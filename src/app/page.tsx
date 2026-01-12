@@ -9,22 +9,28 @@ const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80'
 
 async function getPreviewMenu() {
-  const restaurant = await prisma.restaurant.findFirst({
-    orderBy: { createdAt: 'asc' },
-  })
+  try {
+    const restaurant = await prisma.restaurant.findFirst({
+      orderBy: { createdAt: 'asc' },
+    })
 
-  if (!restaurant) {
+    if (!restaurant) {
+      return []
+    }
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: { available: true, restaurantId: restaurant.id },
+      include: { category: true },
+      orderBy: { createdAt: 'desc' },
+      take: 6,
+    })
+
+    return menuItems
+  } catch (error) {
+    // Handle database connection errors during build
+    console.error('Error fetching preview menu:', error)
     return []
   }
-
-  const menuItems = await prisma.menuItem.findMany({
-    where: { available: true, restaurantId: restaurant.id },
-    include: { category: true },
-    orderBy: { createdAt: 'desc' },
-    take: 6,
-  })
-
-  return menuItems
 }
 
 export default async function Home() {
