@@ -4,13 +4,6 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import { Plus, Trash2, Download, Edit } from 'lucide-react'
@@ -100,6 +93,8 @@ type TransactionRow = {
   amount: number
   details: string
   deleteType?: 'expense' | 'waste'
+  editKind?: 'recurring' | 'transaction'
+  editPayload?: any
 }
 
 export default function ProfitLossPageClient() {
@@ -118,11 +113,8 @@ export default function ProfitLossPageClient() {
   const [showExpenseModal, setShowExpenseModal] = useState(false)
   const [showWasteModal, setShowWasteModal] = useState(false)
   const [editingExpense, setEditingExpense] = useState<any | null>(null)
-  const [expenseFilters, setExpenseFilters] = useState({
-    type: 'ALL',
-    category: 'ALL',
-    sort: 'date_desc',
-  })
+  const [transactionTypeFilter, setTransactionTypeFilter] = useState('ALL')
+  const [transactionCategoryFilter, setTransactionCategoryFilter] = useState('ALL')
   const [sortConfig, setSortConfig] = useState<{
     key: keyof TransactionRow
     direction: 'asc' | 'desc'
@@ -240,6 +232,9 @@ export default function ProfitLossPageClient() {
     )
   }
 
+  const expenseRangeStart = new Date(dateRange.start)
+  const expenseRangeEnd = new Date(dateRange.end)
+
   const transactions: TransactionRow[] = [
     ...data.sales.map((sale) => ({
       id: sale.id,
@@ -273,7 +268,34 @@ export default function ProfitLossPageClient() {
         ? `${tx.quantity} ${tx.ingredient.unit} of ${tx.ingredient.name}`
         : tx.notes || '-',
       deleteType: 'expense' as const,
+      editKind: 'transaction' as const,
+      editPayload: tx,
     })),
+    ...data.expenses
+      .map((exp) => {
+        const totalForRange = recurringTotalForRange(
+          {
+            amount: exp.amount,
+            cadence: exp.cadence,
+            startDate: new Date(exp.startDate),
+            endDate: exp.endDate ? new Date(exp.endDate) : null,
+          },
+          expenseRangeStart,
+          expenseRangeEnd
+        )
+        return {
+          id: exp.id,
+          date: new Date(exp.startDate),
+          type: 'EXPENSE' as const,
+          description: `Recurring: ${exp.name}`,
+          category: exp.category || 'Other',
+          amount: -totalForRange,
+          details: `Cadence: ${exp.cadence}`,
+          editKind: 'recurring' as const,
+          editPayload: exp,
+        }
+      })
+      .filter((row) => row.amount !== 0),
     ...data.wasteRecords.map((waste) => ({
       id: waste.id,
       date: new Date(waste.date),
@@ -320,6 +342,23 @@ export default function ProfitLossPageClient() {
     return String(valueA).localeCompare(String(valueB)) * direction
   })
 
+  const filteredTransactions = sortedTransactions.filter((row) => {
+    if (transactionTypeFilter !== 'ALL' && row.type !== transactionTypeFilter) {
+      return false
+    }
+    if (
+      transactionCategoryFilter !== 'ALL' &&
+      row.category !== transactionCategoryFilter
+    ) {
+      return false
+    }
+    return true
+  })
+
+  const transactionCategories = Array.from(
+    new Set(transactions.map((row) => row.category).filter(Boolean))
+  ).sort()
+
   const toggleSort = (key: keyof TransactionRow) => {
     setSortConfig((prev) => {
       if (prev.key === key) {
@@ -339,73 +378,6 @@ export default function ProfitLossPageClient() {
     if (sortConfig.key !== key) return ''
     return sortConfig.direction === 'asc' ? '▲' : '▼'
   }
-
-  const expenseRangeStart = new Date(dateRange.start)
-  const expenseRangeEnd = new Date(dateRange.end)
-
-  const expenseRows = [
-    ...data.expenseTransactions.map((tx) => ({
-      id: tx.id,
-      kind: 'transaction' as const,
-      date: new Date(tx.date),
-      name: tx.name,
-      category: tx.category,
-      amount: tx.amount,
-      cadence: '-',
-      totalForRange: tx.amount,
-      raw: tx,
-    })),
-    ...data.expenses.map((exp) => ({
-      id: exp.id,
-      kind: 'recurring' as const,
-      date: new Date(exp.startDate),
-      name: exp.name,
-      category: exp.category || 'Other',
-      amount: exp.amount,
-      cadence: exp.cadence,
-      totalForRange: recurringTotalForRange(
-        {
-          amount: exp.amount,
-          cadence: exp.cadence,
-          startDate: new Date(exp.startDate),
-          endDate: exp.endDate ? new Date(exp.endDate) : null,
-        },
-        expenseRangeStart,
-        expenseRangeEnd
-      ),
-      raw: exp,
-    })),
-  ]
-    .filter((row) => {
-      if (expenseFilters.type === 'ONE_TIME' && row.kind !== 'transaction') return false
-      if (expenseFilters.type === 'RECURRING' && row.kind !== 'recurring') return false
-      if (expenseFilters.category !== 'ALL' && row.category !== expenseFilters.category) return false
-      if (row.kind === 'recurring' && row.totalForRange <= 0) return false
-      return true
-    })
-  const expenseCategories = Array.from(
-    new Set(
-      [
-        ...data.expenseTransactions.map((tx) => tx.category),
-        ...data.expenses.map((exp) => exp.category || 'Other'),
-      ].filter(Boolean)
-    )
-  ).sort()
-    .sort((a, b) => {
-      switch (expenseFilters.sort) {
-        case 'date_asc':
-          return (a.date?.getTime() || 0) - (b.date?.getTime() || 0)
-        case 'amount_desc':
-          return b.totalForRange - a.totalForRange
-        case 'amount_asc':
-          return a.totalForRange - b.totalForRange
-        case 'category_asc':
-          return a.category.localeCompare(b.category)
-        case 'date_desc':
-        default:
-          return (b.date?.getTime() || 0) - (a.date?.getTime() || 0)
-      }
-    })
 
   // Calculate profit margin
   const profitMargin = data.summary.revenue > 0
@@ -740,151 +712,6 @@ export default function ProfitLossPageClient() {
         </Card>
       </div>
 
-      {/* Expense Manager */}
-      <Card>
-        <CardHeader className="bg-slate-800 text-white">
-          <CardTitle className="text-white">EXPENSES</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="p-4 border-b bg-white">
-            <div className="grid gap-3 md:grid-cols-3">
-              <div>
-                <Label>Type</Label>
-                <Select
-                  value={expenseFilters.type}
-                  onValueChange={(value: any) =>
-                    setExpenseFilters((prev) => ({ ...prev, type: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">All</SelectItem>
-                    <SelectItem value="ONE_TIME">One-Time</SelectItem>
-                    <SelectItem value="RECURRING">Recurring</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Category</Label>
-                <Select
-                  value={expenseFilters.category}
-                  onValueChange={(value: any) =>
-                    setExpenseFilters((prev) => ({ ...prev, category: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">All</SelectItem>
-                    {expenseCategories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Sort</Label>
-                <Select
-                  value={expenseFilters.sort}
-                  onValueChange={(value: any) =>
-                    setExpenseFilters((prev) => ({ ...prev, sort: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="date_desc">Date (Newest)</SelectItem>
-                    <SelectItem value="date_asc">Date (Oldest)</SelectItem>
-                    <SelectItem value="amount_desc">Amount (High)</SelectItem>
-                    <SelectItem value="amount_asc">Amount (Low)</SelectItem>
-                    <SelectItem value="category_asc">Category (A-Z)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-100">
-                <tr>
-                  <th className="text-left p-3 font-semibold">Type</th>
-                  <th className="text-left p-3 font-semibold">Name</th>
-                  <th className="text-left p-3 font-semibold">Category</th>
-                  <th className="text-left p-3 font-semibold">Cadence</th>
-                  <th className="text-left p-3 font-semibold">Date</th>
-                  <th className="text-right p-3 font-semibold">Amount</th>
-                  <th className="text-right p-3 font-semibold">Total in Range</th>
-                  <th className="text-center p-3 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {expenseRows.map((row) => (
-                  <tr key={`${row.kind}-${row.id}`} className="border-b">
-                    <td className="p-3">
-                      {row.kind === 'recurring' ? 'Recurring' : 'One-Time'}
-                    </td>
-                    <td className="p-3">{row.name}</td>
-                    <td className="p-3">{row.category}</td>
-                    <td className="p-3">{row.cadence}</td>
-                    <td className="p-3">{row.date.toLocaleDateString()}</td>
-                    <td className="p-3 text-right font-mono">
-                      {formatCurrency(row.amount)}
-                    </td>
-                    <td className="p-3 text-right font-mono">
-                      {formatCurrency(row.totalForRange)}
-                    </td>
-                    <td className="p-3 text-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          handleEditExpense({
-                            ...(row.raw as any),
-                            kind: row.kind === 'recurring' ? 'recurring' : 'transaction',
-                          })
-                        }
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      {row.kind === 'recurring' ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteRecurring(row.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteExpense(row.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {expenseRows.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="p-6 text-center text-slate-500">
-                      No expenses found for this filter.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Action Buttons */}
       <div className="flex gap-2">
         <Button onClick={() => {
@@ -906,6 +733,51 @@ export default function ProfitLossPageClient() {
           <CardTitle className="text-white">DETAILED TRANSACTION RECORDS</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
+          <div className="border-b bg-white px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                'ALL',
+                'REVENUE',
+                'COGS',
+                'EXPENSE',
+                'WASTE',
+                'LABOR',
+              ].map((type) => (
+                <Button
+                  key={type}
+                  size="sm"
+                  variant={transactionTypeFilter === type ? 'default' : 'outline'}
+                  className="rounded-full"
+                  onClick={() => setTransactionTypeFilter(type)}
+                >
+                  {type === 'ALL' ? 'All' : type}
+                </Button>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant={transactionCategoryFilter === 'ALL' ? 'default' : 'outline'}
+                className="rounded-full"
+                onClick={() => setTransactionCategoryFilter('ALL')}
+              >
+                All Categories
+              </Button>
+              {transactionCategories.map((category) => (
+                <Button
+                  key={category}
+                  size="sm"
+                  variant={
+                    transactionCategoryFilter === category ? 'default' : 'outline'
+                  }
+                  className="rounded-full"
+                  onClick={() => setTransactionCategoryFilter(category)}
+                >
+                  {category}
+                </Button>
+              ))}
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-100">
@@ -974,7 +846,7 @@ export default function ProfitLossPageClient() {
                 </tr>
               </thead>
               <tbody>
-                {sortedTransactions.map((row) => (
+                {filteredTransactions.map((row) => (
                   <tr key={`${row.type}-${row.id}`} className="border-b hover:bg-slate-50">
                     <td className="p-3">
                       {row.date.toLocaleDateString()}
@@ -1009,6 +881,20 @@ export default function ProfitLossPageClient() {
                     </td>
                     <td className="p-3 text-slate-500">{row.details}</td>
                     <td className="p-3 text-center">
+                      {row.editKind && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            handleEditExpense({
+                              ...(row.editPayload || {}),
+                              kind: row.editKind,
+                            })
+                          }
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
                       {row.deleteType === 'expense' && (
                         <Button
                           variant="ghost"
@@ -1027,12 +913,14 @@ export default function ProfitLossPageClient() {
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
                       )}
-                      {!row.deleteType && <span className="text-slate-400">-</span>}
+                      {!row.deleteType && !row.editKind && (
+                        <span className="text-slate-400">-</span>
+                      )}
                     </td>
                   </tr>
                 ))}
 
-                {sortedTransactions.length === 0 && (
+                {filteredTransactions.length === 0 && (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-slate-500">
                       No transactions found for this period
