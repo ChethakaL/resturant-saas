@@ -17,6 +17,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Ensure public directory exists
+RUN mkdir -p ./public
+
 # Generate Prisma Client
 RUN npx prisma generate
 
@@ -37,6 +40,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Copy necessary files from builder
+# Copy public directory (will be empty if it doesn't exist, which is fine)
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
