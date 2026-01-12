@@ -212,6 +212,7 @@ export async function GET(request: Request) {
 
     // Add one-time expense transactions by category
     // Exclude expense transactions that are from waste records (they're already counted in wasteRecords)
+    let deliveryCOGS = 0
     expenseTransactions.forEach((tx) => {
       // Skip expense transactions created from waste records (they have "Waste record:" in notes)
       if (tx.notes?.includes('Waste record:')) {
@@ -220,18 +221,27 @@ export async function GET(request: Request) {
       
       // Check if this is a COGS entry (from manual stock adjustments)
       const isCOGS = tx.notes?.includes('COGS') || tx.notes?.includes('Manual stock adjustment')
+      const isDelivery = tx.category === 'INVENTORY_PURCHASE'
       const category = isCOGS 
         ? 'COGS' 
         : tx.category === 'OTHER' 
           ? 'Other' 
           : tx.category
       expenseByCategory[category] = (expenseByCategory[category] || 0) + tx.amount
+
+      if (isDelivery) {
+        deliveryCOGS += tx.amount
+      }
       
       // If it's COGS, also add to total COGS
       if (isCOGS) {
         // This will be included in the COGS calculation
       }
     })
+
+    if (deliveryCOGS > 0) {
+      expenseByCategory['COGS (Deliveries)'] = deliveryCOGS
+    }
 
     // Add waste costs (these are NOT in expenseTransactions - they're separate waste records)
     const wasteTotal = wasteRecords.reduce((sum, waste) => sum + waste.cost, 0)
@@ -269,6 +279,15 @@ export async function GET(request: Request) {
         totalCost: s.inventoryUsages.reduce((sum, usage) => 
           sum + (usage.quantityUsed * usage.ingredient.costPerUnit), 0
         ),
+      })),
+      expenses: expenses.map((exp) => ({
+        id: exp.id,
+        name: exp.name,
+        category: exp.category,
+        amount: exp.amount,
+        cadence: exp.cadence,
+        startDate: exp.startDate,
+        endDate: exp.endDate,
       })),
       payrolls: payrolls.map((p) => ({
         id: p.id,

@@ -121,6 +121,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const salesOnly = searchParams.get('salesOnly')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
 
@@ -128,7 +129,9 @@ export async function GET(request: Request) {
       restaurantId: session.user.restaurantId,
     }
 
-    if (status && status !== 'all') {
+    if (salesOnly === 'true') {
+      where.status = 'COMPLETED'
+    } else if (status && status !== 'all') {
       where.status = status
     }
 

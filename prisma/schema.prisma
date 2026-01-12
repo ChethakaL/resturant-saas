@@ -45,6 +45,7 @@ model Restaurant {
   mealPrepSessions    MealPrepSession[]
   preppedDishStocks   PreppedDishStock[]
   wasteRecords        WasteRecord[]
+  deliveries          Delivery[]
 
   @@map("restaurants")
 }
@@ -96,6 +97,7 @@ model Ingredient {
   mealPrepUsages      MealPrepInventoryUsage[]
   wasteRecords        WasteRecord[]
   expenseTransactions ExpenseTransaction[]
+  deliveries          Delivery[]
 
   @@index([restaurantId])
   @@index([stockQuantity]) // For low stock queries
@@ -114,6 +116,30 @@ model StockAdjustment {
   @@index([ingredientId])
   @@index([timestamp])
   @@map("stock_adjustments")
+}
+
+model Delivery {
+  id                   String              @id @default(cuid())
+  ingredientId         String
+  ingredient           Ingredient          @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  supplierName         String
+  quantity             Float
+  unitCost             Float
+  totalCost            Float
+  transportCost        Float               @default(0)
+  deliveryDate         DateTime            @db.Date
+  invoiceNumber        String?
+  notes                String?
+  expenseTransactionId String?
+  expenseTransaction   ExpenseTransaction? @relation(fields: [expenseTransactionId], references: [id])
+  restaurantId         String
+  restaurant           Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt            DateTime            @default(now())
+
+  @@index([ingredientId])
+  @@index([restaurantId])
+  @@index([deliveryDate])
+  @@map("deliveries")
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -295,6 +321,7 @@ model ExpenseTransaction {
   restaurant   Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
+  deliveries   Delivery[]
 
   @@index([restaurantId])
   @@index([date])

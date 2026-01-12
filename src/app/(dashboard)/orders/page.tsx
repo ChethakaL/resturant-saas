@@ -37,28 +37,144 @@ export default async function OrdersPage({
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
 
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const weekStart = new Date(todayStart)
+  weekStart.setDate(todayStart.getDate() - 6)
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
   const statusFilter = searchParams?.status || 'all'
+  const page = Math.max(Number(searchParams?.page || 1), 1)
+  const pageSize = 10
   const where: any = { restaurantId }
 
   if (statusFilter !== 'all') {
     where.status = statusFilter
   }
 
-  const orders = await prisma.sale.findMany({
-    where,
-    include: {
-      items: true,
-      table: true,
-    },
-    orderBy: { timestamp: 'desc' },
-  })
+  const [
+    orders,
+    totalOrders,
+    statusCounts,
+    completedStats,
+    pendingOrders,
+    daySummary,
+    weekSummary,
+    monthSummary,
+    topItems,
+  ] =
+    await Promise.all([
+      prisma.sale.findMany({
+        where,
+        include: {
+          items: true,
+          table: true,
+        },
+        orderBy: { timestamp: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.sale.count({
+        where,
+      }),
+      prisma.sale.groupBy({
+        by: ['status'],
+        where: {
+          restaurantId,
+          ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+        },
+        _count: { _all: true },
+      }),
+      prisma.sale.aggregate({
+        where: {
+          restaurantId,
+          status: 'COMPLETED',
+        },
+        _sum: { total: true },
+        _count: { _all: true },
+      }),
+      prisma.sale.findMany({
+        where: {
+          restaurantId,
+          status: 'PENDING',
+        },
+        include: {
+          items: true,
+          table: true,
+        },
+        orderBy: { timestamp: 'desc' },
+      }),
+      prisma.sale.aggregate({
+        where: {
+          restaurantId,
+          status: 'COMPLETED',
+          timestamp: { gte: todayStart, lte: now },
+        },
+        _sum: { total: true },
+      }),
+      prisma.sale.aggregate({
+        where: {
+          restaurantId,
+          status: 'COMPLETED',
+          timestamp: { gte: weekStart, lte: now },
+        },
+        _sum: { total: true },
+      }),
+      prisma.sale.aggregate({
+        where: {
+          restaurantId,
+          status: 'COMPLETED',
+          timestamp: { gte: monthStart, lte: now },
+        },
+        _sum: { total: true },
+      }),
+      prisma.saleItem.groupBy({
+        by: ['menuItemId'],
+        where: {
+          sale: {
+            restaurantId,
+            status: 'COMPLETED',
+            timestamp: { gte: monthStart, lte: now },
+          },
+        },
+        _sum: {
+          quantity: true,
+          price: true,
+        },
+        orderBy: {
+          _sum: {
+            price: 'desc',
+          },
+        },
+        take: 5,
+      }),
+    ])
 
-  const pendingOrders = orders.filter((order) => order.status === 'PENDING')
-  const completedOrders = orders.filter((order) => order.status === 'COMPLETED')
-  const cancelledOrders = orders.filter((order) => order.status === 'CANCELLED')
-  const totalRevenue = completedOrders.reduce((sum, order) => sum + order.total, 0)
+  const topItemsWithNames = await Promise.all(
+    topItems.map(async (item) => {
+      const menuItem = await prisma.menuItem.findUnique({
+        where: { id: item.menuItemId },
+      })
+      return {
+        id: item.menuItemId,
+        name: menuItem?.name || 'Unknown',
+        revenue: item._sum.price || 0,
+        quantity: item._sum.quantity || 0,
+      }
+    })
+  )
+
+  const completedOrdersCount =
+    statusCounts.find((status) => status.status === 'COMPLETED')?._count._all || 0
+  const cancelledOrdersCount =
+    statusCounts.find((status) => status.status === 'CANCELLED')?._count._all || 0
+  const totalRevenue = completedStats._sum.total || 0
   const averageOrderValue =
-    completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0
+    completedStats._count._all > 0 ? totalRevenue / completedStats._count._all : 0
+  const dayRevenue = daySummary._sum.total || 0
+  const weekRevenue = weekSummary._sum.total || 0
+  const monthRevenue = monthSummary._sum.total || 0
+  const totalPages = Math.max(Math.ceil(totalOrders / pageSize), 1)
 
   const formatDate = (date: Date) =>
     new Intl.DateTimeFormat('en-IQ', {
@@ -96,9 +212,9 @@ export default async function OrdersPage({
             <CardTitle className="text-sm font-medium">Orders in View</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{orders.length}</div>
+            <div className="text-2xl font-bold">{totalOrders}</div>
             <p className="text-xs text-slate-500 mt-1">
-              {completedOrders.length} completed, {cancelledOrders.length} cancelled
+              {completedOrdersCount} completed, {cancelledOrdersCount} cancelled
             </p>
           </CardContent>
         </Card>
@@ -113,8 +229,78 @@ export default async function OrdersPage({
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Sales Transactions</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-slate-600">
+                  Revenue Today
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-slate-900">
+                  {formatCurrency(dayRevenue)}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Completed orders only</p>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-slate-600">
+                  Revenue (Last 7 Days)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-slate-900">
+                  {formatCurrency(weekRevenue)}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Rolling 7-day total</p>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-slate-600">
+                  Revenue (Month-to-date)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-slate-900">
+                  {formatCurrency(monthRevenue)}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Month-to-date total</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-700">Top Dishes</h3>
+            <p className="text-xs text-slate-500 mt-1">Best sellers this month</p>
+            <div className="mt-4 space-y-3">
+              {topItemsWithNames.map((item) => (
+                <div key={item.id} className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">{item.name}</div>
+                    <div className="text-xs text-slate-500">{item.quantity} sold</div>
+                  </div>
+                  <div className="text-sm font-semibold text-slate-900">
+                    {formatCurrency(item.revenue)}
+                  </div>
+                </div>
+              ))}
+              {topItemsWithNames.length === 0 && (
+                <p className="text-sm text-slate-500">No sales data for this month.</p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Pending Orders Section */}
-      {pendingOrders.length > 0 && statusFilter === 'all' && (
+      {pendingOrders.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -265,6 +451,33 @@ export default async function OrdersPage({
                 <p className="text-slate-500">No orders found for this filter.</p>
               </div>
             )}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+            <p className="text-sm text-slate-500">
+              Page {page} of {totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/dashboard/orders?status=${statusFilter}&page=${Math.max(
+                  page - 1,
+                  1
+                )}`}
+              >
+                <Button variant="outline" size="sm" disabled={page <= 1}>
+                  Previous
+                </Button>
+              </Link>
+              <Link
+                href={`/dashboard/orders?status=${statusFilter}&page=${Math.min(
+                  page + 1,
+                  totalPages
+                )}`}
+              >
+                <Button variant="outline" size="sm" disabled={page >= totalPages}>
+                  Next
+                </Button>
+              </Link>
+            </div>
           </div>
         </CardContent>
       </Card>

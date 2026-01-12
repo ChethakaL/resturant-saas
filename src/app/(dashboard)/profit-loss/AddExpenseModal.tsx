@@ -41,6 +41,20 @@ type ExpenseTransaction = {
   unitCost?: number | null
 }
 
+type RecurringExpense = {
+  id: string
+  name: string
+  category?: string | null
+  amount: number
+  cadence: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
+  startDate: string
+  endDate?: string | null
+}
+
+type ExpenseModalData =
+  | ({ kind: 'transaction' } & ExpenseTransaction)
+  | ({ kind: 'recurring' } & RecurringExpense)
+
 export default function AddExpenseModal({
   open,
   onClose,
@@ -49,17 +63,21 @@ export default function AddExpenseModal({
 }: {
   open: boolean
   onClose: () => void
-  initialData?: ExpenseTransaction | null
+  initialData?: ExpenseModalData | null
   onSaved?: () => void
 }) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [formData, setFormData] = useState({
+    type: 'ONE_TIME' as 'ONE_TIME' | 'RECURRING',
     name: '',
     category: 'OTHER' as 'RENT' | 'UTILITIES' | 'INVENTORY_PURCHASE' | 'MARKETING' | 'MAINTENANCE' | 'OTHER',
     amount: '',
     date: new Date().toISOString().split('T')[0],
+    cadence: 'MONTHLY' as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '',
     notes: '',
     ingredientId: '',
     quantity: '',
@@ -70,24 +88,50 @@ export default function AddExpenseModal({
   useEffect(() => {
     if (!open) return
     if (initialData) {
-      setFormData({
-        name: initialData.name,
-        category: initialData.category,
-        amount: initialData.amount.toString(),
-        date: initialData.date.split('T')[0],
-        notes: initialData.notes || '',
-        ingredientId: initialData.ingredientId || '',
-        quantity: initialData.quantity?.toString() || '',
-        unitCost: initialData.unitCost?.toString() || '',
-        otherCategory: '',
-      })
+      if (initialData.kind === 'transaction') {
+        setFormData({
+          type: 'ONE_TIME',
+          name: initialData.name,
+          category: initialData.category,
+          amount: initialData.amount.toString(),
+          date: initialData.date.split('T')[0],
+          cadence: 'MONTHLY',
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: '',
+          notes: initialData.notes || '',
+          ingredientId: initialData.ingredientId || '',
+          quantity: initialData.quantity?.toString() || '',
+          unitCost: initialData.unitCost?.toString() || '',
+          otherCategory: '',
+        })
+      } else {
+        setFormData({
+          type: 'RECURRING',
+          name: initialData.name,
+          category: (initialData.category || 'OTHER') as 'RENT' | 'UTILITIES' | 'INVENTORY_PURCHASE' | 'MARKETING' | 'MAINTENANCE' | 'OTHER',
+          amount: initialData.amount.toString(),
+          date: new Date().toISOString().split('T')[0],
+          cadence: initialData.cadence,
+          startDate: initialData.startDate.split('T')[0],
+          endDate: initialData.endDate ? initialData.endDate.split('T')[0] : '',
+          notes: '',
+          ingredientId: '',
+          quantity: '',
+          unitCost: '',
+          otherCategory: '',
+        })
+      }
       return
     }
     setFormData({
+      type: 'ONE_TIME',
       name: '',
       category: 'OTHER',
       amount: '',
       date: new Date().toISOString().split('T')[0],
+      cadence: 'MONTHLY',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '',
       notes: '',
       ingredientId: '',
       quantity: '',
@@ -110,42 +154,67 @@ export default function AddExpenseModal({
     setLoading(true)
 
     try {
-      if (initialData?.category === 'INVENTORY_PURCHASE') {
+      if (initialData?.kind === 'transaction' && initialData.category === 'INVENTORY_PURCHASE') {
         throw new Error('Inventory purchase edits are not supported yet')
       }
-      const payload: any = {
-        name: formData.category === 'OTHER' && formData.otherCategory 
-          ? formData.otherCategory 
-          : formData.name || (formData.category === 'INVENTORY_PURCHASE' && formData.ingredientId
-            ? `Purchase: ${ingredients.find((i) => i.id === formData.ingredientId)?.name || ''}`
-            : formData.name),
-        category: formData.category,
-        amount: formData.category === 'INVENTORY_PURCHASE' && formData.quantity && formData.unitCost
-          ? parseFloat(formData.quantity) * parseFloat(formData.unitCost)
-          : parseFloat(formData.amount),
-        date: formData.date,
-        notes: formData.notes,
-      }
+      const isRecurring = formData.type === 'RECURRING'
+      let response: Response
 
-      if (formData.category === 'INVENTORY_PURCHASE') {
-        if (!formData.ingredientId || !formData.quantity || !formData.unitCost) {
-          throw new Error('Please fill in all inventory purchase fields')
+      if (isRecurring) {
+        const payload = {
+          name: formData.name,
+          category: formData.category,
+          amount: parseFloat(formData.amount),
+          cadence: formData.cadence,
+          startDate: formData.startDate,
+          endDate: formData.endDate || undefined,
         }
-        payload.ingredientId = formData.ingredientId
-        payload.quantity = parseFloat(formData.quantity)
-        payload.unitCost = parseFloat(formData.unitCost)
-      }
 
-      const response = await fetch(
-        initialData
-          ? `/api/expenses/transactions/${initialData.id}`
-          : '/api/expenses/transactions',
-        {
-          method: initialData ? 'PATCH' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+        response = await fetch(
+          initialData?.kind === 'recurring'
+            ? `/api/expenses/${initialData.id}`
+            : '/api/expenses',
+          {
+            method: initialData?.kind === 'recurring' ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }
+        )
+      } else {
+        const payload: any = {
+          name: formData.category === 'OTHER' && formData.otherCategory 
+            ? formData.otherCategory 
+            : formData.name || (formData.category === 'INVENTORY_PURCHASE' && formData.ingredientId
+              ? `Purchase: ${ingredients.find((i) => i.id === formData.ingredientId)?.name || ''}`
+              : formData.name),
+          category: formData.category,
+          amount: formData.category === 'INVENTORY_PURCHASE' && formData.quantity && formData.unitCost
+            ? parseFloat(formData.quantity) * parseFloat(formData.unitCost)
+            : parseFloat(formData.amount),
+          date: formData.date,
+          notes: formData.notes,
         }
-      )
+
+        if (formData.category === 'INVENTORY_PURCHASE') {
+          if (!formData.ingredientId || !formData.quantity || !formData.unitCost) {
+            throw new Error('Please fill in all inventory purchase fields')
+          }
+          payload.ingredientId = formData.ingredientId
+          payload.quantity = parseFloat(formData.quantity)
+          payload.unitCost = parseFloat(formData.unitCost)
+        }
+
+        response = await fetch(
+          initialData?.kind === 'transaction'
+            ? `/api/expenses/transactions/${initialData.id}`
+            : '/api/expenses/transactions',
+          {
+            method: initialData?.kind === 'transaction' ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }
+        )
+      }
 
       if (!response.ok) {
         const error = await response.json()
@@ -159,10 +228,14 @@ export default function AddExpenseModal({
 
       if (!initialData) {
         setFormData({
+          type: 'ONE_TIME',
           name: '',
           category: 'OTHER',
           amount: '',
           date: new Date().toISOString().split('T')[0],
+          cadence: 'MONTHLY',
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: '',
           notes: '',
           ingredientId: '',
           quantity: '',
@@ -194,6 +267,25 @@ export default function AddExpenseModal({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
+            <Label htmlFor="expenseType">Expense Type</Label>
+            <Select
+              value={formData.type}
+              onValueChange={(value: any) =>
+                setFormData({ ...formData, type: value })
+              }
+              disabled={!!initialData}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ONE_TIME">One-Time</SelectItem>
+                <SelectItem value="RECURRING">Recurring</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
             <Label htmlFor="category">Category</Label>
             <Select
               value={formData.category}
@@ -207,7 +299,9 @@ export default function AddExpenseModal({
               <SelectContent>
                 <SelectItem value="RENT">Rent</SelectItem>
                 <SelectItem value="UTILITIES">Utilities</SelectItem>
-                <SelectItem value="INVENTORY_PURCHASE">Inventory Purchase</SelectItem>
+                {formData.type === 'ONE_TIME' && (
+                  <SelectItem value="INVENTORY_PURCHASE">Inventory Purchase</SelectItem>
+                )}
                 <SelectItem value="MARKETING">Marketing</SelectItem>
                 <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
                 <SelectItem value="OTHER">Other</SelectItem>
@@ -215,7 +309,7 @@ export default function AddExpenseModal({
             </Select>
           </div>
 
-          {formData.category === 'INVENTORY_PURCHASE' ? (
+          {formData.type === 'ONE_TIME' && formData.category === 'INVENTORY_PURCHASE' ? (
             <>
               <div>
                 <Label htmlFor="ingredient">Ingredient</Label>
@@ -330,13 +424,51 @@ export default function AddExpenseModal({
             </>
           )}
 
-          <div>
+          {formData.type === 'ONE_TIME' ? (
+            <div>
               <Label htmlFor="date">Date</Label>
               <DatePicker
                 value={formData.date}
                 onChange={(value) => setFormData({ ...formData, date: value })}
               />
             </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="startDate">Start Date</Label>
+                <DatePicker
+                  value={formData.startDate}
+                  onChange={(value) => setFormData({ ...formData, startDate: value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="endDate">End Date (Optional)</Label>
+                <DatePicker
+                  value={formData.endDate || ''}
+                  onChange={(value) => setFormData({ ...formData, endDate: value })}
+                />
+              </div>
+              <div className="col-span-2">
+                <Label htmlFor="cadence">Frequency</Label>
+                <Select
+                  value={formData.cadence}
+                  onValueChange={(value: any) =>
+                    setFormData({ ...formData, cadence: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DAILY">Daily</SelectItem>
+                    <SelectItem value="WEEKLY">Weekly</SelectItem>
+                    <SelectItem value="MONTHLY">Monthly</SelectItem>
+                    <SelectItem value="ANNUAL">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
 
           <div>
             <Label htmlFor="notes">Notes (Optional)</Label>

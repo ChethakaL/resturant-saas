@@ -16,6 +16,7 @@ import {
   DollarSign,
   Calendar,
   ChefHat,
+  Truck,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,7 @@ const navigation = [
   { name: 'Orders', href: '/orders', icon: ShoppingCart },
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
   { name: 'Inventory', href: '/inventory', icon: Package },
+  { name: 'Deliveries', href: '/inventory/deliveries', icon: Truck },
   { name: 'HR & Staff', href: '/hr/employees', icon: Users },
   { name: 'Payroll', href: '/hr/payroll', icon: DollarSign },
   { name: 'Shifts', href: '/hr/shifts', icon: Calendar },

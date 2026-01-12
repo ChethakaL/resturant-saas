@@ -8,6 +8,7 @@ import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import { Pencil, Plus, Trash2, ChefHat } from 'lucide-react'
 import CreatePrepSessionModal from './CreatePrepSessionModal'
+import RecordUsageModal from './RecordUsageModal'
 
 interface PreppedStock {
   id: string
@@ -53,6 +54,7 @@ export default function MealPrepPageClient() {
   const [todaySessions, setTodaySessions] = useState<PrepSession[]>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingSession, setEditingSession] = useState<PrepSession | null>(null)
+  const [showUsageModal, setShowUsageModal] = useState(false)
   const [selectedDate, setSelectedDate] = useState(() => {
     return new Date().toISOString().split('T')[0]
   })
@@ -130,10 +132,16 @@ export default function MealPrepPageClient() {
           <h1 className="text-3xl font-bold text-slate-900">Meal Prep</h1>
           <p className="text-slate-500 mt-1">Manage batch production and prepped dishes</p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Prep Session
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowUsageModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Direct Usage
+          </Button>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Prep Session
+          </Button>
+        </div>
       </div>
 
       {/* Date Selector */}
@@ -289,6 +297,12 @@ export default function MealPrepPageClient() {
           setEditingSession(null)
         }}
         onSaved={() => fetchData()}
+      />
+
+      <RecordUsageModal
+        open={showUsageModal}
+        onClose={() => setShowUsageModal(false)}
+        onSaved={fetchData}
       />
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,11 @@ interface MenuItemWithDetails extends MenuItem {
 interface OrderItem {
   menuItemId: string
   quantity: number
+}
+
+interface PreppedStock {
+  menuItemId: string
+  availableQuantity: number
 }
 
 function StripePaymentForm({
@@ -104,6 +109,7 @@ export default function NewOrderForm({
   const [cashReceived, setCashReceived] = useState('')
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null)
   const [stripeInitLoading, setStripeInitLoading] = useState(false)
+  const [preppedStock, setPreppedStock] = useState<PreppedStock[]>([])
   const isCashPayment = orderDetails.paymentMethod === 'CASH'
 
   // Filter menu items based on search and category
@@ -276,6 +282,40 @@ export default function NewOrderForm({
       return
     }
 
+    const partialItems = orderItems
+      .map((item) => {
+        const available = preppedStockMap.get(item.menuItemId) ?? 0
+        return { ...item, available }
+      })
+      .filter((item) => item.available < item.quantity)
+
+    if (partialItems.length > 0) {
+      const message = partialItems
+        .map((item) => {
+          const menuItem = menuItems.find((m) => m.id === item.menuItemId)
+          return `${menuItem?.name || 'Item'}: ${item.available} available, ${item.quantity} requested`
+        })
+        .join('\n')
+      const confirmPartial = confirm(
+        `Some items have limited prepped stock:\n\n${message}\n\nReduce quantities to available and complete?`
+      )
+      if (!confirmPartial) {
+        return
+      }
+      setOrderItems((prev) =>
+        prev
+          .map((item) => {
+            const available = preppedStockMap.get(item.menuItemId) ?? 0
+            return {
+              ...item,
+              quantity: Math.min(item.quantity, available),
+            }
+          })
+          .filter((item) => item.quantity > 0)
+      )
+      return
+    }
+
     if (stockWarnings.length > 0) {
       alert('Cannot complete order due to insufficient stock:\n\n' + stockWarnings.join('\n'))
       return
@@ -386,6 +426,7 @@ export default function NewOrderForm({
                       0
                     )
                     const isInOrder = orderItems.some((o) => o.menuItemId === item.id)
+                    const availablePrepped = preppedStockMap.get(item.id) ?? 0
 
                     return (
                       <button
@@ -419,6 +460,9 @@ export default function NewOrderForm({
                             </div>
                             <div className="text-xs text-slate-500">
                               Cost: {formatCurrency(cost)}
+                            </div>
+                            <div className={`text-xs ${availablePrepped > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              {availablePrepped > 0 ? `${availablePrepped} prepped` : 'Out of stock'}
                             </div>
                           </div>
                         </div>
@@ -734,3 +778,22 @@ export default function NewOrderForm({
     </div>
   )
 }
+  useEffect(() => {
+    fetch('/api/meal-prep/stock')
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setPreppedStock(
+            data.map((item) => ({
+              menuItemId: item.menuItemId,
+              availableQuantity: item.availableQuantity,
+            }))
+          )
+        }
+      })
+      .catch(() => null)
+  }, [])
+
+  const preppedStockMap = useMemo(() => {
+    return new Map(preppedStock.map((item) => [item.menuItemId, item.availableQuantity]))
+  }, [preppedStock])

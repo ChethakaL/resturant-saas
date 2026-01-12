@@ -14,7 +14,7 @@ const mealPrepSessionSchema = z.object({
       menuItemId: z.string(),
       quantityPrepped: z.number().int().positive(),
     })
-  ),
+  ).optional(),
   customUsages: z
     .array(
       z.object({
@@ -81,27 +81,30 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     const data = mealPrepSessionSchema.parse(body)
+    const items = data.items ?? []
 
     // Fetch all menu items with their recipes
-    const menuItems = await prisma.menuItem.findMany({
-      where: {
-        id: { in: data.items.map((item) => item.menuItemId) },
-        restaurantId: session.user.restaurantId,
-      },
-      include: {
-        ingredients: {
-          include: {
-            ingredient: true,
+    const menuItems = items.length
+      ? await prisma.menuItem.findMany({
+        where: {
+          id: { in: items.map((item) => item.menuItemId) },
+          restaurantId: session.user.restaurantId,
+        },
+        include: {
+          ingredients: {
+            include: {
+              ingredient: true,
+            },
           },
         },
-      },
     })
+      : []
 
     // Calculate total ingredient usage and validate stock
     const ingredientUsage = new Map<string, number>()
     const ingredientDetails = new Map<string, any>()
 
-    for (const prepItem of data.items) {
+    for (const prepItem of items) {
       const menuItem = menuItems.find((m) => m.id === prepItem.menuItemId)
       if (!menuItem) {
         throw new Error(`Menu item not found: ${prepItem.menuItemId}`)
@@ -162,7 +165,7 @@ export async function POST(request: Request) {
       })
 
       // Create prep items and update prepped stock
-      for (const prepItem of data.items) {
+      for (const prepItem of items) {
         await tx.mealPrepItem.create({
           data: {
             prepSessionId: prepSession.id,
