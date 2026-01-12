@@ -36,6 +36,102 @@ export async function POST(
         throw new Error('Cannot complete cancelled order')
       }
 
+      // Get order items with menu items
+      const orderItems = await tx.saleItem.findMany({
+        where: { saleId: params.id },
+        include: {
+          menuItem: {
+            include: {
+              ingredients: {
+                include: {
+                  ingredient: true,
+                },
+              },
+            },
+          },
+        },
+      })
+
+      // Process each order item: check prepped stock first, then raw ingredients
+      for (const orderItem of orderItems) {
+        const quantityNeeded = orderItem.quantity
+
+        // Check prepped stock first
+        const preppedStock = await tx.preppedDishStock.findUnique({
+          where: { menuItemId: orderItem.menuItemId },
+        })
+
+        let remainingQuantity = quantityNeeded
+        let usedFromPrepped = 0
+
+        if (preppedStock && preppedStock.availableQuantity > 0) {
+          usedFromPrepped = Math.min(
+            preppedStock.availableQuantity,
+            quantityNeeded
+          )
+          remainingQuantity = quantityNeeded - usedFromPrepped
+
+          // Deduct from prepped stock
+          await tx.preppedDishStock.update({
+            where: { menuItemId: orderItem.menuItemId },
+            data: {
+              availableQuantity: {
+                decrement: usedFromPrepped,
+              },
+            },
+          })
+        }
+
+        // If we still need more, use raw ingredients
+        if (remainingQuantity > 0) {
+          // Calculate ingredient usage for remaining quantity
+          const ingredientUsage = new Map<string, number>()
+
+          for (const recipeIng of orderItem.menuItem.ingredients) {
+            const totalNeeded = recipeIng.quantity * remainingQuantity
+            const current = ingredientUsage.get(recipeIng.ingredientId) || 0
+            ingredientUsage.set(recipeIng.ingredientId, current + totalNeeded)
+          }
+
+          // Validate and deduct raw ingredients
+          for (const [ingredientId, needed] of ingredientUsage.entries()) {
+            const ingredient = await tx.ingredient.findUnique({
+              where: { id: ingredientId },
+            })
+
+            if (!ingredient) {
+              throw new Error(`Ingredient not found: ${ingredientId}`)
+            }
+
+            if (ingredient.stockQuantity < needed) {
+              throw new Error(
+                `Insufficient stock for ${ingredient.name}. Need ${needed} ${ingredient.unit}, have ${ingredient.stockQuantity} ${ingredient.unit}`
+              )
+            }
+
+            // Deduct from inventory
+            await tx.ingredient.update({
+              where: { id: ingredientId },
+              data: {
+                stockQuantity: {
+                  decrement: needed,
+                },
+              },
+            })
+
+            // Create stock adjustment
+            await tx.stockAdjustment.create({
+              data: {
+                ingredientId,
+                quantityChange: -needed,
+                reason: 'sale_deduction',
+                notes: `Order ${existing.orderNumber}: ${remainingQuantity}x ${orderItem.menuItem.name} (raw ingredients)`,
+              },
+            })
+          }
+        }
+      }
+
       // Update order to completed and set payment info
       const updatedSale = await tx.sale.update({
         where: { id: params.id },
@@ -43,6 +139,8 @@ export async function POST(
           status: 'COMPLETED',
           paidAt: new Date(),
           paymentMethod: data.paymentMethod || existing.paymentMethod,
+          paymentProvider: data.paymentProvider || existing.paymentProvider,
+          stripePaymentIntentId: data.stripePaymentIntentId || existing.stripePaymentIntentId,
         },
         include: {
           items: {

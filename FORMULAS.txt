@@ -164,12 +164,15 @@ Implementation:
 
 3.3 Daily Cost of Goods Sold (COGS)
 ------------------------------------
-Formula: Σ(Menu Item Cost × Quantity Sold) for all items sold on date
+Formula: COGS from sales + Meal Prep usage cost for the same date
+  - Sales COGS = Σ(Menu Item Cost × Quantity Sold)
+  - Meal Prep COGS = Σ(Usage Quantity × Ingredient Cost Per Unit)
 Example:
   - 2× Chicken Biryani cost 3,400 = 6,800 IQD
   - 1× Hummus cost 2,000 = 2,000 IQD
   - 3× Tea cost 500 = 1,500 IQD
-  - Daily COGS = 10,300 IQD
+  - Meal prep used Chicken 2 kg @ 8,000 IQD/kg = 16,000 IQD
+  - Total Daily COGS = 26,300 IQD
 
 Implementation:
   SELECT
@@ -180,6 +183,15 @@ Implementation:
   JOIN menu_items mi ON si.menu_item_id = mi.id
   WHERE DATE(s.timestamp) = '2026-01-10'
   GROUP BY DATE(s.timestamp)
+
+  SELECT
+    DATE(mps.prep_date) as date,
+    SUM(mpiu.quantity_used * i.cost_per_unit) as meal_prep_cogs
+  FROM meal_prep_sessions mps
+  JOIN meal_prep_inventory_usage mpiu ON mps.id = mpiu.prep_session_id
+  JOIN ingredients i ON mpiu.ingredient_id = i.id
+  WHERE DATE(mps.prep_date) = '2026-01-10'
+  GROUP BY DATE(mps.prep_date)
 
 3.4 Daily Gross Profit
 -----------------------
@@ -306,6 +318,23 @@ Implementation:
   SELECT COUNT(*) as orders_today
   FROM sales
   WHERE DATE(timestamp) = CURRENT_DATE
+
+4.8 Month-to-Date Net Profit
+-----------------------------
+Formula: Revenue - COGS - Operating Expenses - Payroll
+Components:
+  - Revenue: SUM(sales.total) for COMPLETED sales in month
+  - COGS: Sales COGS + Meal Prep COGS
+  - Operating Expenses: Recurring expenses + Expense transactions + Waste costs
+  - Payroll: SUM(payroll.totalPaid) for PAID payrolls in month
+
+4.9 Month-to-Date Net Margin %
+-------------------------------
+Formula: (MTD Net Profit / MTD Revenue) × 100
+
+4.10 Food Cost %
+----------------
+Formula: (MTD COGS / MTD Revenue) × 100
 
 ═══════════════════════════════════════════════════════════════════════════════
 5. INVENTORY DEDUCTION ON ORDER
@@ -712,9 +741,19 @@ Example:
 ---------------
 Formula: (COGS + Labor Cost) / Revenue × 100
 Target: 60-65% (includes labor, which we don't track yet)
-Note: For MVP, we focus on COGS only
+Note: Labor Cost is tracked via Payroll (paid payroll totals for the period).
 
-10.4 Average Check Size
+10.4 Net Profit Margin
+-----------------------
+Formula: ((Revenue - COGS - Operating Expenses - Labor) / Revenue) × 100
+Example:
+  - Revenue = 8,000,000 IQD
+  - COGS = 2,400,000 IQD
+  - Operating Expenses = 1,100,000 IQD
+  - Labor = 900,000 IQD
+  - Net Margin = ((8,000,000 - 2,400,000 - 1,100,000 - 900,000) / 8,000,000) × 100 = 45%
+
+10.5 Average Check Size
 ------------------------
 Formula: Total Revenue / Number of Customers/Orders
 Example:
@@ -722,7 +761,7 @@ Example:
   - Orders = 120
   - Average Check = 880,000 / 120 = 7,333 IQD
 
-10.5 Revenue Per Available Seat Hour (RevPASH)
+10.6 Revenue Per Available Seat Hour (RevPASH)
 -----------------------------------------------
 Formula: Revenue / (Number of Seats × Operating Hours)
 Example:
@@ -731,7 +770,7 @@ Example:
   - Hours Open = 12
   - RevPASH = 880,000 / (50 × 12) = 1,467 IQD per seat-hour
 
-10.6 Table Turnover Rate
+10.7 Table Turnover Rate
 -------------------------
 Formula: Number of Parties Served / Number of Tables
 Example:

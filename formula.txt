@@ -1,0 +1,59 @@
+Profit & Loss Calculations
+
+Scope / Time Window
+- The Profit & Loss page uses the current month from the 1st of the month through "today".
+- All calculations are based on COMPLETED sales in that date range.
+
+Revenue
+- Revenue = SUM(sale.total) for COMPLETED sales in date range.
+- Source: Sale.total.
+
+COGS (Cost of Goods Sold)
+- COGS = COGS from completed sales + Meal Prep usage cost.
+- COGS from sales = SUM(saleItem.cost * saleItem.quantity) for sale items attached to COMPLETED sales.
+- Meal Prep COGS = SUM(mealPrepInventoryUsage.quantityUsed * ingredient.costPerUnit) for prep sessions in range.
+- Source: SaleItem.cost (captured at time of sale) and Ingredient.costPerUnit at prep time.
+
+Gross Profit
+- Gross Profit = Revenue - COGS.
+
+Expenses (Operating Expenses)
+- Recurring Expenses: Each Expense has cadence and a start/end date.
+- For the selected period, each recurring expense contributes a prorated total based on overlap with the date range.
+- One-time Expenses: ExpenseTransactions in range (includes inventory purchases and overhead).
+- Waste Costs: WasteRecord.cost in range.
+
+Cadence formulas (for overlapping days/months only):
+- DAILY: total = amount * number_of_days_in_range
+- WEEKLY: total = amount * (number_of_days_in_range / 7)
+- MONTHLY: total = amount * number_of_months_in_range
+- ANNUAL: total = amount * (number_of_months_in_range / 12)
+
+Payroll
+- Payroll total = SUM(payroll.totalPaid) for payrolls with status = PAID and period within the date range.
+- This is treated as Labor Expense in P&L and the transaction table.
+- Source: Payroll.totalPaid.
+
+Total Expenses
+- Total Expenses = (Recurring Expenses + ExpenseTransactions + Waste) + Payroll total.
+
+Net Profit
+- Net Profit = Revenue - COGS - Operating Expenses - Payroll.
+- If this is negative, it means operating expenses + payroll exceed gross profit.
+
+Transactions Overview Chart
+- Daily Revenue = sum of sale.total per day.
+- Daily Expenses = (Total Expenses for the date range) / (Number of days in range).
+- Daily Net = Daily Revenue - Daily Expenses.
+
+Dashboard Monthly Metrics
+- Monthly Revenue = SUM(sale.total) for COMPLETED sales in month.
+- Monthly COGS = (Sales COGS + Meal Prep COGS).
+- Monthly Net Profit = Monthly Revenue - Monthly COGS - Operating Expenses - Payroll.
+- Net Margin % = (Monthly Net Profit / Monthly Revenue) × 100.
+- Food Cost % = (Monthly COGS / Monthly Revenue) × 100.
+
+Notes / Why you might see a loss
+- If the seeded monthly rent/utility expenses are high relative to revenue, Net Profit will be negative.
+- If payroll totals are large and sales volume is low, Net Profit will be negative.
+- This is expected given the current seed values; adjust expense amounts or generate more sales to show a profit.

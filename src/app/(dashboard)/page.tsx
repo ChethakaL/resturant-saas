@@ -15,6 +15,62 @@ import {
   Award,
   Package
 } from 'lucide-react'
+import AIInsightsCard from '@/components/insights/AIInsightsCard'
+import { redirect } from 'next/navigation'
+import WeeklySalesChart from '@/components/dashboard/WeeklySalesChart'
+import PnLReminder from '@/components/dashboard/PnLReminder'
+
+function daysBetweenInclusive(start: Date, end: Date) {
+  const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
+  const endUtc = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate())
+  return Math.floor((endUtc - startUtc) / (24 * 60 * 60 * 1000)) + 1
+}
+
+function monthsBetweenInclusive(start: Date, end: Date) {
+  return (
+    (end.getFullYear() - start.getFullYear()) * 12 +
+    (end.getMonth() - start.getMonth()) +
+    1
+  )
+}
+
+function overlapRange(start: Date, end: Date, rangeStart: Date, rangeEnd: Date) {
+  const effectiveStart = start > rangeStart ? start : rangeStart
+  const effectiveEnd = end < rangeEnd ? end : rangeEnd
+  if (effectiveEnd < effectiveStart) return null
+  return { start: effectiveStart, end: effectiveEnd }
+}
+
+function expenseTotalForPeriod(
+  expense: {
+    amount: number
+    cadence: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
+    startDate: Date
+    endDate: Date | null
+  },
+  rangeStart: Date,
+  rangeEnd: Date
+) {
+  const end = expense.endDate || rangeEnd
+  const range = overlapRange(expense.startDate, end, rangeStart, rangeEnd)
+  if (!range) return 0
+
+  const dayCount = daysBetweenInclusive(range.start, range.end)
+  const monthCount = monthsBetweenInclusive(range.start, range.end)
+
+  switch (expense.cadence) {
+    case 'DAILY':
+      return expense.amount * dayCount
+    case 'WEEKLY':
+      return expense.amount * (dayCount / 7)
+    case 'MONTHLY':
+      return expense.amount * monthCount
+    case 'ANNUAL':
+      return expense.amount * (monthCount / 12)
+    default:
+      return 0
+  }
+}
 
 async function getDashboardData(restaurantId: string) {
   const now = new Date()
@@ -84,6 +140,44 @@ async function getDashboardData(restaurantId: string) {
   const weeklyRevenue = weeklySales._sum.total || 0
   const weeklyOrders = weeklySales._count
 
+  const weeklySalesData = await prisma.sale.findMany({
+    where: {
+      restaurantId,
+      timestamp: { gte: weekStart },
+      status: 'COMPLETED',
+    },
+    select: {
+      timestamp: true,
+      total: true,
+    },
+  })
+
+  const dailyMap = new Map<string, { revenue: number; orders: number }>()
+  weeklySalesData.forEach((sale) => {
+    const key = sale.timestamp.toISOString().slice(0, 10)
+    const current = dailyMap.get(key) || { revenue: 0, orders: 0 }
+    dailyMap.set(key, {
+      revenue: current.revenue + sale.total,
+      orders: current.orders + 1,
+    })
+  })
+
+  const weeklyTrend: { date: string; revenue: number; orders: number }[] = []
+  const shortDateFormatter = new Intl.DateTimeFormat('en-IQ', {
+    weekday: 'short',
+  })
+  for (let i = 6; i >= 0; i -= 1) {
+    const day = new Date(todayStart)
+    day.setDate(todayStart.getDate() - i)
+    const key = day.toISOString().slice(0, 10)
+    const entry = dailyMap.get(key) || { revenue: 0, orders: 0 }
+    weeklyTrend.push({
+      date: shortDateFormatter.format(day),
+      revenue: entry.revenue,
+      orders: entry.orders,
+    })
+  }
+
   // Monthly metrics
   const monthlySales = await prisma.sale.aggregate({
     where: {
@@ -114,9 +208,84 @@ async function getDashboardData(restaurantId: string) {
     },
   })
 
-  const monthlyCOGS = monthlySaleItems.reduce((sum, item) => sum + (item.quantity * item.cost), 0)
-  const monthlyProfit = monthlyRevenue - monthlyCOGS
-  const monthlyMargin = monthlyRevenue > 0 ? ((monthlyRevenue - monthlyCOGS) / monthlyRevenue) * 100 : 0
+  const monthlyCOGSFromSales = monthlySaleItems.reduce(
+    (sum, item) => sum + (item.quantity * item.cost),
+    0
+  )
+
+  const [monthlyExpenses, monthlyExpenseTransactions, monthlyWasteRecords, monthlyPayrolls, monthlyMealPrepSessions] = await Promise.all([
+    prisma.expense.findMany({
+      where: { restaurantId },
+    }),
+    prisma.expenseTransaction.findMany({
+      where: {
+        restaurantId,
+        date: {
+          gte: monthStart,
+          lte: now,
+        },
+      },
+    }),
+    prisma.wasteRecord.findMany({
+      where: {
+        restaurantId,
+        date: {
+          gte: monthStart,
+          lte: now,
+        },
+      },
+    }),
+    prisma.payroll.findMany({
+      where: {
+        restaurantId,
+        status: 'PAID',
+        period: {
+          gte: monthStart,
+          lte: now,
+        },
+      },
+    }),
+    prisma.mealPrepSession.findMany({
+      where: {
+        restaurantId,
+        prepDate: {
+          gte: monthStart,
+          lte: now,
+        },
+      },
+      include: {
+        inventoryUsages: {
+          include: {
+            ingredient: true,
+          },
+        },
+      },
+    }),
+  ])
+
+  const mealPrepCOGS = monthlyMealPrepSessions.reduce((sum, session) => {
+    return sum + session.inventoryUsages.reduce((sessionSum, usage) => {
+      return sessionSum + (usage.quantityUsed * usage.ingredient.costPerUnit)
+    }, 0)
+  }, 0)
+
+  const monthlyCOGS = monthlyCOGSFromSales + mealPrepCOGS
+
+  const recurringExpenseTotal = monthlyExpenses.reduce((sum, expense) => {
+    return sum + expenseTotalForPeriod(expense, monthStart, now)
+  }, 0)
+
+  const expenseTransactionsTotal = monthlyExpenseTransactions.reduce(
+    (sum, tx) => sum + tx.amount,
+    0
+  )
+
+  const wasteTotal = monthlyWasteRecords.reduce((sum, waste) => sum + waste.cost, 0)
+  const payrollTotal = monthlyPayrolls.reduce((sum, payroll) => sum + payroll.totalPaid, 0)
+  const totalOperatingExpenses = recurringExpenseTotal + expenseTransactionsTotal + wasteTotal
+
+  const monthlyNetProfit = monthlyRevenue - monthlyCOGS - totalOperatingExpenses - payrollTotal
+  const monthlyMargin = monthlyRevenue > 0 ? (monthlyNetProfit / monthlyRevenue) * 100 : 0
   const foodCostPercent = monthlyRevenue > 0 ? (monthlyCOGS / monthlyRevenue) * 100 : 0
 
   // Top selling items (this week)
@@ -260,10 +429,11 @@ async function getDashboardData(restaurantId: string) {
       revenue: weeklyRevenue,
       orders: weeklyOrders,
     },
+    weeklyTrend,
     month: {
       revenue: monthlyRevenue,
       orders: monthlyOrders,
-      profit: monthlyProfit,
+      profit: monthlyNetProfit,
       margin: monthlyMargin,
       foodCostPercent,
     },
@@ -285,11 +455,19 @@ async function getDashboardData(restaurantId: string) {
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
+  if (session!.user.role === 'STAFF') {
+    redirect('/dashboard/orders')
+  }
 
   const data = await getDashboardData(restaurantId)
+  const latestInsight = await prisma.aIInsight.findFirst({
+    where: { restaurantId },
+    orderBy: { createdAt: 'desc' },
+  })
 
   return (
     <div className="space-y-8">
+      <PnLReminder />
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
         <p className="text-slate-500 mt-1">Welcome back, {session!.user.name}</p>
@@ -404,14 +582,14 @@ export default async function DashboardPage() {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-600">Gross Profit</span>
+                  <span className="text-slate-600">Net Profit</span>
                   <span className="text-xl font-bold text-blue-600">
                     {formatCurrency(data.month.profit)}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t">
                   <div>
-                    <div className="text-xs text-slate-600">Profit Margin</div>
+                    <div className="text-xs text-slate-600">Net Margin</div>
                     <div className={`text-lg font-bold ${data.month.margin >= 60 ? 'text-green-600' : 'text-amber-600'}`}>
                       {formatPercentage(data.month.margin, 1)}
                     </div>
@@ -428,6 +606,15 @@ export default async function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Weekly Revenue vs Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <WeeklySalesChart data={data.weeklyTrend} />
+        </CardContent>
+      </Card>
 
       {/* TOP PERFORMERS */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -560,6 +747,8 @@ export default async function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      <AIInsightsCard initialContent={latestInsight?.content || null} />
     </div>
   )
 }

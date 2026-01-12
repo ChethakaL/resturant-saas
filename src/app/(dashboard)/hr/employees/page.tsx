@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, Mail, Phone, Calendar } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { redirect } from 'next/navigation'
 
 async function getEmployees(restaurantId: string) {
   const employees = await prisma.employee.findMany({
@@ -46,6 +47,9 @@ function getPositionColor(position: string) {
 export default async function EmployeesPage() {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
+  if (session!.user.role === 'STAFF') {
+    redirect('/dashboard/orders')
+  }
 
   const employees = await getEmployees(restaurantId)
 

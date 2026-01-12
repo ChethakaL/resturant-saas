@@ -39,6 +39,7 @@ const foodImages = {
 
 async function main() {
   console.log('🌱 Starting seed...')
+  const now = new Date()
 
   // Note: No need to clear data after migrate reset
 
@@ -46,24 +47,138 @@ async function main() {
   // 1. CREATE RESTAURANT
   // ═══════════════════════════════════════════════════════════════
   console.log('🏪 Creating restaurant...')
-  const restaurant = await prisma.restaurant.create({
-    data: {
-      name: 'Al-Rafidain Restaurant',
-      slug: 'al-rafidain',
-      email: 'info@alrafidain.iq',
-      phone: '+964 770 123 4567',
-      address: 'Baghdad, Iraq',
-      currency: 'IQD',
-      timezone: 'Asia/Baghdad',
-      settings: {
-        operatingHours: {
-          open: '10:00',
-          close: '23:00',
-        },
-        tables: 25,
-        seatingCapacity: 100,
+  const existingRestaurant = await prisma.restaurant.findUnique({
+    where: { slug: 'al-rafidain' },
+  })
+
+  if (existingRestaurant) {
+    console.log('⚠️  Existing restaurant found, clearing old data...')
+    await prisma.saleItem.deleteMany({
+      where: {
+        sale: { restaurantId: existingRestaurant.id },
       },
-    },
+    })
+    await prisma.sale.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+    await prisma.menuItemIngredient.deleteMany({
+      where: {
+        menuItem: { restaurantId: existingRestaurant.id },
+      },
+    })
+    await prisma.menuItem.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+    await prisma.ingredient.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+    await prisma.category.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+    await prisma.table.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+    await prisma.payroll.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+    await prisma.shift.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+    await prisma.employee.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+    await prisma.aIInsight.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+    await prisma.expense.deleteMany({
+      where: { restaurantId: existingRestaurant.id },
+    })
+  }
+
+  const restaurant = existingRestaurant
+    ? await prisma.restaurant.update({
+        where: { id: existingRestaurant.id },
+        data: {
+          name: 'Al-Rafidain Restaurant',
+          slug: 'al-rafidain',
+          email: 'info@alrafidain.iq',
+          phone: '+964 770 123 4567',
+          address: 'Baghdad, Iraq',
+          currency: 'IQD',
+          timezone: 'Asia/Baghdad',
+          settings: {
+            operatingHours: {
+              open: '10:00',
+              close: '23:00',
+            },
+            tables: 25,
+            seatingCapacity: 100,
+          },
+        },
+      })
+    : await prisma.restaurant.create({
+        data: {
+          name: 'Al-Rafidain Restaurant',
+          slug: 'al-rafidain',
+          email: 'info@alrafidain.iq',
+          phone: '+964 770 123 4567',
+          address: 'Baghdad, Iraq',
+          currency: 'IQD',
+          timezone: 'Asia/Baghdad',
+          settings: {
+            operatingHours: {
+              open: '10:00',
+              close: '23:00',
+            },
+            tables: 25,
+            seatingCapacity: 100,
+          },
+        },
+      })
+
+  await prisma.expense.createMany({
+    data: [
+      {
+        name: 'Rent',
+        category: 'Facilities',
+        amount: 1500000,
+        cadence: 'MONTHLY',
+        startDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        restaurantId: restaurant.id,
+      },
+      {
+        name: 'Electricity',
+        category: 'Utilities',
+        amount: 400000,
+        cadence: 'MONTHLY',
+        startDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        restaurantId: restaurant.id,
+      },
+      {
+        name: 'Water',
+        category: 'Utilities',
+        amount: 80000,
+        cadence: 'MONTHLY',
+        startDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        restaurantId: restaurant.id,
+      },
+      {
+        name: 'Cleaning Supplies',
+        category: 'Operations',
+        amount: 20000,
+        cadence: 'WEEKLY',
+        startDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        restaurantId: restaurant.id,
+      },
+      {
+        name: 'Marketing',
+        category: 'Growth',
+        amount: 600000,
+        cadence: 'ANNUAL',
+        startDate: new Date(now.getFullYear(), 0, 1),
+        restaurantId: restaurant.id,
+      },
+    ],
   })
 
   // ═══════════════════════════════════════════════════════════════
@@ -72,8 +187,15 @@ async function main() {
   console.log('👥 Creating users...')
   const hashedPassword = await bcrypt.hash('password123', 10)
 
-  const owner = await prisma.user.create({
-    data: {
+  const owner = await prisma.user.upsert({
+    where: { email: 'owner@alrafidain.iq' },
+    update: {
+      password: hashedPassword,
+      name: 'Ahmad Al-Rafidain',
+      role: 'OWNER',
+      restaurantId: restaurant.id,
+    },
+    create: {
       email: 'owner@alrafidain.iq',
       password: hashedPassword,
       name: 'Ahmad Al-Rafidain',
@@ -82,8 +204,15 @@ async function main() {
     },
   })
 
-  await prisma.user.create({
-    data: {
+  await prisma.user.upsert({
+    where: { email: 'manager@alrafidain.iq' },
+    update: {
+      password: hashedPassword,
+      name: 'Fatima Hassan',
+      role: 'MANAGER',
+      restaurantId: restaurant.id,
+    },
+    create: {
       email: 'manager@alrafidain.iq',
       password: hashedPassword,
       name: 'Fatima Hassan',
@@ -92,8 +221,15 @@ async function main() {
     },
   })
 
-  await prisma.user.create({
-    data: {
+  await prisma.user.upsert({
+    where: { email: 'staff@alrafidain.iq' },
+    update: {
+      password: hashedPassword,
+      name: 'Ali Mohammed',
+      role: 'STAFF',
+      restaurantId: restaurant.id,
+    },
+    create: {
       email: 'staff@alrafidain.iq',
       password: hashedPassword,
       name: 'Ali Mohammed',
@@ -101,6 +237,162 @@ async function main() {
       restaurantId: restaurant.id,
     },
   })
+
+  // ═══════════════════════════════════════════════════════════════
+  // 2.5 CREATE TABLES
+  // ═══════════════════════════════════════════════════════════════
+  console.log('🪑 Creating tables...')
+  const tables = await Promise.all(
+    Array.from({ length: 20 }).map((_, index) =>
+      prisma.table.create({
+        data: {
+          number: `T${index + 1}`,
+          capacity: index % 3 === 0 ? 6 : index % 2 === 0 ? 4 : 2,
+          status: 'AVAILABLE',
+          restaurantId: restaurant.id,
+        },
+      })
+    )
+  )
+
+  // ═══════════════════════════════════════════════════════════════
+  // 2.6 CREATE EMPLOYEES
+  // ═══════════════════════════════════════════════════════════════
+  console.log('👨‍🍳 Creating employees...')
+  const employees = await Promise.all([
+    prisma.employee.create({
+      data: {
+        name: 'Sara Ibrahim',
+        position: 'MANAGER',
+        email: 'sara.manager@alrafidain.iq',
+        phone: '+964 770 555 1101',
+        salary: 1200000,
+        salaryType: 'MONTHLY',
+        restaurantId: restaurant.id,
+      },
+    }),
+    prisma.employee.create({
+      data: {
+        name: 'Omar Hassan',
+        position: 'CHEF',
+        phone: '+964 770 555 1102',
+        salary: 1500000,
+        salaryType: 'MONTHLY',
+        restaurantId: restaurant.id,
+      },
+    }),
+    prisma.employee.create({
+      data: {
+        name: 'Huda Ali',
+        position: 'WAITER',
+        phone: '+964 770 555 1103',
+        salary: 25000,
+        salaryType: 'DAILY',
+        restaurantId: restaurant.id,
+      },
+    }),
+    prisma.employee.create({
+      data: {
+        name: 'Mustafa Kareem',
+        position: 'WAITER',
+        phone: '+964 770 555 1104',
+        salary: 25000,
+        salaryType: 'DAILY',
+        restaurantId: restaurant.id,
+      },
+    }),
+    prisma.employee.create({
+      data: {
+        name: 'Zainab Mahmood',
+        position: 'WAITER',
+        phone: '+964 770 555 1105',
+        salary: 25000,
+        salaryType: 'DAILY',
+        restaurantId: restaurant.id,
+      },
+    }),
+    prisma.employee.create({
+      data: {
+        name: 'Hassan Rashid',
+        position: 'WAITER',
+        phone: '+964 770 555 1106',
+        salary: 25000,
+        salaryType: 'DAILY',
+        restaurantId: restaurant.id,
+      },
+    }),
+    prisma.employee.create({
+      data: {
+        name: 'Maryam Adel',
+        position: 'CASHIER',
+        phone: '+964 770 555 1107',
+        salary: 900000,
+        salaryType: 'MONTHLY',
+        restaurantId: restaurant.id,
+      },
+    }),
+    prisma.employee.create({
+      data: {
+        name: 'Ali Qasim',
+        position: 'CLEANER',
+        phone: '+964 770 555 1108',
+        salary: 700000,
+        salaryType: 'MONTHLY',
+        restaurantId: restaurant.id,
+      },
+    }),
+  ])
+
+  const waiters = employees.filter((employee) => employee.position === 'WAITER')
+
+  // ═══════════════════════════════════════════════════════════════
+  // 2.7 CREATE SHIFTS
+  // ═══════════════════════════════════════════════════════════════
+  console.log('🗓️  Creating shifts...')
+  const shiftData: any[] = []
+  for (let dayOffset = 13; dayOffset >= 0; dayOffset--) {
+    const shiftDate = new Date(now.getTime() - dayOffset * 24 * 60 * 60 * 1000)
+    employees.forEach((employee, index) => {
+      if (index % 2 === dayOffset % 2) {
+        shiftData.push({
+          employeeId: employee.id,
+          date: shiftDate,
+          startTime: index % 2 === 0 ? '10:00' : '14:00',
+          endTime: index % 2 === 0 ? '18:00' : '22:00',
+          hoursWorked: 8,
+          restaurantId: restaurant.id,
+        })
+      }
+    })
+  }
+  await prisma.shift.createMany({ data: shiftData })
+
+  // ═══════════════════════════════════════════════════════════════
+  // 2.8 CREATE PAYROLLS
+  // ═══════════════════════════════════════════════════════════════
+  console.log('💵 Creating payrolls...')
+  const payrollData: any[] = []
+  for (let monthOffset = 0; monthOffset < 2; monthOffset++) {
+    const period = new Date(now.getFullYear(), now.getMonth() - monthOffset, 25)
+    employees.forEach((employee) => {
+      const baseSalary =
+        employee.salaryType === 'DAILY' ? employee.salary * 26 : employee.salary
+      const bonuses = employee.position === 'WAITER' ? 50000 : 0
+      const deductions = employee.position === 'CLEANER' ? 25000 : 0
+      payrollData.push({
+        employeeId: employee.id,
+        period,
+        baseSalary,
+        bonuses,
+        deductions,
+        totalPaid: baseSalary + bonuses - deductions,
+        paidDate: new Date(period.getTime() + 2 * 24 * 60 * 60 * 1000),
+        status: 'PAID',
+        restaurantId: restaurant.id,
+      })
+    })
+  }
+  await prisma.payroll.createMany({ data: payrollData })
 
   // ═══════════════════════════════════════════════════════════════
   // 3. CREATE INGREDIENTS
@@ -1234,11 +1526,10 @@ async function main() {
   console.log('✅ Created all recipes')
 
   // ═══════════════════════════════════════════════════════════════
-  // 7. CREATE SALES DATA (90 days history)
+  // 7. CREATE SALES DATA (30 days history)
   // ═══════════════════════════════════════════════════════════════
-  console.log('💰 Creating sales history (90 days)...')
+  console.log('💰 Creating sales history (30 days)...')
 
-  const now = new Date()
   const daysAgo90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
 
   // Helper to get menu item cost
@@ -1305,14 +1596,14 @@ async function main() {
   let orderCounter = 1
   const sales: any[] = []
 
-  for (let dayOffset = 89; dayOffset >= 0; dayOffset--) {
+  for (let dayOffset = 29; dayOffset >= 0; dayOffset--) {
     const saleDate = new Date(now.getTime() - dayOffset * 24 * 60 * 60 * 1000)
     const dayOfWeek = saleDate.getDay()
     const isWeekend = dayOfWeek === 5 || dayOfWeek === 6 // Friday, Saturday
 
     // More orders on weekends
-    const baseOrders = isWeekend ? 45 : 35
-    const ordersToday = baseOrders + Math.floor(Math.random() * 15)
+    const baseOrders = isWeekend ? 26 : 18
+    const ordersToday = baseOrders + Math.floor(Math.random() * 10)
 
     // Peak hours: 12pm-2pm (lunch), 7pm-9pm (dinner)
     const peakHoursLunch = [12, 13, 14]
@@ -1357,13 +1648,24 @@ async function main() {
         orderTotal += selectedItem.price * quantity
       }
 
+      const isCardPayment = Math.random() < 0.35
+      const isApplePay = isCardPayment && Math.random() < 0.45
+
+      const waiter = waiters[Math.floor(Math.random() * waiters.length)]
+      const table = tables[Math.floor(Math.random() * tables.length)]
+      const assignWaiter = Math.random() < 0.8
+      const assignTable = Math.random() < 0.7
+
       sales.push({
         orderNumber: `ORD-${String(orderCounter++).padStart(5, '0')}`,
         total: orderTotal,
-        paymentMethod: 'CASH',
+        paymentMethod: isCardPayment ? (isApplePay ? 'APPLE_PAY' : 'CARD') : 'CASH',
+        paymentProvider: isCardPayment ? 'STRIPE' : null,
         status: 'COMPLETED',
         restaurantId: restaurant.id,
         timestamp: orderTime,
+        waiterId: assignWaiter ? waiter?.id : null,
+        tableId: assignTable ? table?.id : null,
         items: orderItems,
       })
     }
@@ -1377,9 +1679,12 @@ async function main() {
         orderNumber: sale.orderNumber,
         total: sale.total,
         paymentMethod: sale.paymentMethod,
+        paymentProvider: sale.paymentProvider,
         status: sale.status,
         restaurantId: sale.restaurantId,
         timestamp: sale.timestamp,
+        waiterId: sale.waiterId,
+        tableId: sale.tableId,
         items: {
           createMany: {
             data: sale.items,
@@ -1455,7 +1760,7 @@ async function main() {
   console.log(`   • Ingredients: ${ingredients.length}`)
   console.log(`   • Categories: ${categories.length}`)
   console.log(`   • Menu Items: ${menuItems.length}`)
-  console.log(`   • Sales Orders: ${sales.length} (90 days history)`)
+  console.log(`   • Sales Orders: ${sales.length} (30 days history)`)
   console.log(`   • AI Insights: 5`)
   console.log('')
   console.log('🌐 You can now login and explore the dashboard!')

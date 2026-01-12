@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:seed-pnl": "tsx prisma/seed-pnl.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -23,6 +24,9 @@
     "@radix-ui/react-separator": "^1.0.3",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-tabs": "^1.0.4",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@stripe/react-stripe-js": "^2.9.0",
+    "@stripe/stripe-js": "^4.1.0",
     "autoprefixer": "^10.4.23",
     "bcryptjs": "2.4.3",
     "class-variance-authority": "^0.7.0",
@@ -31,10 +35,12 @@
     "lucide-react": "^0.562.0",
     "next": "14.2.5",
     "next-auth": "^4.24.13",
+    "pdf-lib": "^1.17.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-hook-form": "7.52.1",
     "recharts": "2.15.4",
+    "stripe": "^14.24.0",
     "tailwind-merge": "^2.4.0",
     "tailwindcss-animate": "^1.0.7",
     "unsplash-js": "^7.0.19",

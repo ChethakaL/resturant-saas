@@ -12,6 +12,11 @@ import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, AlertTriangle } from 'luc
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import { Category, Ingredient, MenuItem, MenuItemIngredient } from '@prisma/client'
+import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
+import { loadStripe } from '@stripe/stripe-js'
+
+const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
 
 interface MenuItemWithDetails extends MenuItem {
   category: Category
@@ -21,6 +26,59 @@ interface MenuItemWithDetails extends MenuItem {
 interface OrderItem {
   menuItemId: string
   quantity: number
+}
+
+function StripePaymentForm({
+  onPaymentSuccess,
+  loading,
+}: {
+  onPaymentSuccess: (paymentIntentId: string) => Promise<void>
+  loading: boolean
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [confirming, setConfirming] = useState(false)
+
+  const handleConfirm = async () => {
+    if (!stripe || !elements) {
+      return
+    }
+
+    setConfirming(true)
+    const result = await stripe.confirmPayment({
+      elements,
+      redirect: 'if_required',
+    })
+
+    if (result.error) {
+      alert(result.error.message || 'Payment failed. Please try again.')
+      setConfirming(false)
+      return
+    }
+
+    if (result.paymentIntent?.status === 'succeeded') {
+      await onPaymentSuccess(result.paymentIntent.id)
+      return
+    }
+
+    alert('Payment was not completed. Please try again.')
+    setConfirming(false)
+  }
+
+  return (
+    <div className="space-y-3">
+      <PaymentElement />
+      <Button
+        type="button"
+        size="lg"
+        className="w-full"
+        onClick={handleConfirm}
+        disabled={loading || confirming}
+      >
+        {confirming ? 'Confirming...' : 'Confirm Card / Apple Pay'}
+      </Button>
+    </div>
+  )
 }
 
 export default function NewOrderForm({
@@ -42,6 +100,9 @@ export default function NewOrderForm({
     notes: '',
   })
   const [cashReceived, setCashReceived] = useState('')
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null)
+  const [stripeInitLoading, setStripeInitLoading] = useState(false)
+  const isCashPayment = orderDetails.paymentMethod === 'CASH'
 
   // Filter menu items based on search and category
   const filteredMenuItems = useMemo(() => {
@@ -143,6 +204,41 @@ export default function NewOrderForm({
     setOrderItems(orderItems.filter((item) => item.menuItemId !== menuItemId))
   }
 
+  const createOrder = async ({
+    paymentMethod,
+    paymentProvider,
+    stripePaymentIntentId,
+  }: {
+    paymentMethod: string
+    paymentProvider?: string
+    stripePaymentIntentId?: string
+  }) => {
+    const response = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: orderDetails.customerName || null,
+        tableNumber: orderDetails.tableNumber || null,
+        paymentMethod,
+        paymentProvider: paymentProvider || null,
+        stripePaymentIntentId: stripePaymentIntentId || null,
+        paidAt: new Date().toISOString(),
+        status: 'COMPLETED',
+        notes: orderDetails.notes || null,
+        items: orderItems,
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to create order')
+    }
+
+    const order = await response.json()
+    router.push(`/dashboard/orders/${order.id}`)
+    router.refresh()
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -151,46 +247,56 @@ export default function NewOrderForm({
       return
     }
 
-    if (cashReceivedAmount < orderSummary.total) {
-      alert('Cash received must cover the total amount.')
+    if (stockWarnings.length > 0) {
+      alert('Cannot complete order due to insufficient stock:\n\n' + stockWarnings.join('\n'))
       return
     }
 
-    if (stockWarnings.length > 0) {
-      alert('Cannot complete order due to insufficient stock:\n\n' + stockWarnings.join('\n'))
+    if (!isCashPayment) {
+      alert('Use the card payment section to complete card payments.')
+      return
+    }
+
+    if (cashReceivedAmount < orderSummary.total) {
+      alert('Cash received must cover the total amount.')
       return
     }
 
     setLoading(true)
 
     try {
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerName: orderDetails.customerName || null,
-          tableNumber: orderDetails.tableNumber || null,
-          paymentMethod: orderDetails.paymentMethod,
-          notes: orderDetails.notes || null,
-          items: orderItems,
-        }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to create order')
-      }
-
-      const order = await response.json()
-
-      // Redirect to order details/receipt
-      router.push(`/dashboard/orders/${order.id}`)
-      router.refresh()
+      await createOrder({ paymentMethod: 'CASH' })
     } catch (error: any) {
       console.error('Error creating order:', error)
       alert(error.message || 'Failed to create order. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const initCardPayment = async () => {
+    setStripeInitLoading(true)
+    try {
+      const response = await fetch('/api/payments/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: orderSummary.total,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to initialize payment.')
+      }
+
+      const data = await response.json()
+      setStripeClientSecret(data.clientSecret)
+    } catch (error: any) {
+      console.error('Error initializing payment:', error)
+      alert(error.message || 'Failed to initialize payment.')
+    } finally {
+      setStripeInitLoading(false)
     }
   }
 
@@ -333,9 +439,22 @@ export default function NewOrderForm({
 
                 <div className="space-y-2">
                   <Label>Payment Method</Label>
-                  <div className="h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-700">
-                    Cash (IQD)
-                  </div>
+                  <Select
+                    value={orderDetails.paymentMethod}
+                    onValueChange={(value) =>
+                      setOrderDetails({ ...orderDetails, paymentMethod: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CASH">Cash (IQD)</SelectItem>
+                      <SelectItem value="CARD" disabled={!stripePromise}>
+                        Card / Apple Pay (Stripe)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -447,7 +566,7 @@ export default function NewOrderForm({
                   )}
                 </div>
 
-                {orderItems.length > 0 && (
+                {orderItems.length > 0 && isCashPayment && (
                   <div className="mt-6 space-y-3 border-t border-slate-200 pt-4">
                     <div className="space-y-2">
                       <Label htmlFor="cashReceived">Cash Received (IQD)</Label>
@@ -467,6 +586,50 @@ export default function NewOrderForm({
                         {formatCurrency(changeDue)}
                       </span>
                     </div>
+                  </div>
+                )}
+
+                {orderItems.length > 0 && !isCashPayment && (
+                  <div className="mt-6 space-y-3 border-t border-slate-200 pt-4">
+                    {!stripePromise && (
+                      <p className="text-sm text-amber-600">
+                        Add NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY to enable card payments.
+                      </p>
+                    )}
+                    {stripePromise && stripeClientSecret ? (
+                      <Elements
+                        stripe={stripePromise}
+                        options={{ clientSecret: stripeClientSecret }}
+                      >
+                        <StripePaymentForm
+                          loading={loading}
+                          onPaymentSuccess={async (paymentIntentId) => {
+                            setLoading(true)
+                            try {
+                              await createOrder({
+                                paymentMethod: 'CARD',
+                                paymentProvider: 'STRIPE',
+                                stripePaymentIntentId: paymentIntentId,
+                              })
+                            } catch (error: any) {
+                              console.error('Error completing card payment:', error)
+                              alert(error.message || 'Failed to create order.')
+                              setLoading(false)
+                            }
+                          }}
+                        />
+                      </Elements>
+                    ) : stripePromise ? (
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="w-full"
+                        disabled={stripeInitLoading}
+                        onClick={initCardPayment}
+                      >
+                        {stripeInitLoading ? 'Preparing Payment...' : 'Start Card Payment'}
+                      </Button>
+                    ) : null}
                   </div>
                 )}
 
@@ -497,13 +660,13 @@ export default function NewOrderForm({
                   loading ||
                   orderItems.length === 0 ||
                   stockWarnings.length > 0 ||
-                  cashReceivedAmount < orderSummary.total
+                  (isCashPayment && cashReceivedAmount < orderSummary.total)
                 }
                 size="lg"
                 className="w-full"
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
-                {loading ? 'Processing...' : 'Complete Order'}
+                {loading ? 'Processing...' : isCashPayment ? 'Complete Cash Order' : 'Complete Order'}
               </Button>
               <Link href="/dashboard/orders" className="w-full">
                 <Button type="button" variant="outline" disabled={loading} className="w-full">

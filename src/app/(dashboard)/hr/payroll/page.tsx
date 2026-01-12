@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, CheckCircle, Clock, XCircle } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { redirect } from 'next/navigation'
 
 async function getPayrolls(restaurantId: string) {
   const payrolls = await prisma.payroll.findMany({
@@ -49,6 +50,9 @@ function getStatusIcon(status: string) {
 export default async function PayrollPage() {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
+  if (session!.user.role === 'STAFF') {
+    redirect('/dashboard/orders')
+  }
 
   const payrolls = await getPayrolls(restaurantId)
 

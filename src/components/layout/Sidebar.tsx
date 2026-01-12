@@ -15,13 +15,16 @@ import {
   Users,
   DollarSign,
   Calendar,
+  ChefHat,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Profit & Loss', href: '/profit-loss', icon: DollarSign },
+  { name: 'Meal Prep', href: '/meal-prep', icon: ChefHat },
   { name: 'Tables', href: '/tables', icon: Grid3x3 },
   { name: 'Orders', href: '/orders', icon: ShoppingCart },
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
@@ -41,6 +44,12 @@ interface SidebarProps {
 
 export function Sidebar({ restaurantName, userName, userRole }: SidebarProps) {
   const pathname = usePathname()
+  const visibleNavigation =
+    userRole === 'STAFF'
+      ? navigation.filter((item) =>
+          ['Tables', 'Orders', 'Menu', 'Meal Prep'].includes(item.name)
+        )
+      : navigation
 
   return (
     <div className="flex flex-col h-full bg-slate-900 text-white w-64">
@@ -54,7 +63,7 @@ export function Sidebar({ restaurantName, userName, userRole }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
-        {navigation.map((item) => {
+        {visibleNavigation.map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
           return (
             <Link

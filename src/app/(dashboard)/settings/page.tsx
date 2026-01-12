@@ -1,6 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { redirect } from 'next/navigation'
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const session = await getServerSession(authOptions)
+  if (session?.user.role === 'STAFF') {
+    redirect('/dashboard/orders')
+  }
+
   return (
     <div className="space-y-6">
       <div>

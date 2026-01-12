@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, Calendar as CalendarIcon, Clock, Users } from 'lucide-react'
+import { redirect } from 'next/navigation'
 
 async function getShifts(restaurantId: string) {
   const startOfWeek = new Date()
@@ -46,6 +47,9 @@ async function getShifts(restaurantId: string) {
 export default async function ShiftsPage() {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
+  if (session!.user.role === 'STAFF') {
+    redirect('/dashboard/orders')
+  }
 
   const { shifts, employees } = await getShifts(restaurantId)
 
