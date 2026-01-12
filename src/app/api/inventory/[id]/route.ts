@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -13,12 +13,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const resolvedParams = params instanceof Promise ? await params : params
     const data = await request.json()
 
     // Verify ingredient belongs to restaurant
     const existing = await prisma.ingredient.findFirst({
       where: {
-        id: params.id,
+        id: resolvedParams.id,
         restaurantId: session.user.restaurantId,
       },
     })
@@ -28,7 +29,7 @@ export async function PATCH(
     }
 
     const ingredient = await prisma.ingredient.update({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
       data: {
         name: data.name,
         unit: data.unit,
@@ -51,7 +52,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -59,10 +60,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const resolvedParams = params instanceof Promise ? await params : params
+
     // Verify ingredient belongs to restaurant
     const existing = await prisma.ingredient.findFirst({
       where: {
-        id: params.id,
+        id: resolvedParams.id,
         restaurantId: session.user.restaurantId,
       },
     })
@@ -72,7 +75,7 @@ export async function DELETE(
     }
 
     await prisma.ingredient.delete({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
     })
 
     return NextResponse.json({ success: true })

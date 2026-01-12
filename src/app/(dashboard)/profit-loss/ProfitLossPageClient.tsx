@@ -17,6 +17,7 @@ interface PnLData {
     cogs: number
     cogsFromSales: number
     cogsFromMealPrep: number
+    cogsFromManualAdjustments: number
     grossProfit: number
     expenses: number
     payroll: number

@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 
+export const dynamic = 'force-dynamic'
+
 function daysBetweenInclusive(start: Date, end: Date) {
   const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
   const endUtc = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate())

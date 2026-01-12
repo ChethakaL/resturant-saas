@@ -4,24 +4,61 @@ Scope / Time Window
 - The Profit & Loss page uses the current month from the 1st of the month through "today".
 - All calculations are based on COMPLETED sales in that date range.
 
-Revenue
-- Revenue = SUM(sale.total) for COMPLETED sales in date range.
-- Source: Sale.total.
+REVENUE CALCULATION (UPDATED - Includes All Expenses)
+=====================================================
+⚠️ IMPORTANT: Revenue shown in charts and reports is NET REVENUE (after all expenses)
+
+Daily Revenue Calculation:
+- Gross Revenue = SUM(sale.total) for COMPLETED sales on that date
+- Daily COGS = COGS from sales + Meal Prep COGS + Manual Adjustment COGS
+- Daily Operating Expenses = (Recurring Expenses / days in period) + One-time Expenses on that date + Waste Costs on that date
+- Daily Payroll = Total Payroll / days in period
+- Daily Net Revenue = Gross Revenue - Daily COGS - Daily Operating Expenses - Daily Payroll
+- Daily Margin % = (Daily Net Revenue / Gross Revenue) × 100
+
+Monthly Revenue Calculation:
+- Gross Revenue = SUM(sale.total) for COMPLETED sales in date range
+- Monthly COGS = Sales COGS + Meal Prep COGS + Manual Adjustment COGS
+- Monthly Operating Expenses = Recurring Expenses + ExpenseTransactions + Waste Costs
+- Monthly Payroll = SUM(payroll.totalPaid) for PAID payrolls in period
+- Monthly Net Revenue = Gross Revenue - Monthly COGS - Monthly Operating Expenses - Monthly Payroll
+- Monthly Margin % = (Monthly Net Revenue / Gross Revenue) × 100
 
 COGS (Cost of Goods Sold)
-- COGS = COGS from completed sales + Meal Prep usage cost.
-- COGS from sales = SUM(saleItem.cost * saleItem.quantity) for sale items attached to COMPLETED sales.
-- Meal Prep COGS = SUM(mealPrepInventoryUsage.quantityUsed * ingredient.costPerUnit) for prep sessions in range.
-- Source: SaleItem.cost (captured at time of sale) and Ingredient.costPerUnit at prep time.
+=========================
+COGS = COGS from completed sales + Meal Prep usage cost + Manual stock adjustments
+
+1. COGS from Sales:
+   - COGS = SUM(saleItem.cost * saleItem.quantity) for sale items attached to COMPLETED sales
+   - Source: SaleItem.cost (captured at time of sale)
+
+2. Meal Prep COGS:
+   - Meal Prep COGS = SUM(mealPrepInventoryUsage.quantityUsed * ingredient.costPerUnit) for prep sessions in range
+   - This includes ingredients used in prep even if dishes weren't sold yet
+   - Source: Ingredient.costPerUnit at prep time
+
+3. Manual Adjustment COGS:
+   - When inventory is manually adjusted with reason "used", it creates an expense transaction
+   - Manual Adjustment COGS = SUM(expenseTransaction.amount) WHERE notes contains "COGS" or "Manual stock adjustment"
+   - Source: ExpenseTransaction with category INVENTORY_PURCHASE and COGS notes
 
 Gross Profit
-- Gross Profit = Revenue - COGS.
+============
+Gross Profit = Gross Revenue - Total COGS
 
-Expenses (Operating Expenses)
-- Recurring Expenses: Each Expense has cadence and a start/end date.
-- For the selected period, each recurring expense contributes a prorated total based on overlap with the date range.
-- One-time Expenses: ExpenseTransactions in range (includes inventory purchases and overhead).
-- Waste Costs: WasteRecord.cost in range.
+Operating Expenses
+==================
+1. Recurring Expenses:
+   - Each Expense has cadence (DAILY, WEEKLY, MONTHLY, ANNUAL) and a start/end date
+   - For the selected period, each recurring expense contributes a prorated total based on overlap with the date range
+
+2. One-time Expenses:
+   - ExpenseTransactions in range (includes inventory purchases, rent, utilities, marketing, maintenance, other)
+   - Includes waste costs automatically
+
+3. Waste Costs:
+   - WasteRecord.cost in range
+   - Automatically creates expense transaction
 
 Cadence formulas (for overlapping days/months only):
 - DAILY: total = amount * number_of_days_in_range
@@ -30,30 +67,74 @@ Cadence formulas (for overlapping days/months only):
 - ANNUAL: total = amount * (number_of_months_in_range / 12)
 
 Payroll
-- Payroll total = SUM(payroll.totalPaid) for payrolls with status = PAID and period within the date range.
-- This is treated as Labor Expense in P&L and the transaction table.
-- Source: Payroll.totalPaid.
+=======
+Payroll total = SUM(payroll.totalPaid) for payrolls with status = PAID and period within the date range.
+This is treated as Labor Expense in P&L and the transaction table.
+Source: Payroll.totalPaid
 
 Total Expenses
-- Total Expenses = (Recurring Expenses + ExpenseTransactions + Waste) + Payroll total.
+==============
+Total Expenses = (Recurring Expenses + ExpenseTransactions + Waste) + Payroll total
 
 Net Profit
-- Net Profit = Revenue - COGS - Operating Expenses - Payroll.
-- If this is negative, it means operating expenses + payroll exceed gross profit.
+==========
+Net Profit = Gross Revenue - COGS - Operating Expenses - Payroll
+If this is negative, it means operating expenses + payroll exceed gross profit.
 
-Transactions Overview Chart
-- Daily Revenue = sum of sale.total per day.
-- Daily Expenses = (Total Expenses for the date range) / (Number of days in range).
-- Daily Net = Daily Revenue - Daily Expenses.
+Daily Revenue and Margin Chart
+===============================
+For each day in the past month:
+- Revenue = Gross Revenue (sum of sale.total for that day)
+- Daily COGS = COGS from sales on that day + Meal Prep COGS on that day + Manual Adjustment COGS on that day
+- Daily Operating Expenses = (Recurring Expenses / days in period) + One-time Expenses on that date + Waste Costs on that date
+- Daily Payroll = Total Payroll / days in period
+- Daily Net Profit = Gross Revenue - Daily COGS - Daily Operating Expenses - Daily Payroll
+- Daily Margin % = (Daily Net Profit / Gross Revenue) × 100
+  Note: If expenses exceed revenue, margin will be negative (this is mathematically correct but indicates a loss)
 
 Dashboard Monthly Metrics
-- Monthly Revenue = SUM(sale.total) for COMPLETED sales in month.
-- Monthly COGS = (Sales COGS + Meal Prep COGS).
-- Monthly Net Profit = Monthly Revenue - Monthly COGS - Operating Expenses - Payroll.
-- Net Margin % = (Monthly Net Profit / Monthly Revenue) × 100.
-- Food Cost % = (Monthly COGS / Monthly Revenue) × 100.
+=========================
+- Monthly Gross Revenue = SUM(sale.total) for COMPLETED sales in month
+- Monthly COGS = (Sales COGS + Meal Prep COGS + Manual Adjustment COGS)
+- Monthly Operating Expenses = Recurring Expenses + ExpenseTransactions (excluding waste transactions) + Waste Records
+  Note: Waste is counted ONCE - either as WasteRecord OR as ExpenseTransaction with "Waste record:" in notes, not both
+- Monthly Payroll = SUM(payroll.totalPaid) for PAID payrolls
+- Monthly Net Profit = Monthly Gross Revenue - Monthly COGS - Monthly Operating Expenses - Monthly Payroll
+- Net Margin % = (Monthly Net Profit / Monthly Gross Revenue) × 100
+  Formula: Margin % = ((Revenue - COGS - Operating Expenses - Payroll) / Revenue) × 100
+  Example: If Revenue = 1,000,000 IQD, COGS = 300,000, Expenses = 200,000, Payroll = 150,000
+           Net Profit = 1,000,000 - 300,000 - 200,000 - 150,000 = 350,000 IQD
+           Margin % = (350,000 / 1,000,000) × 100 = 35%
+- Food Cost % = (Monthly COGS / Monthly Gross Revenue) × 100
+
+Menu Item Analytics
+===================
+Top Selling Items:
+- Quantity = SUM(saleItem.quantity) for menu item in period
+- Revenue = SUM(saleItem.price * saleItem.quantity)
+- Profit = SUM((saleItem.price - saleItem.cost) * saleItem.quantity)
+- Margin % = (Profit / Revenue) × 100
+- Peak Time = Time bucket (Morning/Afternoon/Evening) with highest quantity sold
+
+Worst Selling Items:
+- Same calculations as Top Selling, sorted by quantity ascending
+
+Highest Margin Items:
+- Same calculations, sorted by margin % descending
+- Shows commonly purchased with (item most frequently bought together)
+
+Lowest Margin Items:
+- Same calculations, sorted by margin % ascending
+
+Items Commonly Purchased Together:
+- For each order, find all unique item pairs
+- Count = Number of orders containing both items
+- Total Margin = Average margin of orders containing both items
+- Peak Time = Time bucket with most occurrences
 
 Notes / Why you might see a loss
-- If the seeded monthly rent/utility expenses are high relative to revenue, Net Profit will be negative.
-- If payroll totals are large and sales volume is low, Net Profit will be negative.
-- This is expected given the current seed values; adjust expense amounts or generate more sales to show a profit.
+=================================
+- If monthly rent/utility expenses are high relative to revenue, Net Profit will be negative
+- If payroll totals are large and sales volume is low, Net Profit will be negative
+- This is expected given realistic expense values; adjust expense amounts or generate more sales to show a profit
+- The revenue shown in charts is NET REVENUE (after all expenses), not gross revenue

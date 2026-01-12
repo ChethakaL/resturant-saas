@@ -5,8 +5,9 @@ import { NextResponse } from 'next/server'
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
+  const resolvedParams = params instanceof Promise ? await params : params
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.restaurantId) {
@@ -18,7 +19,7 @@ export async function POST(
     // Verify ingredient belongs to restaurant
     const ingredient = await prisma.ingredient.findFirst({
       where: {
-        id: params.id,
+        id: resolvedParams.id,
         restaurantId: session.user.restaurantId,
       },
     })
@@ -38,24 +39,47 @@ export async function POST(
     }
 
     // Update stock and create adjustment record in a transaction
-    const result = await prisma.$transaction([
-      prisma.ingredient.update({
-        where: { id: params.id },
+    const result = await prisma.$transaction(async (tx) => {
+      // Update ingredient stock
+      const updatedIngredient = await tx.ingredient.update({
+        where: { id: resolvedParams.id },
         data: {
           stockQuantity: newStock,
         },
-      }),
-      prisma.stockAdjustment.create({
+      })
+
+      // Create stock adjustment record
+      await tx.stockAdjustment.create({
         data: {
-          ingredientId: params.id,
+          ingredientId: resolvedParams.id,
           quantityChange: data.quantityChange,
           reason: data.reason,
           notes: data.notes,
         },
-      }),
-    ])
+      })
 
-    return NextResponse.json(result[0])
+      // If this is a usage (negative quantity change) and reason indicates "used", create COGS expense
+      if (data.quantityChange < 0 && (data.reason?.toLowerCase().includes('used') || data.reason?.toLowerCase().includes('usage'))) {
+        const quantityUsed = Math.abs(data.quantityChange)
+        const cost = quantityUsed * ingredient.costPerUnit
+
+        // Create expense transaction for COGS
+        await tx.expenseTransaction.create({
+          data: {
+            name: `COGS: ${ingredient.name} (Manual Adjustment)`,
+            category: 'INVENTORY_PURCHASE', // Using this category for COGS tracking
+            amount: cost,
+            date: new Date(),
+            notes: `Manual stock adjustment: ${quantityUsed} ${ingredient.unit} used. ${data.notes || ''}`,
+            restaurantId: session.user.restaurantId,
+          },
+        })
+      }
+
+      return updatedIngredient
+    })
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Error adjusting stock:', error)
     return NextResponse.json(

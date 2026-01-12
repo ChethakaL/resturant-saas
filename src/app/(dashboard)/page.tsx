@@ -15,10 +15,11 @@ import {
   Award,
   Package
 } from 'lucide-react'
-import AIInsightsCard from '@/components/insights/AIInsightsCard'
 import { redirect } from 'next/navigation'
-import WeeklySalesChart from '@/components/dashboard/WeeklySalesChart'
 import PnLReminder from '@/components/dashboard/PnLReminder'
+import DailyRevenueMarginChart from '@/components/dashboard/DailyRevenueMarginChart'
+import MenuItemAnalytics from '@/components/dashboard/MenuItemAnalytics'
+import TopWaitersChart from '@/components/dashboard/TopWaitersChart'
 
 function daysBetweenInclusive(start: Date, end: Date) {
   const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
@@ -69,6 +70,219 @@ function expenseTotalForPeriod(
       return expense.amount * (monthCount / 12)
     default:
       return 0
+  }
+}
+
+const TIME_BUCKETS = ['Morning', 'Afternoon', 'Evening'] as const
+type TimeBucket = typeof TIME_BUCKETS[number]
+
+function getTimeBucket(date: Date): TimeBucket {
+  const hour = date.getHours()
+  if (hour < 12) return 'Morning'
+  if (hour < 17) return 'Afternoon'
+  return 'Evening'
+}
+
+async function getAnalyticsData(restaurantId: string) {
+  const endDate = new Date()
+  const monthStart = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+
+  const monthlySales = await prisma.sale.findMany({
+    where: {
+      restaurantId,
+      status: 'COMPLETED',
+      timestamp: {
+        gte: monthStart,
+        lte: endDate,
+      },
+    },
+    include: {
+      items: true,
+    },
+  })
+
+  const monthlySaleItems = await prisma.saleItem.findMany({
+    where: {
+      sale: {
+        restaurantId,
+        status: 'COMPLETED',
+        timestamp: {
+          gte: monthStart,
+          lte: endDate,
+        },
+      },
+    },
+    include: {
+      menuItem: true,
+      sale: true,
+    },
+  })
+
+  const itemStats = new Map<
+    string,
+    {
+      id: string
+      name: string
+      quantity: number
+      revenue: number
+      profit: number
+      timeOfDay: Record<TimeBucket, number>
+    }
+  >()
+
+  monthlySaleItems.forEach((item) => {
+    const lineRevenue = item.price * item.quantity
+    const lineProfit = (item.price - item.cost) * item.quantity
+    const bucket = getTimeBucket(item.sale.timestamp)
+    const current = itemStats.get(item.menuItemId) || {
+      id: item.menuItemId,
+      name: item.menuItem.name,
+      quantity: 0,
+      revenue: 0,
+      profit: 0,
+      timeOfDay: {
+        Morning: 0,
+        Afternoon: 0,
+        Evening: 0,
+      },
+    }
+
+    current.quantity += item.quantity
+    current.revenue += lineRevenue
+    current.profit += lineProfit
+    current.timeOfDay[bucket] += item.quantity
+    itemStats.set(item.menuItemId, current)
+  })
+
+  const comboMap = new Map<
+    string,
+    {
+      items: [string, string]
+      count: number
+      revenue: number
+      profit: number
+      timeOfDay: Record<TimeBucket, number>
+    }
+  >()
+  const topPairByItem = new Map<string, { item: string; count: number }>()
+
+  monthlySales.forEach((sale) => {
+    const uniqueItems = Array.from(
+      new Set(sale.items.map((item) => item.menuItemId))
+    )
+    const bucket = getTimeBucket(sale.timestamp)
+    const saleRevenue = sale.items.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    )
+    const saleProfit = sale.items.reduce(
+      (sum, item) => sum + (item.price - item.cost) * item.quantity,
+      0
+    )
+
+    for (let i = 0; i < uniqueItems.length; i += 1) {
+      for (let j = i + 1; j < uniqueItems.length; j += 1) {
+        const a = uniqueItems[i]
+        const b = uniqueItems[j]
+        const key = [a, b].sort().join('|')
+        const current = comboMap.get(key) || {
+          items: [a, b] as [string, string],
+          count: 0,
+          revenue: 0,
+          profit: 0,
+          timeOfDay: {
+            Morning: 0,
+            Afternoon: 0,
+            Evening: 0,
+          },
+        }
+
+        current.count += 1
+        current.revenue += saleRevenue
+        current.profit += saleProfit
+        current.timeOfDay[bucket] += 1
+        comboMap.set(key, current)
+
+        const updateTopPair = (primary: string, secondary: string) => {
+          const existing = topPairByItem.get(primary)
+          if (!existing || existing.count < current.count) {
+            topPairByItem.set(primary, { item: secondary, count: current.count })
+          }
+        }
+        updateTopPair(a, b)
+        updateTopPair(b, a)
+      }
+    }
+  })
+
+  const itemStatsArray = Array.from(itemStats.values()).map((item) => {
+    const topTimeOfDay = TIME_BUCKETS.reduce((top, bucket) =>
+      item.timeOfDay[bucket] > item.timeOfDay[top] ? bucket : top
+    )
+    return {
+      ...item,
+      margin: item.revenue > 0 ? (item.profit / item.revenue) * 100 : 0,
+      topTimeOfDay,
+    }
+  })
+
+  const menuItemNameById = new Map(
+    monthlySaleItems.map((item) => [item.menuItemId, item.menuItem.name])
+  )
+
+  const topSellingItems = [...itemStatsArray]
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 10)
+    .map((item) => ({
+      ...item,
+      commonlyWith: topPairByItem.get(item.id)?.item
+        ? menuItemNameById.get(topPairByItem.get(item.id)!.item)
+        : undefined,
+    }))
+
+  const worstSellingItems = [...itemStatsArray]
+    .filter((item) => item.quantity > 0)
+    .sort((a, b) => a.quantity - b.quantity)
+    .slice(0, 10)
+
+  const highestMarginItems = [...itemStatsArray]
+    .filter((item) => item.revenue > 0)
+    .sort((a, b) => b.margin - a.margin)
+    .slice(0, 10)
+    .map((item) => ({
+      ...item,
+      commonlyWith: topPairByItem.get(item.id)?.item
+        ? menuItemNameById.get(topPairByItem.get(item.id)!.item)
+        : undefined,
+    }))
+
+  const lowestMarginItems = [...itemStatsArray]
+    .filter((item) => item.revenue > 0)
+    .sort((a, b) => a.margin - b.margin)
+    .slice(0, 10)
+
+  const topCombos = Array.from(comboMap.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+    .map((combo) => {
+      const topTimeOfDay = TIME_BUCKETS.reduce((top, bucket) =>
+        combo.timeOfDay[bucket] > combo.timeOfDay[top] ? bucket : top
+      )
+      const marginValue = combo.revenue > 0 ? (combo.profit / combo.revenue) * 100 : 0
+      return {
+        items: combo.items.map((id) => menuItemNameById.get(id) || 'Unknown') as [string, string],
+        count: combo.count,
+        margin: marginValue,
+        topTimeOfDay,
+      }
+    })
+
+  return {
+    topSellingItems,
+    worstSellingItems,
+    highestMarginItems,
+    lowestMarginItems,
+    topCombos,
   }
 }
 
@@ -460,10 +674,9 @@ export default async function DashboardPage() {
   }
 
   const data = await getDashboardData(restaurantId)
-  const latestInsight = await prisma.aIInsight.findFirst({
-    where: { restaurantId },
-    orderBy: { createdAt: 'desc' },
-  })
+
+  // Get analytics data for menu items
+  const analyticsData = await getAnalyticsData(restaurantId)
 
   return (
     <div className="space-y-8">
@@ -607,99 +820,42 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* Daily Revenue and Margin Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Weekly Revenue vs Orders</CardTitle>
+          <CardTitle>Revenue and Margin Trend</CardTitle>
+          <p className="text-sm text-slate-500 mt-1">Daily revenue and margin for the past month</p>
         </CardHeader>
         <CardContent>
-          <WeeklySalesChart data={data.weeklyTrend} />
+          <DailyRevenueMarginChart />
         </CardContent>
       </Card>
 
-      {/* TOP PERFORMERS */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <Award className="h-5 w-5 text-amber-500" />
-            Top Selling Items (This Week)
-          </h2>
-          <Card>
-            <CardContent className="pt-6">
-              {data.topItems.length > 0 ? (
-                <div className="space-y-3">
-                  {data.topItems.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                          idx === 0 ? 'bg-amber-100 text-amber-800' :
-                          idx === 1 ? 'bg-slate-100 text-slate-800' :
-                          idx === 2 ? 'bg-orange-100 text-orange-800' :
-                          'bg-slate-50 text-slate-600'
-                        }`}>
-                          {idx + 1}
-                        </div>
-                        <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-xs text-slate-500">{item.quantity} sold</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-green-600">
-                          {formatCurrency(item.revenue)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-slate-500 py-4">No sales data yet</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+      {/* Menu Item Analytics */}
+      <MenuItemAnalytics
+        topSellingItems={analyticsData.topSellingItems}
+        worstSellingItems={analyticsData.worstSellingItems}
+        highestMarginItems={analyticsData.highestMarginItems}
+        lowestMarginItems={analyticsData.lowestMarginItems}
+        topCombos={analyticsData.topCombos}
+      />
 
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+      {/* TOP PERFORMERS */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5 text-blue-500" />
             Top Waiters (This Month)
-          </h2>
-          <Card>
-            <CardContent className="pt-6">
-              {data.topWaiters.length > 0 ? (
-                <div className="space-y-3">
-                  {data.topWaiters.map((waiter, idx) => (
-                    <div key={idx} className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                          idx === 0 ? 'bg-blue-100 text-blue-800' :
-                          idx === 1 ? 'bg-slate-100 text-slate-800' :
-                          idx === 2 ? 'bg-indigo-100 text-indigo-800' :
-                          'bg-slate-50 text-slate-600'
-                        }`}>
-                          {idx + 1}
-                        </div>
-                        <div>
-                          <div className="font-medium">{waiter.name}</div>
-                          <div className="text-xs text-slate-500">
-                            {waiter.orders} orders • {formatCurrency(waiter.avgOrder)} avg
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-blue-600">
-                          {formatCurrency(waiter.sales)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-slate-500 py-4">No waiter data yet</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.topWaiters.length > 0 ? (
+            <TopWaitersChart waiters={data.topWaiters} />
+          ) : (
+            <p className="text-center text-slate-500 py-4">No waiter data yet</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* INVENTORY ALERTS */}
       <div>
@@ -747,8 +903,6 @@ export default async function DashboardPage() {
           </Card>
         </div>
       </div>
-
-      <AIInsightsCard initialContent={latestInsight?.content || null} />
     </div>
   )
 }

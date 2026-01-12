@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import NewOrderForm from './NewOrderForm'
 
 async function getOrderFormData(restaurantId: string) {
-  const [menuItems, categories] = await Promise.all([
+  const [menuItems, categories, tables] = await Promise.all([
     prisma.menuItem.findMany({
       where: {
         restaurantId,
@@ -24,9 +24,13 @@ async function getOrderFormData(restaurantId: string) {
       where: { restaurantId },
       orderBy: { displayOrder: 'asc' },
     }),
+    prisma.table.findMany({
+      where: { restaurantId },
+      orderBy: { number: 'asc' },
+    }),
   ])
 
-  return { menuItems, categories }
+  return { menuItems, categories, tables }
 }
 
 export default async function NewOrderPage() {
@@ -35,5 +39,5 @@ export default async function NewOrderPage() {
 
   const data = await getOrderFormData(restaurantId)
 
-  return <NewOrderForm menuItems={data.menuItems} categories={data.categories} />
+  return <NewOrderForm menuItems={data.menuItems} categories={data.categories} tables={data.tables} />
 }

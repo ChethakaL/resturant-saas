@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
-import { Category, Ingredient, MenuItem, MenuItemIngredient } from '@prisma/client'
+import { Category, Ingredient, MenuItem, MenuItemIngredient, Table } from '@prisma/client'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 
@@ -84,9 +84,11 @@ function StripePaymentForm({
 export default function NewOrderForm({
   menuItems,
   categories,
+  tables,
 }: {
   menuItems: MenuItemWithDetails[]
   categories: Category[]
+  tables: Table[]
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -95,7 +97,7 @@ export default function NewOrderForm({
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [orderDetails, setOrderDetails] = useState({
     customerName: '',
-    tableNumber: '',
+    tableId: '',
     paymentMethod: 'CASH',
     notes: '',
   })
@@ -208,22 +210,24 @@ export default function NewOrderForm({
     paymentMethod,
     paymentProvider,
     stripePaymentIntentId,
+    status = 'COMPLETED',
   }: {
     paymentMethod: string
     paymentProvider?: string
     stripePaymentIntentId?: string
+    status?: 'PENDING' | 'COMPLETED'
   }) => {
     const response = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         customerName: orderDetails.customerName || null,
-        tableNumber: orderDetails.tableNumber || null,
+        tableId: orderDetails.tableId || null,
         paymentMethod,
         paymentProvider: paymentProvider || null,
         stripePaymentIntentId: stripePaymentIntentId || null,
-        paidAt: new Date().toISOString(),
-        status: 'COMPLETED',
+        paidAt: status === 'COMPLETED' ? new Date().toISOString() : null,
+        status,
         notes: orderDetails.notes || null,
         items: orderItems,
       }),
@@ -235,8 +239,33 @@ export default function NewOrderForm({
     }
 
     const order = await response.json()
-    router.push(`/dashboard/orders/${order.id}`)
-    router.refresh()
+    if (status === 'PENDING') {
+      router.push('/dashboard/orders')
+      router.refresh()
+    } else {
+      router.push(`/dashboard/orders/${order.id}`)
+      router.refresh()
+    }
+  }
+
+  const handleSaveAsPending = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (orderItems.length === 0) {
+      alert('Please add at least one item to the order')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      await createOrder({ paymentMethod: 'CASH', status: 'PENDING' })
+    } catch (error: any) {
+      console.error('Error saving pending order:', error)
+      alert(error.message || 'Failed to save order. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -425,15 +454,26 @@ export default function NewOrderForm({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="tableNumber">Table Number</Label>
-                    <Input
-                      id="tableNumber"
-                      value={orderDetails.tableNumber}
-                      onChange={(e) =>
-                        setOrderDetails({ ...orderDetails, tableNumber: e.target.value })
+                    <Label htmlFor="tableId">Table</Label>
+                    <Select
+                      value={orderDetails.tableId}
+                      onValueChange={(value) =>
+                        setOrderDetails({ ...orderDetails, tableId: value })
                       }
-                      placeholder="Optional"
-                    />
+                    >
+                      <SelectTrigger id="tableId">
+                        <SelectValue placeholder="Select table (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">No table</SelectItem>
+                        {tables.map((table) => (
+                          <SelectItem key={table.id} value={table.id}>
+                            Table {table.number} ({table.capacity} seats)
+                            {table.status === 'OCCUPIED' && ' - Occupied'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -667,6 +707,20 @@ export default function NewOrderForm({
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
                 {loading ? 'Processing...' : isCashPayment ? 'Complete Cash Order' : 'Complete Order'}
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveAsPending}
+                disabled={
+                  loading ||
+                  orderItems.length === 0 ||
+                  stockWarnings.length > 0
+                }
+                variant="outline"
+                size="lg"
+                className="w-full"
+              >
+                {loading ? 'Saving...' : 'Save as Pending'}
               </Button>
               <Link href="/dashboard/orders" className="w-full">
                 <Button type="button" variant="outline" disabled={loading} className="w-full">

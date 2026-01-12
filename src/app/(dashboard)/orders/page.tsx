@@ -7,9 +7,11 @@ import { formatCurrency } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
+import CompleteOrderButton from '@/components/orders/CompleteOrderButton'
 
 const statusTabs = [
   { label: 'All Orders', value: 'all' },
+  { label: 'Pending', value: 'PENDING' },
   { label: 'Completed', value: 'COMPLETED' },
   { label: 'Cancelled', value: 'CANCELLED' },
 ]
@@ -46,10 +48,12 @@ export default async function OrdersPage({
     where,
     include: {
       items: true,
+      table: true,
     },
     orderBy: { timestamp: 'desc' },
   })
 
+  const pendingOrders = orders.filter((order) => order.status === 'PENDING')
   const completedOrders = orders.filter((order) => order.status === 'COMPLETED')
   const cancelledOrders = orders.filter((order) => order.status === 'CANCELLED')
   const totalRevenue = completedOrders.reduce((sum, order) => sum + order.total, 0)
@@ -108,6 +112,73 @@ export default async function OrdersPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Pending Orders Section */}
+      {pendingOrders.length > 0 && statusFilter === 'all' && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span className="text-amber-600">Pending Orders</span>
+              <span className="text-sm font-normal text-slate-500">
+                ({pendingOrders.length})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-amber-200">
+                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                      Order
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                      Table
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                      Time
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                      Items
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                      Total
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingOrders.map((order) => (
+                    <tr key={order.id} className="border-b border-amber-100 hover:bg-amber-50">
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-slate-900">{order.orderNumber}</div>
+                        {order.customerName && (
+                          <div className="text-sm text-slate-500">{order.customerName}</div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">
+                        {order.table ? `Table ${order.table.number}` : 'No table'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">{formatDate(order.timestamp)}</td>
+                      <td className="py-3 px-4 text-right font-mono">
+                        {order.items.reduce((sum, item) => sum + item.quantity, 0)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-medium">
+                        {formatCurrency(order.total)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <CompleteOrderButton orderId={order.id} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {statusTabs.map((tab) => (

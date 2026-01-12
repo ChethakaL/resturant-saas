@@ -32,6 +32,8 @@ export default function IngredientEditForm({
     minStockLevel: ingredient.minStockLevel.toString(),
     supplier: ingredient.supplier || '',
     notes: ingredient.notes || '',
+    stockQuantity: ingredient.stockQuantity.toString(),
+    stockChangeReason: '',
   })
   const [adjustmentData, setAdjustmentData] = useState({
     type: 'add',
@@ -45,6 +47,35 @@ export default function IngredientEditForm({
     setLoading(true)
 
     try {
+      const newStockQuantity = parseFloat(formData.stockQuantity)
+      const stockDifference = newStockQuantity - ingredient.stockQuantity
+
+      // If stock quantity changed, we need to handle it
+      if (Math.abs(stockDifference) > 0.001) {
+        // If decreasing stock and no reason provided, require reason
+        if (stockDifference < 0 && !formData.stockChangeReason) {
+          alert('Please provide a reason for the stock decrease (e.g., "used", "waste", etc.)')
+          setLoading(false)
+          return
+        }
+
+        // Use the stock adjustment API which handles COGS logging
+        const adjustmentResponse = await fetch(`/api/inventory/${ingredient.id}/adjust`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quantityChange: stockDifference,
+            reason: formData.stockChangeReason || 'adjustment',
+            notes: `Manual stock edit: Changed from ${ingredient.stockQuantity.toFixed(2)} to ${newStockQuantity.toFixed(2)} ${ingredient.unit}`,
+          }),
+        })
+
+        if (!adjustmentResponse.ok) {
+          throw new Error('Failed to adjust stock')
+        }
+      }
+
+      // Update other ingredient details
       const response = await fetch(`/api/inventory/${ingredient.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -62,7 +93,7 @@ export default function IngredientEditForm({
         throw new Error('Failed to update ingredient')
       }
 
-      router.push('/dashboard/inventory')
+      router.push('/inventory')
       router.refresh()
     } catch (error) {
       console.error('Error updating ingredient:', error)
@@ -88,7 +119,7 @@ export default function IngredientEditForm({
         throw new Error('Failed to delete ingredient')
       }
 
-      router.push('/dashboard/inventory')
+      router.push('/inventory')
       router.refresh()
     } catch (error) {
       console.error('Error deleting ingredient:', error)
@@ -140,7 +171,7 @@ export default function IngredientEditForm({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard/inventory">
+          <Link href="/inventory">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
@@ -238,7 +269,7 @@ export default function IngredientEditForm({
               </div>
 
               <div className="flex gap-3 justify-end">
-                <Link href="/dashboard/inventory">
+                <Link href="/inventory">
                   <Button type="button" variant="outline" disabled={loading}>
                     Cancel
                   </Button>
@@ -258,11 +289,62 @@ export default function IngredientEditForm({
               <CardTitle>Current Stock</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <div className="text-3xl font-bold text-slate-900">
-                  {ingredient.stockQuantity.toFixed(2)}
+              <div className="space-y-2">
+                <Label htmlFor="stockQuantity">Current Stock Quantity</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="stockQuantity"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.stockQuantity}
+                    onChange={(e) => {
+                      const newValue = e.target.value
+                      setFormData({ ...formData, stockQuantity: newValue })
+                    }}
+                    className="text-2xl font-bold"
+                  />
+                  <span className="text-sm text-slate-500">{ingredient.unit}</span>
                 </div>
-                <div className="text-sm text-slate-500">{ingredient.unit}</div>
+                {formData.stockQuantity && parseFloat(formData.stockQuantity) !== ingredient.stockQuantity && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-amber-600">
+                      Will change by: {(
+                        parseFloat(formData.stockQuantity) - ingredient.stockQuantity
+                      ).toFixed(2)} {ingredient.unit}
+                    </p>
+                    {parseFloat(formData.stockQuantity) < ingredient.stockQuantity && (
+                      <div className="space-y-2">
+                        <Label htmlFor="stockChangeReason" className="text-xs">
+                          Reason for decrease <span className="text-red-500">*</span>
+                        </Label>
+                        <Select
+                          value={formData.stockChangeReason}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, stockChangeReason: value })
+                          }
+                          required
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select reason" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="used">Used (COGS)</SelectItem>
+                            <SelectItem value="waste">Waste</SelectItem>
+                            <SelectItem value="damage">Damage</SelectItem>
+                            <SelectItem value="expired">Expired</SelectItem>
+                            <SelectItem value="adjustment">Adjustment</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {formData.stockChangeReason === 'used' && (
+                          <p className="text-xs text-amber-600">
+                            ⚠️ This will be recorded as COGS in Profit & Loss
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -332,7 +414,7 @@ export default function IngredientEditForm({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="reason">Reason</Label>
+                    <Label htmlFor="reason">Reason <span className="text-red-500">*</span></Label>
                     <Select
                       value={adjustmentData.reason}
                       onValueChange={(value) =>
@@ -345,11 +427,19 @@ export default function IngredientEditForm({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="purchase">Purchase</SelectItem>
+                        <SelectItem value="used">Used (COGS)</SelectItem>
                         <SelectItem value="waste">Waste</SelectItem>
                         <SelectItem value="adjustment">Adjustment</SelectItem>
                         <SelectItem value="return">Return</SelectItem>
+                        <SelectItem value="damage">Damage</SelectItem>
+                        <SelectItem value="expired">Expired</SelectItem>
                       </SelectContent>
                     </Select>
+                    {adjustmentData.type === 'remove' && adjustmentData.reason === 'used' && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        ⚠️ This will be recorded as COGS in Profit & Loss
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">

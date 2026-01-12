@@ -3,6 +3,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 function daysBetweenInclusive(start: Date, end: Date) {
   const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
   const endUtc = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate())
@@ -183,8 +185,13 @@ export async function GET(request: Request) {
       }, 0)
     }, 0)
 
-    // Total COGS includes both sales COGS and meal prep COGS
-    const totalCOGSWithPrep = totalCOGS + mealPrepCOGS
+    // Calculate COGS from manual stock adjustments (expense transactions with COGS notes)
+    const manualAdjustmentCOGS = expenseTransactions
+      .filter((tx) => tx.notes?.includes('COGS') || tx.notes?.includes('Manual stock adjustment'))
+      .reduce((sum, tx) => sum + tx.amount, 0)
+
+    // Total COGS includes sales COGS, meal prep COGS, and manual adjustments
+    const totalCOGSWithPrep = totalCOGS + mealPrepCOGS + manualAdjustmentCOGS
 
     const grossProfit = totalRevenue - totalCOGSWithPrep
 
@@ -204,12 +211,29 @@ export async function GET(request: Request) {
     }, {})
 
     // Add one-time expense transactions by category
+    // Exclude expense transactions that are from waste records (they're already counted in wasteRecords)
     expenseTransactions.forEach((tx) => {
-      const category = tx.category === 'OTHER' ? (tx.notes?.includes('Waste') ? 'Waste' : 'Other') : tx.category
+      // Skip expense transactions created from waste records (they have "Waste record:" in notes)
+      if (tx.notes?.includes('Waste record:')) {
+        return // Skip this transaction - it's already counted in wasteRecords
+      }
+      
+      // Check if this is a COGS entry (from manual stock adjustments)
+      const isCOGS = tx.notes?.includes('COGS') || tx.notes?.includes('Manual stock adjustment')
+      const category = isCOGS 
+        ? 'COGS' 
+        : tx.category === 'OTHER' 
+          ? 'Other' 
+          : tx.category
       expenseByCategory[category] = (expenseByCategory[category] || 0) + tx.amount
+      
+      // If it's COGS, also add to total COGS
+      if (isCOGS) {
+        // This will be included in the COGS calculation
+      }
     })
 
-    // Add waste costs
+    // Add waste costs (these are NOT in expenseTransactions - they're separate waste records)
     const wasteTotal = wasteRecords.reduce((sum, waste) => sum + waste.cost, 0)
     if (wasteTotal > 0) {
       expenseByCategory['Waste'] = (expenseByCategory['Waste'] || 0) + wasteTotal
@@ -228,6 +252,7 @@ export async function GET(request: Request) {
         cogs: totalCOGSWithPrep,
         cogsFromSales: totalCOGS,
         cogsFromMealPrep: mealPrepCOGS,
+        cogsFromManualAdjustments: manualAdjustmentCOGS,
         grossProfit,
         expenses: totalExpenses,
         payroll: payrollTotal,

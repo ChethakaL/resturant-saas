@@ -24,12 +24,14 @@ async function getIngredient(id: string, restaurantId: string) {
 export default async function IngredientEditPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }> | { id: string }
 }) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
 
-  const ingredient = await getIngredient(params.id, restaurantId)
+  // Handle both Promise and direct params (Next.js 15 compatibility)
+  const resolvedParams = params instanceof Promise ? await params : params
+  const ingredient = await getIngredient(resolvedParams.id, restaurantId)
 
   if (!ingredient) {
     notFound()

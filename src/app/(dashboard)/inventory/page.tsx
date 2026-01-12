@@ -177,7 +177,7 @@ export default async function InventoryPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <Link href={`/dashboard/inventory/${ingredient.id}`}>
+                        <Link href={`/inventory/${ingredient.id}`}>
                           <Button variant="ghost" size="sm">
                             Edit
                           </Button>
