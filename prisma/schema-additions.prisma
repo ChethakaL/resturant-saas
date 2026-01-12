@@ -1,0 +1,132 @@
+// Add these models to the end of schema.prisma
+
+// ═══════════════════════════════════════════════════════════════
+// TABLE MANAGEMENT & DINING
+// ═══════════════════════════════════════════════════════════════
+
+model Table {
+  id            String   @id @default(cuid())
+  number        String   // Table number (e.g., "T1", "T2")
+  capacity      Int      // Number of seats
+  status        TableStatus @default(AVAILABLE)
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  sales         Sale[]
+
+  @@unique([restaurantId, number])
+  @@index([restaurantId])
+  @@index([status])
+  @@map("tables")
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  CLEANING
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HR & EMPLOYEE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+model Employee {
+  id            String   @id @default(cuid())
+  name          String
+  position      EmployeePosition
+  phone         String?
+  email         String?
+  hireDate      DateTime @default(now())
+  salary        Float    // Monthly or hourly rate
+  salaryType    SalaryType @default(MONTHLY)
+  isActive      Boolean  @default(true)
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  sales         Sale[]   @relation("WaiterSales")
+  shifts        Shift[]
+  payrolls      Payroll[]
+
+  @@index([restaurantId])
+  @@index([position])
+  @@index([isActive])
+  @@map("employees")
+}
+
+enum EmployeePosition {
+  WAITER
+  CHEF
+  KITCHEN_STAFF
+  CASHIER
+  MANAGER
+  CLEANER
+}
+
+enum SalaryType {
+  HOURLY
+  DAILY
+  MONTHLY
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAYROLL MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+model Payroll {
+  id            String   @id @default(cuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  period        DateTime @db.Date // Pay period (e.g., end of month)
+  baseSalary    Float
+  bonuses       Float    @default(0)
+  deductions    Float    @default(0)
+  totalPaid     Float
+  notes         String?
+  paidDate      DateTime?
+  status        PayrollStatus @default(PENDING)
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([restaurantId])
+  @@index([period])
+  @@index([status])
+  @@map("payrolls")
+}
+
+enum PayrollStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SHIFT SCHEDULING
+// ═══════════════════════════════════════════════════════════════
+
+model Shift {
+  id            String   @id @default(cuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date          DateTime @db.Date
+  startTime     String   // HH:MM format
+  endTime       String   // HH:MM format
+  hoursWorked   Float?
+  notes         String?
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([restaurantId])
+  @@index([date])
+  @@map("shifts")
+}

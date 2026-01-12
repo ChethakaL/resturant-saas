@@ -1,0 +1,887 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    RESTAURANT SAAS - FORMULA DOCUMENTATION
+                           All Calculations Explained
+═══════════════════════════════════════════════════════════════════════════════
+
+This document contains EVERY formula used in the Restaurant SaaS dashboard and
+analytics system. All calculations are documented for verification and audit.
+
+═══════════════════════════════════════════════════════════════════════════════
+1. INVENTORY MANAGEMENT CALCULATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+1.1 Total Inventory Value
+--------------------------
+Formula: Σ(Stock Quantity × Cost Per Unit) for all ingredients
+Example:
+  - Chicken: 50 kg × 8,000 IQD/kg = 400,000 IQD
+  - Rice: 100 kg × 2,500 IQD/kg = 250,000 IQD
+  - Total = 650,000 IQD
+
+Implementation:
+  SELECT SUM(stock_quantity * cost_per_unit) as total_inventory_value
+  FROM ingredients
+
+1.2 Low Stock Detection
+-----------------------
+Formula: Stock Quantity < Min Stock Level
+Status Levels:
+  - CRITICAL (RED):    Stock < (25% of Min Stock Level)
+  - LOW (AMBER):       (25% of Min) ≤ Stock < Min Stock Level
+  - OK (GREEN):        Stock ≥ Min Stock Level
+
+Example:
+  - Chicken: Min = 40 kg, Current = 8 kg
+  - Status = CRITICAL (8 < 10, which is 25% of 40)
+
+Implementation:
+  SELECT *,
+    CASE
+      WHEN stock_quantity < (min_stock_level * 0.25) THEN 'CRITICAL'
+      WHEN stock_quantity < min_stock_level THEN 'LOW'
+      ELSE 'OK'
+    END as stock_status
+  FROM ingredients
+
+1.3 Inventory Turnover Rate
+----------------------------
+Formula: Cost of Goods Sold (COGS) / Average Inventory Value
+Period: Typically calculated monthly or yearly
+Example:
+  - Monthly COGS = 2,000,000 IQD
+  - Avg Inventory = 500,000 IQD
+  - Turnover = 2,000,000 / 500,000 = 4 times/month
+
+Implementation:
+  COGS = SUM(menu_item_cost * quantity_sold) for period
+  Avg Inventory = (Beginning Inventory + Ending Inventory) / 2
+  Turnover = COGS / Avg Inventory
+
+═══════════════════════════════════════════════════════════════════════════════
+2. MENU ITEM COSTING & PRICING
+═══════════════════════════════════════════════════════════════════════════════
+
+2.1 Menu Item Cost (Recipe-Based)
+----------------------------------
+Formula: Σ(Ingredient Quantity in Recipe × Cost Per Unit) for all ingredients
+Example (Chicken Biryani):
+  - Chicken: 0.3 kg × 8,000 IQD/kg = 2,400 IQD
+  - Rice: 0.2 kg × 2,500 IQD/kg = 500 IQD
+  - Spices: 0.05 kg × 10,000 IQD/kg = 500 IQD
+  - Total Cost = 3,400 IQD
+
+Implementation:
+  SELECT
+    mi.id,
+    mi.name,
+    SUM(mii.quantity * i.cost_per_unit) as total_cost
+  FROM menu_items mi
+  JOIN menu_item_ingredients mii ON mi.id = mii.menu_item_id
+  JOIN ingredients i ON mii.ingredient_id = i.id
+  GROUP BY mi.id, mi.name
+
+2.2 Gross Margin Percentage
+----------------------------
+Formula: ((Selling Price - Cost) / Selling Price) × 100
+Example:
+  - Selling Price = 10,000 IQD
+  - Cost = 3,400 IQD
+  - Margin = ((10,000 - 3,400) / 10,000) × 100 = 66%
+
+Implementation:
+  SELECT
+    name,
+    price,
+    cost,
+    ((price - cost) / price * 100) as margin_percentage
+  FROM menu_items_with_cost
+
+2.3 Profit Per Item
+--------------------
+Formula: Selling Price - Cost
+Example:
+  - Selling Price = 10,000 IQD
+  - Cost = 3,400 IQD
+  - Profit = 6,600 IQD
+
+2.4 Markup Percentage
+---------------------
+Formula: ((Selling Price - Cost) / Cost) × 100
+Example:
+  - Selling Price = 10,000 IQD
+  - Cost = 3,400 IQD
+  - Markup = ((10,000 - 3,400) / 3,400) × 100 = 194.12%
+
+Note: Markup ≠ Margin
+  - Markup is based on COST
+  - Margin is based on SELLING PRICE
+
+2.5 Margin Classification
+--------------------------
+Classification by margin percentage:
+  - HIGH (GREEN):     Margin ≥ 60%
+  - MEDIUM (AMBER):   40% ≤ Margin < 60%
+  - LOW (YELLOW):     20% ≤ Margin < 40%
+  - POOR (RED):       0% ≤ Margin < 20%
+  - LOSS (CRITICAL):  Margin < 0% (selling below cost)
+
+═══════════════════════════════════════════════════════════════════════════════
+3. SALES & REVENUE CALCULATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+3.1 Order Total
+---------------
+Formula: Σ(Menu Item Price × Quantity) for all items in order
+Example Order:
+  - 2× Chicken Biryani @ 10,000 IQD = 20,000 IQD
+  - 1× Hummus @ 5,000 IQD = 5,000 IQD
+  - 3× Tea @ 1,000 IQD = 3,000 IQD
+  - Total = 28,000 IQD
+
+Implementation:
+  SELECT
+    sale_id,
+    SUM(quantity * price) as order_total
+  FROM sale_items
+  GROUP BY sale_id
+
+3.2 Daily Revenue
+-----------------
+Formula: Σ(Order Total) for all orders on specific date
+Example:
+  - Order 1: 28,000 IQD
+  - Order 2: 45,000 IQD
+  - Order 3: 15,000 IQD
+  - Daily Revenue = 88,000 IQD
+
+Implementation:
+  SELECT
+    DATE(timestamp) as date,
+    SUM(total) as daily_revenue
+  FROM sales
+  WHERE DATE(timestamp) = '2026-01-10'
+  GROUP BY DATE(timestamp)
+
+3.3 Daily Cost of Goods Sold (COGS)
+------------------------------------
+Formula: Σ(Menu Item Cost × Quantity Sold) for all items sold on date
+Example:
+  - 2× Chicken Biryani cost 3,400 = 6,800 IQD
+  - 1× Hummus cost 2,000 = 2,000 IQD
+  - 3× Tea cost 500 = 1,500 IQD
+  - Daily COGS = 10,300 IQD
+
+Implementation:
+  SELECT
+    DATE(s.timestamp) as date,
+    SUM(si.quantity * mi.cost) as daily_cogs
+  FROM sales s
+  JOIN sale_items si ON s.id = si.sale_id
+  JOIN menu_items mi ON si.menu_item_id = mi.id
+  WHERE DATE(s.timestamp) = '2026-01-10'
+  GROUP BY DATE(s.timestamp)
+
+3.4 Daily Gross Profit
+-----------------------
+Formula: Daily Revenue - Daily COGS
+Example:
+  - Revenue = 88,000 IQD
+  - COGS = 10,300 IQD
+  - Profit = 77,700 IQD
+
+3.5 Daily Margin Percentage
+----------------------------
+Formula: (Daily Gross Profit / Daily Revenue) × 100
+Example:
+  - Profit = 77,700 IQD
+  - Revenue = 88,000 IQD
+  - Margin = (77,700 / 88,000) × 100 = 88.3%
+
+Note: Restaurant target margin typically 60-70%
+
+═══════════════════════════════════════════════════════════════════════════════
+4. DASHBOARD KPI CALCULATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+4.1 Today's Revenue
+-------------------
+Formula: Σ(Order Total) WHERE date = TODAY
+Implementation:
+  SELECT SUM(total) as today_revenue
+  FROM sales
+  WHERE DATE(timestamp) = CURRENT_DATE
+
+4.2 Revenue Growth (Day-over-Day)
+----------------------------------
+Formula: ((Today Revenue - Yesterday Revenue) / Yesterday Revenue) × 100
+Example:
+  - Today = 88,000 IQD
+  - Yesterday = 75,000 IQD
+  - Growth = ((88,000 - 75,000) / 75,000) × 100 = +17.3%
+
+Implementation:
+  WITH daily_revenue AS (
+    SELECT DATE(timestamp) as date, SUM(total) as revenue
+    FROM sales
+    WHERE DATE(timestamp) >= CURRENT_DATE - INTERVAL '1 day'
+    GROUP BY DATE(timestamp)
+  )
+  SELECT
+    today.revenue as today,
+    yesterday.revenue as yesterday,
+    ((today.revenue - yesterday.revenue) / yesterday.revenue * 100) as growth
+  FROM daily_revenue today
+  CROSS JOIN daily_revenue yesterday
+  WHERE today.date = CURRENT_DATE
+    AND yesterday.date = CURRENT_DATE - INTERVAL '1 day'
+
+4.3 Month-to-Date (MTD) Revenue
+--------------------------------
+Formula: Σ(Order Total) WHERE date >= First Day of Current Month
+Example (Jan 10, 2026):
+  - Sum of all sales from Jan 1 to Jan 10
+  - MTD = 850,000 IQD (10 days of sales)
+
+Implementation:
+  SELECT SUM(total) as mtd_revenue
+  FROM sales
+  WHERE DATE(timestamp) >= DATE_TRUNC('month', CURRENT_DATE)
+
+4.4 MTD Growth vs Last Month
+-----------------------------
+Formula: ((MTD This Month - Same Period Last Month) / Same Period Last Month) × 100
+Example:
+  - MTD (Jan 1-10, 2026) = 850,000 IQD
+  - Same period (Dec 1-10, 2025) = 780,000 IQD
+  - Growth = ((850,000 - 780,000) / 780,000) × 100 = +8.97%
+
+Implementation:
+  WITH period_revenue AS (
+    SELECT
+      SUM(CASE WHEN DATE(timestamp) >= DATE_TRUNC('month', CURRENT_DATE)
+           THEN total ELSE 0 END) as current_mtd,
+      SUM(CASE WHEN DATE(timestamp) >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+               AND DATE(timestamp) < DATE_TRUNC('month', CURRENT_DATE)
+               AND EXTRACT(DAY FROM timestamp) <= EXTRACT(DAY FROM CURRENT_DATE)
+           THEN total ELSE 0 END) as last_month_same_period
+    FROM sales
+    WHERE DATE(timestamp) >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+  )
+  SELECT
+    current_mtd,
+    last_month_same_period,
+    ((current_mtd - last_month_same_period) / last_month_same_period * 100) as growth
+  FROM period_revenue
+
+4.5 Year-to-Date (YTD) Revenue
+-------------------------------
+Formula: Σ(Order Total) WHERE date >= January 1 of Current Year
+Example (Jan 10, 2026):
+  - Sum of all sales from Jan 1 to Jan 10, 2026
+  - Same as MTD in January
+
+Implementation:
+  SELECT SUM(total) as ytd_revenue
+  FROM sales
+  WHERE DATE(timestamp) >= DATE_TRUNC('year', CURRENT_DATE)
+
+4.6 Average Order Value (AOV)
+------------------------------
+Formula: Total Revenue / Number of Orders
+Example:
+  - Total Revenue = 880,000 IQD
+  - Number of Orders = 120
+  - AOV = 880,000 / 120 = 7,333 IQD
+
+Implementation:
+  SELECT
+    SUM(total) / COUNT(*) as average_order_value
+  FROM sales
+  WHERE DATE(timestamp) = CURRENT_DATE
+
+4.7 Orders Count Today
+----------------------
+Formula: COUNT(orders) WHERE date = TODAY
+Implementation:
+  SELECT COUNT(*) as orders_today
+  FROM sales
+  WHERE DATE(timestamp) = CURRENT_DATE
+
+═══════════════════════════════════════════════════════════════════════════════
+5. INVENTORY DEDUCTION ON ORDER
+═══════════════════════════════════════════════════════════════════════════════
+
+5.1 Stock Deduction Calculation
+--------------------------------
+Formula: New Stock = Current Stock - (Recipe Quantity × Order Quantity)
+
+Example Order: 3× Chicken Biryani
+  Recipe for 1 Biryani:
+    - Chicken: 0.3 kg
+    - Rice: 0.2 kg
+    - Spices: 0.05 kg
+
+  Deductions:
+    - Chicken: 50 kg - (0.3 × 3) = 50 - 0.9 = 49.1 kg
+    - Rice: 100 kg - (0.2 × 3) = 100 - 0.6 = 99.4 kg
+    - Spices: 10 kg - (0.05 × 3) = 10 - 0.15 = 9.85 kg
+
+Implementation:
+  FOR EACH item in order:
+    FOR EACH ingredient in item.recipe:
+      UPDATE ingredients
+      SET stock_quantity = stock_quantity - (recipe_quantity * order_quantity)
+      WHERE id = ingredient_id
+
+5.2 Insufficient Stock Check
+-----------------------------
+Formula: Check if Current Stock >= (Recipe Quantity × Order Quantity)
+Before Processing Order:
+  IF stock_quantity < (recipe_quantity * order_quantity) THEN
+    RAISE ERROR "Insufficient stock"
+
+═══════════════════════════════════════════════════════════════════════════════
+6. TIME-BASED ANALYTICS
+═══════════════════════════════════════════════════════════════════════════════
+
+6.1 Hourly Sales Distribution
+------------------------------
+Formula: Σ(Order Total) WHERE HOUR(order_time) = specific_hour
+Example for 1pm-2pm:
+  - 10 orders between 13:00-13:59
+  - Total = 150,000 IQD
+  - % of Daily = (150,000 / 880,000) × 100 = 17.05%
+
+Implementation:
+  SELECT
+    EXTRACT(HOUR FROM timestamp) as hour,
+    COUNT(*) as order_count,
+    SUM(total) as hourly_revenue,
+    (SUM(total) / (SELECT SUM(total) FROM sales WHERE DATE(timestamp) = CURRENT_DATE) * 100) as percentage_of_daily
+  FROM sales
+  WHERE DATE(timestamp) = CURRENT_DATE
+  GROUP BY EXTRACT(HOUR FROM timestamp)
+  ORDER BY hour
+
+6.2 Peak Hour Detection
+------------------------
+Formula: Hour with MAX(Order Count) or MAX(Revenue)
+Example:
+  - 12pm-1pm: 25 orders, 220,000 IQD ← PEAK (by count)
+  - 7pm-8pm: 22 orders, 250,000 IQD ← PEAK (by revenue)
+
+Implementation:
+  SELECT
+    EXTRACT(HOUR FROM timestamp) as peak_hour,
+    COUNT(*) as orders,
+    SUM(total) as revenue
+  FROM sales
+  WHERE DATE(timestamp) = CURRENT_DATE
+  GROUP BY EXTRACT(HOUR FROM timestamp)
+  ORDER BY COUNT(*) DESC
+  LIMIT 1
+
+6.3 Weekday vs Weekend Comparison
+----------------------------------
+Formula:
+  Weekday Revenue = Σ(Order Total) WHERE day NOT IN (Friday, Saturday)
+  Weekend Revenue = Σ(Order Total) WHERE day IN (Friday, Saturday)
+
+Note: In Iraq, weekend is typically Friday-Saturday
+
+Implementation:
+  SELECT
+    CASE
+      WHEN EXTRACT(DOW FROM timestamp) IN (5, 6) THEN 'Weekend'
+      ELSE 'Weekday'
+    END as period_type,
+    SUM(total) as revenue,
+    COUNT(*) as orders,
+    AVG(total) as avg_order_value
+  FROM sales
+  WHERE DATE(timestamp) >= CURRENT_DATE - INTERVAL '30 days'
+  GROUP BY period_type
+
+6.4 Day of Week Performance
+----------------------------
+Formula: Average Revenue by Day of Week over last 4 weeks
+Example:
+  - Saturdays (last 4): 950k, 1.1M, 980k, 1.05M
+  - Average Saturday = 1,020,000 IQD
+
+Implementation:
+  SELECT
+    TO_CHAR(timestamp, 'Day') as day_name,
+    EXTRACT(DOW FROM timestamp) as day_num,
+    AVG(daily_total) as avg_revenue
+  FROM (
+    SELECT DATE(timestamp) as date, SUM(total) as daily_total
+    FROM sales
+    WHERE DATE(timestamp) >= CURRENT_DATE - INTERVAL '28 days'
+    GROUP BY DATE(timestamp)
+  ) daily
+  GROUP BY day_name, day_num
+  ORDER BY day_num
+
+═══════════════════════════════════════════════════════════════════════════════
+7. MENU ITEM PERFORMANCE ANALYTICS
+═══════════════════════════════════════════════════════════════════════════════
+
+7.1 Item Total Revenue
+-----------------------
+Formula: Σ(Price × Quantity Sold) for specific menu item
+Example (Chicken Biryani):
+  - 150 orders × 10,000 IQD = 1,500,000 IQD
+
+Implementation:
+  SELECT
+    mi.name,
+    SUM(si.quantity * si.price) as total_revenue
+  FROM sale_items si
+  JOIN menu_items mi ON si.menu_item_id = mi.id
+  JOIN sales s ON si.sale_id = s.id
+  WHERE DATE(s.timestamp) >= CURRENT_DATE - INTERVAL '30 days'
+  GROUP BY mi.id, mi.name
+  ORDER BY total_revenue DESC
+
+7.2 Item Total Profit
+----------------------
+Formula: Σ((Price - Cost) × Quantity Sold) for specific menu item
+Example:
+  - 150 orders × (10,000 - 3,400) = 150 × 6,600 = 990,000 IQD
+
+Implementation:
+  SELECT
+    mi.name,
+    SUM(si.quantity * (si.price - mi.cost)) as total_profit
+  FROM sale_items si
+  JOIN menu_items mi ON si.menu_item_id = mi.id
+  JOIN sales s ON si.sale_id = s.id
+  GROUP BY mi.id, mi.name
+  ORDER BY total_profit DESC
+
+7.3 Item Popularity Rank
+-------------------------
+Formula: Rank by Total Quantity Sold OR Total Revenue
+Implementation:
+  SELECT
+    mi.name,
+    SUM(si.quantity) as total_sold,
+    ROW_NUMBER() OVER (ORDER BY SUM(si.quantity) DESC) as popularity_rank
+  FROM sale_items si
+  JOIN menu_items mi ON si.menu_item_id = mi.id
+  GROUP BY mi.id, mi.name
+
+7.4 Item Growth Rate
+--------------------
+Formula: ((Current Period Sales - Previous Period Sales) / Previous Period Sales) × 100
+Example (comparing last 30 days to prior 30 days):
+  - Last 30 days: 1,500,000 IQD
+  - Prior 30 days: 1,200,000 IQD
+  - Growth = ((1,500,000 - 1,200,000) / 1,200,000) × 100 = +25%
+
+Implementation:
+  WITH period_sales AS (
+    SELECT
+      mi.id,
+      mi.name,
+      SUM(CASE WHEN s.timestamp >= CURRENT_DATE - INTERVAL '30 days'
+           THEN si.quantity * si.price ELSE 0 END) as current_period,
+      SUM(CASE WHEN s.timestamp >= CURRENT_DATE - INTERVAL '60 days'
+               AND s.timestamp < CURRENT_DATE - INTERVAL '30 days'
+           THEN si.quantity * si.price ELSE 0 END) as previous_period
+    FROM menu_items mi
+    LEFT JOIN sale_items si ON mi.id = si.menu_item_id
+    LEFT JOIN sales s ON si.sale_id = s.id
+    GROUP BY mi.id, mi.name
+  )
+  SELECT
+    name,
+    current_period,
+    previous_period,
+    ((current_period - previous_period) / NULLIF(previous_period, 0) * 100) as growth_rate
+  FROM period_sales
+  WHERE previous_period > 0
+
+7.5 Performance Category Classification
+----------------------------------------
+Categories based on growth rate and revenue:
+
+  RISING STAR (🌟 GREEN):
+    - Growth ≥ 30%
+    - Trending upward
+
+  CASH COW (💰 GOLD):
+    - High Revenue (Top 25%)
+    - High Margin (≥ 60%)
+    - Consistent performer
+
+  DECLINING (⚠️ AMBER):
+    - Growth ≤ -20%
+    - Losing popularity
+
+  NEW ITEM (❓ BLUE):
+    - Total Orders < 20
+    - Not enough data
+
+  UNDERPERFORMER (RED):
+    - Low Revenue (Bottom 25%)
+    - Low Margin (< 40%)
+
+Implementation:
+  SELECT
+    name,
+    revenue,
+    margin,
+    growth_rate,
+    CASE
+      WHEN total_orders < 20 THEN 'NEW_ITEM'
+      WHEN growth_rate >= 30 THEN 'RISING_STAR'
+      WHEN revenue_rank <= 0.25 AND margin >= 60 THEN 'CASH_COW'
+      WHEN growth_rate <= -20 THEN 'DECLINING'
+      WHEN revenue_rank >= 0.75 AND margin < 40 THEN 'UNDERPERFORMER'
+      ELSE 'STABLE'
+    END as category
+  FROM menu_item_analytics
+
+═══════════════════════════════════════════════════════════════════════════════
+8. CATEGORY PERFORMANCE
+═══════════════════════════════════════════════════════════════════════════════
+
+8.1 Category Revenue
+--------------------
+Formula: Σ(Item Revenue) for all items in category
+Example (Grills category):
+  - Chicken Kebab: 800,000 IQD
+  - Lamb Kebab: 1,200,000 IQD
+  - Mixed Grill: 950,000 IQD
+  - Total = 2,950,000 IQD
+
+Implementation:
+  SELECT
+    c.name as category,
+    SUM(si.quantity * si.price) as category_revenue
+  FROM categories c
+  JOIN menu_items mi ON c.id = mi.category_id
+  JOIN sale_items si ON mi.id = si.menu_item_id
+  GROUP BY c.id, c.name
+  ORDER BY category_revenue DESC
+
+8.2 Category Mix Percentage
+----------------------------
+Formula: (Category Revenue / Total Revenue) × 100
+Example:
+  - Grills Revenue = 2,950,000 IQD
+  - Total Revenue = 8,000,000 IQD
+  - Mix = (2,950,000 / 8,000,000) × 100 = 36.88%
+
+8.3 Category Profit Margin
+---------------------------
+Formula: ((Category Revenue - Category Cost) / Category Revenue) × 100
+Implementation:
+  SELECT
+    c.name,
+    SUM(si.quantity * si.price) as revenue,
+    SUM(si.quantity * mi.cost) as cost,
+    ((SUM(si.quantity * si.price) - SUM(si.quantity * mi.cost)) /
+     SUM(si.quantity * si.price) * 100) as margin
+  FROM categories c
+  JOIN menu_items mi ON c.id = mi.category_id
+  JOIN sale_items si ON mi.id = si.menu_item_id
+  GROUP BY c.id, c.name
+
+═══════════════════════════════════════════════════════════════════════════════
+9. AI FORECASTING FORMULAS
+═══════════════════════════════════════════════════════════════════════════════
+
+9.1 Simple Moving Average (SMA) - Revenue Forecast
+---------------------------------------------------
+Formula: Σ(Revenue for last N days) / N
+Example (7-day SMA):
+  - Last 7 days: 88k, 92k, 85k, 95k, 90k, 87k, 93k
+  - Average = (88+92+85+95+90+87+93) / 7 = 90,000 IQD
+  - Forecast for tomorrow = 90,000 IQD
+
+Implementation:
+  SELECT AVG(daily_revenue) as forecasted_revenue
+  FROM (
+    SELECT DATE(timestamp) as date, SUM(total) as daily_revenue
+    FROM sales
+    WHERE DATE(timestamp) >= CURRENT_DATE - INTERVAL '7 days'
+    GROUP BY DATE(timestamp)
+  ) recent
+
+9.2 Weighted Moving Average (WMA)
+----------------------------------
+Formula: Σ(Revenue × Weight) / Σ(Weight)
+Gives more weight to recent days
+Example (3-day WMA with weights 3, 2, 1):
+  - Day -1 (yesterday): 93k × 3 = 279k
+  - Day -2: 87k × 2 = 174k
+  - Day -3: 90k × 1 = 90k
+  - WMA = (279 + 174 + 90) / (3 + 2 + 1) = 90,500 IQD
+
+9.3 Same-Day-of-Week Forecast
+------------------------------
+Formula: AVERAGE(Revenue) for same day of week over last N weeks
+Example (Saturday forecast based on last 4 Saturdays):
+  - Sat1: 1,050,000 IQD
+  - Sat2: 980,000 IQD
+  - Sat3: 1,100,000 IQD
+  - Sat4: 1,020,000 IQD
+  - Forecast = (1,050 + 980 + 1,100 + 1,020) / 4 = 1,037,500 IQD
+
+Implementation:
+  SELECT AVG(daily_revenue) as forecast
+  FROM (
+    SELECT DATE(timestamp) as date, SUM(total) as daily_revenue
+    FROM sales
+    WHERE EXTRACT(DOW FROM timestamp) = EXTRACT(DOW FROM CURRENT_DATE)
+      AND DATE(timestamp) < CURRENT_DATE
+      AND DATE(timestamp) >= CURRENT_DATE - INTERVAL '28 days'
+    GROUP BY DATE(timestamp)
+  ) same_weekday
+
+9.4 Expected Order Count
+-------------------------
+Formula: AVERAGE(Order Count) for same conditions (day, time, etc.)
+Example (Expected lunch orders on Saturday):
+  - Last 4 Saturdays: 85, 92, 88, 90 lunch orders
+  - Expected = (85 + 92 + 88 + 90) / 4 = 89 orders
+
+9.5 Peak Time Prediction
+-------------------------
+Formula: Hour with highest AVERAGE(Order Count) for day of week
+Example (Saturdays peak time):
+  - 12pm: avg 25 orders
+  - 1pm: avg 30 orders ← PREDICTED PEAK
+  - 7pm: avg 28 orders
+
+9.6 Inventory Prep Suggestion
+------------------------------
+Formula: AVERAGE(Ingredient Usage) × Safety Buffer (1.2 = 20% extra)
+Example (Chicken for Saturday lunch):
+  - Last 4 Saturdays used: 28kg, 32kg, 30kg, 29kg
+  - Average = 29.75 kg
+  - Suggested prep = 29.75 × 1.2 = 35.7 kg (round to 36 kg)
+
+Implementation:
+  SELECT
+    i.name,
+    AVG(usage) * 1.2 as suggested_prep
+  FROM (
+    SELECT
+      ing.id,
+      DATE(s.timestamp) as date,
+      SUM(si.quantity * mii.quantity) as usage
+    FROM ingredients ing
+    JOIN menu_item_ingredients mii ON ing.id = mii.ingredient_id
+    JOIN sale_items si ON mii.menu_item_id = si.menu_item_id
+    JOIN sales s ON si.sale_id = s.id
+    WHERE EXTRACT(DOW FROM s.timestamp) = EXTRACT(DOW FROM CURRENT_DATE + INTERVAL '1 day')
+      AND DATE(s.timestamp) >= CURRENT_DATE - INTERVAL '28 days'
+    GROUP BY ing.id, DATE(s.timestamp)
+  ) daily_usage
+  JOIN ingredients i ON daily_usage.id = i.id
+  GROUP BY i.id, i.name
+
+═══════════════════════════════════════════════════════════════════════════════
+10. FINANCIAL RATIOS & RESTAURANT METRICS
+═══════════════════════════════════════════════════════════════════════════════
+
+10.1 Food Cost Percentage
+--------------------------
+Formula: (COGS / Revenue) × 100
+Target: 28-35% for profitable restaurants
+Example:
+  - COGS = 2,400,000 IQD
+  - Revenue = 8,000,000 IQD
+  - Food Cost % = (2,400,000 / 8,000,000) × 100 = 30%
+  - Status: ✓ WITHIN TARGET
+
+10.2 Gross Profit Margin
+-------------------------
+Formula: ((Revenue - COGS) / Revenue) × 100
+Target: 65-72% for restaurants
+Example:
+  - Revenue = 8,000,000 IQD
+  - COGS = 2,400,000 IQD
+  - Margin = ((8,000,000 - 2,400,000) / 8,000,000) × 100 = 70%
+
+10.3 Prime Cost
+---------------
+Formula: (COGS + Labor Cost) / Revenue × 100
+Target: 60-65% (includes labor, which we don't track yet)
+Note: For MVP, we focus on COGS only
+
+10.4 Average Check Size
+------------------------
+Formula: Total Revenue / Number of Customers/Orders
+Example:
+  - Daily Revenue = 880,000 IQD
+  - Orders = 120
+  - Average Check = 880,000 / 120 = 7,333 IQD
+
+10.5 Revenue Per Available Seat Hour (RevPASH)
+-----------------------------------------------
+Formula: Revenue / (Number of Seats × Operating Hours)
+Example:
+  - Daily Revenue = 880,000 IQD
+  - Seats = 50
+  - Hours Open = 12
+  - RevPASH = 880,000 / (50 × 12) = 1,467 IQD per seat-hour
+
+10.6 Table Turnover Rate
+-------------------------
+Formula: Number of Parties Served / Number of Tables
+Example:
+  - Parties Served = 120
+  - Tables = 20
+  - Turnover = 120 / 20 = 6 turns per table per day
+
+═══════════════════════════════════════════════════════════════════════════════
+11. COMPARISON & VARIANCE CALCULATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+11.1 Period-over-Period Growth
+-------------------------------
+Formula: ((Current Period - Previous Period) / Previous Period) × 100
+Applied to: Revenue, orders, costs, any metric
+Example:
+  - This Week: 6,500,000 IQD
+  - Last Week: 6,000,000 IQD
+  - Growth = ((6,500,000 - 6,000,000) / 6,000,000) × 100 = +8.33%
+
+11.2 Variance (Absolute)
+-------------------------
+Formula: Actual Value - Expected/Budgeted Value
+Example:
+  - Actual Revenue = 920,000 IQD
+  - Expected Revenue = 900,000 IQD
+  - Variance = +20,000 IQD (favorable)
+
+11.3 Variance Percentage
+-------------------------
+Formula: (Variance / Expected Value) × 100
+Example:
+  - Variance = +20,000 IQD
+  - Expected = 900,000 IQD
+  - Variance % = (20,000 / 900,000) × 100 = +2.22%
+
+11.4 Year-over-Year (YoY) Comparison
+-------------------------------------
+Formula: ((This Year - Last Year) / Last Year) × 100
+Example (January 2026 vs January 2025):
+  - Jan 2026: 25,000,000 IQD
+  - Jan 2025: 22,000,000 IQD
+  - YoY Growth = ((25M - 22M) / 22M) × 100 = +13.64%
+
+═══════════════════════════════════════════════════════════════════════════════
+12. WASTE & SPOILAGE TRACKING
+═══════════════════════════════════════════════════════════════════════════════
+
+12.1 Waste Amount
+-----------------
+Formula: Quantity marked as wasted/expired
+Tracked per ingredient
+Example:
+  - Tomatoes expired: 5 kg
+  - Chicken wasted: 2 kg
+
+12.2 Waste Cost
+---------------
+Formula: Waste Quantity × Cost Per Unit
+Example:
+  - Tomatoes: 5 kg × 2,000 IQD/kg = 10,000 IQD
+  - Chicken: 2 kg × 8,000 IQD/kg = 16,000 IQD
+  - Total Waste Cost = 26,000 IQD
+
+12.3 Waste Percentage
+----------------------
+Formula: (Total Waste Cost / Total Inventory Cost) × 100
+Target: < 2% for efficient operations
+Example:
+  - Waste Cost = 26,000 IQD
+  - Total Inventory Purchases = 2,000,000 IQD
+  - Waste % = (26,000 / 2,000,000) × 100 = 1.3%
+
+═══════════════════════════════════════════════════════════════════════════════
+13. ADVANCED CALCULATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+13.1 Contribution Margin
+-------------------------
+Formula: Selling Price - Variable Costs
+Per Item: Price - Cost
+Per Category: Category Revenue - Category Variable Costs
+
+13.2 Break-Even Point (Per Item)
+---------------------------------
+Formula: Fixed Costs / (Price - Variable Cost per Unit)
+Note: Requires fixed cost tracking (rent, utilities, etc.)
+
+13.3 Menu Engineering Matrix
+-----------------------------
+Classifies items by:
+  - Popularity (quantity sold)
+  - Profitability (contribution margin)
+
+Quadrants:
+  - STARS: High profit, High popularity
+  - PLOWHORSES: Low profit, High popularity
+  - PUZZLES: High profit, Low popularity
+  - DOGS: Low profit, Low popularity
+
+═══════════════════════════════════════════════════════════════════════════════
+14. ROUNDING & PRECISION RULES
+═══════════════════════════════════════════════════════════════════════════════
+
+Currency (IQD):
+  - Display: No decimals (round to nearest dinar)
+  - Internal storage: 2 decimal precision
+  - Calculations: Full precision, round at display
+
+Percentages:
+  - Display: 1 decimal place (e.g., 66.7%)
+  - Growth rates: 1 decimal place
+  - Margins: 1 decimal place
+
+Quantities:
+  - Weights: 2 decimals (e.g., 0.35 kg)
+  - Counts: Whole numbers
+  - Averages: 1 decimal
+
+═══════════════════════════════════════════════════════════════════════════════
+15. DATA VALIDATION RULES
+═══════════════════════════════════════════════════════════════════════════════
+
+Before Accepting Data:
+  - Prices must be > 0
+  - Costs must be ≥ 0
+  - Quantities must be > 0
+  - Stock levels must be ≥ 0
+  - Percentages must be -100 to 100 (for growth) or 0 to 100 (for margins)
+
+Before Processing Order:
+  - Check ingredient stock sufficiency
+  - Verify menu item availability
+  - Confirm positive pricing
+
+Alerts:
+  - Warn if margin < 20% (low profit item)
+  - Alert if margin < 0% (selling at loss)
+  - Critical alert if stock < 25% of minimum
+
+═══════════════════════════════════════════════════════════════════════════════
+END OF FORMULA DOCUMENTATION
+═══════════════════════════════════════════════════════════════════════════════
+
+Version: 1.0
+Created: 2026-01-10
+Restaurant SaaS MVP
+
+All formulas in this document are implemented exactly as specified in the
+application code. Any discrepancies should be reported immediately.
+
+For questions or clarifications, refer to the corresponding database queries
+and application logic in the codebase.
