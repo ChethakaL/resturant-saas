@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  resturant-saas:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resturant-saas
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3013:3000"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env
+    volumes:
+      - ./prisma:/app/prisma
+    networks:
+      - default
+
+networks:
+  default:
+    driver: bridge
