@@ -39,6 +39,8 @@ export async function PATCH(
           imageUrl: data.imageUrl,
           available: data.available,
           categoryId: data.categoryId,
+          calories: data.calories,
+          tags: data.tags || [],
         },
       })
 

@@ -24,18 +24,26 @@ export async function POST(request: Request) {
           available: data.available,
           categoryId: data.categoryId,
           restaurantId: session.user.restaurantId,
+          calories: data.calories,
+          tags: data.tags || [],
         },
       })
 
-      // Create recipe ingredients
+      // Create recipe ingredients - only if valid ingredient IDs are provided
       if (data.ingredients && data.ingredients.length > 0) {
-        await tx.menuItemIngredient.createMany({
-          data: data.ingredients.map((ing: any) => ({
-            menuItemId: item.id,
-            ingredientId: ing.ingredientId,
-            quantity: ing.quantity,
-          })),
-        })
+        const validIngredients = data.ingredients.filter(
+          (ing: any) => ing.ingredientId && ing.quantity > 0
+        )
+
+        if (validIngredients.length > 0) {
+          await tx.menuItemIngredient.createMany({
+            data: validIngredients.map((ing: any) => ({
+              menuItemId: item.id,
+              ingredientId: ing.ingredientId,
+              quantity: ing.quantity,
+            })),
+          })
+        }
       }
 
       return item

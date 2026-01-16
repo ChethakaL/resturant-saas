@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import CustomerMenu from '@/components/customer/CustomerMenu'
+import SmartMenu from '@/components/customer/SmartMenu'
 
 async function getMenuData() {
   const restaurant = await prisma.restaurant.findFirst({
@@ -13,7 +13,7 @@ async function getMenuData() {
   const menuItems = await prisma.menuItem.findMany({
     where: { available: true, restaurantId: restaurant.id },
     include: { category: true },
-    orderBy: [{ category: { displayOrder: 'asc' } }, { name: 'asc' }],
+    orderBy: [{ popularityScore: 'desc' }, { name: 'asc' }],
   })
 
   return { restaurant, menuItems }
@@ -31,7 +31,7 @@ export default async function Home() {
   }
 
   return (
-    <CustomerMenu
+    <SmartMenu
       restaurantId={data.restaurant.id}
       restaurantName={data.restaurant.name}
       menuItems={data.menuItems}

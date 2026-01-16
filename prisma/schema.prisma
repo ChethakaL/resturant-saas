@@ -178,6 +178,11 @@ model MenuItem {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  // Smart Menu Features
+  calories     Int?       // Calorie count
+  tags         String[]   @default([]) // Dietary tags: vegetarian, vegan, gluten-free, spicy, etc.
+  popularityScore Int     @default(0) // Track how many times ordered for AI suggestions
+
   // Relations
   ingredients   MenuItemIngredient[]
   saleItems     SaleItem[]
@@ -187,6 +192,7 @@ model MenuItem {
   @@index([restaurantId])
   @@index([categoryId])
   @@index([available])
+  @@index([popularityScore])
   @@map("menu_items")
 }
 

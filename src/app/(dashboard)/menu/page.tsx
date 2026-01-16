@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import { Plus, Edit } from 'lucide-react'
 import Link from 'next/link'
+import BulkMenuImport from '@/components/menu/BulkMenuImport'
 
 async function getMenuData(restaurantId: string) {
   const menuItems = await prisma.menuItem.findMany({
@@ -42,9 +43,15 @@ async function getMenuData(restaurantId: string) {
     orderBy: { displayOrder: 'asc' },
   })
 
+  const ingredients = await prisma.ingredient.findMany({
+    where: { restaurantId },
+    orderBy: { name: 'asc' },
+  })
+
   return {
     menuItems: itemsWithMetrics,
     categories,
+    ingredients,
   }
 }
 
@@ -69,12 +76,15 @@ export default async function MenuPage() {
           <h1 className="text-3xl font-bold text-slate-900">Menu Management</h1>
           <p className="text-slate-500 mt-1">Manage menu items and recipes</p>
         </div>
-        <Link href="/dashboard/menu/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Menu Item
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <BulkMenuImport categories={data.categories} ingredients={data.ingredients} />
+          <Link href="/dashboard/menu/new">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Menu Item
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

@@ -8,7 +8,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import { Category, Ingredient, MenuItem, MenuItemIngredient } from '@prisma/client'
@@ -35,6 +43,10 @@ export default function MenuForm({
 }: MenuFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [generatingImage, setGeneratingImage] = useState(false)
+  const [showPromptDialog, setShowPromptDialog] = useState(false)
+  const [customPrompt, setCustomPrompt] = useState('')
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: menuItem?.name || '',
     description: menuItem?.description || '',
@@ -42,6 +54,8 @@ export default function MenuForm({
     categoryId: menuItem?.categoryId || '',
     available: menuItem?.available ?? true,
     imageUrl: menuItem?.imageUrl || '',
+    calories: menuItem?.calories?.toString() || '',
+    tags: menuItem?.tags?.join(', ') || '',
   })
 
   const [recipe, setRecipe] = useState<RecipeIngredient[]>(
@@ -79,6 +93,43 @@ export default function MenuForm({
     setRecipe(newRecipe)
   }
 
+  const generateImage = async (useCustomPrompt: boolean = false) => {
+    if (!formData.name) {
+      alert('Please enter a menu item name first')
+      return
+    }
+
+    setGeneratingImage(true)
+
+    try {
+      const category = categories.find((c) => c.id === formData.categoryId)
+      const response = await fetch('/api/menu/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: useCustomPrompt ? customPrompt : null,
+          itemName: formData.name,
+          description: formData.description,
+          category: category?.name,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate image')
+      }
+
+      setPreviewImageUrl(data.imageUrl)
+      setCustomPrompt('')
+    } catch (error) {
+      console.error('Error generating image:', error)
+      alert(error instanceof Error ? error.message : 'Failed to generate image')
+    } finally {
+      setGeneratingImage(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -113,6 +164,10 @@ export default function MenuForm({
           categoryId: formData.categoryId,
           available: formData.available,
           imageUrl: formData.imageUrl || null,
+          calories: formData.calories ? parseInt(formData.calories) : null,
+          tags: formData.tags
+            ? formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+            : [],
           ingredients: recipe.map((item) => ({
             ingredientId: item.ingredientId,
             quantity: item.quantity,
@@ -253,12 +308,64 @@ export default function MenuForm({
 
                 <div className="space-y-2">
                   <Label htmlFor="imageUrl">Image URL (optional)</Label>
-                  <Input
-                    id="imageUrl"
-                    value={formData.imageUrl}
-                    onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                    placeholder="https://example.com/image.jpg"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="imageUrl"
+                      value={formData.imageUrl}
+                      onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                      placeholder="https://example.com/image.jpg"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowPromptDialog(true)}
+                      disabled={generatingImage}
+                      title="Generate image with AI"
+                    >
+                      {generatingImage ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  {formData.imageUrl && (
+                    <div className="mt-2 border rounded-md p-2">
+                      <img
+                        src={formData.imageUrl}
+                        alt="Menu item preview"
+                        className="w-full h-48 object-cover rounded"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400'
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="calories">Calories (optional)</Label>
+                    <Input
+                      id="calories"
+                      type="number"
+                      value={formData.calories}
+                      onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
+                      placeholder="e.g., 450"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tags">Dietary Tags (optional)</Label>
+                    <Input
+                      id="tags"
+                      value={formData.tags}
+                      onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                      placeholder="e.g., vegan, gluten-free, spicy"
+                    />
+                    <p className="text-xs text-slate-500">Comma-separated tags</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -428,6 +535,103 @@ export default function MenuForm({
           </div>
         </div>
       </form>
+
+      {/* AI Image Generation Dialog */}
+      <Dialog open={showPromptDialog} onOpenChange={setShowPromptDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Image with AI</DialogTitle>
+            <DialogDescription>
+              Choose to auto-generate an image based on your menu item details, or provide a custom
+              prompt.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {generatingImage ? (
+              <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                <Loader2 className="h-12 w-12 animate-spin text-emerald-500" />
+                <p className="text-sm text-slate-500">Generating your image with AI...</p>
+                <p className="text-xs text-slate-400">This may take a few moments</p>
+              </div>
+            ) : previewImageUrl ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Generated Image Preview</Label>
+                  <div className="border rounded-lg overflow-hidden">
+                    <img
+                      src={previewImageUrl}
+                      alt="Generated preview"
+                      className="w-full h-auto"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setFormData({ ...formData, imageUrl: previewImageUrl })
+                        setShowPromptDialog(false)
+                        setPreviewImageUrl(null)
+                        setCustomPrompt('')
+                      }}
+                    >
+                      Use This Image
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setPreviewImageUrl(null)
+                        setCustomPrompt('')
+                      }}
+                    >
+                      Regenerate
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="customPrompt">Custom Prompt (optional)</Label>
+                <Textarea
+                  id="customPrompt"
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="e.g., A gourmet burger with melted cheese, presented on a wooden board..."
+                  rows={4}
+                  disabled={generatingImage}
+                />
+                <p className="text-xs text-slate-500">
+                  Leave blank to auto-generate based on item name, category, and description.
+                </p>
+              </div>
+            )}
+          </div>
+          {!generatingImage && !previewImageUrl && (
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowPromptDialog(false)
+                  setCustomPrompt('')
+                  setPreviewImageUrl(null)
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => generateImage(!!customPrompt)}
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Generate Image
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
