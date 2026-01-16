@@ -326,7 +326,7 @@ export default function SmartMenu({
                           alt={item.name}
                           className="h-48 w-full object-cover"
                         />
-                        {item.popularityScore && item.popularityScore > 50 && (
+                        {item.popularityScore != null && item.popularityScore > 50 && (
                           <Badge className="absolute top-2 right-2 bg-amber-500 text-white">
                             Popular
                           </Badge>
