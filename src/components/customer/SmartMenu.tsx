@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sparkles, Flame, Leaf, X, SlidersHorizontal } from 'lucide-react'
+import { Sparkles, Flame, Leaf, X, SlidersHorizontal, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
 interface MenuItem {
@@ -317,20 +317,21 @@ export default function SmartMenu({
                       key={item.id}
                       className="overflow-hidden bg-white/95 backdrop-blur text-slate-900 hover:shadow-xl transition-all"
                     >
-                      {item.imageUrl && (
-                        <div className="relative">
-                          <img
-                            src={item.imageUrl}
-                            alt={item.name}
-                            className="h-48 w-full object-cover"
-                          />
-                          {item.popularityScore && item.popularityScore > 50 && (
-                            <Badge className="absolute top-2 right-2 bg-amber-500 text-white">
-                              Popular
-                            </Badge>
-                          )}
-                        </div>
-                      )}
+                      <div className="relative">
+                        <img
+                          src={
+                            item.imageUrl ||
+                            'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
+                          }
+                          alt={item.name}
+                          className="h-48 w-full object-cover"
+                        />
+                        {item.popularityScore && item.popularityScore > 50 && (
+                          <Badge className="absolute top-2 right-2 bg-amber-500 text-white">
+                            Popular
+                          </Badge>
+                        )}
+                      </div>
                       <CardContent className="space-y-3 pt-4">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1">
@@ -377,10 +378,20 @@ export default function SmartMenu({
                           variant="outline"
                           size="sm"
                           onClick={() => fetchPairingSuggestions(item)}
+                          disabled={loadingSuggestions && selectedItemForPairing?.id === item.id}
                           className="w-full"
                         >
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          What Goes With This?
+                          {loadingSuggestions && selectedItemForPairing?.id === item.id ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Loading...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              What Goes With This?
+                            </>
+                          )}
                         </Button>
                       </CardContent>
                     </Card>
