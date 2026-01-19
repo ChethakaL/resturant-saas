@@ -127,6 +127,22 @@ export default function BulkMenuImport({ categories, ingredients }: BulkMenuImpo
   const verifyAndNext = async () => {
     if (!editingItem) return
 
+    // Validate required fields
+    if (!editingItem.categoryId) {
+      alert('Please select a category for this item')
+      return
+    }
+
+    if (!editingItem.name.trim()) {
+      alert('Please enter a name for this item')
+      return
+    }
+
+    if (!editingItem.price || editingItem.price <= 0) {
+      alert('Please enter a valid price for this item')
+      return
+    }
+
     // Update the item in the array
     const updatedItems = [...extractedItems]
     updatedItems[currentItemIndex] = { ...editingItem, verified: true }
@@ -147,22 +163,40 @@ export default function BulkMenuImport({ categories, ingredients }: BulkMenuImpo
     setIsProcessing(true)
 
     try {
+      const errors: string[] = []
+
       for (const item of items) {
-        await fetch('/api/menu', {
+        // Validate required fields
+        if (!item.categoryId) {
+          errors.push(`${item.name}: Missing category`)
+          continue
+        }
+
+        const response = await fetch('/api/menu', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: item.name,
-            description: item.description,
-            price: item.price,
+            description: item.description || '',
+            price: Number(item.price) || 0,
             categoryId: item.categoryId,
-            imageUrl: item.imageUrl,
-            calories: item.calories,
-            tags: item.tags,
+            imageUrl: item.imageUrl || '',
+            calories: item.calories ? Number(item.calories) : null,
+            tags: item.tags || [],
             available: true,
             ingredients: [],
           }),
         })
+
+        if (!response.ok) {
+          const data = await response.json()
+          errors.push(`${item.name}: ${data.error || 'Failed to create'}`)
+        }
+      }
+
+      if (errors.length > 0) {
+        console.error('Errors creating items:', errors)
+        alert(`Created ${items.length - errors.length} items. Errors:\n${errors.join('\n')}`)
       }
 
       setStep('complete')
