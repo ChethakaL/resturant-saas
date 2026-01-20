@@ -73,7 +73,7 @@ export default async function InventoryPage() {
           <h1 className="text-3xl font-bold text-slate-900">Inventory Management</h1>
           <p className="text-slate-500 mt-1">Track ingredients and stock levels</p>
         </div>
-        <Link href="/dashboard/inventory/new">
+        <Link href="/inventory/new">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
             Add Ingredient
