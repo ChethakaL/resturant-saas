@@ -755,86 +755,6 @@ export default function NewOrderForm({
                 )}
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Order Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="customerName">Customer Name</Label>
-                    <Input
-                      id="customerName"
-                      value={orderDetails.customerName}
-                      onChange={(e) =>
-                        setOrderDetails({ ...orderDetails, customerName: e.target.value })
-                      }
-                      placeholder="Optional"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="tableId">Table</Label>
-                    <Select
-                      value={orderDetails.tableId || TABLE_NONE_VALUE}
-                      onValueChange={(value) =>
-                        setOrderDetails({
-                          ...orderDetails,
-                          tableId: value === TABLE_NONE_VALUE ? '' : value,
-                        })
-                      }
-                    >
-                      <SelectTrigger id="tableId">
-                        <SelectValue placeholder="Select table (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={TABLE_NONE_VALUE}>No table</SelectItem>
-                        {tables.map((table) => (
-                          <SelectItem key={table.id} value={table.id}>
-                            Table {table.number} ({table.capacity} seats)
-                            {table.status === 'OCCUPIED' && ' - Occupied'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Payment Method</Label>
-                  <Select
-                    value={orderDetails.paymentMethod}
-                    onValueChange={(value) =>
-                      setOrderDetails({ ...orderDetails, paymentMethod: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CASH">Cash (IQD)</SelectItem>
-                      <SelectItem value="CARD" disabled={!stripePromise}>
-                        Card / Apple Pay (Stripe)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Order Notes</Label>
-                  <Textarea
-                    id="notes"
-                    value={orderDetails.notes}
-                    onChange={(e) =>
-                      setOrderDetails({ ...orderDetails, notes: e.target.value })
-                    }
-                    placeholder="Special instructions..."
-                    rows={2}
-                  />
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           <div className="space-y-6">
@@ -1020,6 +940,86 @@ export default function NewOrderForm({
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Order Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="customerName">Customer Name</Label>
+                    <Input
+                      id="customerName"
+                      value={orderDetails.customerName}
+                      onChange={(e) =>
+                        setOrderDetails({ ...orderDetails, customerName: e.target.value })
+                      }
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="tableId">Table</Label>
+                    <Select
+                      value={orderDetails.tableId || TABLE_NONE_VALUE}
+                      onValueChange={(value) =>
+                        setOrderDetails({
+                          ...orderDetails,
+                          tableId: value === TABLE_NONE_VALUE ? '' : value,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="tableId">
+                        <SelectValue placeholder="Select table (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={TABLE_NONE_VALUE}>No table</SelectItem>
+                        {tables.map((table) => (
+                          <SelectItem key={table.id} value={table.id}>
+                            Table {table.number} ({table.capacity} seats)
+                            {table.status === 'OCCUPIED' && ' - Occupied'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Payment Method</Label>
+                  <Select
+                    value={orderDetails.paymentMethod}
+                    onValueChange={(value) =>
+                      setOrderDetails({ ...orderDetails, paymentMethod: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CASH">Cash (IQD)</SelectItem>
+                      <SelectItem value="CARD" disabled={!stripePromise}>
+                        Card / Apple Pay (Stripe)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Order Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={orderDetails.notes}
+                    onChange={(e) =>
+                      setOrderDetails({ ...orderDetails, notes: e.target.value })
+                    }
+                    placeholder="Special instructions..."
+                    rows={2}
+                  />
+                </div>
               </CardContent>
             </Card>
 
