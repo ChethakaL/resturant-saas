@@ -99,7 +99,11 @@ export default async function OrdersPage({
           status: 'PENDING',
         },
         include: {
-          items: true,
+          items: {
+            include: {
+              menuItem: true,
+            },
+          },
           table: true,
         },
         orderBy: { timestamp: 'desc' },
@@ -355,7 +359,7 @@ export default async function OrdersPage({
                         {formatCurrency(order.total)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <CompleteOrderButton orderId={order.id} />
+                        <CompleteOrderButton order={order} />
                       </td>
                     </tr>
                   ))}

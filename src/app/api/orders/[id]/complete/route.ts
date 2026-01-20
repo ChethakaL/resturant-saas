@@ -48,7 +48,6 @@ export async function POST(
     }
 
     const order = await prisma.$transaction(async (tx) => {
-      // Check for prepped stock first, then raw ingredients
       const ingredientUsage = new Map<string, number>()
 
       existing.items.forEach((item) => {
@@ -61,36 +60,7 @@ export async function POST(
         })
       })
 
-      // Try to use prepped stock first
-      for (const [ingredientId, usage] of Array.from(ingredientUsage.entries())) {
-        // Check if there's prepped stock for this menu item
-        const menuItem = existing.items[0]?.menuItem
-        if (menuItem) {
-          const preppedStock = await tx.preppedDishStock.findFirst({
-            where: {
-              menuItemId: menuItem.id,
-              restaurantId: session.user.restaurantId,
-              quantityRemaining: { gt: 0 },
-            },
-            orderBy: { createdAt: 'asc' }, // FIFO
-          })
-
-          if (preppedStock && preppedStock.quantityRemaining >= usage) {
-            // Use prepped stock
-            await tx.preppedDishStock.update({
-              where: { id: preppedStock.id },
-              data: {
-                quantityRemaining: {
-                  decrement: usage,
-                },
-              },
-            })
-            ingredientUsage.delete(ingredientId)
-            continue
-          }
-        }
-
-        // Fall back to raw ingredients
+      for (const [ingredientId, usage] of ingredientUsage.entries()) {
         const ingredient = await tx.ingredient.findUnique({
           where: { id: ingredientId },
         })
@@ -105,7 +75,6 @@ export async function POST(
           )
         }
 
-        // Deduct from raw ingredients
         await tx.ingredient.update({
           where: { id: ingredientId },
           data: { stockQuantity: { decrement: usage } },
