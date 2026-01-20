@@ -12,11 +12,34 @@ async function getMenuData() {
 
   const menuItems = await prisma.menuItem.findMany({
     where: { available: true, restaurantId: restaurant.id },
-    include: { category: true },
+    include: {
+      category: true,
+      ingredients: {
+        include: {
+          ingredient: true,
+        },
+      },
+    },
     orderBy: [{ popularityScore: 'desc' }, { name: 'asc' }],
   })
 
-  return { restaurant, menuItems }
+  const enrichedMenuItems = menuItems.map((item) => {
+    const cost = item.ingredients.reduce(
+      (sum, ing) => sum + ing.quantity * ing.ingredient.costPerUnit,
+      0
+    )
+    const margin =
+      item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0
+
+    const { ingredients, ...rest } = item
+    return {
+      ...rest,
+      cost,
+      margin,
+    }
+  })
+
+  return { restaurant, menuItems: enrichedMenuItems }
 }
 
 export default async function Home() {

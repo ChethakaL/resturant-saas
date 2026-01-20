@@ -31,6 +31,7 @@ interface MenuItem {
   calories?: number | null
   tags?: string[]
   popularityScore?: number
+  margin?: number
   category?: { name: string | null; id: string } | null
 }
 
@@ -78,6 +79,20 @@ export default function SmartMenu({
   }, [menuItems])
 
   // Filter and sort menu items
+  const highlightItemIds = useMemo(() => {
+    const topCandidates = [...menuItems].sort((a, b) => {
+      const popularityDiff =
+        (b.popularityScore || 0) - (a.popularityScore || 0)
+      if (popularityDiff !== 0) {
+        return popularityDiff
+      }
+
+      return (b.margin || 0) - (a.margin || 0)
+    })
+
+    return topCandidates.slice(0, 5).map((item) => item.id)
+  }, [menuItems])
+
   const filteredItems = useMemo(() => {
     let items = menuItems
 
@@ -121,8 +136,27 @@ export default function SmartMenu({
       }
     })
 
-    return items
-  }, [menuItems, search, selectedCategory, selectedTags, sortBy])
+    const highlightSet = new Set(highlightItemIds)
+    const highlighted: MenuItem[] = []
+    const others: MenuItem[] = []
+
+    items.forEach((item) => {
+      if (highlightSet.has(item.id)) {
+        highlighted.push(item)
+      } else {
+        others.push(item)
+      }
+    })
+
+    return [...highlighted, ...others]
+  }, [
+    menuItems,
+    search,
+    selectedCategory,
+    selectedTags,
+    sortBy,
+    highlightItemIds,
+  ])
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
