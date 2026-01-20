@@ -281,6 +281,93 @@ export default function MenuForm({
     }
   }
 
+  // Convert recipe units to ingredient base units
+  const convertRecipeUnitToBaseUnit = (
+    recipeQuantity: number,
+    recipeUnit: string,
+    ingredientUnit: string,
+    ingredientName: string
+  ): { quantity: number; pieceCount: number | null; recipeUnit: string | null } => {
+    const recipeUnitLower = (recipeUnit || '').toLowerCase()
+    const ingredientUnitLower = (ingredientUnit || '').toLowerCase()
+    const nameLower = (ingredientName || '').toLowerCase()
+
+    // If units match, no conversion needed
+    if (recipeUnitLower === ingredientUnitLower) {
+      return { quantity: recipeQuantity, pieceCount: null, recipeUnit: null }
+    }
+
+    // Conversion factors
+    // Spices: 1 tsp ≈ 0.005 kg (5g), 1 tbsp ≈ 0.015 kg (15g)
+    // Salt: 1 tsp ≈ 0.006 kg (6g)
+    // Liquids: 1 cup ≈ 0.24 L, 1 tbsp ≈ 0.015 L, 1 tsp ≈ 0.005 L
+    // Dry goods: 1 cup rice/lentils ≈ 0.2 kg
+
+    // Spices stored in kg, recipe in tsp/tbsp
+    if ((ingredientUnitLower === 'kg' || ingredientUnitLower === 'kilogram') && 
+        (recipeUnitLower === 'tsp' || recipeUnitLower === 'teaspoon' || recipeUnitLower === 'teaspoons')) {
+      const isSalt = nameLower.includes('salt')
+      const tspToKg = isSalt ? 0.006 : 0.005 // Salt is slightly denser
+      return {
+        quantity: recipeQuantity * tspToKg,
+        pieceCount: recipeQuantity,
+        recipeUnit: 'tsp'
+      }
+    }
+
+    if ((ingredientUnitLower === 'kg' || ingredientUnitLower === 'kilogram') && 
+        (recipeUnitLower === 'tbsp' || recipeUnitLower === 'tablespoon' || recipeUnitLower === 'tablespoons')) {
+      const tbspToKg = 0.015
+      return {
+        quantity: recipeQuantity * tbspToKg,
+        pieceCount: recipeQuantity,
+        recipeUnit: 'tbsp'
+      }
+    }
+
+    // Liquids stored in L, recipe in ml/cups/tbsp/tsp
+    if ((ingredientUnitLower === 'liter' || ingredientUnitLower === 'l') && recipeUnitLower === 'ml') {
+      return {
+        quantity: recipeQuantity / 1000,
+        pieceCount: recipeQuantity,
+        recipeUnit: 'ml'
+      }
+    }
+
+    if ((ingredientUnitLower === 'liter' || ingredientUnitLower === 'l') && 
+        (recipeUnitLower === 'tsp' || recipeUnitLower === 'teaspoon')) {
+      return {
+        quantity: recipeQuantity * 0.005,
+        pieceCount: recipeQuantity,
+        recipeUnit: 'tsp'
+      }
+    }
+
+    if ((ingredientUnitLower === 'liter' || ingredientUnitLower === 'l') && 
+        (recipeUnitLower === 'tbsp' || recipeUnitLower === 'tablespoon')) {
+      return {
+        quantity: recipeQuantity * 0.015,
+        pieceCount: recipeQuantity,
+        recipeUnit: 'tbsp'
+      }
+    }
+
+    // Dry goods stored in kg, recipe in cups
+    const dryGoodsKeywords = ['rice', 'lentil', 'bean', 'bulgur', 'wheat', 'flour', 'chickpea']
+    const isDryGood = dryGoodsKeywords.some(keyword => nameLower.includes(keyword))
+    if (isDryGood && (ingredientUnitLower === 'kg' || ingredientUnitLower === 'kilogram') && 
+        (recipeUnitLower === 'cup' || recipeUnitLower === 'cups')) {
+      return {
+        quantity: recipeQuantity * 0.2, // 1 cup ≈ 0.2 kg
+        pieceCount: recipeQuantity,
+        recipeUnit: 'cups'
+      }
+    }
+
+    // No conversion needed or unknown conversion - use original pieceCount if provided
+    return { quantity: recipeQuantity, pieceCount: null, recipeUnit: null }
+  }
+
   const applyRecipeIngredients = async () => {
     if (!suggestedRecipe) return
 
@@ -293,11 +380,22 @@ export default function MenuForm({
 
       for (const ing of suggestedRecipe.ingredients) {
         if (ing.existingIngredientId) {
-          // Ingredient exists, add to recipe
+          // Find the existing ingredient to get its unit
+          const existingIngredient = ingredients.find(i => i.id === ing.existingIngredientId)
+          
+          // Convert recipe unit to ingredient base unit
+          const converted = convertRecipeUnitToBaseUnit(
+            ing.quantity,
+            ing.unit,
+            existingIngredient?.unit || 'kg',
+            existingIngredient?.name || ing.name
+          )
+
+          // Ingredient exists, add to recipe with converted values
           newRecipe.push({
             ingredientId: ing.existingIngredientId,
-            quantity: ing.quantity,
-            pieceCount: ing.pieceCount || null,
+            quantity: converted.quantity,
+            pieceCount: converted.pieceCount !== null ? converted.pieceCount : (ing.pieceCount || null),
           })
         } else {
           // Need to create this ingredient
@@ -316,6 +414,7 @@ export default function MenuForm({
 
           if (createResponse.ok) {
             const newIngredient = await createResponse.json()
+            // For new ingredients, use the recipe unit as-is (no conversion needed)
             newRecipe.push({
               ingredientId: newIngredient.id,
               quantity: ing.quantity,
@@ -447,20 +546,64 @@ export default function MenuForm({
     return 'text-red-600'
   }
 
-  const getCountLabelForIngredient = (ingredient?: Ingredient) => {
+  const getCountLabelForIngredient = (ingredient?: Ingredient, pieceCount?: number | null, quantity?: number) => {
     if (!ingredient) return 'item'
     const lowerName = ingredient.name.toLowerCase()
-    const cupKeywords = ['lentil', 'rice', 'bean', 'dal', 'chickpea', 'bulgur', 'grain', 'flour']
-    if (cupKeywords.some((keyword) => lowerName.includes(keyword))) {
-      return 'cup'
+    const ingredientUnit = ingredient.unit.toLowerCase()
+    
+    // Check if pieceCount represents a recipe unit (tsp, tbsp, cups) based on quantity and pieceCount relationship
+    // When recipe unit is tsp/tbsp/cups, we store the recipe quantity in pieceCount and converted value in quantity
+    if (pieceCount !== null && pieceCount !== undefined && quantity !== undefined) {
+      // Spices: if pieceCount is a small decimal (0.1-5) and quantity is very small (< 0.1 kg), likely tsp/tbsp
+      const spiceKeywords = ['turmeric', 'cumin', 'cinnamon', 'cardamom', 'black pepper', 'salt', 'paprika', 'coriander', 'sumac', 'za\'atar', 'pepper']
+      const isSpice = spiceKeywords.some(keyword => lowerName.includes(keyword))
+      
+      if (isSpice && (ingredientUnit === 'kg' || ingredientUnit === 'kilogram') && quantity < 0.1) {
+        // Check the ratio: if pieceCount/quantity ratio is around 200 (tsp) or 67 (tbsp)
+        const ratio = pieceCount / quantity
+        if (ratio > 100) {
+          // Very high ratio means tsp (1 tsp = 0.005 kg, so ratio = 200)
+          return 'tsp'
+        } else if (ratio > 30) {
+          // Medium ratio means tbsp (1 tbsp = 0.015 kg, so ratio = 67)
+          return 'tbsp'
+        }
+      }
+      
+      // Dry goods: if pieceCount is 0.5-2 and quantity matches cup conversion (pieceCount * 0.2 ≈ quantity)
+      const dryGoodsKeywords = ['rice', 'lentil', 'bean', 'bulgur', 'wheat', 'flour', 'chickpea']
+      const isDryGood = dryGoodsKeywords.some(keyword => lowerName.includes(keyword))
+      if (isDryGood && (ingredientUnit === 'kg' || ingredientUnit === 'kilogram') && pieceCount <= 2 && pieceCount > 0) {
+        const expectedQuantity = pieceCount * 0.2 // 1 cup ≈ 0.2 kg
+        if (Math.abs(quantity - expectedQuantity) < 0.05) { // Within 0.05 kg tolerance
+          return 'cup'
+        }
+      }
+      
+      // Liquids: if pieceCount is large (> 10) and quantity matches ml conversion
+      if ((ingredientUnit === 'liter' || ingredientUnit === 'l') && pieceCount > 10) {
+        const expectedQuantity = pieceCount / 1000 // ml to L
+        if (Math.abs(quantity - expectedQuantity) < 0.001) { // Within 0.001 L tolerance
+          return 'ml'
+        }
+      }
     }
-    const pieceKeywords = ['onion', 'tomato', 'pepper', 'egg', 'carrot', 'potato', 'cucumber', 'slice', 'pita']
-    if (
-      pieceKeywords.some((keyword) => lowerName.includes(keyword)) ||
-      ['piece', 'pieces', 'pcs'].includes(ingredient.unit.toLowerCase())
-    ) {
-      return 'piece'
+    
+    // Default logic for countable items (when pieceCount is a whole number and represents actual pieces)
+    if (pieceCount !== null && pieceCount !== undefined && Number.isInteger(pieceCount) && pieceCount > 0 && pieceCount <= 10) {
+      const cupKeywords = ['lentil', 'rice', 'bean', 'dal', 'chickpea', 'bulgur', 'grain', 'flour']
+      if (cupKeywords.some((keyword) => lowerName.includes(keyword))) {
+        return 'cup'
+      }
+      const pieceKeywords = ['onion', 'tomato', 'pepper', 'egg', 'carrot', 'potato', 'cucumber', 'slice', 'pita']
+      if (
+        pieceKeywords.some((keyword) => lowerName.includes(keyword)) ||
+        ['piece', 'pieces', 'pcs'].includes(ingredientUnit)
+      ) {
+        return 'piece'
+      }
     }
+    
     return 'item'
   }
 
@@ -781,14 +924,33 @@ export default function MenuForm({
                         const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
                         const itemCost = ingredient ? ingredient.costPerUnit * item.quantity : 0
                         const countLabel = formatCountLabel(
-                          getCountLabelForIngredient(ingredient),
+                          getCountLabelForIngredient(ingredient, item.pieceCount, item.quantity),
                           item.pieceCount || undefined
                         )
 
-                        // Format display: "2 cups (0.2 kg)" or just "0.5 kg" if no count
-                        const displayQuantity = item.pieceCount
-                          ? `${item.pieceCount} ${countLabel} (${item.quantity} ${ingredient?.unit || ''})`
-                          : `${item.quantity} ${ingredient?.unit || ''}`
+                        // Format display: If pieceCount exists and represents a recipe unit (tsp, tbsp, cups),
+                        // show it with the count label, otherwise show quantity with ingredient unit
+                        let displayQuantity: string
+                        
+                        if (item.pieceCount !== null && item.pieceCount !== undefined) {
+                          // pieceCount exists - check if it's a recipe unit (tsp, tbsp, cups) or a piece count
+                          const recipeUnitLabel = getCountLabelForIngredient(ingredient, item.pieceCount, item.quantity)
+                          
+                          // If the label is tsp, tbsp, or cups, it's a recipe unit - show pieceCount with that unit
+                          if (['tsp', 'tbsp', 'cups', 'cup'].includes(recipeUnitLabel)) {
+                            const unitDisplay = recipeUnitLabel === 'cup' && item.pieceCount !== 1 ? 'cups' : 
+                                               recipeUnitLabel === 'tsp' && item.pieceCount !== 1 ? 'tsp' :
+                                               recipeUnitLabel === 'tbsp' && item.pieceCount !== 1 ? 'tbsp' :
+                                               recipeUnitLabel
+                            displayQuantity = `${item.pieceCount} ${unitDisplay} (${item.quantity.toFixed(4)} ${ingredient?.unit || ''})`
+                          } else {
+                            // It's a piece count (onions, tomatoes, etc.)
+                            displayQuantity = `${item.pieceCount} ${countLabel} (${item.quantity} ${ingredient?.unit || ''})`
+                          }
+                        } else {
+                          // No pieceCount - just show quantity with ingredient unit
+                          displayQuantity = `${item.quantity} ${ingredient?.unit || ''}`
+                        }
 
                         return (
                         <div
