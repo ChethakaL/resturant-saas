@@ -38,9 +38,16 @@ export async function PATCH(
           price: data.price,
           imageUrl: data.imageUrl,
           available: data.available,
-          categoryId: data.categoryId,
+          category: {
+            connect: { id: data.categoryId },
+          },
           calories: data.calories,
           tags: data.tags || [],
+          // Recipe details
+          prepTime: data.prepTime || null,
+          cookTime: data.cookTime || null,
+          recipeSteps: data.recipeSteps || [],
+          recipeTips: data.recipeTips || [],
         },
       })
 
@@ -56,6 +63,7 @@ export async function PATCH(
             menuItemId: item.id,
             ingredientId: ing.ingredientId,
             quantity: ing.quantity,
+            pieceCount: ing.pieceCount || null,
           })),
         })
       }

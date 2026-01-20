@@ -183,6 +183,12 @@ model MenuItem {
   tags         String[]   @default([]) // Dietary tags: vegetarian, vegan, gluten-free, spicy, etc.
   popularityScore Int     @default(0) // Track how many times ordered for AI suggestions
 
+  // Recipe Details (optional)
+  prepTime     String?    // e.g., "15 minutes"
+  cookTime     String?    // e.g., "30 minutes"
+  recipeSteps  String[]   @default([]) // Step-by-step cooking instructions
+  recipeTips   String[]   @default([]) // Chef tips
+
   // Relations
   ingredients   MenuItemIngredient[]
   saleItems     SaleItem[]
@@ -202,7 +208,8 @@ model MenuItemIngredient {
   menuItem     MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   ingredientId String
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  quantity     Float // Amount of ingredient per serving
+  quantity     Float // Amount of ingredient per serving (in the ingredient's unit)
+  pieceCount   Float? // Optional: number of pieces (e.g., "2 tomatoes")
   createdAt    DateTime   @default(now())
 
   @@unique([menuItemId, ingredientId])

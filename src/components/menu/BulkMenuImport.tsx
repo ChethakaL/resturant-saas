@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Category, Ingredient } from '@prisma/client'
+import { useToast } from '@/components/ui/use-toast'
 
 interface ExtractedMenuItem {
   name: string
@@ -39,6 +40,7 @@ interface BulkMenuImportProps {
 }
 
 export default function BulkMenuImport({ categories, ingredients }: BulkMenuImportProps) {
+  const { toast } = useToast()
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<'upload' | 'extracting' | 'verifying' | 'complete'>('upload')
   const [menuImage, setMenuImage] = useState<string | null>(null)
@@ -86,7 +88,7 @@ export default function BulkMenuImport({ categories, ingredients }: BulkMenuImpo
       }
     } catch (error) {
       console.error('Error extracting menu items:', error)
-      alert(error instanceof Error ? error.message : 'Failed to extract menu items')
+      toast({ title: 'Extraction Failed', description: error instanceof Error ? error.message : 'Failed to extract menu items', variant: 'destructive' })
       setStep('upload')
     } finally {
       setIsProcessing(false)
@@ -118,7 +120,7 @@ export default function BulkMenuImport({ categories, ingredients }: BulkMenuImpo
       setEditingItem({ ...editingItem, imageUrl: data.imageUrl })
     } catch (error) {
       console.error('Error generating image:', error)
-      alert(error instanceof Error ? error.message : 'Failed to generate image')
+      toast({ title: 'Image Generation Failed', description: error instanceof Error ? error.message : 'Failed to generate image', variant: 'destructive' })
     } finally {
       setIsGeneratingImage(false)
     }
@@ -129,17 +131,17 @@ export default function BulkMenuImport({ categories, ingredients }: BulkMenuImpo
 
     // Validate required fields
     if (!editingItem.categoryId) {
-      alert('Please select a category for this item')
+      toast({ title: 'Missing Category', description: 'Please select a category for this item', variant: 'destructive' })
       return
     }
 
     if (!editingItem.name.trim()) {
-      alert('Please enter a name for this item')
+      toast({ title: 'Missing Name', description: 'Please enter a name for this item', variant: 'destructive' })
       return
     }
 
     if (!editingItem.price || editingItem.price <= 0) {
-      alert('Please enter a valid price for this item')
+      toast({ title: 'Invalid Price', description: 'Please enter a valid price for this item', variant: 'destructive' })
       return
     }
 
@@ -196,7 +198,16 @@ export default function BulkMenuImport({ categories, ingredients }: BulkMenuImpo
 
       if (errors.length > 0) {
         console.error('Errors creating items:', errors)
-        alert(`Created ${items.length - errors.length} items. Errors:\n${errors.join('\n')}`)
+        toast({
+          title: 'Partial Success',
+          description: `Created ${items.length - errors.length} of ${items.length} items. Some items failed.`,
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: 'Success',
+          description: `Created ${items.length} menu items successfully!`,
+        })
       }
 
       setStep('complete')
@@ -206,7 +217,7 @@ export default function BulkMenuImport({ categories, ingredients }: BulkMenuImpo
       }, 2000)
     } catch (error) {
       console.error('Error creating menu items:', error)
-      alert('Failed to create some menu items')
+      toast({ title: 'Error', description: 'Failed to create some menu items', variant: 'destructive' })
     } finally {
       setIsProcessing(false)
     }

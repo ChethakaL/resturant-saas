@@ -4,38 +4,21 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
-  // LayoutDashboard,
-  // Package,
   UtensilsCrossed,
-  // ShoppingCart,
-  // BarChart3,
-  // Settings,
+  ShoppingCart,
+  Receipt,
+  Package,
   LogOut,
-  // Grid3x3,
-  // Users,
-  // DollarSign,
-  // Calendar,
-  // ChefHat,
-  // Truck,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
 const navigation = [
-  // { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  // { name: 'Profit & Loss', href: '/profit-loss', icon: DollarSign },
-  // { name: 'Meal Prep', href: '/meal-prep', icon: ChefHat },
-  // { name: 'Tables', href: '/tables', icon: Grid3x3 },
-  // { name: 'Orders', href: '/orders', icon: ShoppingCart },
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
-  // { name: 'Inventory', href: '/inventory', icon: Package },
-  // { name: 'Deliveries', href: '/inventory/deliveries', icon: Truck },
-  // { name: 'HR & Staff', href: '/hr/employees', icon: Users },
-  // { name: 'Payroll', href: '/hr/payroll', icon: DollarSign },
-  // { name: 'Shifts', href: '/hr/shifts', icon: Calendar },
-  // { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  // { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart },
+  { name: 'Orders', href: '/orders', icon: Receipt },
+  { name: 'Inventory', href: '/inventory', icon: Package },
 ]
 
 interface SidebarProps {
@@ -49,7 +32,7 @@ export function Sidebar({ restaurantName, userName, userRole }: SidebarProps) {
   const visibleNavigation =
     userRole === 'STAFF'
       ? navigation.filter((item) =>
-          ['Tables', 'Orders', 'Menu', 'Meal Prep'].includes(item.name)
+          ['Sales POS', 'Orders', 'Menu', 'Meal Prep'].includes(item.name)
         )
       : navigation
 

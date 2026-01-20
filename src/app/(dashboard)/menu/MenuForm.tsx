@@ -16,14 +16,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import { Category, Ingredient, MenuItem, MenuItemIngredient } from '@prisma/client'
+import { useToast } from '@/components/ui/use-toast'
 
 interface RecipeIngredient {
   ingredientId: string
   quantity: number
+  pieceCount?: number | null
 }
 
 interface MenuFormProps {
@@ -42,11 +45,19 @@ export default function MenuForm({
   menuItem,
 }: MenuFormProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [generatingImage, setGeneratingImage] = useState(false)
   const [showPromptDialog, setShowPromptDialog] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+
+  // AI Recipe suggestion state
+  const [showRecipeDialog, setShowRecipeDialog] = useState(false)
+  const [loadingRecipe, setLoadingRecipe] = useState(false)
+  const [suggestedRecipe, setSuggestedRecipe] = useState<any>(null)
+  const [recipeInstructions, setRecipeInstructions] = useState('')
+  const [creatingIngredients, setCreatingIngredients] = useState(false)
   const [formData, setFormData] = useState({
     name: menuItem?.name || '',
     description: menuItem?.description || '',
@@ -62,13 +73,30 @@ export default function MenuForm({
     menuItem?.ingredients.map((ing) => ({
       ingredientId: ing.ingredientId,
       quantity: ing.quantity,
+      pieceCount: (ing as any).pieceCount || null,
     })) || []
   )
+
+  // Store recipe steps and tips
+  const [recipeSteps, setRecipeSteps] = useState<string[]>(menuItem?.recipeSteps || [])
+  const [recipeTips, setRecipeTips] = useState<string[]>(menuItem?.recipeTips || [])
+  const [prepTime, setPrepTime] = useState(menuItem?.prepTime || '')
+  const [cookTime, setCookTime] = useState(menuItem?.cookTime || '')
+
+  // Track newly created ingredients (so they show in the recipe builder before page refresh)
+  const [newlyCreatedIngredients, setNewlyCreatedIngredients] = useState<Ingredient[]>([])
+
+  // Combined ingredients list (original + newly created)
+  const allIngredients = useMemo(() => {
+    const existingIds = new Set(ingredients.map((i) => i.id))
+    const newOnes = newlyCreatedIngredients.filter((i) => !existingIds.has(i.id))
+    return [...ingredients, ...newOnes]
+  }, [ingredients, newlyCreatedIngredients])
 
   // Calculate real-time cost and margin
   const calculations = useMemo(() => {
     const cost = recipe.reduce((sum, item) => {
-      const ingredient = ingredients.find((i) => i.id === item.ingredientId)
+      const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
       return sum + (ingredient ? ingredient.costPerUnit * item.quantity : 0)
     }, 0)
 
@@ -77,10 +105,39 @@ export default function MenuForm({
     const margin = price > 0 ? ((profit / price) * 100) : 0
 
     return { cost, profit, margin }
-  }, [recipe, formData.price, ingredients])
+  }, [recipe, formData.price, allIngredients])
 
   const addIngredient = () => {
-    setRecipe([...recipe, { ingredientId: '', quantity: 0 }])
+    // Add new ingredient at the TOP of the list so user can see it
+    setRecipe([{ ingredientId: '', quantity: 0, pieceCount: null }, ...recipe])
+  }
+
+  const addRecipeStep = () => {
+    setRecipeSteps((prev) => [...prev, ''])
+  }
+
+  const updateRecipeStep = (index: number, value: string) => {
+    setRecipeSteps((prev) =>
+      prev.map((step, stepIndex) => (stepIndex === index ? value : step))
+    )
+  }
+
+  const removeRecipeStep = (index: number) => {
+    setRecipeSteps((prev) => prev.filter((_, stepIndex) => stepIndex !== index))
+  }
+
+  const addRecipeTip = () => {
+    setRecipeTips((prev) => [...prev, ''])
+  }
+
+  const updateRecipeTip = (index: number, value: string) => {
+    setRecipeTips((prev) =>
+      prev.map((tip, tipIndex) => (tipIndex === index ? value : tip))
+    )
+  }
+
+  const removeRecipeTip = (index: number) => {
+    setRecipeTips((prev) => prev.filter((_, tipIndex) => tipIndex !== index))
   }
 
   const removeIngredient = (index: number) => {
@@ -95,7 +152,7 @@ export default function MenuForm({
 
   const generateImage = async (useCustomPrompt: boolean = false) => {
     if (!formData.name) {
-      alert('Please enter a menu item name first')
+      toast({ title: 'Missing Information', description: 'Please enter a menu item name first', variant: 'destructive' })
       return
     }
 
@@ -124,9 +181,197 @@ export default function MenuForm({
       setCustomPrompt('')
     } catch (error) {
       console.error('Error generating image:', error)
-      alert(error instanceof Error ? error.message : 'Failed to generate image')
+      toast({ title: 'Image Generation Failed', description: error instanceof Error ? error.message : 'Failed to generate image', variant: 'destructive' })
     } finally {
       setGeneratingImage(false)
+    }
+  }
+
+  const normalizeIngredientQuantities = (ingredients: any[]) => {
+    const vegKeywords = ['tomato', 'onion', 'parsley', 'cilantro', 'pepper', 'carrot', 'cucumber', 'lettuce', 'garlic']
+    const spiceKeywords = ['turmeric', 'cumin', 'coriander', 'black pepper', 'cardamom', 'cinnamon', 'saffron']
+    const dryKeywords = ['lentil', 'rice', 'beans', 'chickpea', 'bulgur', 'flour']
+
+    return ingredients.map((ing) => {
+      const name = (ing.name || '').toLowerCase()
+      const unit = (ing.unit || '').toLowerCase()
+      let quantity = Number(ing.quantity) || 0
+      let note = ing.notes
+
+      if (unit.includes('kg') || unit.includes('g')) {
+        const isVeg = vegKeywords.some((keyword) => name.includes(keyword))
+        if (isVeg) {
+          const limit = unit.includes('g') ? 250 : 0.25
+          if (quantity > limit) {
+            quantity = limit
+            note = note || 'Adjusted to realistic serving size'
+          }
+        } else if (spiceKeywords.some((keyword) => name.includes(keyword))) {
+          const limit = unit.includes('g') ? 10 : 0.02
+          if (quantity > limit) {
+            quantity = limit
+            note = note || 'Spices kept to single-serving scale'
+          }
+        }
+      }
+
+      if (unit.includes('cup')) {
+        const limit = 2
+        if (quantity > limit) {
+          quantity = limit
+          note = note || 'Capped to 2 cups per serving'
+        }
+      }
+
+      if (!ing.pieceCount && vegKeywords.some((keyword) => name.includes(keyword))) {
+        note = note || 'Count inferred from recipe instructions'
+      }
+
+      return {
+        ...ing,
+        quantity,
+        notes: note,
+      }
+    })
+  }
+
+  const fetchRecipeSuggestion = async () => {
+    if (!formData.name) {
+      toast({ title: 'Missing Information', description: 'Please enter a menu item name first', variant: 'destructive' })
+      return
+    }
+
+    setLoadingRecipe(true)
+    setSuggestedRecipe(null)
+
+    try {
+      const response = await fetch('/api/menu/suggest-recipe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemName: formData.name,
+          description: formData.description,
+          additionalInstructions: recipeInstructions,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get recipe suggestion')
+      }
+
+      setSuggestedRecipe({
+        ...data.recipe,
+        ingredients: normalizeIngredientQuantities(data.recipe.ingredients || []),
+      })
+
+      // Update calories and tags if not already set
+      if (!formData.calories && data.recipe.calories) {
+        setFormData((prev) => ({ ...prev, calories: data.recipe.calories.toString() }))
+      }
+      if (!formData.tags && data.recipe.dietaryTags?.length > 0) {
+        setFormData((prev) => ({ ...prev, tags: data.recipe.dietaryTags.join(', ') }))
+      }
+    } catch (error) {
+      console.error('Error fetching recipe:', error)
+      toast({ title: 'Recipe Suggestion Failed', description: error instanceof Error ? error.message : 'Failed to get recipe suggestion', variant: 'destructive' })
+    } finally {
+      setLoadingRecipe(false)
+    }
+  }
+
+  const applyRecipeIngredients = async () => {
+    if (!suggestedRecipe) return
+
+    setCreatingIngredients(true)
+
+    try {
+      const newRecipe: RecipeIngredient[] = []
+      const missingIngredients: string[] = []
+      const createdIngredients: Ingredient[] = []
+
+      for (const ing of suggestedRecipe.ingredients) {
+        if (ing.existingIngredientId) {
+          // Ingredient exists, add to recipe
+          newRecipe.push({
+            ingredientId: ing.existingIngredientId,
+            quantity: ing.quantity,
+            pieceCount: ing.pieceCount || null,
+          })
+        } else {
+          // Need to create this ingredient
+          missingIngredients.push(`${ing.name} (${ing.quantity} ${ing.unit})`)
+
+          // Create the ingredient
+          const createResponse = await fetch('/api/ingredients', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: ing.name,
+              unit: ing.unit,
+              costPerUnit: 0, // Default cost, user can update later
+            }),
+          })
+
+          if (createResponse.ok) {
+            const newIngredient = await createResponse.json()
+            newRecipe.push({
+              ingredientId: newIngredient.id,
+              quantity: ing.quantity,
+              pieceCount: ing.pieceCount || null,
+            })
+            // Track newly created ingredients for display
+            createdIngredients.push(newIngredient)
+          }
+        }
+      }
+
+      setRecipe(newRecipe)
+
+      // Add newly created ingredients to our local state so they show in the dropdown
+      if (createdIngredients.length > 0) {
+        setNewlyCreatedIngredients((prev) => [...prev, ...createdIngredients])
+      }
+
+      // Store recipe steps and tips
+      if (suggestedRecipe.steps?.length > 0) {
+        setRecipeSteps(suggestedRecipe.steps)
+      }
+      if (suggestedRecipe.tips?.length > 0) {
+        setRecipeTips(suggestedRecipe.tips)
+      }
+      if (suggestedRecipe.prepTime) {
+        setPrepTime(suggestedRecipe.prepTime)
+      }
+      if (suggestedRecipe.cookTime) {
+        setCookTime(suggestedRecipe.cookTime)
+      }
+
+      if (missingIngredients.length > 0) {
+        toast({
+          title: 'Recipe Applied',
+          description: `Created ${missingIngredients.length} new ingredient(s). Click "Save Changes" to save the recipe. You can update costs later in Inventory.`,
+        })
+      } else {
+        toast({
+          title: 'Recipe Applied',
+          description: 'All ingredients have been added. Click "Save Changes" to save the recipe.',
+        })
+      }
+
+      setShowRecipeDialog(false)
+      setSuggestedRecipe(null)
+      setRecipeInstructions('')
+
+      // Note: We don't reload the page anymore because we have the new ingredient IDs
+      // The ingredients dropdown may not show the new ingredients until page refresh,
+      // but the recipe will save correctly with the correct ingredient IDs
+    } catch (error) {
+      console.error('Error applying recipe:', error)
+      toast({ title: 'Error', description: 'Failed to apply recipe ingredients', variant: 'destructive' })
+    } finally {
+      setCreatingIngredients(false)
     }
   }
 
@@ -134,17 +379,17 @@ export default function MenuForm({
     e.preventDefault()
 
     if (!formData.categoryId) {
-      alert('Please select a category')
+      toast({ title: 'Missing Information', description: 'Please select a category', variant: 'destructive' })
       return
     }
 
     if (recipe.length === 0) {
-      alert('Please add at least one ingredient to the recipe')
+      toast({ title: 'Missing Ingredients', description: 'Please add at least one ingredient to the recipe', variant: 'destructive' })
       return
     }
 
     if (recipe.some((item) => !item.ingredientId || item.quantity <= 0)) {
-      alert('Please complete all recipe ingredients with valid quantities')
+      toast({ title: 'Invalid Quantities', description: 'Please complete all recipe ingredients with valid quantities', variant: 'destructive' })
       return
     }
 
@@ -171,7 +416,13 @@ export default function MenuForm({
           ingredients: recipe.map((item) => ({
             ingredientId: item.ingredientId,
             quantity: item.quantity,
+            pieceCount: item.pieceCount || null,
           })),
+          // Recipe details
+          prepTime: prepTime || null,
+          cookTime: cookTime || null,
+          recipeSteps: recipeSteps,
+          recipeTips: recipeTips,
         }),
       })
 
@@ -183,7 +434,7 @@ export default function MenuForm({
       router.refresh()
     } catch (error) {
       console.error('Error saving menu item:', error)
-      alert('Failed to save menu item. Please try again.')
+      toast({ title: 'Save Failed', description: 'Failed to save menu item. Please try again.', variant: 'destructive' })
     } finally {
       setLoading(false)
     }
@@ -194,6 +445,34 @@ export default function MenuForm({
     if (margin >= 40) return 'text-amber-600'
     if (margin >= 20) return 'text-yellow-600'
     return 'text-red-600'
+  }
+
+  const getCountLabelForIngredient = (ingredient?: Ingredient) => {
+    if (!ingredient) return 'item'
+    const lowerName = ingredient.name.toLowerCase()
+    const cupKeywords = ['lentil', 'rice', 'bean', 'dal', 'chickpea', 'bulgur', 'grain', 'flour']
+    if (cupKeywords.some((keyword) => lowerName.includes(keyword))) {
+      return 'cup'
+    }
+    const pieceKeywords = ['onion', 'tomato', 'pepper', 'egg', 'carrot', 'potato', 'cucumber', 'slice', 'pita']
+    if (
+      pieceKeywords.some((keyword) => lowerName.includes(keyword)) ||
+      ['piece', 'pieces', 'pcs'].includes(ingredient.unit.toLowerCase())
+    ) {
+      return 'piece'
+    }
+    return 'item'
+  }
+
+  const formatCountLabel = (label: string, count?: number) => {
+    if (!label) return ''
+    if (count === 1) {
+      return label
+    }
+    if (label.endsWith('s')) {
+      return label
+    }
+    return `${label}s`
   }
 
   return (
@@ -371,84 +650,238 @@ export default function MenuForm({
             </Card>
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Recipe Builder</CardTitle>
-                <Button type="button" variant="outline" size="sm" onClick={addIngredient}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Ingredient
-                </Button>
+              <CardHeader className="flex items-center justify-between gap-3">
+                <CardTitle>Recipe Instructions</CardTitle>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={addRecipeStep}>
+                    <Plus className="h-3 w-3 mr-2" />
+                    Add Step
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={addRecipeTip}>
+                    <Plus className="h-3 w-3 mr-2" />
+                    Add Tip
+                  </Button>
+                </div>
               </CardHeader>
-              <CardContent>
-                {recipe.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500">
-                    No ingredients added. Click "Add Ingredient" to start building your recipe.
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-slate-700">Steps</p>
+                    <p className="text-xs text-slate-400">Describe the cooking sequence</p>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {recipe.map((item, index) => {
-                      const ingredient = ingredients.find((i) => i.id === item.ingredientId)
-                      const itemCost = ingredient ? ingredient.costPerUnit * item.quantity : 0
-
-                      return (
+                  {recipeSteps.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      No steps yet. Use the &quot;Add Step&quot; button to outline the recipe.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {recipeSteps.map((step, index) => (
                         <div
-                          key={index}
-                          className="flex items-end gap-3 p-3 border border-slate-200 rounded-md"
+                          key={`step-${index}`}
+                          className="border border-slate-200 rounded-md p-3 bg-white"
                         >
-                          <div className="flex-1 space-y-2">
-                            <Label>Ingredient</Label>
-                            <Select
-                              value={item.ingredientId}
-                              onValueChange={(value) =>
-                                updateIngredient(index, 'ingredientId', value)
-                              }
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-slate-500">
+                              Step {index + 1}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeRecipeStep(index)}
+                              className="text-red-500 hover:text-red-700"
                             >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select ingredient" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {ingredients.map((ing) => (
-                                  <SelectItem key={ing.id} value={ing.id}>
-                                    {ing.name} ({ing.unit})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              Remove
+                            </Button>
                           </div>
-
-                          <div className="w-32 space-y-2">
-                            <Label>Quantity</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={item.quantity || ''}
-                              onChange={(e) =>
-                                updateIngredient(
-                                  index,
-                                  'quantity',
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              placeholder="0.00"
+                          <Textarea
+                            rows={2}
+                            placeholder="e.g., Sweat onions until translucent..."
+                            value={step}
+                            onChange={(e) => updateRecipeStep(index, e.target.value)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-slate-700">Tips</p>
+                    <p className="text-xs text-slate-400">Chef notes for great results</p>
+                  </div>
+                  {recipeTips.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      Add a few tips to help the team serve the dish consistently.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {recipeTips.map((tip, index) => (
+                        <div
+                          key={`tip-${index}`}
+                          className="flex items-start gap-3 border border-dashed border-slate-200 rounded-md p-3 bg-slate-50"
+                        >
+                          <Badge variant="outline" className="text-xs uppercase">
+                            Tip {index + 1}
+                          </Badge>
+                          <div className="flex-1 space-y-2">
+                            <Textarea
+                              rows={2}
+                              placeholder="e.g., Garnish with parsley..."
+                              value={tip}
+                              onChange={(e) => updateRecipeTip(index, e.target.value)}
                             />
                           </div>
-
-                          <div className="w-32 space-y-2">
-                            <Label>Cost</Label>
-                            <div className="h-10 px-3 py-2 bg-slate-50 rounded-md text-sm font-mono text-slate-700">
-                              {formatCurrency(itemCost)}
-                            </div>
-                          </div>
-
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => removeIngredient(index)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => removeRecipeTip(index)}
+                            className="text-red-500 hover:text-red-700"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            Remove
                           </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Recipe Builder</CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowRecipeDialog(true)}
+                    disabled={!formData.name}
+                    title={!formData.name ? 'Enter item name first' : 'Get AI recipe suggestion'}
+                  >
+                    <ChefHat className="h-4 w-4 mr-2" />
+                    AI Recipe
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={addIngredient}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Ingredient
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {recipe.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500">
+                    No ingredients added. Click "Add Ingredient" or use "AI Recipe" to get suggestions.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                      {recipe.map((item, index) => {
+                        const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
+                        const itemCost = ingredient ? ingredient.costPerUnit * item.quantity : 0
+                        const countLabel = formatCountLabel(
+                          getCountLabelForIngredient(ingredient),
+                          item.pieceCount || undefined
+                        )
+
+                        // Format display: "2 cups (0.2 kg)" or just "0.5 kg" if no count
+                        const displayQuantity = item.pieceCount
+                          ? `${item.pieceCount} ${countLabel} (${item.quantity} ${ingredient?.unit || ''})`
+                          : `${item.quantity} ${ingredient?.unit || ''}`
+
+                        return (
+                        <div
+                          key={index}
+                          className="p-3 border border-slate-200 rounded-md space-y-3"
+                        >
+                          <div className="flex items-end gap-3">
+                            <div className="flex-1 space-y-2">
+                              <Label>Ingredient</Label>
+                              <Select
+                                value={item.ingredientId}
+                                onValueChange={(value) =>
+                                  updateIngredient(index, 'ingredientId', value)
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select ingredient" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {allIngredients.map((ing) => (
+                                    <SelectItem key={ing.id} value={ing.id}>
+                                      {ing.name} ({ing.unit})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeIngredient(index)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-2">
+                              <Label>Count (optional)</Label>
+                              <Input
+                                type="number"
+                                step="any"
+                                min="0"
+                                value={item.pieceCount ?? ''}
+                                onChange={(e) =>
+                                  updateIngredient(
+                                    index,
+                                    'pieceCount' as any,
+                                    e.target.value ? Number(e.target.value) : null
+                                  )
+                                }
+                                placeholder="e.g., 2"
+                              />
+                              <p className="text-xs text-slate-400">
+                                Use cups for dry goods (lentils, rice) or pieces for countable veggies.
+                              </p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>Quantity ({ingredient?.unit || 'unit'})</Label>
+                              <Input
+                                type="number"
+                                step="any"
+                                min="0"
+                                value={item.quantity || ''}
+                                onChange={(e) =>
+                                  updateIngredient(
+                                    index,
+                                    'quantity',
+                                    parseFloat(e.target.value) || 0
+                                  )
+                                }
+                                placeholder="0.00"
+                              />
+                              <p className="text-xs text-slate-400">Weight/Volume</p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>Cost</Label>
+                              <div className="h-10 px-3 py-2 bg-slate-50 rounded-md text-sm font-mono text-slate-700">
+                                {formatCurrency(itemCost)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {ingredient && (
+                            <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
+                              Display: <strong>{ingredient.name}</strong> - {displayQuantity}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -629,6 +1062,219 @@ export default function MenuForm({
                 Generate Image
               </Button>
             </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Recipe Suggestion Dialog */}
+      <Dialog open={showRecipeDialog} onOpenChange={setShowRecipeDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ChefHat className="h-5 w-5 text-emerald-600" />
+              AI Recipe Suggestion for "{formData.name}"
+            </DialogTitle>
+            <DialogDescription>
+              Get a recipe suggestion from AI based on your menu item
+            </DialogDescription>
+          </DialogHeader>
+
+          {!suggestedRecipe && !loadingRecipe && (
+            <div className="space-y-4 py-4">
+              <div className="text-center py-4">
+                <ChefHat className="h-12 w-12 mx-auto text-emerald-500 mb-3" />
+                <p className="text-slate-600 mb-4">
+                  Let AI find the perfect recipe for <strong>"{formData.name}"</strong>
+                </p>
+              </div>
+              <Button onClick={fetchRecipeSuggestion} className="w-full">
+                <ChefHat className="h-4 w-4 mr-2" />
+                Get Recipe Suggestion
+              </Button>
+            </div>
+          )}
+
+          {loadingRecipe && (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-emerald-500" />
+              <p className="text-sm text-slate-500">Searching for the perfect recipe...</p>
+            </div>
+          )}
+
+          {suggestedRecipe && (
+            <div className="space-y-6 py-4">
+              {/* Recipe Header */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                <h3 className="font-semibold text-emerald-800 text-lg">{suggestedRecipe.recipeName}</h3>
+                <div className="flex flex-wrap gap-4 mt-2 text-sm text-emerald-700">
+                  <span>Prep: {suggestedRecipe.prepTime}</span>
+                  <span>Cook: {suggestedRecipe.cookTime}</span>
+                  <span>Servings: {suggestedRecipe.servings}</span>
+                  {suggestedRecipe.calories && <span>{suggestedRecipe.calories} calories</span>}
+                </div>
+                {suggestedRecipe.dietaryTags?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {suggestedRecipe.dietaryTags.map((tag: string) => (
+                      <Badge key={tag} variant="secondary" className="text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Ingredients */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-slate-800 flex items-center gap-2">
+                  Ingredients
+                  <span className="text-xs font-normal text-slate-500">
+                    ({suggestedRecipe.ingredients?.filter((i: any) => i.isAvailable).length || 0} available,{' '}
+                    {suggestedRecipe.ingredients?.filter((i: any) => !i.isAvailable).length || 0} need to be created)
+                  </span>
+                </h4>
+                <div className="space-y-2">
+                  {suggestedRecipe.ingredients?.map((ing: any, index: number) => (
+                    <div
+                      key={index}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        ing.isAvailable
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-amber-50 border-amber-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {ing.isAvailable ? (
+                          <Check className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-amber-600" />
+                        )}
+                        <div>
+                          <span className="font-medium">{ing.name}</span>
+                          <span className="text-slate-500 ml-2">
+                            {ing.pieceCount ? (
+                              <>{ing.pieceCount} items ({ing.quantity} {ing.unit})</>
+                            ) : (
+                              <>{ing.quantity} {ing.unit}</>
+                            )}
+                          </span>
+                          {ing.notes && (
+                            <span className="text-xs text-slate-400 ml-2">({ing.notes})</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-xs">
+                        {ing.isAvailable ? (
+                          <span className="text-green-600">In inventory</span>
+                        ) : (
+                          <span className="text-amber-600">Will be created</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cooking Steps */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-slate-800">Cooking Steps</h4>
+                <ol className="space-y-2">
+                  {suggestedRecipe.steps?.map((step: string, index: number) => (
+                    <li
+                      key={index}
+                      className="flex gap-3 p-3 bg-slate-50 rounded-lg"
+                    >
+                      <span className="flex-shrink-0 w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                        {index + 1}
+                      </span>
+                      <span className="text-slate-700">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              {/* Tips */}
+              {suggestedRecipe.tips?.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-slate-800">Tips</h4>
+                  <ul className="space-y-1">
+                    {suggestedRecipe.tips.map((tip: string, index: number) => (
+                      <li key={index} className="text-sm text-slate-600 flex items-start gap-2">
+                        <span className="text-emerald-500">•</span>
+                        {tip}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Ask for modifications */}
+              <div className="space-y-3 border-t pt-4">
+                <Label className="text-base font-medium">Want to modify this recipe?</Label>
+                <p className="text-sm text-slate-500">
+                  Tell us what you'd like to add, remove, or change
+                </p>
+                <Textarea
+                  value={recipeInstructions}
+                  onChange={(e) => setRecipeInstructions(e.target.value)}
+                  placeholder="e.g., Add more garlic and onions, use olive oil instead of butter, make it less spicy, add cumin and coriander..."
+                  rows={2}
+                  className="resize-none"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={fetchRecipeSuggestion}
+                  disabled={loadingRecipe || !recipeInstructions.trim()}
+                  className="w-full"
+                >
+                  {loadingRecipe ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Updating Recipe...
+                    </>
+                  ) : (
+                    <>
+                      <ChefHat className="h-4 w-4 mr-2" />
+                      Update Recipe with Changes
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowRecipeDialog(false)
+                    setSuggestedRecipe(null)
+                    setRecipeInstructions('')
+                  }}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={applyRecipeIngredients}
+                  disabled={creatingIngredients}
+                  className="flex-1"
+                >
+                  {creatingIngredients ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Applying...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Apply Recipe Ingredients
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

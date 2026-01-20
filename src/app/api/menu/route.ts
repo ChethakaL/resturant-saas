@@ -26,6 +26,11 @@ export async function POST(request: Request) {
           restaurantId: session.user.restaurantId,
           calories: data.calories,
           tags: data.tags || [],
+          // Recipe details
+          prepTime: data.prepTime || null,
+          cookTime: data.cookTime || null,
+          recipeSteps: data.recipeSteps || [],
+          recipeTips: data.recipeTips || [],
         },
       })
 
@@ -41,6 +46,7 @@ export async function POST(request: Request) {
               menuItemId: item.id,
               ingredientId: ing.ingredientId,
               quantity: ing.quantity,
+              pieceCount: ing.pieceCount || null,
             })),
           })
         }

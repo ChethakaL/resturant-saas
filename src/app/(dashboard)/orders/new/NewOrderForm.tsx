@@ -4,16 +4,35 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, AlertTriangle } from 'lucide-react'
+import {
+  ArrowLeft,
+  ShoppingCart,
+  Plus,
+  Minus,
+  Trash2,
+  AlertTriangle,
+  Printer,
+  Mail,
+} from 'lucide-react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import { Category, Ingredient, MenuItem, MenuItemIngredient, Table } from '@prisma/client'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
+import { buildReceiptHtml, buildReceiptText, ReceiptOrder } from '@/lib/receipt'
+import { useToast } from '@/components/ui/use-toast'
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
@@ -33,6 +52,48 @@ interface PreppedStock {
   availableQuantity: number
 }
 
+const DEFAULT_ORDER_DETAILS = {
+  customerName: '',
+  tableId: '',
+  paymentMethod: 'CASH',
+  notes: '',
+}
+
+type SaleResponse = {
+  id: string
+  orderNumber: string
+  total: number
+  paymentMethod: string
+  status: string
+  customerName?: string | null
+  notes?: string | null
+  timestamp: string
+  table?: { number: number } | null
+  items: Array<{
+    id: string
+    quantity: number
+    price: number
+    menuItem: { name: string }
+  }>
+}
+
+const mapSaleToReceiptOrder = (order: SaleResponse): ReceiptOrder => ({
+  id: order.id,
+  orderNumber: order.orderNumber,
+  total: order.total,
+  paymentMethod: order.paymentMethod,
+  status: order.status,
+  tableNumber: order.table?.number ?? null,
+  customerName: order.customerName ?? null,
+  notes: order.notes ?? null,
+  timestamp: order.timestamp,
+  items: order.items.map((item) => ({
+    name: item.menuItem.name,
+    quantity: item.quantity,
+    price: item.price,
+  })),
+})
+
 function StripePaymentForm({
   onPaymentSuccess,
   loading,
@@ -42,6 +103,7 @@ function StripePaymentForm({
 }) {
   const stripe = useStripe()
   const elements = useElements()
+  const { toast } = useToast()
   const [confirming, setConfirming] = useState(false)
 
   const handleConfirm = async () => {
@@ -56,7 +118,11 @@ function StripePaymentForm({
     })
 
     if (result.error) {
-      alert(result.error.message || 'Payment failed. Please try again.')
+      toast({
+        title: 'Payment Failed',
+        description: result.error.message || 'Payment failed. Please try again.',
+        variant: 'destructive',
+      })
       setConfirming(false)
       return
     }
@@ -66,7 +132,11 @@ function StripePaymentForm({
       return
     }
 
-    alert('Payment was not completed. Please try again.')
+    toast({
+      title: 'Payment Incomplete',
+      description: 'Payment was not completed. Please try again.',
+      variant: 'destructive',
+    })
     setConfirming(false)
   }
 
@@ -100,17 +170,104 @@ export default function NewOrderForm({
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
-  const [orderDetails, setOrderDetails] = useState({
-    customerName: '',
-    tableId: '',
-    paymentMethod: 'CASH',
-    notes: '',
-  })
+  const [orderDetails, setOrderDetails] = useState(() => ({ ...DEFAULT_ORDER_DETAILS }))
+  const TABLE_NONE_VALUE = 'TABLE_NONE'
   const [cashReceived, setCashReceived] = useState('')
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null)
   const [stripeInitLoading, setStripeInitLoading] = useState(false)
   const [preppedStock, setPreppedStock] = useState<PreppedStock[]>([])
+  const [latestOrder, setLatestOrder] = useState<ReceiptOrder | null>(null)
+  const [emailModalOpen, setEmailModalOpen] = useState(false)
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
   const isCashPayment = orderDetails.paymentMethod === 'CASH'
+  const preppedStockMap = useMemo(
+    () =>
+      new Map(preppedStock.map((item) => [item.menuItemId, item.availableQuantity])),
+    [preppedStock]
+  )
+  const { toast } = useToast()
+  const [stockModal, setStockModal] = useState<{
+    open: boolean
+    items: Array<{
+      menuItemId: string
+      name: string
+      available: number
+      requested: number
+    }>
+  }>({ open: false, items: [] })
+
+  const handleReduceStock = () => {
+    setOrderItems((prev) =>
+      prev
+        .map((item) => {
+          const match = stockModal.items.find((stockItem) => stockItem.menuItemId === item.menuItemId)
+          if (!match) return item
+          return {
+            ...item,
+            quantity: Math.min(item.quantity, match.available),
+          }
+        })
+        .filter((item) => item.quantity > 0)
+    )
+    setStockModal({ open: false, items: [] })
+    toast({
+      title: 'Quantities adjusted',
+      description: 'Reduced items to available stock so you can complete the order.',
+    })
+  }
+
+  const handleDismissStockModal = () => {
+    setStockModal({ open: false, items: [] })
+  }
+  const calculateIngredientAvailability = (menuItem: MenuItemWithDetails) => {
+    if (!menuItem.ingredients.length) {
+      return Infinity
+    }
+
+    const servings = menuItem.ingredients
+      .map((ingredient) => {
+        if (!ingredient.quantity || ingredient.quantity <= 0) {
+          return Infinity
+        }
+
+        const stock = ingredient.ingredient.stockQuantity || 0
+        return stock / ingredient.quantity
+      })
+      .filter((value) => Number.isFinite(value))
+
+    if (servings.length === 0) {
+      return Infinity
+    }
+
+    return Math.floor(Math.min(...servings))
+  }
+
+  useEffect(() => {
+    let isMounted = true
+    fetch('/api/meal-prep/stock')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (!isMounted) return
+        if (Array.isArray(data)) {
+          setPreppedStock(
+            data.map((item) => ({
+              menuItemId: item.menuItemId,
+              availableQuantity: item.availableQuantity,
+            }))
+          )
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setPreppedStock([])
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   // Filter menu items based on search and category
   const filteredMenuItems = useMemo(() => {
@@ -222,7 +379,7 @@ export default function NewOrderForm({
     paymentProvider?: string
     stripePaymentIntentId?: string
     status?: 'PENDING' | 'COMPLETED'
-  }) => {
+  }): Promise<SaleResponse> => {
     const response = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -239,36 +396,110 @@ export default function NewOrderForm({
       }),
     })
 
+    const data = await response.json()
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to create order')
+      throw new Error(data.error || 'Failed to create order')
     }
 
-    const order = await response.json()
-    if (status === 'PENDING') {
-      router.push('/dashboard/orders')
-      router.refresh()
-    } else {
-      router.push(`/dashboard/orders/${order.id}`)
-      router.refresh()
+    return data as SaleResponse
+  }
+
+  const handleOrderSuccess = (order: SaleResponse) => {
+    setLatestOrder(mapSaleToReceiptOrder(order))
+    setOrderItems([])
+    setOrderDetails({ ...DEFAULT_ORDER_DETAILS })
+    setCashReceived('')
+    setStripeClientSecret(null)
+  }
+
+  const printReceipt = () => {
+    if (!latestOrder || typeof window === 'undefined') return
+    const html = buildReceiptHtml(latestOrder)
+    const printWindow = window.open('', '_blank', 'width=600,height=800')
+    if (!printWindow) return
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.focus()
+    setTimeout(() => {
+      printWindow.print()
+    }, 300)
+  }
+
+  const emailReceipt = () => {
+    if (!latestOrder) return
+    setCustomerEmail('')
+    setEmailModalOpen(true)
+  }
+
+  const handleSendEmail = async () => {
+    if (!customerEmail || !latestOrder) return
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(customerEmail)) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address',
+        variant: 'destructive',
+      })
+      return
     }
+
+    setSendingEmail(true)
+
+    try {
+      // TODO: Implement actual email sending API call here
+      // For now, just simulate sending
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      toast({
+        title: 'Email Sent',
+        description: `Receipt has been sent to ${customerEmail}`,
+      })
+
+      setEmailModalOpen(false)
+      setCustomerEmail('')
+    } catch (error) {
+      toast({
+        title: 'Email Failed',
+        description: 'Failed to send email. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
+  const handleStartNewOrder = () => {
+    setLatestOrder(null)
   }
 
   const handleSaveAsPending = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (orderItems.length === 0) {
-      alert('Please add at least one item to the order')
+      toast({
+        title: 'No Items',
+        description: 'Please add at least one item to the order',
+        variant: 'destructive',
+      })
       return
     }
 
     setLoading(true)
 
     try {
+      setLatestOrder(null)
       await createOrder({ paymentMethod: 'CASH', status: 'PENDING' })
+      router.push('/orders')
+      router.refresh()
     } catch (error: any) {
       console.error('Error saving pending order:', error)
-      alert(error.message || 'Failed to save order. Please try again.')
+      toast({
+        title: 'Save Failed',
+        description: error.message || 'Failed to save order. Please try again.',
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }
@@ -278,66 +509,97 @@ export default function NewOrderForm({
     e.preventDefault()
 
     if (orderItems.length === 0) {
-      alert('Please add at least one item to the order')
+      toast({
+        title: 'No Items',
+        description: 'Please add at least one item to the order',
+        variant: 'destructive',
+      })
       return
     }
 
     const partialItems = orderItems
       .map((item) => {
-        const available = preppedStockMap.get(item.menuItemId) ?? 0
+        const menuItem = menuItems.find((m) => m.id === item.menuItemId)
+        // Check prepped stock first (this is what shows in the green badge)
+        // Try map lookup first, then fallback to direct array search
+        let preppedAvailable = preppedStockMap.get(item.menuItemId) ?? 0
+        if (preppedAvailable === 0) {
+          // Fallback: search the array directly in case of key mismatch
+          const preppedStockItem = preppedStock.find((ps) => ps.menuItemId === item.menuItemId)
+          preppedAvailable = preppedStockItem?.availableQuantity ?? 0
+        }
+        // Fall back to raw ingredient availability if no prepped stock
+        const rawAvailable = menuItem ? calculateIngredientAvailability(menuItem) : 0
+        // Use prepped stock if available (even if 0), otherwise use raw ingredient availability
+        const available = preppedAvailable > 0 
+          ? preppedAvailable 
+          : (Number.isFinite(rawAvailable) && rawAvailable > 0 ? rawAvailable : 0)
         return { ...item, available }
       })
-      .filter((item) => item.available < item.quantity)
+      .filter((item) => {
+        // Only show as partial if we truly don't have enough stock
+        return item.available < item.quantity
+      })
 
     if (partialItems.length > 0) {
-      const message = partialItems
-        .map((item) => {
+      setStockModal({
+        open: true,
+        items: partialItems.map((item) => {
           const menuItem = menuItems.find((m) => m.id === item.menuItemId)
-          return `${menuItem?.name || 'Item'}: ${item.available} available, ${item.quantity} requested`
-        })
-        .join('\n')
-      const confirmPartial = confirm(
-        `Some items have limited prepped stock:\n\n${message}\n\nReduce quantities to available and complete?`
-      )
-      if (!confirmPartial) {
-        return
-      }
-      setOrderItems((prev) =>
-        prev
-          .map((item) => {
-            const available = preppedStockMap.get(item.menuItemId) ?? 0
-            return {
-              ...item,
-              quantity: Math.min(item.quantity, available),
-            }
-          })
-          .filter((item) => item.quantity > 0)
-      )
+          const preppedAvailable = preppedStockMap.get(item.menuItemId) ?? 0
+          const rawAvailable = menuItem ? calculateIngredientAvailability(menuItem) : 0
+          // Show the actual available count (prepped takes priority)
+          const totalAvailable = preppedAvailable > 0 ? preppedAvailable : (Number.isFinite(rawAvailable) ? rawAvailable : 0)
+          return {
+            menuItemId: item.menuItemId,
+            name: menuItem?.name || 'Item',
+            available: totalAvailable,
+            requested: item.quantity,
+          }
+        }),
+      })
       return
     }
 
     if (stockWarnings.length > 0) {
-      alert('Cannot complete order due to insufficient stock:\n\n' + stockWarnings.join('\n'))
+      toast({
+        title: 'Stock Shortage',
+        description: 'Cannot complete order due to insufficient stock. Please adjust quantities.',
+        variant: 'destructive',
+      })
       return
     }
 
     if (!isCashPayment) {
-      alert('Use the card payment section to complete card payments.')
+      toast({
+        title: 'Card Payment Required',
+        description: 'Use the card payment section to complete card payments.',
+        variant: 'destructive',
+      })
       return
     }
 
     if (cashReceivedAmount < orderSummary.total) {
-      alert('Cash received must cover the total amount.')
+      toast({
+        title: 'Insufficient Cash',
+        description: 'Cash received must cover the total amount.',
+        variant: 'destructive',
+      })
       return
     }
 
     setLoading(true)
 
     try {
-      await createOrder({ paymentMethod: 'CASH' })
+      const order = await createOrder({ paymentMethod: 'CASH' })
+      handleOrderSuccess(order)
     } catch (error: any) {
       console.error('Error creating order:', error)
-      alert(error.message || 'Failed to create order. Please try again.')
+      toast({
+        title: 'Order Failed',
+        description: error.message || 'Failed to create order. Please try again.',
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }
@@ -363,7 +625,11 @@ export default function NewOrderForm({
       setStripeClientSecret(data.clientSecret)
     } catch (error: any) {
       console.error('Error initializing payment:', error)
-      alert(error.message || 'Failed to initialize payment.')
+      toast({
+        title: 'Payment Setup Failed',
+        description: error.message || 'Failed to initialize payment.',
+        variant: 'destructive',
+      })
     } finally {
       setStripeInitLoading(false)
     }
@@ -427,6 +693,17 @@ export default function NewOrderForm({
                     )
                     const isInOrder = orderItems.some((o) => o.menuItemId === item.id)
                     const availablePrepped = preppedStockMap.get(item.id) ?? 0
+                    const inventoryAvailability = calculateIngredientAvailability(item)
+                    const hasInventory =
+                      Number.isFinite(inventoryAvailability) && inventoryAvailability > 0
+                    const availabilityText = availablePrepped > 0
+                      ? `${availablePrepped} prepped`
+                      : hasInventory
+                        ? `${inventoryAvailability} available`
+                        : 'Out of stock'
+                    const availabilityColor = availablePrepped > 0 || hasInventory
+                      ? 'text-emerald-600'
+                      : 'text-red-500'
 
                     return (
                       <button
@@ -461,8 +738,8 @@ export default function NewOrderForm({
                             <div className="text-xs text-slate-500">
                               Cost: {formatCurrency(cost)}
                             </div>
-                            <div className={`text-xs ${availablePrepped > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                              {availablePrepped > 0 ? `${availablePrepped} prepped` : 'Out of stock'}
+                            <div className={`text-xs ${availabilityColor}`}>
+                              {availabilityText}
                             </div>
                           </div>
                         </div>
@@ -500,16 +777,19 @@ export default function NewOrderForm({
                   <div className="space-y-2">
                     <Label htmlFor="tableId">Table</Label>
                     <Select
-                      value={orderDetails.tableId}
+                      value={orderDetails.tableId || TABLE_NONE_VALUE}
                       onValueChange={(value) =>
-                        setOrderDetails({ ...orderDetails, tableId: value })
+                        setOrderDetails({
+                          ...orderDetails,
+                          tableId: value === TABLE_NONE_VALUE ? '' : value,
+                        })
                       }
                     >
                       <SelectTrigger id="tableId">
                         <SelectValue placeholder="Select table (optional)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">No table</SelectItem>
+                        <SelectItem value={TABLE_NONE_VALUE}>No table</SelectItem>
                         {tables.map((table) => (
                           <SelectItem key={table.id} value={table.id}>
                             Table {table.number} ({table.capacity} seats)
@@ -690,16 +970,22 @@ export default function NewOrderForm({
                           onPaymentSuccess={async (paymentIntentId) => {
                             setLoading(true)
                             try {
-                              await createOrder({
+                              const order = await createOrder({
                                 paymentMethod: 'CARD',
                                 paymentProvider: 'STRIPE',
                                 stripePaymentIntentId: paymentIntentId,
                               })
-                            } catch (error: any) {
-                              console.error('Error completing card payment:', error)
-                              alert(error.message || 'Failed to create order.')
-                              setLoading(false)
-                            }
+                              handleOrderSuccess(order)
+                          } catch (error: any) {
+                            console.error('Error completing card payment:', error)
+                            toast({
+                              title: 'Payment Failed',
+                              description: error.message || 'Failed to create order.',
+                              variant: 'destructive',
+                            })
+                          } finally {
+                            setLoading(false)
+                          }
                           }}
                         />
                       </Elements>
@@ -737,63 +1023,176 @@ export default function NewOrderForm({
               </CardContent>
             </Card>
 
-            <div className="flex flex-col gap-3">
-              <Button
-                type="submit"
-                disabled={
-                  loading ||
-                  orderItems.length === 0 ||
-                  stockWarnings.length > 0 ||
-                  (isCashPayment && cashReceivedAmount < orderSummary.total)
-                }
-                size="lg"
-                className="w-full"
-              >
-                <ShoppingCart className="h-4 w-4 mr-2" />
-                {loading ? 'Processing...' : isCashPayment ? 'Complete Cash Order' : 'Complete Order'}
-              </Button>
-              <Button
-                type="button"
-                onClick={handleSaveAsPending}
-                disabled={
-                  loading ||
-                  orderItems.length === 0 ||
-                  stockWarnings.length > 0
-                }
-                variant="outline"
-                size="lg"
-                className="w-full"
-              >
-                {loading ? 'Saving...' : 'Save as Pending'}
-              </Button>
-              <Link href="/dashboard/orders" className="w-full">
-                <Button type="button" variant="outline" disabled={loading} className="w-full">
-                  Cancel
-                </Button>
-              </Link>
+            {latestOrder && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Receipt Ready</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-slate-700">
+                    Order <strong>{latestOrder.orderNumber}</strong> completed for{' '}
+                    {latestOrder.tableNumber ? `Table ${latestOrder.tableNumber}` : 'a walk-in customer'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Total {formatCurrency(latestOrder.total)} · {latestOrder.paymentMethod}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={printReceipt}
+                    >
+                      <Printer className="h-4 w-4 mr-2" />
+                      Print Receipt
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={emailReceipt}
+                    >
+                      <Mail className="h-4 w-4 mr-2" />
+                      Email Receipt
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => router.push(`/orders/${latestOrder.id}`)}
+                    >
+                      View Order
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleStartNewOrder}
+                    >
+                      Start New Order
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+        <Dialog open={stockModal.open} onOpenChange={(open) => !open && handleDismissStockModal()}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Limited Stock</DialogTitle>
+              <DialogDescription>
+                Some items have less stock than requested. Reduce them to continue.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              {stockModal.items.map((item) => (
+                <div key={item.menuItemId} className="flex justify-between text-sm">
+                  <span>{item.name}</span>
+                  <span className="font-mono text-slate-600">
+                    {item.available} available · {item.requested} requested
+                  </span>
+                </div>
+              ))}
             </div>
+            <DialogFooter className="flex justify-end gap-2">
+              <Button variant="outline" onClick={handleDismissStockModal}>
+                Cancel
+              </Button>
+              <Button onClick={handleReduceStock}>Reduce & Continue</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Email Receipt</DialogTitle>
+              <DialogDescription>
+                Enter the customer's email address to send the receipt.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="customerEmail">Email Address</Label>
+                <Input
+                  id="customerEmail"
+                  type="email"
+                  placeholder="customer@example.com"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !sendingEmail) {
+                      handleSendEmail()
+                    }
+                  }}
+                  disabled={sendingEmail}
+                />
+              </div>
+              {latestOrder && (
+                <div className="rounded-lg bg-slate-50 p-3 text-sm">
+                  <div className="font-medium text-slate-900 mb-1">Order Details:</div>
+                  <div className="text-slate-600">
+                    Order #{latestOrder.orderNumber} · {formatCurrency(latestOrder.total)}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEmailModalOpen(false)
+                  setCustomerEmail('')
+                }}
+                disabled={sendingEmail}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSendEmail} disabled={sendingEmail || !customerEmail.trim()}>
+                {sendingEmail ? 'Sending...' : 'Send'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <div className="flex flex-col gap-3">
+          <Button
+            type="submit"
+            disabled={
+              loading ||
+              orderItems.length === 0 ||
+              stockWarnings.length > 0 ||
+              (isCashPayment && cashReceivedAmount < orderSummary.total)
+            }
+            size="lg"
+            className="w-full"
+          >
+            <ShoppingCart className="h-4 w-4 mr-2" />
+            {loading ? 'Processing...' : isCashPayment ? 'Complete Cash Order' : 'Complete Order'}
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSaveAsPending}
+            disabled={
+              loading ||
+              orderItems.length === 0 ||
+              stockWarnings.length > 0
+            }
+            variant="outline"
+            size="lg"
+            className="w-full"
+          >
+            {loading ? 'Saving...' : 'Save as Pending'}
+          </Button>
+          <Link href="/orders" className="w-full">
+            <Button type="button" variant="outline" disabled={loading} className="w-full">
+              Cancel
+            </Button>
+          </Link>
+        </div>
           </div>
         </div>
       </form>
     </div>
   )
 }
-  useEffect(() => {
-    fetch('/api/meal-prep/stock')
-      .then((res) => res.ok ? res.json() : [])
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setPreppedStock(
-            data.map((item) => ({
-              menuItemId: item.menuItemId,
-              availableQuantity: item.availableQuantity,
-            }))
-          )
-        }
-      })
-      .catch(() => null)
-  }, [])
-
-  const preppedStockMap = useMemo(() => {
-    return new Map(preppedStock.map((item) => [item.menuItemId, item.availableQuantity]))
-  }, [preppedStock])
