@@ -53,6 +53,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # Copy static files - must be at .next/static relative to server.js location
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy server files (required for RSC - React Server Components)
+COPY --from=builder --chown=nextjs:nodejs /app/.next/server ./.next/server
+
 # Copy Prisma files and schema
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
