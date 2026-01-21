@@ -7,25 +7,46 @@ import { formatCurrency } from '@/lib/utils'
 import { Plus, AlertTriangle, Check } from 'lucide-react'
 import Link from 'next/link'
 
-async function getInventoryData(restaurantId: string) {
-  const ingredients = await prisma.ingredient.findMany({
-    where: { restaurantId },
-    orderBy: { name: 'asc' },
-  })
+const PAGE_SIZE = 25
 
-  // Calculate total inventory value
-  const totalValue = ingredients.reduce(
+async function getInventoryData(restaurantId: string, page: number) {
+  const skip = (page - 1) * PAGE_SIZE
+
+  // Run all queries in parallel for better performance
+  const [
+    totalCount,
+    ingredients,
+    aggregates,
+  ] = await Promise.all([
+    prisma.ingredient.count({ where: { restaurantId } }),
+    prisma.ingredient.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+      skip,
+      take: PAGE_SIZE,
+    }),
+    // Get summary stats from all ingredients (lightweight aggregate)
+    prisma.ingredient.findMany({
+      where: { restaurantId },
+      select: {
+        stockQuantity: true,
+        costPerUnit: true,
+        minStockLevel: true,
+      },
+    }),
+  ])
+
+  // Calculate totals from aggregates
+  const totalValue = aggregates.reduce(
     (sum, ing) => sum + (ing.stockQuantity * ing.costPerUnit),
     0
   )
 
-  // Count low stock items
-  const lowStockCount = ingredients.filter(
+  const lowStockCount = aggregates.filter(
     ing => ing.stockQuantity < ing.minStockLevel
   ).length
 
-  // Count critical stock items (below 25% of minimum)
-  const criticalStockCount = ingredients.filter(
+  const criticalStockCount = aggregates.filter(
     ing => ing.stockQuantity < (ing.minStockLevel * 0.25)
   ).length
 
@@ -34,6 +55,8 @@ async function getInventoryData(restaurantId: string) {
     totalValue,
     lowStockCount,
     criticalStockCount,
+    totalCount,
+    totalPages: Math.ceil(totalCount / PAGE_SIZE),
   }
 }
 
@@ -59,11 +82,16 @@ function getStockStatus(stockQuantity: number, minStockLevel: number) {
   }
 }
 
-export default async function InventoryPage() {
+export default async function InventoryPage({
+  searchParams,
+}: {
+  searchParams?: { page?: string }
+}) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
+  const page = Math.max(Number(searchParams?.page || 1), 1)
 
-  const data = await getInventoryData(restaurantId)
+  const data = await getInventoryData(restaurantId, page)
 
   return (
     <div className="space-y-6">
@@ -73,7 +101,7 @@ export default async function InventoryPage() {
           <h1 className="text-3xl font-bold text-slate-900">Inventory Management</h1>
           <p className="text-slate-500 mt-1">Track ingredients and stock levels</p>
         </div>
-        <Link href="/inventory/new">
+        <Link href="/dashboard/inventory/new">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
             Add Ingredient
@@ -195,6 +223,27 @@ export default async function InventoryPage() {
               </div>
             )}
           </div>
+
+          {/* Pagination */}
+          {data.totalPages > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 mt-4">
+              <p className="text-sm text-slate-500">
+                Page {page} of {data.totalPages} ({data.totalCount} ingredients)
+              </p>
+              <div className="flex items-center gap-2">
+                <Link href={`/dashboard/inventory?page=${Math.max(page - 1, 1)}`}>
+                  <Button variant="outline" size="sm" disabled={page <= 1}>
+                    Previous
+                  </Button>
+                </Link>
+                <Link href={`/dashboard/inventory?page=${Math.min(page + 1, data.totalPages)}`}>
+                  <Button variant="outline" size="sm" disabled={page >= data.totalPages}>
+                    Next
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

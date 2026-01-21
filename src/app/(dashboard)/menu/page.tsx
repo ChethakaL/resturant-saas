@@ -9,27 +9,60 @@ import Link from 'next/link'
 import BulkMenuImport from '@/components/menu/BulkMenuImport'
 import MenuItemsTable from '@/components/menu/MenuItemsTable'
 
-async function getMenuData(restaurantId: string) {
-  const menuItems = await prisma.menuItem.findMany({
-    where: { restaurantId },
-    include: {
-      category: true,
-      ingredients: {
-        include: {
-          ingredient: true,
+const PAGE_SIZE = 20
+
+async function getMenuData(restaurantId: string, page: number) {
+  const skip = (page - 1) * PAGE_SIZE
+
+  // Run count and paginated fetch in parallel
+  const [totalCount, menuItems, categories, ingredients, avgMarginResult] = await Promise.all([
+    prisma.menuItem.count({ where: { restaurantId } }),
+    prisma.menuItem.findMany({
+      where: { restaurantId },
+      include: {
+        category: true,
+        ingredients: {
+          include: {
+            ingredient: true,
+          },
         },
       },
-    },
-    orderBy: { name: 'asc' },
-  })
+      orderBy: { name: 'asc' },
+      skip,
+      take: PAGE_SIZE,
+    }),
+    prisma.category.findMany({
+      where: { restaurantId },
+      orderBy: { displayOrder: 'asc' },
+    }),
+    prisma.ingredient.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+    }),
+    // Calculate average margin from all items (lightweight query for summary)
+    prisma.menuItem.findMany({
+      where: { restaurantId },
+      select: {
+        price: true,
+        ingredients: {
+          select: {
+            quantity: true,
+            ingredient: {
+              select: { costPerUnit: true },
+            },
+          },
+        },
+      },
+    }),
+  ])
 
-  // Calculate cost and margin for each item
+  // Calculate cost and margin for paginated items
   const itemsWithMetrics = menuItems.map((item) => {
     const cost = item.ingredients.reduce(
       (sum, ing) => sum + ing.quantity * ing.ingredient.costPerUnit,
       0
     )
-    const margin = ((item.price - cost) / item.price) * 100
+    const margin = item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0
 
     return {
       ...item,
@@ -39,28 +72,38 @@ async function getMenuData(restaurantId: string) {
     }
   })
 
-  const categories = await prisma.category.findMany({
-    where: { restaurantId },
-    orderBy: { displayOrder: 'asc' },
+  // Calculate average margin from all items
+  const allMargins = avgMarginResult.map((item) => {
+    const cost = item.ingredients.reduce(
+      (sum, ing) => sum + ing.quantity * ing.ingredient.costPerUnit,
+      0
+    )
+    return item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0
   })
-
-  const ingredients = await prisma.ingredient.findMany({
-    where: { restaurantId },
-    orderBy: { name: 'asc' },
-  })
+  const avgMargin = allMargins.length > 0
+    ? allMargins.reduce((sum, m) => sum + m, 0) / allMargins.length
+    : 0
 
   return {
     menuItems: itemsWithMetrics,
     categories,
     ingredients,
+    totalCount,
+    totalPages: Math.ceil(totalCount / PAGE_SIZE),
+    avgMargin,
   }
 }
 
-export default async function MenuPage() {
+export default async function MenuPage({
+  searchParams,
+}: {
+  searchParams?: { page?: string }
+}) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
+  const page = Math.max(Number(searchParams?.page || 1), 1)
 
-  const data = await getMenuData(restaurantId)
+  const data = await getMenuData(restaurantId, page)
 
   return (
     <div className="space-y-6">
@@ -86,7 +129,7 @@ export default async function MenuPage() {
             <CardTitle className="text-sm font-medium">Total Menu Items</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.menuItems.length}</div>
+            <div className="text-2xl font-bold">{data.totalCount}</div>
           </CardContent>
         </Card>
 
@@ -96,10 +139,7 @@ export default async function MenuPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {formatPercentage(
-                data.menuItems.reduce((sum, item) => sum + item.margin, 0) /
-                  (data.menuItems.length || 1)
-              )}
+              {formatPercentage(data.avgMargin)}
             </div>
           </CardContent>
         </Card>
@@ -120,6 +160,27 @@ export default async function MenuPage() {
         </CardHeader>
         <CardContent>
           <MenuItemsTable menuItems={data.menuItems} />
+
+          {/* Pagination */}
+          {data.totalPages > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 mt-4">
+              <p className="text-sm text-slate-500">
+                Page {page} of {data.totalPages} ({data.totalCount} items)
+              </p>
+              <div className="flex items-center gap-2">
+                <Link href={`/dashboard/menu?page=${Math.max(page - 1, 1)}`}>
+                  <Button variant="outline" size="sm" disabled={page <= 1}>
+                    Previous
+                  </Button>
+                </Link>
+                <Link href={`/dashboard/menu?page=${Math.min(page + 1, data.totalPages)}`}>
+                  <Button variant="outline" size="sm" disabled={page >= data.totalPages}>
+                    Next
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

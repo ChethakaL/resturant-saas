@@ -101,6 +101,7 @@ model Ingredient {
 
   @@index([restaurantId])
   @@index([stockQuantity]) // For low stock queries
+  @@index([restaurantId, stockQuantity]) // Composite index for inventory queries
   @@map("ingredients")
 }
 
@@ -250,6 +251,8 @@ model Sale {
   @@index([timestamp])
   @@index([orderNumber])
   @@index([status])
+  @@index([restaurantId, status]) // Composite index for filtered queries
+  @@index([restaurantId, status, timestamp]) // Composite index for dashboard queries
   @@map("sales")
 }
 

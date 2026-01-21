@@ -32,7 +32,7 @@ function getStatusBadge(status: string) {
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams?: { status?: string }
+  searchParams?: { status?: string; page?: string }
 }) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
@@ -154,19 +154,22 @@ export default async function OrdersPage({
       }),
     ])
 
-  const topItemsWithNames = await Promise.all(
-    topItems.map(async (item) => {
-      const menuItem = await prisma.menuItem.findUnique({
-        where: { id: item.menuItemId },
+  // Batch fetch menu items instead of N+1 queries
+  const topItemIds = topItems.map((item) => item.menuItemId)
+  const menuItemsForTop = topItemIds.length > 0
+    ? await prisma.menuItem.findMany({
+        where: { id: { in: topItemIds } },
+        select: { id: true, name: true },
       })
-      return {
-        id: item.menuItemId,
-        name: menuItem?.name || 'Unknown',
-        revenue: item._sum.price || 0,
-        quantity: item._sum.quantity || 0,
-      }
-    })
-  )
+    : []
+  const menuItemsMap = new Map(menuItemsForTop.map((item) => [item.id, item.name]))
+
+  const topItemsWithNames = topItems.map((item) => ({
+    id: item.menuItemId,
+    name: menuItemsMap.get(item.menuItemId) || 'Unknown',
+    revenue: item._sum.price || 0,
+    quantity: item._sum.quantity || 0,
+  }))
 
   const completedOrdersCount =
     statusCounts.find((status) => status.status === 'COMPLETED')?._count._all || 0

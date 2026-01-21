@@ -524,18 +524,22 @@ async function getDashboardData(restaurantId: string) {
     take: 5,
   })
 
-  const topItemsData = await Promise.all(
-    topItems.map(async (item) => {
-      const menuItem = await prisma.menuItem.findUnique({
-        where: { id: item.menuItemId },
-      })
-      return {
-        name: menuItem?.name || 'Unknown',
-        quantity: item._sum.quantity || 0,
-        revenue: item._sum.price || 0,
-      }
-    })
-  )
+  // Batch fetch menu items instead of N+1 queries
+  const topItemIds = topItems.map((item) => item.menuItemId)
+  const menuItemsMap = topItemIds.length > 0
+    ? new Map(
+        (await prisma.menuItem.findMany({
+          where: { id: { in: topItemIds } },
+          select: { id: true, name: true },
+        })).map((item) => [item.id, item.name])
+      )
+    : new Map<string, string>()
+
+  const topItemsData = topItems.map((item) => ({
+    name: menuItemsMap.get(item.menuItemId) || 'Unknown',
+    quantity: item._sum.quantity || 0,
+    revenue: item._sum.price || 0,
+  }))
 
   // Top waiters (this month)
   const topWaiters = await prisma.sale.groupBy({
@@ -558,19 +562,23 @@ async function getDashboardData(restaurantId: string) {
     take: 5,
   })
 
-  const topWaitersData = await Promise.all(
-    topWaiters.map(async (waiter) => {
-      const employee = await prisma.employee.findUnique({
-        where: { id: waiter.waiterId! },
-      })
-      return {
-        name: employee?.name || 'Unknown',
-        sales: waiter._sum.total || 0,
-        orders: waiter._count,
-        avgOrder: waiter._count > 0 ? (waiter._sum.total || 0) / waiter._count : 0,
-      }
-    })
-  )
+  // Batch fetch employees instead of N+1 queries
+  const waiterIds = topWaiters.map((w) => w.waiterId).filter((id): id is string => id !== null)
+  const employeesMap = waiterIds.length > 0
+    ? new Map(
+        (await prisma.employee.findMany({
+          where: { id: { in: waiterIds } },
+          select: { id: true, name: true },
+        })).map((emp) => [emp.id, emp.name])
+      )
+    : new Map<string, string>()
+
+  const topWaitersData = topWaiters.map((waiter) => ({
+    name: waiter.waiterId ? employeesMap.get(waiter.waiterId) || 'Unknown' : 'Unknown',
+    sales: waiter._sum.total || 0,
+    orders: waiter._count,
+    avgOrder: waiter._count > 0 ? (waiter._sum.total || 0) / waiter._count : 0,
+  }))
 
   // Low stock alerts
   const allIngredients = await prisma.ingredient.findMany({
