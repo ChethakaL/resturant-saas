@@ -15,6 +15,11 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    outputFileTracingIncludes: {
+      '/*': ['./node_modules/next/dist/**/*'],
+    },
+  },
 };
 
 export default nextConfig;

@@ -43,18 +43,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy necessary files from builder
-# Copy public directory (will be empty if it doesn't exist, which is fine)
+# Copy public directory
 COPY --from=builder /app/public ./public
 
-# Copy standalone build - this includes server.js and the .next directory structure
+# Copy the standalone build (includes node_modules and .next/server)
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 
-# Copy static files - must be at .next/static relative to server.js location
+# Copy static files to the correct location within standalone's .next folder
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-# Copy server files (required for RSC - React Server Components)
-COPY --from=builder --chown=nextjs:nodejs /app/.next/server ./.next/server
 
 # Copy Prisma files and schema
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
