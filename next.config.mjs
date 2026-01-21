@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  // output: 'standalone', // Disabled temporarily - causing clientModules error
   images: {
     remotePatterns: [
       {
@@ -14,11 +14,6 @@ const nextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true,
-  },
-  experimental: {
-    outputFileTracingIncludes: {
-      '/*': ['./node_modules/next/dist/**/*'],
-    },
   },
 };
 
