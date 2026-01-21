@@ -27,6 +27,10 @@ RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
+# Verify build output exists
+RUN test -f .next/standalone/server.js || (echo "Build failed: server.js not found" && exit 1)
+RUN test -d .next/static || (echo "Build failed: static directory not found" && exit 1)
+
 # Stage 3: Runner
 FROM node:20-alpine AS runner
 # Install OpenSSL for Prisma runtime
@@ -42,19 +46,20 @@ RUN adduser --system --uid 1001 nextjs
 # Copy necessary files from builder
 # Copy public directory (will be empty if it doesn't exist, which is fine)
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+
+# Copy standalone build - this includes server.js and the .next directory structure
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+
+# Copy static files - must be at .next/static relative to server.js location
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Copy Prisma files and schema
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
 # Copy package.json for scripts
-COPY --from=builder /app/package.json ./package.json
-
-# Set correct permissions
-RUN chown -R nextjs:nodejs /app
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
 USER nextjs
 
