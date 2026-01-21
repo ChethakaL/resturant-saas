@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // output: 'standalone', // Disabled temporarily - causing clientModules error
+  output: 'standalone', // Disabled temporarily - causing clientModules error
   images: {
     remotePatterns: [
       {
