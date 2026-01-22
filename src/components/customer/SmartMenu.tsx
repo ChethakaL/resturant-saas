@@ -112,7 +112,7 @@ const uiCopyMap: Record<
     whatGoesWithThis: 'What goes well with this?',
     noItemsMessage: 'No items match your filters',
     languageLabel: 'Display language',
-    costLabel: 'Cost',
+    costLabel: 'Price',
     proteinLabel: 'Protein',
     carbsLabel: 'Carbs',
     viewDetails: 'See the full AI description',
