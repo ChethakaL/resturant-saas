@@ -536,7 +536,7 @@ export default function SmartMenu({
                 width={160}
                 height={160}
                 alt="iServePlus logo"
-                className="w-32 h-32 rounded-full border border-white/20 bg-white/5 p-2 shadow-lg"
+                className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-white/20 bg-white/5 p-2 shadow-lg object-contain"
               />
               <div className="space-y-1">
                 <p className="text-4xl sm:text-6xl font-bold tracking-tight text-white">
