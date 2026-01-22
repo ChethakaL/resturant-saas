@@ -42,6 +42,8 @@ export async function PATCH(
             connect: { id: data.categoryId },
           },
           calories: data.calories,
+          protein: data.protein,
+          carbs: data.carbs,
           tags: data.tags || [],
           // Recipe details
           prepTime: data.prepTime || null,

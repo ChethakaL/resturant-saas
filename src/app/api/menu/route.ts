@@ -25,6 +25,8 @@ export async function POST(request: Request) {
           categoryId: data.categoryId,
           restaurantId: session.user.restaurantId,
           calories: data.calories,
+          protein: data.protein,
+          carbs: data.carbs,
           tags: data.tags || [],
           // Recipe details
           prepTime: data.prepTime || null,

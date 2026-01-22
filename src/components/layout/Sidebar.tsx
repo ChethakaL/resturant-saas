@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import {
   UtensilsCrossed,
@@ -22,12 +23,11 @@ const navigation = [
 ]
 
 interface SidebarProps {
-  restaurantName: string
   userName: string
   userRole: string
 }
 
-export function Sidebar({ restaurantName, userName, userRole }: SidebarProps) {
+export function Sidebar({ userName, userRole }: SidebarProps) {
   const pathname = usePathname()
   const visibleNavigation =
     userRole === 'STAFF'
@@ -39,9 +39,16 @@ export function Sidebar({ restaurantName, userName, userRole }: SidebarProps) {
   return (
     <div className="flex flex-col h-full bg-slate-900 text-white w-64">
       {/* Header */}
-      <div className="p-6">
-        <h1 className="text-xl font-bold">{restaurantName}</h1>
-        <p className="text-sm text-slate-400 mt-1">{userRole}</p>
+      <div className="p-6 flex flex-col items-center">
+        <Image
+          src="/logo.png"
+          alt="iServe+"
+          width={140}
+          height={50}
+          className="h-12 w-auto invert"
+          priority
+        />
+        <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">{userRole}</p>
       </div>
 
       <Separator className="bg-slate-700" />

@@ -19,7 +19,6 @@ export default async function DashboardLayout({
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
       <Sidebar
-        restaurantName={session.user.restaurantName}
         userName={session.user.name}
         userRole={session.user.role}
       />

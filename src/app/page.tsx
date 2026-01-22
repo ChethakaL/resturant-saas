@@ -39,6 +39,7 @@ async function getMenuData() {
       ...rest,
       cost,
       margin,
+      updatedAt: item.updatedAt.toISOString(),
     }
   })
 
@@ -59,7 +60,6 @@ export default async function Home() {
   return (
     <SmartMenu
       restaurantId={data.restaurant.id}
-      restaurantName={data.restaurant.name}
       menuItems={data.menuItems}
     />
   )

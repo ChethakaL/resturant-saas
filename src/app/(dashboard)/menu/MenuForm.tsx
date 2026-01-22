@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
@@ -51,6 +51,8 @@ export default function MenuForm({
   const [showPromptDialog, setShowPromptDialog] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+  const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   // AI Recipe suggestion state
   const [showRecipeDialog, setShowRecipeDialog] = useState(false)
@@ -66,6 +68,8 @@ export default function MenuForm({
     available: menuItem?.available ?? true,
     imageUrl: menuItem?.imageUrl || '',
     calories: menuItem?.calories?.toString() || '',
+    protein: (menuItem as any)?.protein?.toString() || '',
+    carbs: (menuItem as any)?.carbs?.toString() || '',
     tags: menuItem?.tags?.join(', ') || '',
   })
 
@@ -151,6 +155,40 @@ export default function MenuForm({
   }
 
   const generateImage = async (useCustomPrompt: boolean = false) => {
+    // If there's an uploaded photo, enhance it instead of generating from scratch
+    if (uploadedPhoto) {
+      setGeneratingImage(true)
+      try {
+        const response = await fetch('/api/menu/enhance-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageData: uploadedPhoto,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to enhance image')
+        }
+
+        setPreviewImageUrl(data.imageUrl)
+        setUploadedPhoto(null)
+        toast({
+          title: 'Image enhanced',
+          description: 'Your photo has been professionally enhanced!',
+        })
+      } catch (error) {
+        console.error('Error enhancing image:', error)
+        toast({ title: 'Enhancement Failed', description: error instanceof Error ? error.message : 'Failed to enhance image', variant: 'destructive' })
+      } finally {
+        setGeneratingImage(false)
+      }
+      return
+    }
+
+    // Generate from scratch
     if (!formData.name) {
       toast({ title: 'Missing Information', description: 'Please enter a menu item name first', variant: 'destructive' })
       return
@@ -185,6 +223,20 @@ export default function MenuForm({
     } finally {
       setGeneratingImage(false)
     }
+  }
+
+  const handlePhotoUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setUploadedPhoto(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
   }
 
   const normalizeIngredientQuantities = (ingredients: any[]) => {
@@ -509,6 +561,8 @@ export default function MenuForm({
           available: formData.available,
           imageUrl: formData.imageUrl || null,
           calories: formData.calories ? parseInt(formData.calories) : null,
+          protein: formData.protein ? parseInt(formData.protein) : null,
+          carbs: formData.carbs ? parseInt(formData.carbs) : null,
           tags: formData.tags
             ? formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
             : [],
@@ -767,7 +821,7 @@ export default function MenuForm({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="calories">Calories (optional)</Label>
                     <Input
@@ -779,15 +833,35 @@ export default function MenuForm({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="tags">Dietary Tags (optional)</Label>
+                    <Label htmlFor="protein">Protein g (optional)</Label>
                     <Input
-                      id="tags"
-                      value={formData.tags}
-                      onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                      placeholder="e.g., vegan, gluten-free, spicy"
+                      id="protein"
+                      type="number"
+                      value={formData.protein}
+                      onChange={(e) => setFormData({ ...formData, protein: e.target.value })}
+                      placeholder="e.g., 25"
                     />
-                    <p className="text-xs text-slate-500">Comma-separated tags</p>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="carbs">Carbs g (optional)</Label>
+                    <Input
+                      id="carbs"
+                      type="number"
+                      value={formData.carbs}
+                      onChange={(e) => setFormData({ ...formData, carbs: e.target.value })}
+                      placeholder="e.g., 40"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tags">Dietary Tags (optional)</Label>
+                  <Input
+                    id="tags"
+                    value={formData.tags}
+                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                    placeholder="e.g., vegan, gluten-free, spicy"
+                  />
+                  <p className="text-xs text-slate-500">Comma-separated tags</p>
                 </div>
               </CardContent>
             </Card>
@@ -1132,26 +1206,37 @@ export default function MenuForm({
       </form>
 
       {/* AI Image Generation Dialog */}
-      <Dialog open={showPromptDialog} onOpenChange={setShowPromptDialog}>
-        <DialogContent>
+      <Dialog open={showPromptDialog} onOpenChange={(open) => {
+        setShowPromptDialog(open)
+        if (!open) {
+          setUploadedPhoto(null)
+          setCustomPrompt('')
+          setPreviewImageUrl(null)
+        }
+      }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Generate Image with AI</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-emerald-500" />
+              Generate Image with AI
+            </DialogTitle>
             <DialogDescription>
-              Choose to auto-generate an image based on your menu item details, or provide a custom
-              prompt.
+              Upload your own photo for professional enhancement, or generate a new image from scratch.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {generatingImage ? (
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 <Loader2 className="h-12 w-12 animate-spin text-emerald-500" />
-                <p className="text-sm text-slate-500">Generating your image with AI...</p>
+                <p className="text-sm text-slate-500">
+                  {uploadedPhoto ? 'Enhancing your photo professionally...' : 'Generating your image with AI...'}
+                </p>
                 <p className="text-xs text-slate-400">This may take a few moments</p>
               </div>
             ) : previewImageUrl ? (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Generated Image Preview</Label>
+                  <Label>Image Preview</Label>
                   <div className="border rounded-lg overflow-hidden">
                     <img
                       src={previewImageUrl}
@@ -1162,15 +1247,17 @@ export default function MenuForm({
                   <div className="flex gap-2">
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="default"
                       className="flex-1"
                       onClick={() => {
                         setFormData({ ...formData, imageUrl: previewImageUrl })
                         setShowPromptDialog(false)
                         setPreviewImageUrl(null)
                         setCustomPrompt('')
+                        setUploadedPhoto(null)
                       }}
                     >
+                      <Check className="h-4 w-4 mr-2" />
                       Use This Image
                     </Button>
                     <Button
@@ -1179,27 +1266,95 @@ export default function MenuForm({
                       onClick={() => {
                         setPreviewImageUrl(null)
                         setCustomPrompt('')
+                        setUploadedPhoto(null)
                       }}
                     >
-                      Regenerate
+                      Try Again
                     </Button>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="space-y-2">
-                <Label htmlFor="customPrompt">Custom Prompt (optional)</Label>
-                <Textarea
-                  id="customPrompt"
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="e.g., A gourmet burger with melted cheese, presented on a wooden board..."
-                  rows={4}
-                  disabled={generatingImage}
-                />
-                <p className="text-xs text-slate-500">
-                  Leave blank to auto-generate based on item name, category, and description.
-                </p>
+              <div className="space-y-4">
+                {/* Upload Photo Section */}
+                <div className="space-y-2">
+                  <Label>Upload Your Photo (Recommended)</Label>
+                  <p className="text-xs text-slate-500">
+                    Upload a photo of your actual dish and our AI will enhance it to look professionally shot.
+                    This helps customers see exactly what they&apos;ll receive!
+                  </p>
+                  <div className="flex gap-2 items-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <ImagePlus className="h-4 w-4 mr-2" />
+                      Select Photo
+                    </Button>
+                    {uploadedPhoto && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setUploadedPhoto(null)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    ref={fileInputRef}
+                    onChange={handlePhotoUpload}
+                  />
+                  {uploadedPhoto && (
+                    <div className="mt-2 rounded-lg border-2 border-emerald-500/50 overflow-hidden">
+                      <img
+                        src={uploadedPhoto}
+                        alt="Uploaded preview"
+                        className="w-full h-48 object-cover"
+                      />
+                      <div className="px-3 py-2 bg-emerald-500/10 text-xs text-emerald-700 flex items-center gap-2">
+                        <Check className="h-3 w-3" />
+                        Photo ready for AI enhancement
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Divider */}
+                {!uploadedPhoto && (
+                  <>
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-slate-200" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-white px-2 text-slate-500">or generate from scratch</span>
+                      </div>
+                    </div>
+
+                    {/* Custom Prompt Section */}
+                    <div className="space-y-2">
+                      <Label htmlFor="customPrompt">Custom Prompt (optional)</Label>
+                      <Textarea
+                        id="customPrompt"
+                        value={customPrompt}
+                        onChange={(e) => setCustomPrompt(e.target.value)}
+                        placeholder="e.g., A gourmet burger with melted cheese, presented on a wooden board..."
+                        rows={3}
+                        disabled={generatingImage}
+                      />
+                      <p className="text-xs text-slate-500">
+                        Leave blank to auto-generate based on item name, category, and description.
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1212,6 +1367,7 @@ export default function MenuForm({
                   setShowPromptDialog(false)
                   setCustomPrompt('')
                   setPreviewImageUrl(null)
+                  setUploadedPhoto(null)
                 }}
               >
                 Cancel
@@ -1221,7 +1377,7 @@ export default function MenuForm({
                 onClick={() => generateImage(!!customPrompt)}
               >
                 <Sparkles className="h-4 w-4 mr-2" />
-                Generate Image
+                {uploadedPhoto ? 'Enhance Photo' : 'Generate Image'}
               </Button>
             </DialogFooter>
           )}
