@@ -1,8 +1,10 @@
+import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { formatPercentage } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
@@ -11,14 +13,31 @@ import MenuItemsTable from '@/components/menu/MenuItemsTable'
 
 const PAGE_SIZE = 20
 
-async function getMenuData(restaurantId: string, page: number) {
+async function getMenuData(
+  restaurantId: string,
+  page: number,
+  search?: string
+) {
   const skip = (page - 1) * PAGE_SIZE
+
+  const normalizedSearch = search?.trim() ?? ''
+  const where: Prisma.MenuItemWhereInput = {
+    restaurantId,
+    ...(normalizedSearch
+      ? {
+          name: {
+            contains: normalizedSearch,
+            mode: 'insensitive',
+          },
+        }
+      : {}),
+  }
 
   // Run count and paginated fetch in parallel
   const [totalCount, menuItems, categories, ingredients, avgMarginResult] = await Promise.all([
-    prisma.menuItem.count({ where: { restaurantId } }),
+    prisma.menuItem.count({ where }),
     prisma.menuItem.findMany({
-      where: { restaurantId },
+      where,
       include: {
         category: true,
         ingredients: {
@@ -41,7 +60,7 @@ async function getMenuData(restaurantId: string, page: number) {
     }),
     // Calculate average margin from all items (lightweight query for summary)
     prisma.menuItem.findMany({
-      where: { restaurantId },
+      where,
       select: {
         price: true,
         ingredients: {
@@ -97,13 +116,23 @@ async function getMenuData(restaurantId: string, page: number) {
 export default async function MenuPage({
   searchParams,
 }: {
-  searchParams?: { page?: string }
+  searchParams?: { page?: string; search?: string | string[] }
 }) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
   const page = Math.max(Number(searchParams?.page || 1), 1)
+  const rawSearch = searchParams?.search
+  const normalizedSearch =
+    typeof rawSearch === 'string'
+      ? rawSearch.trim()
+      : Array.isArray(rawSearch)
+      ? rawSearch[0]?.trim() ?? ''
+      : ''
 
-  const data = await getMenuData(restaurantId, page)
+  const data = await getMenuData(restaurantId, page, normalizedSearch)
+  const searchQuery = normalizedSearch
+    ? `&search=${encodeURIComponent(normalizedSearch)}`
+    : ''
 
   return (
     <div className="space-y-6">
@@ -159,6 +188,31 @@ export default async function MenuPage({
           <CardTitle>All Menu Items</CardTitle>
         </CardHeader>
         <CardContent>
+          <form
+            method="get"
+            className="mb-4 flex flex-wrap items-end gap-2"
+          >
+            <input type="hidden" name="page" value="1" />
+            <div className="flex flex-1 gap-2 min-w-0">
+              <Input
+                name="search"
+                placeholder="Search menu items"
+                defaultValue={normalizedSearch}
+                className="min-w-0"
+              />
+              <Button size="sm" type="submit">
+                Search
+              </Button>
+            </div>
+            {normalizedSearch && (
+              <Link href="/dashboard/menu?page=1">
+                <Button variant="outline" size="sm">
+                  Clear
+                </Button>
+              </Link>
+            )}
+          </form>
+
           <MenuItemsTable menuItems={data.menuItems} />
 
           {/* Pagination */}
@@ -168,12 +222,19 @@ export default async function MenuPage({
                 Page {page} of {data.totalPages} ({data.totalCount} items)
               </p>
               <div className="flex items-center gap-2">
-                <Link href={`/dashboard/menu?page=${Math.max(page - 1, 1)}`}>
+                <Link
+                  href={`/dashboard/menu?page=${Math.max(page - 1, 1)}${searchQuery}`}
+                >
                   <Button variant="outline" size="sm" disabled={page <= 1}>
                     Previous
                   </Button>
                 </Link>
-                <Link href={`/dashboard/menu?page=${Math.min(page + 1, data.totalPages)}`}>
+                <Link
+                  href={`/dashboard/menu?page=${Math.min(
+                    page + 1,
+                    data.totalPages
+                  )}${searchQuery}`}
+                >
                   <Button variant="outline" size="sm" disabled={page >= data.totalPages}>
                     Next
                   </Button>

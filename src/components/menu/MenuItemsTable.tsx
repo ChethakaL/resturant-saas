@@ -3,8 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { useToast } from '@/components/ui/use-toast'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
-import { Edit } from 'lucide-react'
+import { Edit, Trash } from 'lucide-react'
 
 export interface MenuItemWithMetrics {
   id: string
@@ -36,7 +45,11 @@ export default function MenuItemsTable({
 }) {
   const [items, setItems] = useState(menuItems)
   const [updatingIds, setUpdatingIds] = useState<string[]>([])
+  const [deletingIds, setDeletingIds] = useState<string[]>([])
+  const [menuItemToDelete, setMenuItemToDelete] =
+    useState<MenuItemWithMetrics | null>(null)
   const itemsRef = useRef(items)
+  const { toast } = useToast()
 
   useEffect(() => {
     setItems(menuItems)
@@ -84,6 +97,47 @@ export default function MenuItemsTable({
     [updatingIds]
   )
 
+  const confirmDelete = useCallback(async () => {
+    if (!menuItemToDelete) return
+
+    const id = menuItemToDelete.id
+    if (deletingIds.includes(id)) return
+
+    setDeletingIds((prev) => [...prev, id])
+
+    try {
+      const response = await fetch(`/api/menu/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        throw new Error(
+          errorBody?.error ?? 'Failed to delete the menu item. Please try again.'
+        )
+      }
+
+      setItems((prev) => prev.filter((item) => item.id !== id))
+      toast({
+        title: 'Menu Item Deleted',
+        description: `${menuItemToDelete.name} was removed from your menu.`,
+      })
+      setMenuItemToDelete(null)
+    } catch (error) {
+      console.error('Failed to delete menu item', error)
+      toast({
+        title: 'Delete Failed',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Something went wrong. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingIds((prev) => prev.filter((itemId) => itemId !== id))
+    }
+  }, [deletingIds, menuItemToDelete, toast])
+
   return (
     <div className="overflow-x-auto">
       {items.length === 0 ? (
@@ -93,9 +147,10 @@ export default function MenuItemsTable({
           </p>
         </div>
       ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-200">
+        <>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-200">
               <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
                 Image
               </th>
@@ -128,6 +183,7 @@ export default function MenuItemsTable({
           <tbody>
             {items.map((item) => {
               const isUpdating = updatingIds.includes(item.id)
+              const isDeleting = deletingIds.includes(item.id)
               return (
                 <tr
                   key={item.id}
@@ -191,18 +247,73 @@ export default function MenuItemsTable({
                     </button>
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <Link href={`/dashboard/menu/${item.id}`}>
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4 mr-1" />
-                        Edit
+                    <div className="flex items-center justify-end gap-2">
+                      <Link href={`/dashboard/menu/${item.id}`}>
+                        <Button variant="ghost" size="sm">
+                          <Edit className="h-4 w-4 mr-1" />
+                          Edit
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={isDeleting}
+                        onClick={() => setMenuItemToDelete(item)}
+                      >
+                        <Trash className="h-4 w-4 mr-1" />
+                        {isDeleting ? 'Deleting...' : 'Delete'}
                       </Button>
-                    </Link>
+                    </div>
                   </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+        <Dialog
+          open={Boolean(menuItemToDelete)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setMenuItemToDelete(null)
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete menu item</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to remove{' '}
+                <span className="font-medium">
+                  {menuItemToDelete?.name ?? 'this item'}
+                </span>{' '}
+                from your menu? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMenuItemToDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={
+                  !menuItemToDelete ||
+                  deletingIds.includes(menuItemToDelete.id)
+                }
+                onClick={confirmDelete}
+              >
+                {menuItemToDelete && deletingIds.includes(menuItemToDelete.id)
+                  ? 'Deleting...'
+                  : 'Delete'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
       )}
     </div>
   )
