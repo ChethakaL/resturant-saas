@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { formatCurrency } from '@/lib/utils'
 import Image from 'next/image'
 import {
@@ -14,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sparkles, Flame, Leaf, X, Loader2 } from 'lucide-react'
+import { Sparkles, Flame, Leaf, X, Loader2, Globe } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 
@@ -599,6 +600,8 @@ export default function SmartMenu({
     selectedItemForDetail?.description ||
     'An AI-crafted description is on the way.'
 
+  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
       <div className="relative overflow-hidden">
@@ -609,118 +612,144 @@ export default function SmartMenu({
           <div className="absolute bottom-20 left-1/2 h-60 w-60 rounded-full bg-blue-400 blur-[140px]" />
         </div>
 
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-4 sm:py-6 space-y-3">
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-400/30 bg-gradient-to-r from-emerald-500/20 to-amber-500/20">
-              <span className="text-xs font-medium text-emerald-200">Powered by</span>
-              <span className="text-sm font-bold bg-gradient-to-r from-emerald-400 to-amber-400 bg-clip-text text-transparent">Invisible AI</span>
-            </div>
-            <div className="flex flex-col items-center gap-4">
-              <Image
-                src="/logo.png"
-                width={160}
-                height={160}
-                alt="iServePlus logo"
-                className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-white/20 bg-white/5 p-2 shadow-lg object-contain"
-              />
-              <div className="space-y-1">
-                <p className="text-4xl sm:text-6xl font-bold tracking-tight text-white">
-                  Menu
-                </p>
-                <p className="text-sm sm:text-base text-white/70 max-w-2xl mx-auto">
-                  Discover the menu in English, Iraqi Arabic, or Sorani Kurdish — all translated with care and kept in clear digits.
-                </p>
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-4 sm:py-6">
+          <div className="pointer-events-auto absolute top-4 right-4 z-20 rounded-full border border-white/10 bg-slate-950/80 px-3 py-2 text-right uppercase tracking-[0.2em] text-white/70 backdrop-blur md:text-[11px] sm:top-5 sm:right-5">
+            <Popover open={isLanguageMenuOpen} onOpenChange={setIsLanguageMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="ml-auto flex items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-[11px]"
+                  size="sm"
+                  aria-label="Choose display language"
+                >
+                  <Globe className="h-4 w-4 text-emerald-200" />
+                  <span className="sr-only">
+                    Display language:{" "}
+                    {
+                      languageOptions.find((option) => option.value === language)
+                        ?.label
+                    }
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                sideOffset={8}
+                className="w-40 rounded-lg border border-white/20 bg-slate-950/95 p-1 text-[13px] text-white shadow-2xl"
+              >
+                {languageOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setLanguage(option.value)
+                      setIsLanguageMenuOpen(false)
+                    }}
+                    className={`flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-2 text-left transition ${
+                      language === option.value
+                        ? 'bg-emerald-500/20 text-white'
+                        : 'text-white/70 hover:bg-white/5'
+                    }`}
+                  >
+                    <span>{option.label}</span>
+                    {language === option.value && (
+                      <span className="text-emerald-300">✓</span>
+                    )}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-400/30 bg-gradient-to-r from-emerald-500/20 to-amber-500/20">
+                <span className="text-xs font-medium text-emerald-200">Powered by</span>
+                <span className="text-sm font-bold bg-gradient-to-r from-emerald-400 to-amber-400 bg-clip-text text-transparent">Invisible AI</span>
+              </div>
+              <div className="flex flex-col items-center gap-4">
+                <Image
+                  src="/logo.png"
+                  width={160}
+                  height={160}
+                  alt="iServePlus logo"
+                  className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-white/20 bg-white/5 p-2 shadow-lg object-contain"
+                />
+                <div className="space-y-1">
+                  <p className="text-4xl sm:text-6xl font-bold tracking-tight text-white">
+                    Menu
+                  </p>
+                  <p className="text-sm sm:text-base text-white/70 max-w-2xl mx-auto">
+                    Discover the menu in English, Iraqi Arabic, or Sorani Kurdish — all translated with care and kept in clear digits.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Search Bar */}
-          <div className="max-w-xl mx-auto">
-            <Input
-              placeholder={currentCopy.searchPlaceholder}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="bg-white/10 border-white/20 text-white placeholder:text-white/50 h-10 text-sm"
-            />
-          </div>
+            {/* Search Bar */}
+            <div className="max-w-xl mx-auto">
+              <Input
+                placeholder={currentCopy.searchPlaceholder}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="bg-white/10 border-white/20 text-white placeholder:text-white/50 h-10 text-sm"
+              />
+            </div>
 
-          {/* Bubble Filters - Categories */}
-          <div className="overflow-x-auto px-4">
-            <div className="flex gap-3 pb-3">
-              <button
-                onClick={() => setSelectedCategory('all')}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                  selectedCategory === 'all'
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/50'
-                    : 'bg-white/10 text-white/80 hover:bg-white/20'
-                }`}
-              >
-                All
-              </button>
-              {categories.map((category) => (
+            {/* Bubble Filters - Categories */}
+            <div className="overflow-x-auto px-4">
+              <div className="flex gap-3 pb-3">
                 <button
-                  key={category.id}
-                  onClick={() => setSelectedCategory(category.id)}
+                  onClick={() => setSelectedCategory('all')}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                    selectedCategory === category.id
+                    selectedCategory === 'all'
                       ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/50'
                       : 'bg-white/10 text-white/80 hover:bg-white/20'
                   }`}
                 >
-                  {category.name}
+                  All
                 </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Dietary Tags Filters */}
-          {allTags.length > 0 && (
-            <div className="overflow-x-auto px-4">
-              <div className="flex gap-2 pb-3">
-                {allTags.map((tag) => (
+                {categories.map((category) => (
                   <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1 whitespace-nowrap ${
-                      selectedTags.includes(tag)
-                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/50'
-                        : 'bg-white/5 text-white/70 hover:bg-white/10'
+                    key={category.id}
+                    onClick={() => setSelectedCategory(category.id)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+                      selectedCategory === category.id
+                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/50'
+                        : 'bg-white/10 text-white/80 hover:bg-white/20'
                     }`}
                   >
-                    {getTagIcon(tag)}
-                    {tag}
+                    {category.name}
                   </button>
                 ))}
               </div>
             </div>
-          )}
 
-          {/* Sort Options */}
-          <div className="space-y-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div className="flex-1 space-y-1">
-                <span className="text-xs uppercase tracking-[0.3em] text-white/60">
-                  {currentCopy.languageLabel}
-                </span>
-                <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
-                  {languageOptions.map((option) => (
+            {/* Dietary Tags Filters */}
+            {allTags.length > 0 && (
+              <div className="overflow-x-auto px-4">
+                <div className="flex gap-2 pb-3">
+                  {allTags.map((tag) => (
                     <button
-                      type="button"
-                      key={option.value}
-                      onClick={() => setLanguage(option.value)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition whitespace-nowrap ${
-                        language === option.value
-                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40'
-                          : 'bg-white/10 text-white/70 hover:bg-white/20'
+                      key={tag}
+                      onClick={() => toggleTag(tag)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1 whitespace-nowrap ${
+                        selectedTags.includes(tag)
+                          ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/50'
+                          : 'bg-white/5 text-white/70 hover:bg-white/10'
                       }`}
                     >
-                      {option.label}
+                      {getTagIcon(tag)}
+                      {tag}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="flex-1 space-y-1">
+            )}
+
+            {/* Sort Options */}
+            <div className="space-y-3 px-4">
+              <div className="space-y-1">
                 <span className="text-xs uppercase tracking-[0.3em] text-white/60">
                   Sort
                 </span>
@@ -741,73 +770,71 @@ export default function SmartMenu({
                   ))}
                 </div>
               </div>
+              {translationCache[language] && (
+                <p className="text-xs text-center text-emerald-200 flex items-center justify-center gap-2">
+                  {isTranslating && language !== 'en' ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>
+                        Translating... (
+                        {translatedCount[language] || 0}/{menuItems.length})
+                      </span>
+                    </>
+                  ) : (
+                    `Language ready: ${
+                      languageOptions.find((option) => option.value === language)
+                        ?.label
+                    }`
+                  )}
+                </p>
+              )}
             </div>
-            {translationCache[language] && (
-              <p className="text-xs text-center text-emerald-200 flex items-center justify-center gap-2">
-                {isTranslating && language !== 'en' ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    <span>
-                      Translating... (
-                      {translatedCount[language] || 0}/{menuItems.length})
-                    </span>
-                  </>
-                ) : (
-                  `Language ready: ${
-                    languageOptions.find((option) => option.value === language)
-                      ?.label
-                  }`
-                )}
+            {translationError && (
+              <p className="text-xs text-center text-red-300">
+                {translationError}
               </p>
             )}
-          </div>
-          {translationError && (
-            <p className="text-xs text-center text-red-300">
-              {translationError}
-            </p>
-          )}
 
-          {/* Active Filters Display */}
-          {(selectedCategory !== 'all' || selectedTags.length > 0) && (
-            <div className="flex flex-wrap gap-2 justify-center items-center">
-              <span className="text-xs text-white/60">{currentCopy.filtersLabel}</span>
-              {selectedCategory !== 'all' && (
-                <Badge
-                  variant="secondary"
-                  className="bg-emerald-500/20 text-emerald-200 border-emerald-500/30"
-                >
-                  {categories.find((c) => c.id === selectedCategory)?.name}
-                  <X
-                    className="h-3 w-3 ml-1 cursor-pointer"
-                    onClick={() => setSelectedCategory('all')}
-                  />
-                </Badge>
-              )}
-              {selectedTags.map((tag) => (
-                <Badge
-                  key={tag}
-                  variant="secondary"
-                  className="bg-amber-500/20 text-amber-200 border-amber-500/30"
-                >
-                  {getLocalizedTagLabel(tag)}
-                  <X
-                    className="h-3 w-3 ml-1 cursor-pointer"
-                    onClick={() => toggleTag(tag)}
-                  />
-                </Badge>
-              ))}
-            </div>
-          )}
+            {/* Active Filters Display */}
+            {(selectedCategory !== 'all' || selectedTags.length > 0) && (
+              <div className="flex flex-wrap gap-2 justify-center items-center">
+                <span className="text-xs text-white/60">{currentCopy.filtersLabel}</span>
+                {selectedCategory !== 'all' && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-emerald-500/20 text-emerald-200 border-emerald-500/30"
+                  >
+                    {categories.find((c) => c.id === selectedCategory)?.name}
+                    <X
+                      className="h-3 w-3 ml-1 cursor-pointer"
+                      onClick={() => setSelectedCategory('all')}
+                    />
+                  </Badge>
+                )}
+                {selectedTags.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant="secondary"
+                    className="bg-amber-500/20 text-amber-200 border-amber-500/30"
+                  >
+                    {getLocalizedTagLabel(tag)}
+                    <X
+                      className="h-3 w-3 ml-1 cursor-pointer"
+                      onClick={() => toggleTag(tag)}
+                    />
+                  </Badge>
+                ))}
+              </div>
+            )}
 
-          {/* Menu Items Grid */}
-          <div className="space-y-4 relative">
+            {/* Menu Items Grid */}
+            <div className="space-y-4 relative px-4">
               {filteredItems.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-white/60">{currentCopy.noItemsMessage}</p>
                 </div>
               ) : (
-                <>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   {filteredItems.map((item) => {
                     const translation =
                       translationCache[language]?.[item.id]
@@ -931,8 +958,8 @@ export default function SmartMenu({
                     )
                   })}
                 </div>
-              </>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
