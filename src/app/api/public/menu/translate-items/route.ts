@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import crypto from 'crypto'
 import { prisma } from '@/lib/prisma'
 import type {
   MenuItemTranslation,
   MenuItemTranslationLanguage,
 } from '@prisma/client'
+import { callGemini, parseGeminiJson } from '@/lib/generative'
 
 type LanguageCode = 'en' | 'ar' | 'ku'
 
@@ -63,54 +63,6 @@ function buildSnippetLine(item: TranslationRequestItem) {
   return lineParts.join(' | ')
 }
 
-async function callGemini(prompt: string) {
-  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY!)
-  // Use gemini-2.0-flash for text tasks - it's faster and cheaper than image models
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-  })
-  return await model.generateContent(prompt)
-}
-
-function extractJsonBlock(raw: string) {
-  const cleaned = raw
-    .replace(/```json/g, '')
-    .replace(/```/g, '')
-    .trim()
-  const braceMatch = cleaned.match(/\{[\s\S]*\}/)
-  if (braceMatch) {
-    return braceMatch[0]
-  }
-  return cleaned
-}
-
-function tryParseCandidates(candidate: string) {
-  const normalized = candidate.trim()
-  if (!normalized) {
-    throw new Error('Empty candidate')
-  }
-  return JSON.parse(normalized)
-}
-
-function parseTranslationPayload(rawText: string) {
-  const baseCandidate = extractJsonBlock(rawText)
-  const normalizedCandidates = [
-    baseCandidate,
-    baseCandidate.replace(/(\r?\n)+/g, ' '),
-    baseCandidate.replace(/,\s+/g, ', '),
-  ]
-
-  for (const candidate of normalizedCandidates) {
-    try {
-      return tryParseCandidates(candidate)
-    } catch (error) {
-      // Continue to the next candidate
-    }
-  }
-
-  throw new Error('Unable to parse JSON from translation response')
-}
-
 async function translateChunk(
   lang: LanguageCode,
   languageLabel: string,
@@ -121,7 +73,7 @@ async function translateChunk(
 
   const aiResult = await callGemini(prompt)
   const rawText = aiResult.response.text()
-  const payload = parseTranslationPayload(rawText)
+  const payload = parseGeminiJson(rawText)
   if (!payload || !Array.isArray(payload.items)) {
     throw new Error('Translation payload missing items array')
   }

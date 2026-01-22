@@ -167,6 +167,16 @@ export default function SmartMenu({
     useState<MenuItem | null>(null)
   const { toast } = useToast()
   const isDetailOpen = Boolean(selectedItemForDetail)
+  const [descriptionCache, setDescriptionCache] = useState<
+    Record<LanguageCode, Record<string, string>>
+  >({
+    en: {},
+    ar: {},
+    ku: {},
+  })
+  const [descriptionLoadingItem, setDescriptionLoadingItem] =
+    useState<string | null>(null)
+  const [descriptionError, setDescriptionError] = useState<string | null>(null)
 
   const fetchTranslations = useCallback(
     async (lang: LanguageCode) => {
@@ -485,6 +495,74 @@ export default function SmartMenu({
     }
   }
 
+  const generateDescription = useCallback(
+    async (item: MenuItem, lang: LanguageCode) => {
+      setDescriptionError(null)
+      setDescriptionLoadingItem(item.id)
+      try {
+        const response = await fetch('/api/public/menu/item-description', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            menuItemId: item.id,
+            language: lang,
+          }),
+        })
+
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data?.error || 'Failed to generate AI description')
+        }
+
+        const description = (data.description || '').trim()
+        if (!description) {
+          throw new Error('AI description was empty')
+        }
+
+        setDescriptionCache((prev) => ({
+          ...prev,
+          [lang]: {
+            ...(prev[lang] || {}),
+            [item.id]: description,
+          },
+        }))
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Unable to generate AI description'
+        setDescriptionError(message)
+        toast({
+          title: 'AI description failed',
+          description: message,
+          variant: 'destructive',
+        })
+      } finally {
+        setDescriptionLoadingItem((current) =>
+          current === item.id ? null : current
+        )
+      }
+    },
+    [toast]
+  )
+
+  const generatedDescription =
+    selectedItemForDetail && descriptionCache[language]
+      ? descriptionCache[language][selectedItemForDetail.id]
+      : undefined
+
+  useEffect(() => {
+    if (!selectedItemForDetail || generatedDescription) {
+      return
+    }
+    generateDescription(selectedItemForDetail, language)
+  }, [
+    selectedItemForDetail,
+    language,
+    generatedDescription,
+    generateDescription,
+  ])
+
   const getTagIcon = (tag: string) => {
     const lowerTag = tag.toLowerCase()
     if (lowerTag.includes('spicy') || lowerTag.includes('hot')) {
@@ -512,6 +590,14 @@ export default function SmartMenu({
   const detailMacroSegments = selectedItemForDetail
     ? buildMacroSegments(selectedItemForDetail, detailTranslation)
     : []
+  const isDescriptionLoading =
+    Boolean(selectedItemForDetail) &&
+    descriptionLoadingItem === selectedItemForDetail?.id
+  const detailDescriptionText =
+    generatedDescription ||
+    detailTranslation?.aiDescription ||
+    selectedItemForDetail?.description ||
+    'An AI-crafted description is on the way.'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
@@ -920,6 +1006,8 @@ export default function SmartMenu({
         onOpenChange={(open) => {
           if (!open) {
             setSelectedItemForDetail(null)
+            setDescriptionError(null)
+            setDescriptionLoadingItem(null)
           }
         }}
       >
@@ -929,11 +1017,23 @@ export default function SmartMenu({
               <Sparkles className="h-5 w-5 text-emerald-500" />
               {detailTranslation?.name || selectedItemForDetail?.name}
             </DialogTitle>
-            <DialogDescription className="text-sm text-slate-600">
-              {currentCopy.detailTitle} —{' '}
-              {detailTranslation?.aiDescription ||
-                selectedItemForDetail?.description ||
-                'An AI-crafted description is on the way.'}
+            <DialogDescription className="text-sm text-slate-600 space-y-1">
+              <span className="flex items-center gap-2">
+                {currentCopy.detailTitle} —{' '}
+                {isDescriptionLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                    Generating AI description...
+                  </>
+                ) : (
+                  detailDescriptionText
+                )}
+              </span>
+              {descriptionError && (
+                <span className="text-xs text-red-300">
+                  {descriptionError}
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           {selectedItemForDetail && (

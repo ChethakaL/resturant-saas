@@ -53,7 +53,11 @@ export async function POST(request: NextRequest) {
               ],
             },
             {
-              text: prompt,
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
             },
           ],
           generationConfig: {
