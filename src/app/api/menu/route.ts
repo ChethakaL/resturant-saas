@@ -54,6 +54,16 @@ export async function POST(request: Request) {
         }
       }
 
+      // Create add-on associations
+      if (data.addOnIds && data.addOnIds.length > 0) {
+        await tx.menuItemAddOn.createMany({
+          data: data.addOnIds.map((addOnId: string) => ({
+            menuItemId: item.id,
+            addOnId,
+          })),
+        })
+      }
+
       return item
     })
 
@@ -81,6 +91,11 @@ export async function GET(request: Request) {
         ingredients: {
           include: {
             ingredient: true,
+          },
+        },
+        addOns: {
+          include: {
+            addOn: true,
           },
         },
       },

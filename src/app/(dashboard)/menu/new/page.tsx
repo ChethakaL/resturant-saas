@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import MenuForm from '../MenuForm'
 
 async function getFormData(restaurantId: string) {
-  const [categories, ingredients] = await Promise.all([
+  const [categories, ingredients, addOns] = await Promise.all([
     prisma.category.findMany({
       where: { restaurantId },
       orderBy: { displayOrder: 'asc' },
@@ -13,9 +13,13 @@ async function getFormData(restaurantId: string) {
       where: { restaurantId },
       orderBy: { name: 'asc' },
     }),
+    prisma.addOn.findMany({
+      where: { restaurantId, available: true },
+      orderBy: { name: 'asc' },
+    }),
   ])
 
-  return { categories, ingredients }
+  return { categories, ingredients, addOns }
 }
 
 export default async function NewMenuItemPage() {
@@ -28,6 +32,7 @@ export default async function NewMenuItemPage() {
     <MenuForm
       categories={data.categories}
       ingredients={data.ingredients}
+      addOns={data.addOns}
       mode="create"
     />
   )

@@ -16,11 +16,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
-import { Category, Ingredient, MenuItem, MenuItemIngredient } from '@prisma/client'
+import { Category, Ingredient, MenuItem, MenuItemIngredient, AddOn, MenuItemAddOn } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
 
 interface RecipeIngredient {
@@ -32,15 +32,18 @@ interface RecipeIngredient {
 interface MenuFormProps {
   categories: Category[]
   ingredients: Ingredient[]
+  addOns?: AddOn[]
   mode: 'create' | 'edit'
   menuItem?: MenuItem & {
     ingredients: (MenuItemIngredient & { ingredient: Ingredient })[]
+    addOns?: (MenuItemAddOn & { addOn: AddOn })[]
   }
 }
 
 export default function MenuForm({
   categories,
   ingredients,
+  addOns = [],
   mode,
   menuItem,
 }: MenuFormProps) {
@@ -93,6 +96,16 @@ export default function MenuForm({
 
   // Track newly created ingredients (so they show in the recipe builder before page refresh)
   const [newlyCreatedIngredients, setNewlyCreatedIngredients] = useState<Ingredient[]>([])
+
+  // Selected add-ons for this menu item
+  const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>(
+    menuItem?.addOns?.map((a) => a.addOnId) || []
+  )
+
+  // Add-ons search and pagination
+  const [addOnSearchQuery, setAddOnSearchQuery] = useState('')
+  const [addOnPage, setAddOnPage] = useState(1)
+  const addOnsPerPage = 6
 
   // Combined ingredients list (original + newly created)
   const allIngredients = useMemo(() => {
@@ -657,6 +670,8 @@ export default function MenuForm({
           cookTime: cookTime || null,
           recipeSteps: recipeSteps,
           recipeTips: recipeTips,
+          // Add-ons
+          addOnIds: selectedAddOnIds,
         }),
       })
 
@@ -1241,6 +1256,148 @@ export default function MenuForm({
                         </div>
                       )
                     })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Add-ons Section */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <CardTitle>Available Add-ons</CardTitle>
+                {selectedAddOnIds.length > 0 && (
+                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                    {selectedAddOnIds.length} selected
+                  </Badge>
+                )}
+              </CardHeader>
+              <CardContent>
+                {addOns.length === 0 ? (
+                  <div className="text-center py-6 text-slate-500">
+                    <p className="text-sm">No add-ons available.</p>
+                    <p className="text-xs mt-1">
+                      <Link href="/addons" className="text-emerald-600 hover:underline">
+                        Create add-ons
+                      </Link>{' '}
+                      to offer extras with your menu items.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Search Bar */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Input
+                        placeholder="Search add-ons..."
+                        value={addOnSearchQuery}
+                        onChange={(e) => {
+                          setAddOnSearchQuery(e.target.value)
+                          setAddOnPage(1)
+                        }}
+                        className="pl-9"
+                      />
+                    </div>
+
+                    {(() => {
+                      const filteredAddOns = addOns.filter(
+                        (addOn) =>
+                          addOn.name.toLowerCase().includes(addOnSearchQuery.toLowerCase()) ||
+                          addOn.description?.toLowerCase().includes(addOnSearchQuery.toLowerCase())
+                      )
+                      const totalPages = Math.ceil(filteredAddOns.length / addOnsPerPage)
+                      const startIndex = (addOnPage - 1) * addOnsPerPage
+                      const paginatedAddOns = filteredAddOns.slice(startIndex, startIndex + addOnsPerPage)
+
+                      return (
+                        <>
+                          {filteredAddOns.length === 0 ? (
+                            <div className="text-center py-6 text-slate-500">
+                              <p className="text-sm">No add-ons match your search.</p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="grid gap-2">
+                                {paginatedAddOns.map((addOn) => {
+                                  const isSelected = selectedAddOnIds.includes(addOn.id)
+                                  return (
+                                    <div
+                                      key={addOn.id}
+                                      onClick={() => {
+                                        if (isSelected) {
+                                          setSelectedAddOnIds(selectedAddOnIds.filter((id) => id !== addOn.id))
+                                        } else {
+                                          setSelectedAddOnIds([...selectedAddOnIds, addOn.id])
+                                        }
+                                      }}
+                                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                                        isSelected
+                                          ? 'border-emerald-500 bg-emerald-50'
+                                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div
+                                          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                            isSelected
+                                              ? 'bg-emerald-500 border-emerald-500'
+                                              : 'border-slate-300'
+                                          }`}
+                                        >
+                                          {isSelected && <Check className="h-3 w-3 text-white" />}
+                                        </div>
+                                        <div>
+                                          <p className="font-medium text-slate-800">{addOn.name}</p>
+                                          {addOn.description && (
+                                            <p className="text-xs text-slate-500 line-clamp-1">{addOn.description}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <span className="font-mono text-sm text-slate-600 whitespace-nowrap">
+                                        +{formatCurrency(addOn.price)}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+
+                              {/* Pagination */}
+                              {totalPages > 1 && (
+                                <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+                                  <p className="text-xs text-slate-500">
+                                    Showing {startIndex + 1}-{Math.min(startIndex + addOnsPerPage, filteredAddOns.length)} of {filteredAddOns.length}
+                                  </p>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setAddOnPage(Math.max(1, addOnPage - 1))}
+                                      disabled={addOnPage === 1}
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <ChevronLeft className="h-4 w-4" />
+                                    </Button>
+                                    <span className="text-sm text-slate-600 px-2">
+                                      {addOnPage} / {totalPages}
+                                    </span>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setAddOnPage(Math.min(totalPages, addOnPage + 1))}
+                                      disabled={addOnPage === totalPages}
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
                 )}
               </CardContent>

@@ -16,6 +16,11 @@ async function getMenuItemData(id: string, restaurantId: string) {
           ingredient: true,
         },
       },
+      addOns: {
+        include: {
+          addOn: true,
+        },
+      },
     },
   })
 
@@ -23,7 +28,7 @@ async function getMenuItemData(id: string, restaurantId: string) {
     return null
   }
 
-  const [categories, ingredients] = await Promise.all([
+  const [categories, ingredients, addOns] = await Promise.all([
     prisma.category.findMany({
       where: { restaurantId },
       orderBy: { displayOrder: 'asc' },
@@ -32,9 +37,13 @@ async function getMenuItemData(id: string, restaurantId: string) {
       where: { restaurantId },
       orderBy: { name: 'asc' },
     }),
+    prisma.addOn.findMany({
+      where: { restaurantId, available: true },
+      orderBy: { name: 'asc' },
+    }),
   ])
 
-  return { menuItem, categories, ingredients }
+  return { menuItem, categories, ingredients, addOns }
 }
 
 export default async function MenuItemEditPage({
@@ -55,6 +64,7 @@ export default async function MenuItemEditPage({
     <MenuForm
       categories={data.categories}
       ingredients={data.ingredients}
+      addOns={data.addOns}
       menuItem={data.menuItem}
       mode="edit"
     />

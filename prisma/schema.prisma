@@ -21,6 +21,7 @@ model Restaurant {
   settings            Json?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+  addOns              AddOn[]
   aiInsights          AIInsight[]
   categories          Category[]
   deliveries          Delivery[]
@@ -157,6 +158,7 @@ model MenuItem {
   recipeTips      String[]              @default([])
   carbs           Int?
   protein         Int?
+  addOns          MenuItemAddOn[]
   mealPrepItems   MealPrepItem[]
   ingredients     MenuItemIngredient[]
   translations    MenuItemTranslation[]
@@ -206,6 +208,37 @@ model MenuItemTranslation {
   @@unique([menuItemId, language])
   @@index([language])
   @@map("menu_item_translations")
+}
+
+model AddOn {
+  id           String          @id @default(cuid())
+  name         String
+  price        Float
+  description  String?
+  available    Boolean         @default(true)
+  restaurantId String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  menuItems    MenuItemAddOn[]
+  restaurant   Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@index([available])
+  @@map("add_ons")
+}
+
+model MenuItemAddOn {
+  id         String   @id @default(cuid())
+  menuItemId String
+  addOnId    String
+  createdAt  DateTime @default(now())
+  addOn      AddOn    @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, addOnId])
+  @@index([menuItemId])
+  @@index([addOnId])
+  @@map("menu_item_add_ons")
 }
 
 model Sale {

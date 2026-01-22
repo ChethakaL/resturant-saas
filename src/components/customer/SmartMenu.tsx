@@ -34,6 +34,12 @@ interface MenuItem {
   carbs?: number | null
   category?: { name: string | null; id: string } | null
   updatedAt: string
+  addOns?: Array<{
+    id: string
+    name: string
+    price: number
+    description?: string | null
+  }>
 }
 
 interface SmartMenuProps {
@@ -292,10 +298,9 @@ export default function SmartMenu({
           throw new Error('Translation payload malformed')
         }
 
-        const translatedMap = data.items.reduce<
-          Record<string, MenuItemTranslation>
-        >((acc, translated) => {
-          acc[translated.id] = {
+        const translatedMap = (data.items as any[]).reduce(
+          (acc: Record<string, MenuItemTranslation>, translated: any) => {
+            acc[translated.id] = {
             name: translated.name,
             description: translated.description,
             aiDescription:
@@ -960,6 +965,27 @@ export default function SmartMenu({
                             </div>
                           )}
 
+                          {item.addOns && item.addOns.length > 0 && (
+                            <div className="space-y-2 pt-1 border-t border-slate-200">
+                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                Available Add-ons
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {item.addOns.map((addOn) => (
+                                  <div
+                                    key={addOn.id}
+                                    className="flex items-center gap-1.5 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-1.5 text-xs"
+                                  >
+                                    <span className="font-medium text-slate-700">{addOn.name}</span>
+                                    <span className="text-emerald-600 font-semibold">
+                                      +{formatCurrency(addOn.price)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="space-y-2">
                             <Button
                               type="button"
@@ -1137,6 +1163,42 @@ export default function SmartMenu({
                     alt={selectedItemForDetail.name}
                     className="w-full h-56 object-cover"
                   />
+                </div>
+              )}
+              {selectedItemForDetail.addOns && selectedItemForDetail.addOns.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-slate-200">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 mb-2">
+                      Available Add-ons
+                    </p>
+                    <p className="text-xs text-slate-500 mb-3">
+                      Enhance your meal with these optional additions
+                    </p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {selectedItemForDetail.addOns.map((addOn) => (
+                      <div
+                        key={addOn.id}
+                        className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 hover:bg-slate-100 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-900 text-sm">
+                            {addOn.name}
+                          </p>
+                          {addOn.description && (
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                              {addOn.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex-shrink-0">
+                          <p className="text-sm font-bold text-emerald-700 whitespace-nowrap">
+                            +{formatCurrency(addOn.price)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

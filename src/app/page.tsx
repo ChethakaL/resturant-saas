@@ -13,7 +13,7 @@ async function getMenuData() {
     return null
   }
 
-  const menuItems = await prisma.menuItem.findMany({
+  const menuItems = (await prisma.menuItem.findMany({
     where: { available: true, restaurantId: restaurant.id },
     include: {
       category: true,
@@ -22,24 +22,37 @@ async function getMenuData() {
           ingredient: true,
         },
       },
+      addOns: {
+        include: {
+          addOn: true,
+        },
+      },
     },
     orderBy: [{ popularityScore: 'desc' }, { name: 'asc' }],
-  })
+  })) as any[]
 
-  const enrichedMenuItems = menuItems.map((item) => {
+  const enrichedMenuItems = menuItems.map((item: any) => {
     const cost = item.ingredients.reduce(
-      (sum, ing) => sum + ing.quantity * ing.ingredient.costPerUnit,
+      (sum: number, ing: any) => sum + ing.quantity * ing.ingredient.costPerUnit,
       0
     )
     const margin =
       item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0
 
-    const { ingredients, ...rest } = item
+    const { ingredients, addOns: menuItemAddOns, ...rest } = item
     return {
       ...rest,
       cost,
       margin,
       updatedAt: item.updatedAt.toISOString(),
+      addOns: menuItemAddOns
+        .filter((ma: any) => ma.addOn.available)
+        .map((ma: any) => ({
+          id: ma.addOn.id,
+          name: ma.addOn.name,
+          price: ma.addOn.price,
+          description: ma.addOn.description,
+        })),
     }
   })
 

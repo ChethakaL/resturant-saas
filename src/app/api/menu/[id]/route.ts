@@ -70,6 +70,21 @@ export async function PATCH(
         })
       }
 
+      // Delete existing add-on associations
+      await tx.menuItemAddOn.deleteMany({
+        where: { menuItemId: params.id },
+      })
+
+      // Create new add-on associations
+      if (data.addOnIds && data.addOnIds.length > 0) {
+        await tx.menuItemAddOn.createMany({
+          data: data.addOnIds.map((addOnId: string) => ({
+            menuItemId: item.id,
+            addOnId,
+          })),
+        })
+      }
+
       return item
     })
 

@@ -10,6 +10,7 @@ import {
   Receipt,
   Package,
   LogOut,
+  PlusCircle,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ import { Separator } from '@/components/ui/separator'
 
 const navigation = [
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
+  { name: 'Add-ons', href: '/addons', icon: PlusCircle },
   { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart },
   { name: 'Orders', href: '/orders', icon: Receipt },
   { name: 'Inventory', href: '/inventory', icon: Package },
@@ -45,7 +47,7 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
           alt="iServe+"
           width={140}
           height={50}
-          className="h-12 w-auto invert"
+          className="h-12 w-auto rounded-full"
           priority
         />
         <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">{userRole}</p>
