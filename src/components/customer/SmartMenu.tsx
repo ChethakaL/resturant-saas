@@ -748,18 +748,15 @@ export default function SmartMenu({
             )}
 
             {/* Sort Options */}
-            <div className="space-y-3 px-4">
-              <div className="space-y-1">
-                <span className="text-xs uppercase tracking-[0.3em] text-white/60">
-                  Sort
-                </span>
-                <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
+            <div className="px-4">
+              <div className="overflow-x-auto -mx-4 px-4">
+                <div className="flex gap-2 pb-1">
                   {sortOptions.map((option) => (
                     <button
                       type="button"
                       key={option.value}
                       onClick={() => setSortBy(option.value)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition whitespace-nowrap ${
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${
                         sortBy === option.value
                           ? 'bg-white text-slate-900 shadow-lg shadow-white/40'
                           : 'bg-white/10 text-white/70 hover:bg-white/20'
