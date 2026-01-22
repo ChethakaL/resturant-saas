@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sparkles, Flame, Leaf, X, Loader2, Globe } from 'lucide-react'
+import { Sparkles, Flame, Leaf, X, Loader2, Globe, Funnel } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 
@@ -59,10 +59,24 @@ const languageOptions: { value: LanguageCode; label: string }[] = [
   { value: 'ku', label: 'کوردی (سۆرانی)' },
 ]
 
-const sortOptions: { value: 'popular' | 'price-low' | 'price-high'; label: string }[] = [
+const sortOptions: {
+  value:
+    | 'popular'
+    | 'price-low'
+    | 'price-high'
+    | 'protein-high'
+    | 'carbs-high'
+    | 'protein-low'
+    | 'carbs-low'
+  label: string
+}[] = [
   { value: 'popular', label: 'Most Popular' },
   { value: 'price-low', label: 'Price: Low → High' },
   { value: 'price-high', label: 'Price: High → Low' },
+  { value: 'protein-high', label: 'Protein: High → Low' },
+  { value: 'carbs-high', label: 'Carbs: High → Low' },
+  { value: 'protein-low', label: 'Protein: Low → High' },
+  { value: 'carbs-low', label: 'Carbs: Low → High' },
 ]
 
 const tagTranslations: Record<string, Partial<Record<LanguageCode, string>>> = {
@@ -146,9 +160,15 @@ export default function SmartMenu({
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [sortBy, setSortBy] = useState<'popular' | 'price-low' | 'price-high'>(
-    'popular'
-  )
+  const [sortBy, setSortBy] = useState<
+    | 'popular'
+    | 'price-low'
+    | 'price-high'
+    | 'protein-high'
+    | 'carbs-high'
+    | 'protein-low'
+    | 'carbs-low'
+  >('popular')
   const [showPairingSuggestions, setShowPairingSuggestions] = useState(false)
   const [selectedItemForPairing, setSelectedItemForPairing] =
     useState<MenuItem | null>(null)
@@ -326,6 +346,8 @@ export default function SmartMenu({
   }, [language, fetchTranslations])
 
   const currentCopy = uiCopyMap[language]
+  const currentLanguageLabel =
+    languageOptions.find((option) => option.value === language)?.label || ''
   const buildMacroSegments = (
     item: MenuItem,
     translation?: MenuItemTranslation
@@ -416,6 +438,15 @@ export default function SmartMenu({
     }
 
     // Sort
+    const macroValue = (item: MenuItem, key: 'protein' | 'carbs') => {
+      const translation = translationCache[language]?.[item.id]
+      const raw =
+        key === 'protein'
+          ? translation?.protein ?? item.protein ?? 0
+          : translation?.carbs ?? item.carbs ?? 0
+      return raw ?? 0
+    }
+
     items = [...items].sort((a, b) => {
       switch (sortBy) {
         case 'popular':
@@ -424,6 +455,14 @@ export default function SmartMenu({
           return a.price - b.price
         case 'price-high':
           return b.price - a.price
+        case 'protein-high':
+          return macroValue(b, 'protein') - macroValue(a, 'protein')
+        case 'carbs-high':
+          return macroValue(b, 'carbs') - macroValue(a, 'carbs')
+        case 'protein-low':
+          return macroValue(a, 'protein') - macroValue(b, 'protein')
+        case 'carbs-low':
+          return macroValue(a, 'carbs') - macroValue(b, 'carbs')
         default:
           return 0
       }
@@ -449,6 +488,8 @@ export default function SmartMenu({
     selectedTags,
     sortBy,
     highlightItemIds,
+    language,
+    translationCache,
   ])
 
 
@@ -601,6 +642,7 @@ export default function SmartMenu({
     'An AI-crafted description is on the way.'
 
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
@@ -613,184 +655,187 @@ export default function SmartMenu({
         </div>
 
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-4 sm:py-6">
-          <div className="pointer-events-auto absolute top-4 right-4 z-20 rounded-full border border-white/10 bg-slate-950/80 px-3 py-2 text-right uppercase tracking-[0.2em] text-white/70 backdrop-blur md:text-[11px] sm:top-5 sm:right-5">
-            <Popover open={isLanguageMenuOpen} onOpenChange={setIsLanguageMenuOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="ml-auto flex items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-[11px]"
-                  size="sm"
-                  aria-label="Choose display language"
-                >
-                  <Globe className="h-4 w-4 text-emerald-200" />
-                  <span className="sr-only">
-                    Display language:{" "}
-                    {
-                      languageOptions.find((option) => option.value === language)
-                        ?.label
-                    }
-                  </span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                sideOffset={8}
-                className="w-40 rounded-lg border border-white/20 bg-slate-950/95 p-1 text-[13px] text-white shadow-2xl"
-              >
-                {languageOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setLanguage(option.value)
-                      setIsLanguageMenuOpen(false)
-                    }}
-                    className={`flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-2 text-left transition ${
-                      language === option.value
-                        ? 'bg-emerald-500/20 text-white'
-                        : 'text-white/70 hover:bg-white/5'
-                    }`}
-                  >
-                    <span>{option.label}</span>
-                    {language === option.value && (
-                      <span className="text-emerald-300">✓</span>
-                    )}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
-          </div>
-
           <div className="space-y-6">
             {/* Header */}
-            <div className="text-center space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-400/30 bg-gradient-to-r from-emerald-500/20 to-amber-500/20">
-                <span className="text-xs font-medium text-emerald-200">Powered by</span>
-                <span className="text-sm font-bold bg-gradient-to-r from-emerald-400 to-amber-400 bg-clip-text text-transparent">Invisible AI</span>
-              </div>
-              <div className="flex flex-col items-center gap-4">
+            <div className="flex items-center justify-between gap-6">
+              <div className="flex-shrink-0">
                 <Image
                   src="/logo.png"
-                  width={160}
-                  height={160}
+                  width={42}
+                  height={42}
                   alt="iServePlus logo"
-                  className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-white/20 bg-white/5 p-2 shadow-lg object-contain"
+                  className="w-16 h-16 rounded-full border border-white/20 bg-white/5 p-1 shadow-lg object-contain"
                 />
-                <div className="space-y-1">
-                  <p className="text-4xl sm:text-6xl font-bold tracking-tight text-white">
-                    Menu
-                  </p>
-                  <p className="text-sm sm:text-base text-white/70 max-w-2xl mx-auto">
-                    Discover the menu in English, Iraqi Arabic, or Sorani Kurdish — all translated with care and kept in clear digits.
-                  </p>
-                </div>
               </div>
-            </div>
-
-            {/* Search Bar */}
-            <div className="max-w-xl mx-auto">
-              <Input
-                placeholder={currentCopy.searchPlaceholder}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="bg-white/10 border-white/20 text-white placeholder:text-white/50 h-10 text-sm"
-              />
-            </div>
-
-            {/* Bubble Filters - Categories */}
-            <div className="overflow-x-auto px-4">
-              <div className="flex gap-3 pb-3">
-                <button
-                  onClick={() => setSelectedCategory('all')}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                    selectedCategory === 'all'
-                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/50'
-                      : 'bg-white/10 text-white/80 hover:bg-white/20'
-                  }`}
-                >
-                  All
-                </button>
-                {categories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => setSelectedCategory(category.id)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                      selectedCategory === category.id
-                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/50'
-                        : 'bg-white/10 text-white/80 hover:bg-white/20'
-                    }`}
-                  >
-                    {category.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Dietary Tags Filters */}
-            {allTags.length > 0 && (
-              <div className="overflow-x-auto px-4">
-                <div className="flex gap-2 pb-3">
-                  {allTags.map((tag) => (
-                    <button
-                      key={tag}
-                      onClick={() => toggleTag(tag)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1 whitespace-nowrap ${
-                        selectedTags.includes(tag)
-                          ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/50'
-                          : 'bg-white/5 text-white/70 hover:bg-white/10'
-                      }`}
-                    >
-                      {getTagIcon(tag)}
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Sort Options */}
-            <div className="px-4">
-              <div className="overflow-x-auto -mx-4 px-4">
-                <div className="flex gap-2 pb-1">
-                  {sortOptions.map((option) => (
-                    <button
-                      type="button"
-                      key={option.value}
-                      onClick={() => setSortBy(option.value)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${
-                        sortBy === option.value
-                          ? 'bg-white text-slate-900 shadow-lg shadow-white/40'
-                          : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {translationCache[language] && (
-                <p className="text-xs text-center text-emerald-200 flex items-center justify-center gap-2">
-                  {isTranslating && language !== 'en' ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>
-                        Translating... (
-                        {translatedCount[language] || 0}/{menuItems.length})
-                      </span>
-                    </>
-                  ) : (
-                    `Language ready: ${
-                      languageOptions.find((option) => option.value === language)
-                        ?.label
-                    }`
-                  )}
+              <div className="flex-1 text-center">
+                <p className="text-4xl sm:text-5xl font-bold tracking-tight text-white">
+                  Menu
                 </p>
-              )}
+              </div>
+              <div className="flex-shrink-0">
+                <Popover open={isLanguageMenuOpen} onOpenChange={setIsLanguageMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/5 p-0 text-slate-100 transition hover:bg-white/10"
+                      size="sm"
+                      aria-label={`Display language: ${currentLanguageLabel}`}
+                    >
+                      <Globe className="h-4 w-4 text-emerald-200" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    sideOffset={8}
+                    className="w-40 rounded-lg border border-white/20 bg-slate-950/95 p-1 text-[13px] text-white shadow-2xl"
+                  >
+                    {languageOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setLanguage(option.value)
+                          setIsLanguageMenuOpen(false)
+                        }}
+                        className={`flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-2 text-left transition ${
+                          language === option.value
+                            ? 'bg-emerald-500/20 text-white'
+                            : 'text-white/70 hover:bg-white/5'
+                        }`}
+                      >
+                        <span>{option.label}</span>
+                        {language === option.value && (
+                          <span className="text-emerald-300">✓</span>
+                        )}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
-            {translationError && (
-              <p className="text-xs text-center text-red-300">
-                {translationError}
-              </p>
-            )}
+
+            {/* Search + Filter */}
+            <div className="flex justify-center">
+              <div className="flex w-full max-w-lg items-center gap-3">
+                <Input
+                  placeholder={currentCopy.searchPlaceholder}
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/50 h-10 text-sm"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/5 p-0 text-white transition hover:bg-white/10"
+                  onClick={() => setIsFilterDialogOpen(true)}
+                  aria-label="Open filters"
+                >
+                  <Funnel className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+            <DialogContent className="max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
+              <DialogHeader>
+                  <DialogTitle className="text-lg font-semibold text-slate-900">
+                    Filters
+                  </DialogTitle>
+                  <DialogDescription className="text-sm text-slate-500">
+                    Select categories, dietary attributes, and sort order.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-5 pt-3">
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                      Categories
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setSelectedCategory('all')}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
+                          selectedCategory === 'all'
+                            ? 'bg-slate-900 text-white'
+                            : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        All
+                      </button>
+                      {categories.map((category) => (
+                        <button
+                          key={category.id}
+                          onClick={() => setSelectedCategory(category.id)}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
+                            selectedCategory === category.id
+                              ? 'bg-slate-900 text-white'
+                              : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          {category.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {allTags.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                        Dietary
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {allTags.map((tag) => (
+                          <button
+                            key={tag}
+                            onClick={() => toggleTag(tag)}
+                            className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                              selectedTags.includes(tag)
+                                ? 'border-emerald-400 bg-emerald-500/20 text-emerald-900'
+                                : 'border-slate-200 bg-slate-100 text-slate-700 hover:border-slate-300 hover:text-slate-900'
+                            }`}
+                          >
+                            {getTagIcon(tag)}
+                            {getLocalizedTagLabel(tag)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                      Sort by
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {sortOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => setSortBy(option.value)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                            sortBy === option.value
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter className="justify-between pt-4">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setSelectedCategory('all')
+                      setSelectedTags([])
+                      setSortBy('popular')
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                  <Button onClick={() => setIsFilterDialogOpen(false)}>
+                    Apply
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {/* Active Filters Display */}
             {(selectedCategory !== 'all' || selectedTags.length > 0) && (
@@ -957,6 +1002,14 @@ export default function SmartMenu({
                 </div>
               )}
             </div>
+            <footer className="pt-10">
+              <div className="flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.3em] text-white/60">
+                <span>Powered by</span>
+                <span className="font-bold bg-gradient-to-r from-emerald-400 to-amber-400 bg-clip-text text-transparent">
+                  Invisible AI
+                </span>
+              </div>
+            </footer>
           </div>
         </div>
       </div>

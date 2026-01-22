@@ -60,6 +60,10 @@ export default function MenuForm({
   const [suggestedRecipe, setSuggestedRecipe] = useState<any>(null)
   const [recipeInstructions, setRecipeInstructions] = useState('')
   const [creatingIngredients, setCreatingIngredients] = useState(false)
+
+  // AI description and nutrition state
+  const [generatingDescription, setGeneratingDescription] = useState(false)
+  const [estimatingNutrition, setEstimatingNutrition] = useState(false)
   const [formData, setFormData] = useState({
     name: menuItem?.name || '',
     description: menuItem?.description || '',
@@ -330,6 +334,83 @@ export default function MenuForm({
       toast({ title: 'Recipe Suggestion Failed', description: error instanceof Error ? error.message : 'Failed to get recipe suggestion', variant: 'destructive' })
     } finally {
       setLoadingRecipe(false)
+    }
+  }
+
+  const generateDescription = async () => {
+    if (!formData.name) {
+      toast({ title: 'Missing Information', description: 'Please enter a menu item name first', variant: 'destructive' })
+      return
+    }
+
+    setGeneratingDescription(true)
+
+    try {
+      const category = categories.find((c) => c.id === formData.categoryId)
+      const response = await fetch('/api/menu/generate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemName: formData.name,
+          category: category?.name,
+          tags: formData.tags,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate description')
+      }
+
+      setFormData((prev) => ({ ...prev, description: data.description }))
+      toast({ title: 'Description Generated', description: 'AI has created a menu description for you' })
+    } catch (error) {
+      console.error('Error generating description:', error)
+      toast({ title: 'Generation Failed', description: error instanceof Error ? error.message : 'Failed to generate description', variant: 'destructive' })
+    } finally {
+      setGeneratingDescription(false)
+    }
+  }
+
+  const estimateNutrition = async () => {
+    if (!formData.name) {
+      toast({ title: 'Missing Information', description: 'Please enter a menu item name first', variant: 'destructive' })
+      return
+    }
+
+    setEstimatingNutrition(true)
+
+    try {
+      const category = categories.find((c) => c.id === formData.categoryId)
+      const response = await fetch('/api/menu/estimate-nutrition', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemName: formData.name,
+          description: formData.description,
+          category: category?.name,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to estimate nutrition')
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        calories: data.calories.toString(),
+        protein: data.protein.toString(),
+        carbs: data.carbs.toString(),
+      }))
+      toast({ title: 'Nutrition Estimated', description: data.reasoning || 'AI has estimated the nutritional values' })
+    } catch (error) {
+      console.error('Error estimating nutrition:', error)
+      toast({ title: 'Estimation Failed', description: error instanceof Error ? error.message : 'Failed to estimate nutrition', variant: 'destructive' })
+    } finally {
+      setEstimatingNutrition(false)
     }
   }
 
@@ -772,7 +853,25 @@ export default function MenuForm({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="description">Description</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={generateDescription}
+                      disabled={generatingDescription || !formData.name}
+                      title={!formData.name ? 'Enter item name first' : 'Generate description with AI'}
+                      className="h-7 px-2 text-xs"
+                    >
+                      {generatingDescription ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      ) : (
+                        <Sparkles className="h-3 w-3 mr-1" />
+                      )}
+                      AI Write
+                    </Button>
+                  </div>
                   <Textarea
                     id="description"
                     value={formData.description}
@@ -821,36 +920,57 @@ export default function MenuForm({
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="calories">Calories (optional)</Label>
-                    <Input
-                      id="calories"
-                      type="number"
-                      value={formData.calories}
-                      onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
-                      placeholder="e.g., 450"
-                    />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Nutrition (optional)</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={estimateNutrition}
+                      disabled={estimatingNutrition || !formData.name}
+                      title={!formData.name ? 'Enter item name first' : 'Estimate nutrition with AI'}
+                      className="h-7 px-2 text-xs"
+                    >
+                      {estimatingNutrition ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      ) : (
+                        <Sparkles className="h-3 w-3 mr-1" />
+                      )}
+                      AI Estimate
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="protein">Protein g (optional)</Label>
-                    <Input
-                      id="protein"
-                      type="number"
-                      value={formData.protein}
-                      onChange={(e) => setFormData({ ...formData, protein: e.target.value })}
-                      placeholder="e.g., 25"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="carbs">Carbs g (optional)</Label>
-                    <Input
-                      id="carbs"
-                      type="number"
-                      value={formData.carbs}
-                      onChange={(e) => setFormData({ ...formData, carbs: e.target.value })}
-                      placeholder="e.g., 40"
-                    />
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="calories" className="text-xs text-slate-500">Calories</Label>
+                      <Input
+                        id="calories"
+                        type="number"
+                        value={formData.calories}
+                        onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
+                        placeholder="e.g., 450"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="protein" className="text-xs text-slate-500">Protein (g)</Label>
+                      <Input
+                        id="protein"
+                        type="number"
+                        value={formData.protein}
+                        onChange={(e) => setFormData({ ...formData, protein: e.target.value })}
+                        placeholder="e.g., 25"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="carbs" className="text-xs text-slate-500">Carbs (g)</Label>
+                      <Input
+                        id="carbs"
+                        type="number"
+                        value={formData.carbs}
+                        onChange={(e) => setFormData({ ...formData, carbs: e.target.value })}
+                        placeholder="e.g., 40"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">
