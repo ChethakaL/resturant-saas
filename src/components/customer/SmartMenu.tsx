@@ -105,6 +105,13 @@ const categoryTranslations: Record<string, Partial<Record<LanguageCode, string>>
   appetizers: { ar: 'مقبلات', ku: 'پێوەچوون' },
 }
 
+const addOnTranslations: Record<string, Partial<Record<LanguageCode, string>>> = {
+  'extra sauce': { ar: 'صلصة إضافية', ku: 'سوسە زیادە' },
+  cheese: { ar: 'جبنة', ku: 'پنیەر' },
+  bread: { ar: 'خبز', ku: 'نان' },
+  'mixed greens': { ar: 'خضار مشكلة', ku: 'سەوزی تێکەوت' },
+}
+
 const uiCopyMap: Record<
   LanguageCode,
   {
@@ -129,6 +136,7 @@ const uiCopyMap: Record<
     costLabel: 'Price',
     proteinLabel: 'Protein',
     carbsLabel: 'Carbs',
+    addOnsLabel: 'Available add-ons',
     viewDetails: 'See the full AI description',
     detailTitle: 'Chef insights',
   },
@@ -141,6 +149,7 @@ const uiCopyMap: Record<
     costLabel: 'التكلفة',
     proteinLabel: 'بروتين',
     carbsLabel: 'كربوهيدرات',
+    addOnsLabel: 'الإضافات المتاحة',
     viewDetails: 'عرض الوصف الكامل من الذكاء الاصطناعي',
     detailTitle: 'لمحات الشيف',
   },
@@ -153,6 +162,7 @@ const uiCopyMap: Record<
     costLabel: 'نرخی بەرهەم',
     proteinLabel: 'پڕۆتین',
     carbsLabel: 'کاربوهایدرات',
+    addOnsLabel: 'زیادکاریەکان',
     viewDetails: 'وەسفی تەواوی AI ببینە',
     detailTitle: 'هەڵەکانی خواردن',
   },
@@ -656,6 +666,12 @@ const getLocalizedCategoryName = (category?: string | null) => {
   return categoryTranslations[normalized]?.[language] || category
 }
 
+const getLocalizedAddOnName = (name: string) => {
+  if (language === 'en') return name
+  const normalized = name.toLowerCase()
+  return addOnTranslations[normalized]?.[language] || name
+}
+
   const detailTranslation = selectedItemForDetail
     ? translationCache[language]?.[selectedItemForDetail.id]
     : undefined
@@ -991,8 +1007,8 @@ const getLocalizedCategoryName = (category?: string | null) => {
                               <h3 className="text-lg font-semibold leading-tight">
                                 {displayName}
                               </h3>
-                              <p className="text-xs text-slate-500 mt-0.5">
-                                {item.category?.name || 'General'}
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                {getLocalizedCategoryName(item.category?.name)}
                               </p>
                             </div>
                             <div className="text-right">
@@ -1043,16 +1059,18 @@ const getLocalizedCategoryName = (category?: string | null) => {
 
                           {item.addOns && item.addOns.length > 0 && (
                             <div className="space-y-2 pt-1 border-t border-slate-200">
-                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                Available Add-ons
-                              </p>
+                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                            {currentCopy.addOnsLabel}
+                          </p>
                               <div className="flex flex-wrap gap-2">
                                 {item.addOns.map((addOn) => (
                                   <div
                                     key={addOn.id}
                                     className="flex items-center gap-1.5 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-1.5 text-xs"
                                   >
-                                    <span className="font-medium text-slate-700">{addOn.name}</span>
+                                    <span className="font-medium text-slate-700">
+                                      {getLocalizedAddOnName(addOn.name)}
+                                    </span>
                                     <span className="text-emerald-600 font-semibold">
                                       +{formatCurrency(addOn.price)}
                                     </span>
@@ -1156,7 +1174,7 @@ const getLocalizedCategoryName = (category?: string | null) => {
                       <div className="flex-1">
                         <h4 className="font-semibold">{item.name}</h4>
                         <p className="text-xs text-slate-500">
-                          {item.category?.name || 'General'}
+                          {getLocalizedCategoryName(item.category?.name)}
                         </p>
                       </div>
                       <span className="text-sm font-bold text-emerald-700">
@@ -1245,7 +1263,7 @@ const getLocalizedCategoryName = (category?: string | null) => {
                 <div className="space-y-3 pt-2 border-t border-slate-200">
                   <div>
                     <p className="text-sm font-semibold text-slate-900 mb-2">
-                      Available Add-ons
+                      {currentCopy.addOnsLabel}
                     </p>
                     <p className="text-xs text-slate-500 mb-3">
                       Enhance your meal with these optional additions
@@ -1259,7 +1277,7 @@ const getLocalizedCategoryName = (category?: string | null) => {
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-slate-900 text-sm">
-                            {addOn.name}
+                            {getLocalizedAddOnName(addOn.name)}
                           </p>
                           {addOn.description && (
                             <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
