@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 
 export async function PATCH(
   request: Request,
@@ -88,6 +89,9 @@ export async function PATCH(
       return item
     })
 
+    // Revalidate the public menu page so changes appear immediately
+    revalidatePath('/')
+
     return NextResponse.json(menuItem)
   } catch (error) {
     console.error('Error updating menu item:', error)
@@ -123,6 +127,9 @@ export async function DELETE(
     await prisma.menuItem.delete({
       where: { id: params.id },
     })
+
+    // Revalidate the public menu page so deleted items disappear immediately
+    revalidatePath('/')
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 
 export async function POST(request: Request) {
   try {
@@ -66,6 +67,9 @@ export async function POST(request: Request) {
 
       return item
     })
+
+    // Revalidate the public menu page so new items appear immediately
+    revalidatePath('/')
 
     return NextResponse.json(menuItem)
   } catch (error) {
