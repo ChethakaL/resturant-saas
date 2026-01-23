@@ -99,6 +99,12 @@ const tagTranslations: Record<string, Partial<Record<LanguageCode, string>>> = {
   wrap: { ar: 'لفافة', ku: 'لەپەک' },
 }
 
+const categoryTranslations: Record<string, Partial<Record<LanguageCode, string>>> = {
+  'main dishes': { ar: 'الأطباق الرئيسية', ku: 'سەربەخۆیەکان' },
+  grills: { ar: 'مشاوي', ku: 'گریلەکان' },
+  appetizers: { ar: 'مقبلات', ku: 'پێوەچوون' },
+}
+
 const uiCopyMap: Record<
   LanguageCode,
   {
@@ -637,11 +643,18 @@ export default function SmartMenu({
     return null
   }
 
-  const getLocalizedTagLabel = (tag: string) => {
-    if (language === 'en') return tag
-    const normalized = tag.toLowerCase()
-    return tagTranslations[normalized]?.[language] || tag
-  }
+const getLocalizedTagLabel = (tag: string) => {
+  if (language === 'en') return tag
+  const normalized = tag.toLowerCase()
+  return tagTranslations[normalized]?.[language] || tag
+}
+
+const getLocalizedCategoryName = (category?: string | null) => {
+  if (!category) return 'General'
+  if (language === 'en') return category
+  const normalized = category.toLowerCase()
+  return categoryTranslations[normalized]?.[language] || category
+}
 
   const detailTranslation = selectedItemForDetail
     ? translationCache[language]?.[selectedItemForDetail.id]
@@ -740,34 +753,40 @@ export default function SmartMenu({
                 </div>
                 <div className="overflow-x-auto px-4">
                   <div className="flex gap-3 py-2">
-                    {highMarginItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="min-w-[170px] flex-shrink-0 divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/5 shadow-lg shadow-black/40 backdrop-blur"
-                      >
-                        <div className="h-28 w-full overflow-hidden rounded-t-2xl">
-                          <img
-                            src={
-                              item.imageUrl ||
-                              'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=60'
-                            }
-                            alt={item.name}
-                            className="h-28 w-full object-cover transition duration-200 hover:scale-105"
-                          />
-                        </div>
-                        <div className="space-y-1 px-3 py-3 text-sm">
-                          <p className="font-semibold text-white line-clamp-2">
-                            {item.name}
-                          </p>
-                          <p className="text-xs uppercase tracking-[0.3em] text-white/60">
-                            {item.category?.name || 'General'}
-                          </p>
-                          <div className="flex items-center justify-between text-xs text-white/70">
-                            <span>{formatCurrency(item.price)}</span>
+                    {highMarginItems.map((item) => {
+                      const translation =
+                        translationCache[language]?.[item.id]
+                      const displayName = translation?.name || item.name
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="min-w-[170px] flex-shrink-0 divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/5 shadow-lg shadow-black/40 backdrop-blur"
+                        >
+                          <div className="h-28 w-full overflow-hidden rounded-t-2xl">
+                            <img
+                              src={
+                                item.imageUrl ||
+                                'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=60'
+                              }
+                              alt={item.name}
+                              className="h-28 w-full object-cover transition duration-200 hover:scale-105"
+                            />
+                          </div>
+                          <div className="space-y-1 px-3 py-3 text-sm">
+                            <p className="font-semibold text-white line-clamp-2">
+                              {displayName}
+                            </p>
+                            <p className="text-xs uppercase tracking-[0.3em] text-white/60">
+                              {getLocalizedCategoryName(item.category?.name)}
+                            </p>
+                            <div className="flex items-center justify-between text-xs text-white/70">
+                              <span>{formatCurrency(item.price)}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               </div>
