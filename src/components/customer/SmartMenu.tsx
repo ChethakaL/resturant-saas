@@ -674,7 +674,7 @@ export default function SmartMenu({
               </div>
               <div className="flex-1 text-center">
                 <p className="text-4xl sm:text-5xl font-bold tracking-tight text-white">
-                  Menu
+                  Discover
                 </p>
               </div>
               <div className="flex-shrink-0">
@@ -720,7 +720,7 @@ export default function SmartMenu({
 
             {/* Search + Filter */}
             <div className="flex justify-center">
-              <div className="flex w-full max-w-lg items-center gap-3">
+              <div className="flex w-full max-w-md items-center gap-3">
                 <Input
                   placeholder={currentCopy.searchPlaceholder}
                   value={search}
@@ -730,11 +730,14 @@ export default function SmartMenu({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/5 p-0 text-white transition hover:bg-white/10"
+                  className="flex h-9 rounded-full border border-white/20 bg-white/5 px-3 py-0.5 text-white transition hover:bg-white/10"
                   onClick={() => setIsFilterDialogOpen(true)}
                   aria-label="Open filters"
                 >
                   <Funnel className="h-4 w-4" />
+                  <span className="ml-2 text-xs font-semibold uppercase tracking-[0.3em]">
+                    Filter
+                  </span>
                 </Button>
               </div>
             </div>
