@@ -74,6 +74,7 @@ const sortOptions: {
     | 'carbs-high'
     | 'protein-low'
     | 'carbs-low'
+    | 'calories-low'
   label: string
 }[] = [
   { value: 'popular', label: 'Most Popular' },
@@ -83,6 +84,7 @@ const sortOptions: {
   { value: 'carbs-high', label: 'Carbs: High → Low' },
   { value: 'protein-low', label: 'Protein: Low → High' },
   { value: 'carbs-low', label: 'Carbs: Low → High' },
+  { value: 'calories-low', label: 'Calories: Low → High' },
 ]
 
 const tagTranslations: Record<string, Partial<Record<LanguageCode, string>>> = {
@@ -113,7 +115,7 @@ const uiCopyMap: Record<
   }
 > = {
   en: {
-    searchPlaceholder: 'Search dishes…',
+    searchPlaceholder: 'Explore',
     filtersLabel: 'Active filters:',
     whatGoesWithThis: 'What goes well with this?',
     noItemsMessage: 'No items match your filters',
@@ -174,6 +176,7 @@ export default function SmartMenu({
     | 'carbs-high'
     | 'protein-low'
     | 'carbs-low'
+    | 'calories-low'
   >('popular')
   const [showPairingSuggestions, setShowPairingSuggestions] = useState(false)
   const [selectedItemForPairing, setSelectedItemForPairing] =
@@ -417,6 +420,13 @@ export default function SmartMenu({
     return topCandidates.slice(0, 5).map((item) => item.id)
   }, [menuItems])
 
+  const highMarginItems = useMemo(() => {
+    return [...menuItems]
+      .filter((item) => item.margin != null)
+      .sort((a, b) => (b.margin ?? 0) - (a.margin ?? 0))
+      .slice(0, 6)
+  }, [menuItems])
+
   const filteredItems = useMemo(() => {
     let items = menuItems
 
@@ -468,6 +478,8 @@ export default function SmartMenu({
           return macroValue(a, 'protein') - macroValue(b, 'protein')
         case 'carbs-low':
           return macroValue(a, 'carbs') - macroValue(b, 'carbs')
+        case 'calories-low':
+          return (a.calories || 0) - (b.calories || 0)
         default:
           return 0
       }
@@ -674,7 +686,7 @@ export default function SmartMenu({
               </div>
               <div className="flex-1 text-center">
                 <p className="text-4xl sm:text-5xl font-bold tracking-tight text-white">
-                  Discover
+                  Menu
                 </p>
               </div>
               <div className="flex-shrink-0">
@@ -718,6 +730,48 @@ export default function SmartMenu({
               </div>
             </div>
 
+            {highMarginItems.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-4">
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/60">
+                    Highlights
+                  </p>
+                  <span className="text-xs text-emerald-300">Chef picks</span>
+                </div>
+                <div className="overflow-x-auto px-4">
+                  <div className="flex gap-3 py-2">
+                    {highMarginItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="min-w-[170px] flex-shrink-0 divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/5 shadow-lg shadow-black/40 backdrop-blur"
+                      >
+                        <div className="h-28 w-full overflow-hidden rounded-t-2xl">
+                          <img
+                            src={
+                              item.imageUrl ||
+                              'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=60'
+                            }
+                            alt={item.name}
+                            className="h-28 w-full object-cover transition duration-200 hover:scale-105"
+                          />
+                        </div>
+                        <div className="space-y-1 px-3 py-3 text-sm">
+                          <p className="font-semibold text-white line-clamp-2">
+                            {item.name}
+                          </p>
+                          <p className="text-xs uppercase tracking-[0.3em] text-white/60">
+                            {item.category?.name || 'General'}
+                          </p>
+                          <div className="flex items-center justify-between text-xs text-white/70">
+                            <span>{formatCurrency(item.price)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Search + Filter */}
             <div className="flex justify-center">
               <div className="flex w-full max-w-md items-center gap-3">
@@ -736,7 +790,7 @@ export default function SmartMenu({
                 >
                   <Funnel className="h-4 w-4" />
                   <span className="ml-2 text-xs font-semibold uppercase tracking-[0.3em]">
-                    Filter
+                    Discover
                   </span>
                 </Button>
               </div>
