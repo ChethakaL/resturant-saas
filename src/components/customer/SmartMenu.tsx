@@ -61,8 +61,8 @@ type TranslationCache = Partial<Record<LanguageCode, Record<string, MenuItemTran
 
 const languageOptions: { value: LanguageCode; label: string }[] = [
   { value: 'en', label: 'English' },
-  { value: 'ar', label: 'العربية (العراق)' },
-  { value: 'ku', label: 'کوردی (سۆرانی)' },
+  { value: 'ku', label: 'كوردي' },
+  { value: 'ar', label: 'عربي' },
 ]
 
 const sortOptions: {
@@ -123,8 +123,14 @@ const uiCopyMap: Record<
     costLabel: string
     proteinLabel: string
     carbsLabel: string
+    addOnsLabel: string
     viewDetails: string
     detailTitle: string
+    pairingTitle: string
+    pairingDescription: string
+    pairingAnalyzing: string
+    pairingNoSuggestions: string
+    loadingLabel: string
   }
 > = {
   en: {
@@ -139,6 +145,12 @@ const uiCopyMap: Record<
     addOnsLabel: 'Available add-ons',
     viewDetails: 'See the full AI description',
     detailTitle: 'Chef insights',
+    pairingTitle: 'Perfect pairings for',
+    pairingDescription:
+      'AI-powered recommendations based on flavor profiles and popular combinations',
+    pairingAnalyzing: 'Analyzing flavor profiles...',
+    pairingNoSuggestions: 'No suggestions available at the moment.',
+    loadingLabel: 'Loading...',
   },
   ar: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -152,6 +164,12 @@ const uiCopyMap: Record<
     addOnsLabel: 'الإضافات المتاحة',
     viewDetails: 'عرض الوصف الكامل من الذكاء الاصطناعي',
     detailTitle: 'لمحات الشيف',
+    pairingTitle: 'مقترحات مثالية لـ',
+    pairingDescription:
+      'توصيات مدعومة بالذكاء الاصطناعي بناءً على نكهات وتركيبات شهيرة',
+    pairingAnalyzing: 'يتم تحليل نكهات الطعام...',
+    pairingNoSuggestions: 'لا توجد اقتراحات حالياً.',
+    loadingLabel: 'جارٍ التحميل...',
   },
   ku: {
     searchPlaceholder: 'ئێستا خواردنەکان بگەڕە…',
@@ -165,6 +183,12 @@ const uiCopyMap: Record<
     addOnsLabel: 'زیادکاریەکان',
     viewDetails: 'وەسفی تەواوی AI ببینە',
     detailTitle: 'هەڵەکانی خواردن',
+    pairingTitle: 'هاوپەیوەندییە باشەکان بۆ',
+    pairingDescription:
+      'پێشنیارەکانی AI لەسەر هەماهنگی تەمەنی و خواردنە گونجاوەکان',
+    pairingAnalyzing: 'پەیوەندی تەمەنی دەچێتەوە...',
+    pairingNoSuggestions: 'هێشتا پێشنیارێک نییە.',
+    loadingLabel: 'ئامادە دەبێت...',
   },
 }
 
@@ -672,6 +696,12 @@ const getLocalizedAddOnName = (name: string) => {
   return addOnTranslations[normalized]?.[language] || name
 }
 
+  const pairingItemTranslation = selectedItemForPairing
+    ? translationCache[language]?.[selectedItemForPairing.id]
+    : undefined
+  const pairingItemDisplayName =
+    pairingItemTranslation?.name || selectedItemForPairing?.name || ''
+
   const detailTranslation = selectedItemForDetail
     ? translationCache[language]?.[selectedItemForDetail.id]
     : undefined
@@ -1096,7 +1126,7 @@ const getLocalizedAddOnName = (name: string) => {
                               selectedItemForPairing?.id === item.id ? (
                                 <>
                                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  Loading...
+                                  {currentCopy.loadingLabel}
                                 </>
                               ) : (
                                 <>
@@ -1140,10 +1170,11 @@ const getLocalizedAddOnName = (name: string) => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-emerald-500" />
-              Perfect Pairings for {selectedItemForPairing?.name}
+              {currentCopy.pairingTitle}{' '}
+              <span className="font-semibold">{pairingItemDisplayName}</span>
             </DialogTitle>
-            <DialogDescription>
-              AI-powered recommendations based on flavor profiles and popular combinations
+            <DialogDescription className="text-sm text-slate-500">
+              {currentCopy.pairingDescription}
             </DialogDescription>
           </DialogHeader>
 
@@ -1151,49 +1182,58 @@ const getLocalizedAddOnName = (name: string) => {
             <div className="py-12 text-center">
               <Sparkles className="h-8 w-8 animate-spin mx-auto text-emerald-500" />
               <p className="mt-4 text-sm text-slate-500">
-                Analyzing flavor profiles...
+                {currentCopy.pairingAnalyzing}
               </p>
             </div>
           ) : pairingSuggestions.length === 0 ? (
             <div className="py-8 text-center text-slate-500">
-              No suggestions available at the moment.
+              {currentCopy.pairingNoSuggestions}
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
-              {pairingSuggestions.map((item) => (
-                <Card key={item.id} className="overflow-hidden">
-                  {item.imageUrl && (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="h-32 w-full object-cover"
-                    />
-                  )}
-                  <CardContent className="space-y-2 pt-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4 className="font-semibold">{item.name}</h4>
-                        <p className="text-xs text-slate-500">
-                          {getLocalizedCategoryName(item.category?.name)}
-                        </p>
+              {pairingSuggestions.map((item) => {
+                const suggestionTranslation =
+                  translationCache[language]?.[item.id]
+                const suggestionName =
+                  suggestionTranslation?.name || item.name
+                const suggestionDescription =
+                  suggestionTranslation?.description || item.description || ''
+
+                return (
+                  <Card key={item.id} className="overflow-hidden">
+                    {item.imageUrl && (
+                      <img
+                        src={item.imageUrl}
+                        alt={suggestionName}
+                        className="h-32 w-full object-cover"
+                      />
+                    )}
+                    <CardContent className="space-y-2 pt-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-semibold">{suggestionName}</h4>
+                          <p className="text-xs text-slate-500">
+                            {getLocalizedCategoryName(item.category?.name)}
+                          </p>
+                        </div>
+                        <span className="text-sm font-bold text-emerald-700">
+                          {formatCurrency(item.price)}
+                        </span>
                       </div>
-                      <span className="text-sm font-bold text-emerald-700">
-                        {formatCurrency(item.price)}
-                      </span>
-                    </div>
-                    {item.description && (
-                      <p className="text-xs text-slate-600 line-clamp-3">
-                        {item.description}
-                      </p>
-                    )}
-                    {item.calories && (
-                      <p className="text-xs text-slate-500 font-medium">
-                        {item.calories} calories
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                      {suggestionDescription && (
+                        <p className="text-xs text-slate-600 line-clamp-3">
+                          {suggestionDescription}
+                        </p>
+                      )}
+                      {item.calories && (
+                        <p className="text-xs text-slate-500 font-medium">
+                          {item.calories} calories
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </DialogContent>
