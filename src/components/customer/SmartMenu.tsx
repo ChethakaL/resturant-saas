@@ -192,6 +192,8 @@ const uiCopyMap: Record<
   },
 }
 
+const SMART_SEARCH_STOP_WORDS = new Set(['or', 'and'])
+
 export default function SmartMenu({
   restaurantId,
   menuItems,
@@ -206,6 +208,8 @@ export default function SmartMenu({
   }
 
   const [search, setSearch] = useState('')
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const searchOverlayInputRef = useRef<HTMLInputElement | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<
@@ -247,6 +251,22 @@ export default function SmartMenu({
   const [descriptionLoadingItem, setDescriptionLoadingItem] =
     useState<string | null>(null)
   const [descriptionError, setDescriptionError] = useState<string | null>(null)
+  const trimmedSearch = search.trim()
+  const searchTokens = useMemo(() => {
+    if (!trimmedSearch) {
+      return []
+    }
+    return trimmedSearch
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((token) => !SMART_SEARCH_STOP_WORDS.has(token))
+  }, [trimmedSearch])
+  const isSmartSearchActive = isSearchFocused || trimmedSearch.length > 0
+  const closeSmartSearch = () => {
+    setSearch('')
+    setIsSearchFocused(false)
+  }
 
   const fetchTranslations = useCallback(
     async (lang: LanguageCode) => {
@@ -393,6 +413,12 @@ export default function SmartMenu({
     fetchTranslations(language)
   }, [language, fetchTranslations])
 
+  useEffect(() => {
+    if (isSmartSearchActive && searchOverlayInputRef.current) {
+      searchOverlayInputRef.current.focus({ preventScroll: true })
+    }
+  }, [isSmartSearchActive])
+
   const currentCopy = uiCopyMap[language]
   const currentLanguageLabel =
     languageOptions.find((option) => option.value === language)?.label || ''
@@ -471,13 +497,24 @@ export default function SmartMenu({
     let items = menuItems
 
     // Search filter
-    if (search.trim()) {
-      const term = search.trim().toLowerCase()
-      items = items.filter(
-        (item) =>
-          item.name.toLowerCase().includes(term) ||
-          item.description?.toLowerCase().includes(term)
-      )
+    if (searchTokens.length > 0) {
+      items = items.filter((item) => {
+        const translation = translationCache[language]?.[item.id]
+        const haystack = [
+          item.name,
+          item.description,
+          item.category?.name,
+          item.tags?.join(' '),
+          translation?.name,
+          translation?.description,
+          translation?.aiDescription,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+
+        return searchTokens.some((token) => haystack.includes(token))
+      })
     }
 
     // Category filter
@@ -540,7 +577,7 @@ export default function SmartMenu({
     return [...highlighted, ...others]
   }, [
     menuItems,
-    search,
+    searchTokens,
     selectedCategory,
     selectedTags,
     sortBy,
@@ -722,7 +759,11 @@ const getLocalizedAddOnName = (name: string) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
-      <div className="relative overflow-hidden">
+      <div
+        className={`relative overflow-hidden transition-all duration-300 ${
+          isSmartSearchActive ? 'pointer-events-none blur-sm' : 'pointer-events-auto'
+        }`}
+      >
         {/* Background Effects */}
         <div className="absolute inset-0 opacity-20">
           <div className="absolute -top-32 left-10 h-72 w-72 rounded-full bg-emerald-400 blur-[140px]" />
@@ -839,10 +880,15 @@ const getLocalizedAddOnName = (name: string) => {
             )}
             {/* Search + Filter */}
             <div className="flex justify-center">
-              <div className="flex w-full max-w-md items-center gap-3">
+              <div
+                className={`flex w-full max-w-md items-center gap-3 transition duration-300 ${
+                  isSmartSearchActive ? 'opacity-0 pointer-events-none' : ''
+                }`}
+              >
                 <Input
                   placeholder={currentCopy.searchPlaceholder}
                   value={search}
+                  onFocus={() => setIsSearchFocused(true)}
                   onChange={(event) => setSearch(event.target.value)}
                   className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/50 h-10 text-sm"
                 />
@@ -1163,6 +1209,157 @@ const getLocalizedAddOnName = (name: string) => {
           </div>
         </div>
       </div>
+
+      {isSmartSearchActive && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-10 sm:pt-16">
+          <div
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-3xl"
+            onClick={closeSmartSearch}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-4xl">
+            <div
+              className="relative space-y-6 rounded-[32px] border border-white/10 bg-slate-900/95 p-5 shadow-2xl backdrop-blur-3xl sm:p-6"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="space-y-2">
+                <p className="text-[0.65rem] uppercase tracking-[0.5em] text-white/60">
+                  Smart Search
+                </p>
+                <h3 className="text-xl font-semibold text-white sm:text-2xl">
+                  {trimmedSearch
+                    ? `Results for “${trimmedSearch}”`
+                    : 'Tell us what you crave'}
+                </h3>
+                <p className="text-sm text-white/60">
+                  {trimmedSearch
+                    ? `We found ${filteredItems.length} menu ${
+                        filteredItems.length === 1 ? 'item' : 'items'
+                      } inspired by “${trimmedSearch}”.`
+                    : 'Use dishes, ingredients, or vibes and we will surface matching cards for you.'}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex h-full flex-1 rounded-2xl border border-white/20 bg-white/5 px-3 py-2 shadow-inner shadow-black/30">
+                  <Input
+                    ref={searchOverlayInputRef}
+                    autoComplete="off"
+                    placeholder="Search by ingredient, flavor, or mood..."
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={(event) => {
+                      if (!event.target.value.trim()) {
+                        setIsSearchFocused(false)
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        closeSmartSearch()
+                        event.currentTarget.blur()
+                      }
+                    }}
+                    className="flex-1 border-0 bg-transparent px-0 text-white placeholder:text-white/60 focus-visible:ring-0"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex h-9 rounded-full border border-white/20 bg-white/5 px-3 py-0.5 text-white transition hover:bg-white/10"
+                    onClick={() => {
+                      setIsFilterDialogOpen(true)
+                      setIsSearchFocused(false)
+                    }}
+                    aria-label="Open filters"
+                  >
+                    <Funnel className="h-4 w-4" />
+                    <span className="ml-2 text-xs font-semibold uppercase tracking-[0.3em]">
+                      Discover
+                    </span>
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={closeSmartSearch}>
+                    <span className="text-xs font-semibold uppercase tracking-[0.3em]">
+                      Clear
+                    </span>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="max-h-[60vh] overflow-y-auto pr-1">
+                {filteredItems.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-10 text-center text-white/60">
+                    <Sparkles className="h-8 w-8 text-emerald-400" />
+                    <p className="text-sm font-semibold text-white">No matches yet.</p>
+                    <p className="text-xs text-white/40">
+                      Try a different prompt or broaden the search.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {filteredItems.map((item) => {
+                      const translation =
+                        translationCache[language]?.[item.id]
+                      const displayName = translation?.name || item.name
+                      const displayDescription =
+                        translation?.description || item.description || ''
+                      return (
+                        <article
+                          key={item.id}
+                          className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-2xl transition hover:-translate-y-0.5 hover:shadow-2xl backdrop-blur-2xl"
+                        >
+                          <div className="relative h-32 overflow-hidden rounded-t-3xl">
+                            <img
+                              src={
+                                item.imageUrl ||
+                                'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
+                              }
+                              alt={item.name}
+                              className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
+                            />
+                          </div>
+                          <div className="space-y-2 px-4 py-4">
+                            <div className="flex items-center justify-between gap-2 text-white">
+                              <h4 className="text-base font-semibold leading-tight">
+                                {displayName}
+                              </h4>
+                              <span className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">
+                                {formatCurrency(item.price)}
+                              </span>
+                            </div>
+                            <p className="text-[0.65rem] uppercase tracking-[0.4em] text-white/60">
+                              {getLocalizedCategoryName(item.category?.name)}
+                            </p>
+                            {displayDescription && (
+                              <p className="text-[0.8rem] text-white/70 line-clamp-2">
+                                {displayDescription}
+                              </p>
+                            )}
+                            {item.tags && item.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 text-[0.65rem] uppercase tracking-[0.3em] text-white/60">
+                                {item.tags.slice(0, 2).map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="rounded-full border border-white/20 px-2 py-0.5"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pairing Suggestions Dialog */}
       <Dialog open={showPairingSuggestions} onOpenChange={setShowPairingSuggestions}>
