@@ -131,6 +131,17 @@ const uiCopyMap: Record<
     pairingAnalyzing: string
     pairingNoSuggestions: string
     loadingLabel: string
+    smartSearchLabel: string
+    smartSearchPrompt: string
+    smartSearchDescription: string
+    smartSearchInputPlaceholder: string
+    smartSearchFilters: string
+    smartSearchClear: string
+    resultsHeadingPrefix: string
+    resultsSummarySingular: string
+    resultsSummaryPlural: string
+    noMatchesTitle: string
+    noMatchesDescription: string
   }
 > = {
   en: {
@@ -151,6 +162,18 @@ const uiCopyMap: Record<
     pairingAnalyzing: 'Analyzing flavor profiles...',
     pairingNoSuggestions: 'No suggestions available at the moment.',
     loadingLabel: 'Loading...',
+    smartSearchLabel: 'Smart Search',
+    smartSearchPrompt: 'Tell us what you crave',
+    smartSearchDescription:
+      'Use dishes, ingredients, or vibes and we will surface matching cards for you.',
+    smartSearchInputPlaceholder: 'Search by ingredient, flavor, or mood...',
+    smartSearchFilters: 'Discover',
+    smartSearchClear: 'Clear',
+    resultsHeadingPrefix: 'Results for',
+    resultsSummarySingular: 'We found {count} menu item inspired by "{query}".',
+    resultsSummaryPlural: 'We found {count} menu items inspired by "{query}".',
+    noMatchesTitle: 'No matches yet.',
+    noMatchesDescription: 'Try a different prompt or broaden the search.',
   },
   ar: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -170,6 +193,18 @@ const uiCopyMap: Record<
     pairingAnalyzing: 'يتم تحليل نكهات الطعام...',
     pairingNoSuggestions: 'لا توجد اقتراحات حالياً.',
     loadingLabel: 'جارٍ التحميل...',
+    smartSearchLabel: 'البحث الذكي',
+    smartSearchPrompt: 'قل لنا ما تهتم به',
+    smartSearchDescription:
+      'استخدم اسم طبق، مكوّن أو شعور وسنُظهر خيارات متناسبة.',
+    smartSearchInputPlaceholder: 'ابحث عن مكوّن، نكهة أو مزاج...',
+    smartSearchFilters: 'اكتشف',
+    smartSearchClear: 'مسح',
+    resultsHeadingPrefix: 'النتائج لـ',
+    resultsSummarySingular: 'وجدنا {count} طبقًا مستوحى من "{query}".',
+    resultsSummaryPlural: 'وجدنا {count} أطباقًا مستوحاة من "{query}".',
+    noMatchesTitle: 'لا توجد نتائج حتى الآن.',
+    noMatchesDescription: 'حاول عبارة مختلفة أو وسّع نطاق البحث.',
   },
   ku: {
     searchPlaceholder: 'ئێستا خواردنەکان بگەڕە…',
@@ -189,10 +224,31 @@ const uiCopyMap: Record<
     pairingAnalyzing: 'پەیوەندی تەمەنی دەچێتەوە...',
     pairingNoSuggestions: 'هێشتا پێشنیارێک نییە.',
     loadingLabel: 'ئامادە دەبێت...',
+    smartSearchLabel: 'گەڕینی زیرەک',
+    smartSearchPrompt: 'بەڵگەکەت بڵێ چی دەتەوێت',
+    smartSearchDescription:
+      'بەکارهێنانی خۆراک، ماددە یان هەست بۆ نیشاندانی کارتێکی گونجاو.',
+    smartSearchInputPlaceholder: 'بگەڕێ بە ماددە، چێشت یان مەزە...',
+    smartSearchFilters: 'دۆزینەوە',
+    smartSearchClear: 'سڕینەوە',
+    resultsHeadingPrefix: 'ئەنجامەکان بۆ',
+    resultsSummarySingular: 'دۆزرا {count} خواردن بە پێی "{query}".',
+    resultsSummaryPlural: 'دۆزرا {count} خواردنە گونجاوەکان بە "{query}".',
+    noMatchesTitle: 'هێشتا هیچ ئەنجامێک نییە.',
+    noMatchesDescription: 'وشەیەکی دیاری بکە یان گەڕانەکە زۆرتر بکە.',
   },
 }
 
 const SMART_SEARCH_STOP_WORDS = new Set(['or', 'and'])
+
+const formatTemplate = (
+  template: string,
+  values: Record<string, string>
+): string => {
+  return Object.entries(values).reduce((result, [key, value]) => {
+    return result.replace(new RegExp(`\\{${key}\\}`, 'g'), value)
+  }, template)
+}
 
 export default function SmartMenu({
   restaurantId,
@@ -408,6 +464,12 @@ export default function SmartMenu({
   }, [fetchTranslations])
 
   useEffect(() => {
+    // Preload all supported languages so cross-language queries match translations.
+    fetchTranslations('ar')
+    fetchTranslations('ku')
+  }, [fetchTranslations])
+
+  useEffect(() => {
     // Always fetch translations when language changes, even if cache exists
     // The fetchTranslations function will check if items are actually translated
     fetchTranslations(language)
@@ -500,6 +562,11 @@ export default function SmartMenu({
     if (searchTokens.length > 0) {
       items = items.filter((item) => {
         const translation = translationCache[language]?.[item.id]
+        const multiLangTranslations = Object.values(translationCache)
+          .map((langMap) => langMap[item.id])
+          .filter(Boolean)
+          .flatMap((t) => [t.name, t.description, t.aiDescription])
+
         const haystack = [
           item.name,
           item.description,
@@ -508,6 +575,7 @@ export default function SmartMenu({
           translation?.name,
           translation?.description,
           translation?.aiDescription,
+          ...multiLangTranslations,
         ]
           .filter(Boolean)
           .join(' ')
@@ -585,6 +653,17 @@ export default function SmartMenu({
     language,
     translationCache,
   ])
+
+  const summaryTemplate =
+    filteredItems.length === 1
+      ? currentCopy.resultsSummarySingular
+      : currentCopy.resultsSummaryPlural
+  const smartSearchSummary = trimmedSearch
+    ? formatTemplate(summaryTemplate, {
+        count: filteredItems.length.toString(),
+        query: trimmedSearch,
+      })
+    : currentCopy.smartSearchDescription
 
 
   const toggleTag = (tag: string) => {
@@ -1224,20 +1303,14 @@ const getLocalizedAddOnName = (name: string) => {
             >
               <div className="space-y-2">
                 <p className="text-[0.65rem] uppercase tracking-[0.5em] text-white/60">
-                  Smart Search
+                  {currentCopy.smartSearchLabel}
                 </p>
                 <h3 className="text-xl font-semibold text-white sm:text-2xl">
                   {trimmedSearch
-                    ? `Results for “${trimmedSearch}”`
-                    : 'Tell us what you crave'}
+                    ? `${currentCopy.resultsHeadingPrefix} “${trimmedSearch}”`
+                    : currentCopy.smartSearchPrompt}
                 </h3>
-                <p className="text-sm text-white/60">
-                  {trimmedSearch
-                    ? `We found ${filteredItems.length} menu ${
-                        filteredItems.length === 1 ? 'item' : 'items'
-                      } inspired by “${trimmedSearch}”.`
-                    : 'Use dishes, ingredients, or vibes and we will surface matching cards for you.'}
-                </p>
+                <p className="text-sm text-white/60">{smartSearchSummary}</p>
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1245,7 +1318,7 @@ const getLocalizedAddOnName = (name: string) => {
                   <Input
                     ref={searchOverlayInputRef}
                     autoComplete="off"
-                    placeholder="Search by ingredient, flavor, or mood..."
+                    placeholder={currentCopy.smartSearchInputPlaceholder}
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     onFocus={() => setIsSearchFocused(true)}
@@ -1260,7 +1333,7 @@ const getLocalizedAddOnName = (name: string) => {
                         event.currentTarget.blur()
                       }
                     }}
-                    className="flex-1 border-0 bg-transparent px-0 text-white placeholder:text-white/60 focus-visible:ring-0"
+                    className="flex-1 border-0 bg-transparent px-0 text-base text-white placeholder:text-white/60 focus-visible:ring-0"
                   />
                 </div>
 
@@ -1277,12 +1350,12 @@ const getLocalizedAddOnName = (name: string) => {
                   >
                     <Funnel className="h-4 w-4" />
                     <span className="ml-2 text-xs font-semibold uppercase tracking-[0.3em]">
-                      Discover
+                      {currentCopy.smartSearchFilters}
                     </span>
                   </Button>
                   <Button variant="ghost" size="sm" onClick={closeSmartSearch}>
                     <span className="text-xs font-semibold uppercase tracking-[0.3em]">
-                      Clear
+                      {currentCopy.smartSearchClear}
                     </span>
                   </Button>
                 </div>
@@ -1292,9 +1365,11 @@ const getLocalizedAddOnName = (name: string) => {
                 {filteredItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-10 text-center text-white/60">
                     <Sparkles className="h-8 w-8 text-emerald-400" />
-                    <p className="text-sm font-semibold text-white">No matches yet.</p>
+                    <p className="text-sm font-semibold text-white">
+                      {currentCopy.noMatchesTitle}
+                    </p>
                     <p className="text-xs text-white/40">
-                      Try a different prompt or broaden the search.
+                      {currentCopy.noMatchesDescription}
                     </p>
                   </div>
                 ) : (
