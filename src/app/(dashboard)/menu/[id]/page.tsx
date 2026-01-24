@@ -61,6 +61,11 @@ export default async function MenuItemEditPage({
     notFound()
   }
 
+  const user = await prisma.user.findUnique({
+    where: { id: session!.user.id },
+  })
+  const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
+
   return (
     <MenuForm
       categories={data.categories}
@@ -68,6 +73,7 @@ export default async function MenuItemEditPage({
       addOns={data.addOns}
       menuItem={data.menuItem}
       mode="edit"
+      defaultBackgroundPrompt={defaultBackgroundPrompt}
     />
   )
 }

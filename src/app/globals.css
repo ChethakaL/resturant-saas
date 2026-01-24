@@ -60,3 +60,22 @@
     @apply bg-slate-50 text-foreground h-full;
   }
 }
+
+@layer utilities {
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(16, 185, 129, 0.6) rgba(148, 163, 184, 0.3);
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, 0.25);
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(16, 185, 129, 0.8);
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+  }
+}

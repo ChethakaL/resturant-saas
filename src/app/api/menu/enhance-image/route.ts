@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { enforceImageDimensions } from '@/lib/image-processor'
+import {
+  ImageOrientation,
+  ImageSizePreset,
+  imageOrientationPrompts,
+  imageSizePrompts,
+} from '@/lib/image-format'
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,7 +16,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { imageData } = await request.json()
+    const {
+      imageData,
+      prompt,
+      orientation = 'landscape',
+      sizePreset = 'medium',
+    }: {
+      imageData?: string
+      prompt?: string
+      orientation?: ImageOrientation
+      sizePreset?: ImageSizePreset
+    } = await request.json()
     if (!imageData) {
       return NextResponse.json(
         { error: 'No image provided' },
@@ -43,6 +60,9 @@ export async function POST(request: NextRequest) {
 
     // Use Gemini 2.5 Flash Image API to enhance the image
     // Using a direct editing command format
+    const userPrompt = (prompt || '').trim()
+    const orientationHint = imageOrientationPrompts[orientation] ?? ''
+    const sizeHint = imageSizePrompts[sizePreset] ?? ''
     const enhancementPrompt = `
 You are editing a real photo of a cooked dish. Your job is to create a restaurant-quality menu photograph of THE SAME EXACT DISH.
 
@@ -58,13 +78,16 @@ STRICT PRESERVATION (MOST IMPORTANT):
 - Keep identifying details of the dish (toppings, edges, crumbs, burn marks, cuts, placement) consistent with the original.
 - Only change: lighting, color grading, sharpness, perspective correction, and BACKGROUND/surface.
 
-BACKGROUND RULES:
-- Replace the messy/phone background with a clean, premium restaurant-style setting.
-- Use realistic shadows/reflections so the dish sits naturally in the new scene.
-- No text, no logos, no watermarks.
+    BACKGROUND RULES:
+    - Replace the messy/phone background with a clean, premium restaurant-style setting.
+    - Use realistic shadows/reflections so the dish sits naturally in the new scene.
+    - No text, no logos, no watermarks.
 
-OUTPUT:
-- Photorealistic, high-quality menu-style image.
+    ${orientationHint ? `COMPOSITION NOTES:\n${orientationHint}\n` : ''}
+    ${sizeHint ? `SIZE NOTES:\n${sizeHint}\n` : ''}
+
+    OUTPUT:
+    - Photorealistic, high-quality menu-style image.
 `;
 
     const response = await fetch(
@@ -85,7 +108,7 @@ OUTPUT:
                   },
                 },
                 {
-                  text: enhancementPrompt,
+                  text: enhancementPrompt + (userPrompt ? `\n\nUSER NOTE: ${userPrompt}` : ''),
                 },
               ],
             },
@@ -167,27 +190,17 @@ OUTPUT:
       )
     }
 
-    // Verify the image is different from the original (basic check)
-    const originalDataPreview = base64Data.substring(0, 100)
-    const enhancedDataPreview = imageBase64.substring(0, 100)
-    const isDifferent = originalDataPreview !== enhancedDataPreview
-    console.log('Image comparison:', {
-      isDifferent,
-      originalPreview: originalDataPreview,
-      enhancedPreview: enhancedDataPreview
-    })
-
-    if (!isDifferent) {
-      console.warn('WARNING: Enhanced image appears to be identical to original. Gemini may not have enhanced it.')
-    }
-
-    // Return as data URL
-    const imageDataUrl = `data:${imageMimeType};base64,${imageBase64}`
+    const processedImage = await enforceImageDimensions(
+      imageBase64,
+      orientation,
+      sizePreset
+    )
+    const imageDataUrl = `data:${processedImage.mimeType};base64,${processedImage.base64}`
 
     console.log('Image enhanced successfully with Gemini 2.5 Flash Image', {
       originalSize: base64Data.length,
-      enhancedSize: imageBase64.length,
-      isDifferent
+      enhancedSize: processedImage.base64.length,
+      mimeType: processedImage.mimeType,
     })
 
     return NextResponse.json({

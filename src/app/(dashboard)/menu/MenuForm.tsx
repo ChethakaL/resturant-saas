@@ -31,6 +31,14 @@ import {
 } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
 import { buildTranslationSeed, TranslationSeedPayload } from '@/lib/menu-translation-seed'
+import {
+  ImageOrientation,
+  ImageSizePreset,
+  imageOrientationOptions,
+  imageOrientationPrompts,
+  imageSizeOptions,
+  imageSizePrompts,
+} from '@/lib/image-format'
 
 interface RecipeIngredient {
   ingredientId: string
@@ -67,6 +75,7 @@ interface MenuFormProps {
     addOns?: (MenuItemAddOn & { addOn: AddOn })[]
     translations?: MenuItemTranslation[]
   }
+  defaultBackgroundPrompt?: string | null
 }
 
 export default function MenuForm({
@@ -75,6 +84,7 @@ export default function MenuForm({
   addOns = [],
   mode,
   menuItem,
+  defaultBackgroundPrompt,
 }: MenuFormProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -82,10 +92,35 @@ export default function MenuForm({
   const [generatingImage, setGeneratingImage] = useState(false)
   const [showPromptDialog, setShowPromptDialog] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
+  const [imageOrientation, setImageOrientation] = useState<ImageOrientation>('landscape')
+  const [imageSizePreset, setImageSizePreset] = useState<ImageSizePreset>('medium')
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const translationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const currentOrientationOption =
+    imageOrientationOptions.find((option) => option.value === imageOrientation) ??
+    imageOrientationOptions[0]
+  const currentSizeOption =
+    imageSizeOptions.find((option) => option.value === imageSizePreset) ??
+    imageSizeOptions[1]
+
+  const [savedBackgroundPrompt, setSavedBackgroundPrompt] = useState(
+    defaultBackgroundPrompt ?? ''
+  )
+  const [defaultBackgroundDraft, setDefaultBackgroundDraft] = useState(
+    defaultBackgroundPrompt ?? ''
+  )
+  const [savingBackgroundPrompt, setSavingBackgroundPrompt] = useState(false)
+
+  useEffect(() => {
+    const prompt = defaultBackgroundPrompt ?? ''
+    setDefaultBackgroundDraft(prompt)
+    setSavedBackgroundPrompt(prompt)
+  }, [defaultBackgroundPrompt])
+
+  const trimmedSavedBackgroundPrompt = savedBackgroundPrompt.trim()
 
   // AI Recipe suggestion state
   const [showRecipeDialog, setShowRecipeDialog] = useState(false)
@@ -420,7 +455,10 @@ export default function MenuForm({
     setRecipe(newRecipe)
   }
 
-  const generateImage = async (useCustomPrompt: boolean = false) => {
+  const generateImage = async () => {
+    const promptForUpload =
+      customPrompt.trim() || trimmedSavedBackgroundPrompt || undefined
+
     // If there's an uploaded photo, enhance it instead of generating from scratch
     if (uploadedPhoto) {
       setGeneratingImage(true)
@@ -430,6 +468,9 @@ export default function MenuForm({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             imageData: uploadedPhoto,
+            prompt: promptForUpload,
+            orientation: imageOrientation,
+            sizePreset: imageSizePreset,
           }),
         })
 
@@ -440,14 +481,18 @@ export default function MenuForm({
         }
 
         setPreviewImageUrl(data.imageUrl)
-        setUploadedPhoto(null)
         toast({
           title: 'Image enhanced',
           description: 'Your photo has been professionally enhanced!',
         })
       } catch (error) {
         console.error('Error enhancing image:', error)
-        toast({ title: 'Enhancement Failed', description: error instanceof Error ? error.message : 'Failed to enhance image', variant: 'destructive' })
+        toast({
+          title: 'Enhancement Failed',
+          description:
+            error instanceof Error ? error.message : 'Failed to enhance image',
+          variant: 'destructive',
+        })
       } finally {
         setGeneratingImage(false)
       }
@@ -456,7 +501,11 @@ export default function MenuForm({
 
     // Generate from scratch
     if (!formData.name) {
-      toast({ title: 'Missing Information', description: 'Please enter a menu item name first', variant: 'destructive' })
+      toast({
+        title: 'Missing Information',
+        description: 'Please enter a menu item name first',
+        variant: 'destructive',
+      })
       return
     }
 
@@ -464,14 +513,18 @@ export default function MenuForm({
 
     try {
       const category = categories.find((c) => c.id === formData.categoryId)
+      const promptForGeneration =
+        customPrompt.trim() || trimmedSavedBackgroundPrompt
       const response = await fetch('/api/menu/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: useCustomPrompt ? customPrompt : null,
+          prompt: promptForGeneration || null,
           itemName: formData.name,
           description: formData.description,
           category: category?.name,
+          orientation: imageOrientation,
+          sizePreset: imageSizePreset,
         }),
       })
 
@@ -485,9 +538,57 @@ export default function MenuForm({
       setCustomPrompt('')
     } catch (error) {
       console.error('Error generating image:', error)
-      toast({ title: 'Image Generation Failed', description: error instanceof Error ? error.message : 'Failed to generate image', variant: 'destructive' })
+      toast({
+        title: 'Image Generation Failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to generate image',
+        variant: 'destructive',
+      })
     } finally {
       setGeneratingImage(false)
+    }
+  }
+
+  const saveBackgroundPrompt = async () => {
+    if (savingBackgroundPrompt) {
+      return
+    }
+
+    setSavingBackgroundPrompt(true)
+    try {
+      const response = await fetch('/api/user/background', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: defaultBackgroundDraft,
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to save background prompt')
+      }
+
+      const savedValue = data.defaultBackgroundPrompt ?? ''
+      setSavedBackgroundPrompt(savedValue)
+      setDefaultBackgroundDraft(savedValue)
+
+      toast({
+        title: 'Default background saved',
+        description: 'Your prompt will now be reused for future menu images.',
+      })
+    } catch (error) {
+      console.error('Error saving background prompt:', error)
+      toast({
+        title: 'Save Failed',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Unable to save background prompt. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingBackgroundPrompt(false)
     }
   }
 
@@ -1384,6 +1485,41 @@ export default function MenuForm({
             </Card>
 
             <Card>
+              <CardHeader>
+                <CardTitle>Consistent Background Prompt</CardTitle>
+                <CardDescription>
+                  Describe a background treatment you'd like to reuse for every menu photo. Leave it blank to start from scratch each time.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  rows={3}
+                  value={defaultBackgroundDraft}
+                  onChange={(event) => setDefaultBackgroundDraft(event.target.value)}
+                  placeholder="e.g., Moody restaurant lighting, a warm wooden table, and soft steam rising from the dish."
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-slate-500">
+                    {trimmedSavedBackgroundPrompt
+                      ? 'This prompt is automatically applied whenever you do not provide a custom prompt.'
+                      : 'Set a default background description to reuse across menu images.'}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={saveBackgroundPrompt}
+                    disabled={
+                      savingBackgroundPrompt ||
+                      defaultBackgroundDraft.trim() === trimmedSavedBackgroundPrompt
+                    }
+                  >
+                    {savingBackgroundPrompt ? 'Saving…' : 'Save default background'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
               <CardHeader className="flex items-center justify-between gap-3">
                 <CardTitle>Recipe Instructions</CardTitle>
                 <div className="flex flex-wrap gap-2">
@@ -1873,8 +2009,8 @@ export default function MenuForm({
           setPreviewImageUrl(null)
         }
       }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+          <DialogContent className="max-w-lg max-h-[80vh]">
+            <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-emerald-500" />
               Generate Image with AI
@@ -1883,7 +2019,7 @@ export default function MenuForm({
               Upload your own photo for professional enhancement, or generate a new image from scratch.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
             {generatingImage ? (
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 <Loader2 className="h-12 w-12 animate-spin text-emerald-500" />
@@ -1924,8 +2060,6 @@ export default function MenuForm({
                       variant="outline"
                       onClick={() => {
                         setPreviewImageUrl(null)
-                        setCustomPrompt('')
-                        setUploadedPhoto(null)
                       }}
                     >
                       Try Again
@@ -1985,35 +2119,108 @@ export default function MenuForm({
                   )}
                 </div>
 
-                {/* Divider */}
                 {!uploadedPhoto && (
-                  <>
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-slate-200" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-white px-2 text-slate-500">or generate from scratch</span>
-                      </div>
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-slate-200" />
                     </div>
-
-                    {/* Custom Prompt Section */}
-                    <div className="space-y-2">
-                      <Label htmlFor="customPrompt">Custom Prompt (optional)</Label>
-                      <Textarea
-                        id="customPrompt"
-                        value={customPrompt}
-                        onChange={(e) => setCustomPrompt(e.target.value)}
-                        placeholder="e.g., A gourmet burger with melted cheese, presented on a wooden board..."
-                        rows={3}
-                        disabled={generatingImage}
-                      />
-                      <p className="text-xs text-slate-500">
-                        Leave blank to auto-generate based on item name, category, and description.
-                      </p>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-white px-2 text-slate-500">or generate from scratch</span>
                     </div>
-                  </>
+                  </div>
                 )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="customPrompt">Custom Prompt (optional)</Label>
+                  <Textarea
+                    id="customPrompt"
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    placeholder="Describe subtle adjustments or recreate the scene from scratch..."
+                    rows={3}
+                    disabled={generatingImage}
+                  />
+                  {trimmedSavedBackgroundPrompt && (
+                    <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="leading-relaxed">
+                        Default background prompt ready. Apply it to speed up every menu image.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCustomPrompt(trimmedSavedBackgroundPrompt)}
+                        disabled={generatingImage}
+                        className="rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-600"
+                      >
+                        Use default prompt
+                      </Button>
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-500">
+                    {uploadedPhoto
+                      ? 'Tell us how to tweak the uploaded photo (lighting, crop, mood, minor edits).'
+                      : 'Leave blank to auto-generate based on item name, category, and description.'}
+                  </p>
+                </div>
+                <div className="space-y-3 border-t border-dashed border-slate-200 pt-3">
+                  <div className="space-y-2">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                      Orientation
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {imageOrientationOptions.map((option) => {
+                        const isActive = option.value === imageOrientation
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setImageOrientation(option.value)}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
+                              isActive
+                                ? 'border-emerald-500 bg-emerald-100 text-slate-900'
+                                : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
+                            }`}
+                          >
+                            <span className="block text-sm">{option.label}</span>
+                            <span className="text-[10px] text-slate-400">{option.aspect}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <p className="text-xs text-slate-500 italic">
+                      {currentOrientationOption.description}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                      Target size
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {imageSizeOptions.map((option) => {
+                        const isActive = option.value === imageSizePreset
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setImageSizePreset(option.value)}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
+                              isActive
+                                ? 'border-emerald-500 bg-emerald-100 text-slate-900'
+                                : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
+                            }`}
+                          >
+                            <span className="block text-sm">{option.label}</span>
+                            <span className="text-[10px] text-slate-400">{`${option.pixels}px`}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <p className="text-xs text-slate-500 italic">
+                      {currentSizeOption.description}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -2031,10 +2238,10 @@ export default function MenuForm({
               >
                 Cancel
               </Button>
-              <Button
-                type="button"
-                onClick={() => generateImage(!!customPrompt)}
-              >
+                      <Button
+                        type="button"
+                        onClick={generateImage}
+                      >
                 <Sparkles className="h-4 w-4 mr-2" />
                 {uploadedPhoto ? 'Enhance Photo' : 'Generate Image'}
               </Button>

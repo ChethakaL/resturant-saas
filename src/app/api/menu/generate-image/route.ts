@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import {
+  ImageOrientation,
+  ImageSizePreset,
+  imageOrientationPrompts,
+  imageSizePrompts,
+} from '@/lib/image-format'
+import { enforceImageDimensions } from '@/lib/image-processor'
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,7 +16,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { prompt, itemName, description, category } = await request.json()
+    const {
+      prompt,
+      itemName,
+      description,
+      category,
+      orientation = 'landscape',
+      sizePreset = 'medium',
+    }: {
+      prompt?: string | null
+      itemName?: string
+      description?: string
+      category?: string
+      orientation?: ImageOrientation
+      sizePreset?: ImageSizePreset
+    } = await request.json()
 
     if (!process.env.GOOGLE_AI_KEY) {
       return NextResponse.json(
@@ -18,15 +39,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Build the prompt - use custom prompt if provided, otherwise use auto-generated
-    let imagePrompt = prompt
-    if (!imagePrompt) {
-      imagePrompt = `Professional food photography of ${itemName}${
-        category ? ` (${category})` : ''
-      }${
-        description ? `, ${description}` : ''
-      }. High-quality, appetizing presentation on a clean plate with beautiful lighting, garnish, and styling. Restaurant menu quality, photorealistic.`
-    }
+    // Build orientation / size hints and merge with provided prompt
+    const orientationHint = imageOrientationPrompts[orientation] ?? ''
+    const sizeHint = imageSizePrompts[sizePreset] ?? ''
+
+    const basePrompt =
+      !prompt || !prompt.trim()
+        ? `Professional food photography of ${itemName}${
+            category ? ` (${category})` : ''
+          }${description ? `, ${description}` : ''}. High-quality, appetizing presentation on a clean plate with beautiful lighting, garnish, and styling. Restaurant menu quality, photorealistic.`
+        : prompt.trim()
+
+    const hintParts = [orientationHint, sizeHint].filter(Boolean)
+    const imagePrompt = hintParts.length
+      ? `${basePrompt} ${hintParts.join(' ')}`
+      : basePrompt
 
     console.log('Generating image with Gemini 2.5 Flash Image:', imagePrompt)
 
@@ -112,7 +139,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Return as data URL (same as marketing-tool approach)
-    const imageDataUrl = `data:${imageMimeType};base64,${imageBase64}`
+    const processed = await enforceImageDimensions(
+      imageBase64,
+      orientation,
+      sizePreset
+    )
+    const imageDataUrl = `data:${processed.mimeType};base64,${processed.base64}`
 
     console.log('Image generated successfully with Gemini 2.5 Flash Image')
 

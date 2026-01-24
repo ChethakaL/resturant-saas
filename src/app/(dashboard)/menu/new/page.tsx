@@ -27,6 +27,10 @@ export default async function NewMenuItemPage() {
   const restaurantId = session!.user.restaurantId
 
   const data = await getFormData(restaurantId)
+  const user = await prisma.user.findUnique({
+    where: { id: session!.user.id },
+  })
+  const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
 
   return (
     <MenuForm
@@ -34,6 +38,7 @@ export default async function NewMenuItemPage() {
       ingredients={data.ingredients}
       addOns={data.addOns}
       mode="create"
+      defaultBackgroundPrompt={defaultBackgroundPrompt}
     />
   )
 }

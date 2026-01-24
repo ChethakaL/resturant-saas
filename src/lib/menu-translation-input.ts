@@ -1,4 +1,4 @@
-import { MenuItemTranslationLanguage } from '@prisma/client'
+import type { MenuItemTranslationLanguage } from '@prisma/client'
 
 export interface TranslationInputPayload {
   language: MenuItemTranslationLanguage
@@ -10,9 +10,9 @@ export interface TranslationInputPayload {
 }
 
 const SUPPORTED_LANGUAGES: MenuItemTranslationLanguage[] = [
-  MenuItemTranslationLanguage.ar,
-  MenuItemTranslationLanguage.ku,
-]
+  'ar',
+  'ku',
+] as MenuItemTranslationLanguage[]
 
 export function normalizeTranslationInputs(items: unknown): TranslationInputPayload[] {
   if (!Array.isArray(items)) {
