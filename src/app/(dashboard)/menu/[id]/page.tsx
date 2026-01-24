@@ -21,6 +21,7 @@ async function getMenuItemData(id: string, restaurantId: string) {
           addOn: true,
         },
       },
+      translations: true,
     },
   })
 

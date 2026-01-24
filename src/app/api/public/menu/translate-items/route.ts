@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 import { prisma } from '@/lib/prisma'
 import type {
   MenuItemTranslation,
   MenuItemTranslationLanguage,
 } from '@prisma/client'
 import { callGemini, parseGeminiJson } from '@/lib/generative'
+import { buildSourceFingerprint } from '@/lib/menu-translations'
+import { DEFAULT_CATEGORY_NAME } from '@/lib/menu-translation-seed'
 
 type LanguageCode = 'en' | 'ar' | 'ku'
 
@@ -38,24 +39,11 @@ interface TranslatedItemPayload {
   carbs?: number | null
 }
 
-function buildSourceFingerprint(item: TranslationRequestItem) {
-  const payload = {
-    name: (item.name || '').trim(),
-    description: (item.description || '').trim(),
-    category: item.category?.trim() || 'Chef specials',
-    price: item.price ?? 0,
-    calories: item.calories ?? 0,
-    protein: item.protein ?? null,
-    carbs: item.carbs ?? null,
-  }
-  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')
-}
-
 function buildSnippetLine(item: TranslationRequestItem) {
   const lineParts = [
     `- ID: ${item.id}`,
     `Name: ${item.name}`,
-    `Category: ${item.category || 'Chef specials'}`,
+    `Category: ${item.category || DEFAULT_CATEGORY_NAME}`,
     `Description: ${item.description || 'No description provided'}`,
     `Price: ${item.price ?? 'unknown'}`,
     `Calories: ${item.calories ?? 'unknown'}`,
@@ -126,7 +114,7 @@ export async function POST(request: NextRequest) {
         protein:
           typeof item.protein === 'number' ? item.protein : null,
         carbs: typeof item.carbs === 'number' ? item.carbs : null,
-        category: item.category || 'Chef specials',
+        category: item.category || DEFAULT_CATEGORY_NAME,
         price: typeof item.price === 'number' ? item.price : null,
         updatedAt: item.updatedAt || null,
       })) as TranslationRequestItem[]

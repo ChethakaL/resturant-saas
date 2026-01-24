@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo, useRef, ChangeEvent } from 'react'
+import { useState, useMemo, useRef, useEffect, ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,13 +20,41 @@ import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, Alert
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
-import { Category, Ingredient, MenuItem, MenuItemIngredient, AddOn, MenuItemAddOn } from '@prisma/client'
+import {
+  Category,
+  Ingredient,
+  MenuItem,
+  MenuItemIngredient,
+  AddOn,
+  MenuItemAddOn,
+  MenuItemTranslation,
+} from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
+import { buildTranslationSeed, TranslationSeedPayload } from '@/lib/menu-translation-seed'
 
 interface RecipeIngredient {
   ingredientId: string
   quantity: number
   pieceCount?: number | null
+}
+
+const translationLanguages = [
+  { code: 'ar', label: 'Iraqi Arabic' },
+  { code: 'ku', label: 'Sorani Kurdish' },
+] as const
+
+type LanguageCode = (typeof translationLanguages)[number]['code']
+
+interface TranslationDraft {
+  name: string
+  description: string
+  aiDescription: string
+  protein: number | null
+  carbs: number | null
+  loading: boolean
+  error?: string
+  dirty: boolean
+  signature: string
 }
 
 interface MenuFormProps {
@@ -37,6 +65,7 @@ interface MenuFormProps {
   menuItem?: MenuItem & {
     ingredients: (MenuItemIngredient & { ingredient: Ingredient })[]
     addOns?: (MenuItemAddOn & { addOn: AddOn })[]
+    translations?: MenuItemTranslation[]
   }
 }
 
@@ -56,6 +85,7 @@ export default function MenuForm({
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const translationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // AI Recipe suggestion state
   const [showRecipeDialog, setShowRecipeDialog] = useState(false)
@@ -67,10 +97,10 @@ export default function MenuForm({
   // AI description and nutrition state
   const [generatingDescription, setGeneratingDescription] = useState(false)
   const [estimatingNutrition, setEstimatingNutrition] = useState(false)
-  const [formData, setFormData] = useState({
+  const initialFormData = {
     name: menuItem?.name || '',
     description: menuItem?.description || '',
-    price: menuItem?.price.toString() || '',
+    price: menuItem?.price?.toString() || '',
     categoryId: menuItem?.categoryId || '',
     available: menuItem?.available ?? true,
     imageUrl: menuItem?.imageUrl || '',
@@ -78,7 +108,226 @@ export default function MenuForm({
     protein: (menuItem as any)?.protein?.toString() || '',
     carbs: (menuItem as any)?.carbs?.toString() || '',
     tags: menuItem?.tags?.join(', ') || '',
+  }
+
+  const [formData, setFormData] = useState(initialFormData)
+
+  const initialCategoryName = categories.find(
+    (category) => category.id === initialFormData.categoryId
+  )?.name
+
+  const initialTranslationSeed = buildTranslationSeed({
+    name: initialFormData.name,
+    description: initialFormData.description,
+    categoryName: initialCategoryName,
+    price: initialFormData.price,
+    calories: initialFormData.calories,
+    protein: initialFormData.protein,
+    carbs: initialFormData.carbs,
   })
+
+  const translationBaseSignature =
+    mode === 'edit' ? initialTranslationSeed?.signature ?? '' : ''
+
+  const [translationsState, setTranslationsState] = useState<
+    Record<LanguageCode, TranslationDraft>
+  >(() => {
+    return translationLanguages.reduce((acc, language) => {
+      const existing = menuItem?.translations?.find(
+        (translation) => translation.language === language.code
+      )
+
+      acc[language.code] = {
+        name: existing?.translatedName || '',
+        description: existing?.translatedDescription || '',
+        aiDescription: existing?.aiDescription || '',
+        protein: existing?.protein ?? null,
+        carbs: existing?.carbs ?? null,
+        loading: false,
+        error: undefined,
+        dirty: false,
+        signature: translationBaseSignature,
+      }
+      return acc
+    }, {} as Record<LanguageCode, TranslationDraft>)
+  })
+
+  const translationSeed = useMemo(() => {
+    const selectedCategoryName = categories.find(
+      (category) => category.id === formData.categoryId
+    )?.name
+
+    return buildTranslationSeed({
+      name: formData.name,
+      description: formData.description,
+      categoryName: selectedCategoryName,
+      price: formData.price,
+      calories: formData.calories,
+      protein: formData.protein,
+      carbs: formData.carbs,
+    })
+  }, [
+    categories,
+    formData.name,
+    formData.description,
+    formData.categoryId,
+    formData.price,
+    formData.calories,
+    formData.protein,
+    formData.carbs,
+  ])
+
+  const translationPayload = translationSeed?.payload
+  const translationSignature = translationSeed?.signature ?? ''
+
+  const updateTranslationField = (
+    language: LanguageCode,
+    field: 'name' | 'description',
+    value: string
+  ) => {
+    setTranslationsState((prev) => ({
+      ...prev,
+      [language]: {
+        ...prev[language],
+        [field]: value,
+        dirty: true,
+      },
+    }))
+  }
+
+  const translateSingleLanguage = async (
+    language: LanguageCode,
+    payload: TranslationSeedPayload,
+    signature: string
+  ) => {
+    setTranslationsState((prev) => ({
+      ...prev,
+      [language]: {
+        ...prev[language],
+        loading: true,
+        error: undefined,
+      },
+    }))
+
+    try {
+      const response = await fetch('/api/menu/translate-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language,
+          name: payload.name,
+          description: payload.description,
+          category: payload.category,
+          price: payload.price,
+          calories: payload.calories,
+          protein: payload.protein,
+          carbs: payload.carbs,
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Translation failed')
+      }
+
+      setTranslationsState((prev) => ({
+        ...prev,
+        [language]: {
+          ...prev[language],
+          name: data.name || prev[language].name,
+          description: data.description || prev[language].description,
+          aiDescription: data.aiDescription || prev[language].aiDescription,
+          protein:
+            typeof data.protein === 'number'
+              ? data.protein
+              : prev[language].protein,
+          carbs:
+            typeof data.carbs === 'number'
+              ? data.carbs
+              : prev[language].carbs,
+          loading: false,
+          error: undefined,
+          dirty: false,
+          signature,
+        },
+      }))
+    } catch (error) {
+      setTranslationsState((prev) => ({
+        ...prev,
+        [language]: {
+          ...prev[language],
+          loading: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to translate text',
+        },
+      }))
+    }
+  }
+
+  const regenerateTranslation = (language: LanguageCode) => {
+    if (!translationPayload) {
+      return
+    }
+
+    setTranslationsState((prev) => ({
+      ...prev,
+      [language]: {
+        ...prev[language],
+        dirty: false,
+      },
+    }))
+
+    translateSingleLanguage(language, translationPayload, translationSignature)
+  }
+
+  useEffect(() => {
+    if (!translationPayload) {
+      return
+    }
+
+    if (translationTimerRef.current) {
+      clearTimeout(translationTimerRef.current)
+    }
+
+    translationTimerRef.current = setTimeout(() => {
+      const languagesToUpdate = translationLanguages.filter((language) => {
+        const state = translationsState[language.code]
+        if (!state || state.dirty) {
+          return false
+        }
+
+        if (!state.signature) {
+          return true
+        }
+
+        if (state.signature !== translationSignature) {
+          return true
+        }
+
+        if (!state.name && !state.description) {
+          return true
+        }
+
+        return false
+      })
+
+      if (languagesToUpdate.length === 0) {
+        return
+      }
+
+      languagesToUpdate.forEach((language) => {
+        translateSingleLanguage(language.code, translationPayload, translationSignature)
+      })
+    }, 900)
+
+    return () => {
+      if (translationTimerRef.current) {
+        clearTimeout(translationTimerRef.current)
+      }
+    }
+  }, [translationPayload, translationSignature])
 
   const [recipe, setRecipe] = useState<RecipeIngredient[]>(
     menuItem?.ingredients.map((ing) => ({
@@ -641,6 +890,30 @@ export default function MenuForm({
     setLoading(true)
 
     try {
+      const preparedTranslations = translationLanguages
+        .map((language) => {
+          const translation = translationsState[language.code]
+          if (!translation) return null
+
+          const hasContent =
+            translation.name.trim().length > 0 ||
+            translation.description.trim().length > 0
+
+          if (!hasContent) {
+            return null
+          }
+
+          return {
+            language: language.code,
+            name: translation.name.trim(),
+            description: translation.description.trim(),
+            aiDescription: translation.aiDescription,
+            protein: translation.protein,
+            carbs: translation.carbs,
+          }
+        })
+        .filter(Boolean)
+
       const url = mode === 'create' ? '/api/menu' : `/api/menu/${menuItem?.id}`
       const method = mode === 'create' ? 'POST' : 'PATCH'
 
@@ -672,6 +945,7 @@ export default function MenuForm({
           recipeTips: recipeTips,
           // Add-ons
           addOnIds: selectedAddOnIds,
+          translations: preparedTranslations,
         }),
       })
 
@@ -998,6 +1272,114 @@ export default function MenuForm({
                   />
                   <p className="text-xs text-slate-500">Comma-separated tags</p>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Menu Translations</CardTitle>
+                <CardDescription>
+                  Auto-generate Iraqi Arabic and Sorani Kurdish names and descriptions.
+                  You can always edit them before saving.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {translationLanguages.map((language) => {
+                  const translation = translationsState[language.code]
+                  if (!translation) return null
+
+                  return (
+                    <div
+                      key={language.code}
+                      className="space-y-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {language.label}
+                          </p>
+                          {translation.dirty && (
+                            <Badge variant="destructive" className="text-[10px] uppercase">
+                              Edited
+                            </Badge>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          onClick={() => regenerateTranslation(language.code)}
+                          disabled={!translationPayload || translation.loading}
+                        >
+                          {translation.loading ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            'Refresh'
+                          )}
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor={`translation-name-${language.code}`}>Name</Label>
+                          <Input
+                            id={`translation-name-${language.code}`}
+                            value={translation.name}
+                            onChange={(event) =>
+                              updateTranslationField(
+                                language.code,
+                                'name',
+                                event.target.value
+                              )
+                            }
+                            placeholder={`Auto translated name (${language.label})`}
+                          />
+                        </div>
+                        <div className="md:col-span-2 space-y-2">
+                          <Label htmlFor={`translation-description-${language.code}`}>
+                            Description
+                          </Label>
+                          <Textarea
+                            id={`translation-description-${language.code}`}
+                            rows={2}
+                            value={translation.description}
+                            onChange={(event) =>
+                              updateTranslationField(
+                                language.code,
+                                'description',
+                                event.target.value
+                              )
+                            }
+                            placeholder={`Auto translated description (${language.label})`}
+                          />
+                        </div>
+                      </div>
+
+                      {translation.aiDescription && (
+                        <p className="text-xs italic text-slate-500">
+                          {translation.aiDescription}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+                        <span>
+                          Protein:{' '}
+                          {translation.protein !== null
+                            ? `${translation.protein}g`
+                            : '—'}
+                        </span>
+                        <span>
+                          Carbs:{' '}
+                          {translation.carbs !== null ? `${translation.carbs}g` : '—'}
+                        </span>
+                      </div>
+
+                      {translation.error && (
+                        <p className="text-xs text-red-600">{translation.error}</p>
+                      )}
+                    </div>
+                  )
+                })}
               </CardContent>
             </Card>
 

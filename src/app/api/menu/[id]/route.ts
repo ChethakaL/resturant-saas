@@ -3,6 +3,9 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
+import { buildTranslationSeed } from '@/lib/menu-translation-seed'
+import { buildSourceFingerprint } from '@/lib/menu-translations'
+import { normalizeTranslationInputs } from '@/lib/menu-translation-input'
 
 export async function PATCH(
   request: Request,
@@ -84,6 +87,64 @@ export async function PATCH(
             addOnId,
           })),
         })
+      }
+
+      const sanitizedTranslations = normalizeTranslationInputs(data.translations)
+      if (sanitizedTranslations.length > 0) {
+        const category = await tx.category.findUnique({
+          where: { id: data.categoryId },
+        })
+
+        const translationSeed = buildTranslationSeed({
+          name: data.name,
+          description: data.description ?? '',
+          categoryName: category?.name,
+          price: data.price,
+          calories: data.calories,
+          protein: data.protein,
+          carbs: data.carbs,
+        })
+
+        if (translationSeed) {
+          const sourceHash = buildSourceFingerprint(translationSeed.payload)
+          const sourceUpdatedAt = new Date()
+
+          await Promise.all(
+            sanitizedTranslations.map((translation) =>
+              tx.menuItemTranslation.upsert({
+                where: {
+                  menuItemId_language: {
+                    menuItemId: item.id,
+                    language: translation.language,
+                  },
+                },
+                update: {
+                  translatedName:
+                    translation.name || translationSeed.payload.name,
+                  translatedDescription:
+                    translation.description ||
+                    translationSeed.payload.description,
+                  aiDescription: translation.aiDescription,
+                  protein: translation.protein,
+                  carbs: translation.carbs,
+                  sourceHash,
+                  sourceUpdatedAt,
+                },
+                create: {
+                  menuItemId: item.id,
+                  language: translation.language,
+                  translatedName: translation.name,
+                  translatedDescription: translation.description,
+                  aiDescription: translation.aiDescription,
+                  protein: translation.protein,
+                  carbs: translation.carbs,
+                  sourceHash,
+                  sourceUpdatedAt,
+                },
+              })
+            )
+          )
+        }
       }
 
       return item
