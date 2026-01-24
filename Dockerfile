@@ -53,6 +53,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # Copy static files - must be at .next/static relative to server.js location
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Create and set permissions for cache directory (needed for ISR/revalidation)
+RUN mkdir -p ./.next/cache && chown -R nextjs:nodejs ./.next/cache
+
 # Copy Prisma files and schema
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma

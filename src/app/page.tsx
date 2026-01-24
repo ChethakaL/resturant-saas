@@ -1,11 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import SmartMenu from '@/components/customer/SmartMenu'
-import { unstable_noStore as noStore } from 'next/cache'
+
+// Revalidate on every request - ensures fresh menu data
+export const revalidate = 0
 
 async function getMenuData() {
-  // Opt out of caching - always fetch fresh menu data from database
-  noStore()
-
   const restaurant = await prisma.restaurant.findFirst({
     orderBy: { createdAt: 'asc' },
   })
