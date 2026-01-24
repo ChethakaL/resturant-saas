@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       !prompt || !prompt.trim()
         ? `Professional food photography of ${itemName}${
             category ? ` (${category})` : ''
-          }${description ? `, ${description}` : ''}. High-quality, appetizing presentation on a clean plate with beautiful lighting, garnish, and styling. Restaurant menu quality, photorealistic.`
+          }${description ? `, ${description}` : ''}. IMPORTANT: The dish must be fully visible and centered in the frame - do not crop or cut off any part of the food. Show the complete dish from a slightly elevated angle. High-quality, appetizing presentation on a clean plate with beautiful lighting, garnish, and styling. Leave adequate margin around the food. Restaurant menu quality, photorealistic, full dish visible with nothing cut off.`
         : prompt.trim()
 
     const hintParts = [orientationHint, sizeHint].filter(Boolean)

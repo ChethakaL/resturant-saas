@@ -1128,7 +1128,7 @@ const getLocalizedAddOnName = (name: string) => {
                   <p className="text-white/60">{currentCopy.noItemsMessage}</p>
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-3">
                   {filteredItems.map((item) => {
                     const translation =
                       translationCache[language]?.[item.id]
@@ -1139,138 +1139,114 @@ const getLocalizedAddOnName = (name: string) => {
                     return (
                       <Card
                         key={item.id}
-                        className="overflow-hidden bg-white/95 backdrop-blur text-slate-900 hover:shadow-xl transition-all relative"
+                        className="overflow-hidden bg-white/95 backdrop-blur text-slate-900 hover:shadow-lg transition-all"
+                        onClick={() => setSelectedItemForDetail(item)}
                       >
-                        <div className="relative">
-                          <img
-                            src={
-                              item.imageUrl ||
-                              'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
-                            }
-                            alt={item.name}
-                            className="h-48 w-full object-cover"
-                          />
-                          {item.popularityScore != null && item.popularityScore > 50 && (
-                            <Badge className="absolute top-2 right-2 bg-amber-500 text-white">
-                              Popular
-                            </Badge>
-                          )}
-                        </div>
-                        <CardContent className="space-y-4 pt-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-lg font-semibold leading-tight">
+                        <div className="flex">
+                          {/* Left side - Content */}
+                          <div className="flex-1 p-3 min-w-0">
+                            {/* Title & Price Row */}
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <h3 className="text-base font-semibold leading-tight line-clamp-2">
                                 {displayName}
                               </h3>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                                {getLocalizedCategoryName(item.category?.name)}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-[0.6rem] uppercase tracking-[0.3em] text-slate-500 mt-1">
-                                {currentCopy.costLabel}
-                              </p>
-                              <p className="text-2xl font-bold text-emerald-700 leading-tight">
+                              <p className="text-lg font-bold text-emerald-700 flex-shrink-0">
                                 {formatCurrency(item.price)}
                               </p>
                             </div>
-                          </div>
 
-                          {macroSegments.length > 0 && (
-                            <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                              {macroSegments.map((segment) => (
-                                <span key={segment}>{segment}</span>
-                              ))}
-                            </div>
-                          )}
-
-                          {displayDescription && (
-                            <p className="text-sm text-slate-600 line-clamp-3">
-                              {displayDescription}
+                            {/* Category */}
+                            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+                              {getLocalizedCategoryName(item.category?.name)}
                             </p>
-                          )}
 
-                          {item.tags && item.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {item.tags.map((tag) => {
-                                const tagLabel = getLocalizedTagLabel(tag)
-                                const hasTranslation = tagTranslations[tag.toLowerCase()]?.[language]
-                                const isTagTranslated = language === 'en' || Boolean(hasTranslation)
-                                return (
-                                  <Badge
-                                    key={tag}
-                                    variant="secondary"
-                                    className={`text-xs py-0 px-2 ${!isTagTranslated ? 'opacity-60' : ''}`}
-                                  >
-                                    {getTagIcon(tag)}
-                                    <span className="ml-1">
-                                      {tagLabel}
-                                    </span>
-                                  </Badge>
-                                )
-                              })}
-                            </div>
-                          )}
+                            {/* Description */}
+                            {displayDescription && (
+                              <p className="text-xs text-slate-600 line-clamp-2 mb-2">
+                                {displayDescription}
+                              </p>
+                            )}
 
-                          {item.addOns && item.addOns.length > 0 && (
-                            <div className="space-y-2 pt-1 border-t border-slate-200">
-                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                            {currentCopy.addOnsLabel}
-                          </p>
-                              <div className="flex flex-wrap gap-2">
-                                {item.addOns.map((addOn) => (
-                                  <div
-                                    key={addOn.id}
-                                    className="flex items-center gap-1.5 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-1.5 text-xs"
-                                  >
-                                    <span className="font-medium text-slate-700">
-                                      {getLocalizedAddOnName(addOn.name)}
-                                    </span>
-                                    <span className="text-emerald-600 font-semibold">
-                                      +{formatCurrency(addOn.price)}
-                                    </span>
-                                  </div>
+                            {/* Macros */}
+                            {macroSegments.length > 0 && (
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500 mb-2">
+                                {macroSegments.map((segment) => (
+                                  <span key={segment}>{segment}</span>
                                 ))}
                               </div>
-                            </div>
-                          )}
+                            )}
 
-                          <div className="space-y-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => fetchPairingSuggestions(item)}
-                              disabled={
-                                loadingSuggestions &&
-                                selectedItemForPairing?.id === item.id
-                              }
-                              className="w-full"
-                            >
-                              {loadingSuggestions &&
-                              selectedItemForPairing?.id === item.id ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  {currentCopy.loadingLabel}
-                                </>
-                              ) : (
-                                <>
-                                  <Sparkles className="h-4 w-4 mr-2" />
-                                  {currentCopy.whatGoesWithThis}
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="w-full text-slate-700"
-                              onClick={() => setSelectedItemForDetail(item)}
-                            >
-                              {currentCopy.viewDetails}
-                            </Button>
+                            {/* Tags */}
+                            {item.tags && item.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {item.tags.slice(0, 3).map((tag) => {
+                                  const tagLabel = getLocalizedTagLabel(tag)
+                                  return (
+                                    <span
+                                      key={tag}
+                                      className="inline-flex items-center gap-0.5 text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
+                                    >
+                                      {getTagIcon(tag)}
+                                      {tagLabel}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  fetchPairingSuggestions(item)
+                                }}
+                                disabled={
+                                  loadingSuggestions &&
+                                  selectedItemForPairing?.id === item.id
+                                }
+                                className="flex items-center gap-1 text-[10px] font-medium text-emerald-700 hover:text-emerald-800 transition-colors"
+                              >
+                                {loadingSuggestions &&
+                                selectedItemForPairing?.id === item.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Sparkles className="h-3 w-3" />
+                                )}
+                                <span>Pairings</span>
+                              </button>
+                              <span className="text-slate-300">•</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSelectedItemForDetail(item)
+                                }}
+                                className="text-[10px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                              >
+                                More info
+                              </button>
+                            </div>
                           </div>
-                        </CardContent>
+
+                          {/* Right side - Image */}
+                          <div className="relative w-28 sm:w-36 flex-shrink-0">
+                            <img
+                              src={
+                                item.imageUrl ||
+                                'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
+                              }
+                              alt={item.name}
+                              className="w-full h-full object-cover rounded-r-xl"
+                            />
+                            {item.popularityScore != null && item.popularityScore > 50 && (
+                              <span className="absolute top-1.5 right-1.5 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                                Popular
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </Card>
                     )
                   })}
