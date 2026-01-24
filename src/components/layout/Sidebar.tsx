@@ -11,6 +11,7 @@ import {
   Package,
   LogOut,
   PlusCircle,
+  Layers,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,7 @@ import { Separator } from '@/components/ui/separator'
 const navigation = [
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
   { name: 'Add-ons', href: '/addons', icon: PlusCircle },
+  { name: 'Categories', href: '/categories', icon: Layers },
   { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart },
   { name: 'Orders', href: '/orders', icon: Receipt },
   { name: 'Inventory', href: '/inventory', icon: Package },
