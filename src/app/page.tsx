@@ -1,10 +1,11 @@
 import { prisma } from '@/lib/prisma'
 import SmartMenu from '@/components/customer/SmartMenu'
-
-// Always fetch fresh menu data so admin changes show up immediately on the public menu
-// export const dynamic = 'force-dynamic'
+import { unstable_noStore as noStore } from 'next/cache'
 
 async function getMenuData() {
+  // Opt out of caching - always fetch fresh menu data from database
+  noStore()
+
   const restaurant = await prisma.restaurant.findFirst({
     orderBy: { createdAt: 'asc' },
   })
