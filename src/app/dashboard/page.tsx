@@ -865,52 +865,7 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* INVENTORY ALERTS */}
-      <div>
-        <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-          <Package className="h-5 w-5 text-red-500" />
-          Inventory Alerts
-        </h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card className="border-amber-200 bg-amber-50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-                Low Stock Items
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-600 mb-3">
-                {data.inventory.lowStock}
-              </div>
-              {data.inventory.lowStockItems.slice(0, 3).map((item) => (
-                <div key={item.id} className="text-sm text-slate-700 mb-1">
-                  • {item.name}: {item.stockQuantity.toFixed(1)} {item.unit}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-red-200 bg-red-50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-red-600" />
-                Critical Stock
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-red-600 mb-3">
-                {data.inventory.critical}
-              </div>
-              <p className="text-sm text-red-800">
-                {data.inventory.critical > 0
-                  ? 'Immediate restocking required'
-                  : 'All items above critical level'}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      
     </div>
   )
 }
