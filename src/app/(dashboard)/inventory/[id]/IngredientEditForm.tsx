@@ -7,39 +7,23 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Save, Trash2, Plus, Minus } from 'lucide-react'
+import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
-import { formatCurrency } from '@/lib/utils'
-import { Ingredient, StockAdjustment } from '@prisma/client'
-
-interface IngredientWithAdjustments extends Ingredient {
-  stockAdjustments: StockAdjustment[]
-}
+import { Ingredient } from '@prisma/client'
 
 export default function IngredientEditForm({
   ingredient,
 }: {
-  ingredient: IngredientWithAdjustments
+  ingredient: Ingredient
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [showAdjustment, setShowAdjustment] = useState(false)
   const [formData, setFormData] = useState({
     name: ingredient.name,
     unit: ingredient.unit,
     costPerUnit: ingredient.costPerUnit.toString(),
-    minStockLevel: ingredient.minStockLevel.toString(),
     supplier: ingredient.supplier || '',
     notes: ingredient.notes || '',
-    stockQuantity: ingredient.stockQuantity.toString(),
-    stockChangeReason: '',
-  })
-  const [adjustmentData, setAdjustmentData] = useState({
-    type: 'add',
-    quantity: '',
-    reason: '',
-    notes: '',
   })
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -47,35 +31,6 @@ export default function IngredientEditForm({
     setLoading(true)
 
     try {
-      const newStockQuantity = parseFloat(formData.stockQuantity)
-      const stockDifference = newStockQuantity - ingredient.stockQuantity
-
-      // If stock quantity changed, we need to handle it
-      if (Math.abs(stockDifference) > 0.001) {
-        // If decreasing stock and no reason provided, require reason
-        if (stockDifference < 0 && !formData.stockChangeReason) {
-          alert('Please provide a reason for the stock decrease (e.g., "used", "waste", etc.)')
-          setLoading(false)
-          return
-        }
-
-        // Use the stock adjustment API which handles COGS logging
-        const adjustmentResponse = await fetch(`/api/inventory/${ingredient.id}/adjust`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            quantityChange: stockDifference,
-            reason: formData.stockChangeReason || 'adjustment',
-            notes: `Manual stock edit: Changed from ${ingredient.stockQuantity.toFixed(2)} to ${newStockQuantity.toFixed(2)} ${ingredient.unit}`,
-          }),
-        })
-
-        if (!adjustmentResponse.ok) {
-          throw new Error('Failed to adjust stock')
-        }
-      }
-
-      // Update other ingredient details
       const response = await fetch(`/api/inventory/${ingredient.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -83,7 +38,6 @@ export default function IngredientEditForm({
           name: formData.name,
           unit: formData.unit,
           costPerUnit: parseFloat(formData.costPerUnit),
-          minStockLevel: parseFloat(formData.minStockLevel),
           supplier: formData.supplier || null,
           notes: formData.notes || null,
         }),
@@ -129,44 +83,6 @@ export default function IngredientEditForm({
     }
   }
 
-  const handleStockAdjustment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-
-    try {
-      const quantityChange = parseFloat(adjustmentData.quantity)
-      const finalQuantity = adjustmentData.type === 'add' ? quantityChange : -quantityChange
-
-      const response = await fetch(`/api/inventory/${ingredient.id}/adjust`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          quantityChange: finalQuantity,
-          reason: adjustmentData.reason,
-          notes: adjustmentData.notes || null,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to adjust stock')
-      }
-
-      setShowAdjustment(false)
-      setAdjustmentData({
-        type: 'add',
-        quantity: '',
-        reason: '',
-        notes: '',
-      })
-      router.refresh()
-    } catch (error) {
-      console.error('Error adjusting stock:', error)
-      alert('Failed to adjust stock. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -179,7 +95,7 @@ export default function IngredientEditForm({
           </Link>
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Edit Ingredient</h1>
-            <p className="text-slate-500 mt-1">Update ingredient details and manage stock</p>
+            <p className="text-slate-500 mt-1">Update ingredient details</p>
           </div>
         </div>
         <Button variant="destructive" onClick={handleDelete} disabled={loading}>
@@ -188,331 +104,85 @@ export default function IngredientEditForm({
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Ingredient Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleUpdate} className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="name">
-                    Ingredient Name <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="name"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="unit">
-                    Unit <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="unit"
-                    required
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="costPerUnit">
-                    Cost Per Unit (IQD) <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="costPerUnit"
-                    type="number"
-                    step="0.01"
-                    required
-                    value={formData.costPerUnit}
-                    onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="minStockLevel">
-                    Minimum Stock Level <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="minStockLevel"
-                    type="number"
-                    step="0.01"
-                    required
-                    value={formData.minStockLevel}
-                    onChange={(e) => setFormData({ ...formData, minStockLevel: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="supplier">Supplier</Label>
-                  <Input
-                    id="supplier"
-                    value={formData.supplier}
-                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                  />
-                </div>
-              </div>
-
+      <Card>
+        <CardHeader>
+          <CardTitle>Ingredient Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleUpdate} className="space-y-6">
+            <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3}
+                <Label htmlFor="name">
+                  Ingredient Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="name"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
 
-              <div className="flex gap-3 justify-end">
-                <Link href="/inventory">
-                  <Button type="button" variant="outline" disabled={loading}>
-                    Cancel
-                  </Button>
-                </Link>
-                <Button type="submit" disabled={loading}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Current Stock</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="stockQuantity">Current Stock Quantity</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="stockQuantity"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.stockQuantity}
-                    onChange={(e) => {
-                      const newValue = e.target.value
-                      setFormData({ ...formData, stockQuantity: newValue })
-                    }}
-                    className="text-2xl font-bold"
-                  />
-                  <span className="text-sm text-slate-500">{ingredient.unit}</span>
-                </div>
-                {formData.stockQuantity && parseFloat(formData.stockQuantity) !== ingredient.stockQuantity && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-amber-600">
-                      Will change by: {(
-                        parseFloat(formData.stockQuantity) - ingredient.stockQuantity
-                      ).toFixed(2)} {ingredient.unit}
-                    </p>
-                    {parseFloat(formData.stockQuantity) < ingredient.stockQuantity && (
-                      <div className="space-y-2">
-                        <Label htmlFor="stockChangeReason" className="text-xs">
-                          Reason for decrease <span className="text-red-500">*</span>
-                        </Label>
-                        <Select
-                          value={formData.stockChangeReason}
-                          onValueChange={(value) =>
-                            setFormData({ ...formData, stockChangeReason: value })
-                          }
-                          required
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select reason" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="used">Used (COGS)</SelectItem>
-                            <SelectItem value="waste">Waste</SelectItem>
-                            <SelectItem value="damage">Damage</SelectItem>
-                            <SelectItem value="expired">Expired</SelectItem>
-                            <SelectItem value="adjustment">Adjustment</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {formData.stockChangeReason === 'used' && (
-                          <p className="text-xs text-amber-600">
-                            ⚠️ This will be recorded as COGS in Profit & Loss
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                <Label htmlFor="unit">
+                  Unit <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="unit"
+                  required
+                  value={formData.unit}
+                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                />
               </div>
 
               <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Total Value:</span>
-                  <span className="font-medium">
-                    {formatCurrency(ingredient.stockQuantity * ingredient.costPerUnit)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Min Level:</span>
-                  <span className="font-medium">{ingredient.minStockLevel.toFixed(2)} {ingredient.unit}</span>
-                </div>
+                <Label htmlFor="costPerUnit">
+                  Cost Per Unit (IQD) <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="costPerUnit"
+                  type="number"
+                  step="0.01"
+                  required
+                  value={formData.costPerUnit}
+                  onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
+                />
               </div>
 
-              {!showAdjustment ? (
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  onClick={() => setShowAdjustment(true)}
-                >
-                  Adjust Stock
+              <div className="space-y-2">
+                <Label htmlFor="supplier">Supplier</Label>
+                <Input
+                  id="supplier"
+                  value={formData.supplier}
+                  onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <Link href="/inventory">
+                <Button type="button" variant="outline" disabled={loading}>
+                  Cancel
                 </Button>
-              ) : (
-                <form onSubmit={handleStockAdjustment} className="space-y-3">
-                  <div className="space-y-2">
-                    <Label>Adjustment Type</Label>
-                    <Select
-                      value={adjustmentData.type}
-                      onValueChange={(value) =>
-                        setAdjustmentData({ ...adjustmentData, type: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="add">
-                          <div className="flex items-center gap-2">
-                            <Plus className="h-4 w-4 text-green-600" />
-                            Add Stock
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="remove">
-                          <div className="flex items-center gap-2">
-                            <Minus className="h-4 w-4 text-red-600" />
-                            Remove Stock
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity">Quantity</Label>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      step="0.01"
-                      required
-                      value={adjustmentData.quantity}
-                      onChange={(e) =>
-                        setAdjustmentData({ ...adjustmentData, quantity: e.target.value })
-                      }
-                      placeholder="0.00"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="reason">Reason <span className="text-red-500">*</span></Label>
-                    <Select
-                      value={adjustmentData.reason}
-                      onValueChange={(value) =>
-                        setAdjustmentData({ ...adjustmentData, reason: value })
-                      }
-                      required
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select reason" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="purchase">Purchase</SelectItem>
-                        <SelectItem value="used">Used (COGS)</SelectItem>
-                        <SelectItem value="waste">Waste</SelectItem>
-                        <SelectItem value="adjustment">Adjustment</SelectItem>
-                        <SelectItem value="return">Return</SelectItem>
-                        <SelectItem value="damage">Damage</SelectItem>
-                        <SelectItem value="expired">Expired</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {adjustmentData.type === 'remove' && adjustmentData.reason === 'used' && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        ⚠️ This will be recorded as COGS in Profit & Loss
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="adjustmentNotes">Notes</Label>
-                    <Textarea
-                      id="adjustmentNotes"
-                      value={adjustmentData.notes}
-                      onChange={(e) =>
-                        setAdjustmentData({ ...adjustmentData, notes: e.target.value })
-                      }
-                      placeholder="Optional notes..."
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowAdjustment(false)}
-                      className="flex-1"
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" size="sm" className="flex-1" disabled={loading}>
-                      Apply
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Adjustments</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {ingredient.stockAdjustments.length === 0 ? (
-                  <p className="text-sm text-slate-500">No adjustments yet</p>
-                ) : (
-                  ingredient.stockAdjustments.map((adjustment) => (
-                    <div
-                      key={adjustment.id}
-                      className="flex items-start justify-between text-sm border-b border-slate-100 pb-3 last:border-0 last:pb-0"
-                    >
-                      <div className="space-y-1">
-                        <div className="font-medium capitalize">{adjustment.reason.replace('_', ' ')}</div>
-                        {adjustment.notes && (
-                          <div className="text-xs text-slate-500">{adjustment.notes}</div>
-                        )}
-                        <div className="text-xs text-slate-400">
-                          {new Date(adjustment.timestamp).toLocaleString()}
-                        </div>
-                      </div>
-                      <div
-                        className={`font-mono font-medium ${
-                          adjustment.quantityChange > 0 ? 'text-green-600' : 'text-red-600'
-                        }`}
-                      >
-                        {adjustment.quantityChange > 0 ? '+' : ''}
-                        {adjustment.quantityChange.toFixed(2)}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+              </Link>
+              <Button type="submit" disabled={loading}>
+                <Save className="h-4 w-4 mr-2" />
+                {loading ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }

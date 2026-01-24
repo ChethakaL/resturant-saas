@@ -22,7 +22,6 @@ import {
   Plus,
   Minus,
   Trash2,
-  AlertTriangle,
   Printer,
   Mail,
 } from 'lucide-react'
@@ -47,10 +46,6 @@ interface OrderItem {
   quantity: number
 }
 
-interface PreppedStock {
-  menuItemId: string
-  availableQuantity: number
-}
 
 const DEFAULT_ORDER_DETAILS = {
   customerName: '',
@@ -175,99 +170,12 @@ export default function NewOrderForm({
   const [cashReceived, setCashReceived] = useState('')
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null)
   const [stripeInitLoading, setStripeInitLoading] = useState(false)
-  const [preppedStock, setPreppedStock] = useState<PreppedStock[]>([])
   const [latestOrder, setLatestOrder] = useState<ReceiptOrder | null>(null)
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [customerEmail, setCustomerEmail] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const isCashPayment = orderDetails.paymentMethod === 'CASH'
-  const preppedStockMap = useMemo(
-    () =>
-      new Map(preppedStock.map((item) => [item.menuItemId, item.availableQuantity])),
-    [preppedStock]
-  )
   const { toast } = useToast()
-  const [stockModal, setStockModal] = useState<{
-    open: boolean
-    items: Array<{
-      menuItemId: string
-      name: string
-      available: number
-      requested: number
-    }>
-  }>({ open: false, items: [] })
-
-  const handleReduceStock = () => {
-    setOrderItems((prev) =>
-      prev
-        .map((item) => {
-          const match = stockModal.items.find((stockItem) => stockItem.menuItemId === item.menuItemId)
-          if (!match) return item
-          return {
-            ...item,
-            quantity: Math.min(item.quantity, match.available),
-          }
-        })
-        .filter((item) => item.quantity > 0)
-    )
-    setStockModal({ open: false, items: [] })
-    toast({
-      title: 'Quantities adjusted',
-      description: 'Reduced items to available stock so you can complete the order.',
-    })
-  }
-
-  const handleDismissStockModal = () => {
-    setStockModal({ open: false, items: [] })
-  }
-  const calculateIngredientAvailability = (menuItem: MenuItemWithDetails) => {
-    if (!menuItem.ingredients.length) {
-      return Infinity
-    }
-
-    const servings = menuItem.ingredients
-      .map((ingredient) => {
-        if (!ingredient.quantity || ingredient.quantity <= 0) {
-          return Infinity
-        }
-
-        const stock = ingredient.ingredient.stockQuantity || 0
-        return stock / ingredient.quantity
-      })
-      .filter((value) => Number.isFinite(value))
-
-    if (servings.length === 0) {
-      return Infinity
-    }
-
-    return Math.floor(Math.min(...servings))
-  }
-
-  useEffect(() => {
-    let isMounted = true
-    fetch('/api/meal-prep/stock')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (!isMounted) return
-        if (Array.isArray(data)) {
-          setPreppedStock(
-            data.map((item) => ({
-              menuItemId: item.menuItemId,
-              availableQuantity: item.availableQuantity,
-            }))
-          )
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setPreppedStock([])
-        }
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
 
   // Filter menu items based on search and category
   const filteredMenuItems = useMemo(() => {
@@ -302,41 +210,6 @@ export default function NewOrderForm({
 
   const cashReceivedAmount = parseFloat(cashReceived) || 0
   const changeDue = Math.max(cashReceivedAmount - orderSummary.total, 0)
-
-  // Check stock availability for order
-  const stockWarnings = useMemo(() => {
-    const warnings: string[] = []
-    const ingredientUsage = new Map<string, number>()
-
-    // Calculate total ingredient usage for the order
-    orderItems.forEach((orderItem) => {
-      const menuItem = menuItems.find((m) => m.id === orderItem.menuItemId)
-      if (menuItem) {
-        menuItem.ingredients.forEach((ing) => {
-          const currentUsage = ingredientUsage.get(ing.ingredientId) || 0
-          ingredientUsage.set(
-            ing.ingredientId,
-            currentUsage + ing.quantity * orderItem.quantity
-          )
-        })
-      }
-    })
-
-    // Check if we have enough stock
-    ingredientUsage.forEach((usage, ingredientId) => {
-      const ingredient = menuItems
-        .flatMap((m) => m.ingredients)
-        .find((i) => i.ingredientId === ingredientId)?.ingredient
-
-      if (ingredient && ingredient.stockQuantity < usage) {
-        warnings.push(
-          `Insufficient ${ingredient.name}: Need ${usage.toFixed(2)} ${ingredient.unit}, have ${ingredient.stockQuantity.toFixed(2)} ${ingredient.unit}`
-        )
-      }
-    })
-
-    return warnings
-  }, [orderItems, menuItems])
 
   const addToOrder = (menuItemId: string) => {
     const existing = orderItems.find((item) => item.menuItemId === menuItemId)
@@ -517,59 +390,6 @@ export default function NewOrderForm({
       return
     }
 
-    const partialItems = orderItems
-      .map((item) => {
-        const menuItem = menuItems.find((m) => m.id === item.menuItemId)
-        // Check prepped stock first (this is what shows in the green badge)
-        // Try map lookup first, then fallback to direct array search
-        let preppedAvailable = preppedStockMap.get(item.menuItemId) ?? 0
-        if (preppedAvailable === 0) {
-          // Fallback: search the array directly in case of key mismatch
-          const preppedStockItem = preppedStock.find((ps) => ps.menuItemId === item.menuItemId)
-          preppedAvailable = preppedStockItem?.availableQuantity ?? 0
-        }
-        // Fall back to raw ingredient availability if no prepped stock
-        const rawAvailable = menuItem ? calculateIngredientAvailability(menuItem) : 0
-        // Use prepped stock if available (even if 0), otherwise use raw ingredient availability
-        const available = preppedAvailable > 0 
-          ? preppedAvailable 
-          : (Number.isFinite(rawAvailable) && rawAvailable > 0 ? rawAvailable : 0)
-        return { ...item, available }
-      })
-      .filter((item) => {
-        // Only show as partial if we truly don't have enough stock
-        return item.available < item.quantity
-      })
-
-    if (partialItems.length > 0) {
-      setStockModal({
-        open: true,
-        items: partialItems.map((item) => {
-          const menuItem = menuItems.find((m) => m.id === item.menuItemId)
-          const preppedAvailable = preppedStockMap.get(item.menuItemId) ?? 0
-          const rawAvailable = menuItem ? calculateIngredientAvailability(menuItem) : 0
-          // Show the actual available count (prepped takes priority)
-          const totalAvailable = preppedAvailable > 0 ? preppedAvailable : (Number.isFinite(rawAvailable) ? rawAvailable : 0)
-          return {
-            menuItemId: item.menuItemId,
-            name: menuItem?.name || 'Item',
-            available: totalAvailable,
-            requested: item.quantity,
-          }
-        }),
-      })
-      return
-    }
-
-    if (stockWarnings.length > 0) {
-      toast({
-        title: 'Stock Shortage',
-        description: 'Cannot complete order due to insufficient stock. Please adjust quantities.',
-        variant: 'destructive',
-      })
-      return
-    }
-
     if (!isCashPayment) {
       toast({
         title: 'Card Payment Required',
@@ -692,18 +512,6 @@ export default function NewOrderForm({
                       0
                     )
                     const isInOrder = orderItems.some((o) => o.menuItemId === item.id)
-                    const availablePrepped = preppedStockMap.get(item.id) ?? 0
-                    const inventoryAvailability = calculateIngredientAvailability(item)
-                    const hasInventory =
-                      Number.isFinite(inventoryAvailability) && inventoryAvailability > 0
-                    const availabilityText = availablePrepped > 0
-                      ? `${availablePrepped} prepped`
-                      : hasInventory
-                        ? `${inventoryAvailability} available`
-                        : 'Out of stock'
-                    const availabilityColor = availablePrepped > 0 || hasInventory
-                      ? 'text-emerald-600'
-                      : 'text-red-500'
 
                     return (
                       <button
@@ -737,9 +545,6 @@ export default function NewOrderForm({
                             </div>
                             <div className="text-xs text-slate-500">
                               Cost: {formatCurrency(cost)}
-                            </div>
-                            <div className={`text-xs ${availabilityColor}`}>
-                              {availabilityText}
                             </div>
                           </div>
                         </div>
@@ -923,23 +728,6 @@ export default function NewOrderForm({
                   </div>
                 )}
 
-                {stockWarnings.length > 0 && (
-                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <div className="flex gap-2 items-start">
-                      <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-                      <div className="text-sm text-red-800">
-                        <strong>Stock Warning:</strong>
-                        <ul className="mt-1 space-y-1">
-                          {stockWarnings.map((warning, idx) => (
-                            <li key={idx} className="text-xs">
-                              {warning}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -1076,33 +864,6 @@ export default function NewOrderForm({
               </Card>
             )}
 
-        <Dialog open={stockModal.open} onOpenChange={(open) => !open && handleDismissStockModal()}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Limited Stock</DialogTitle>
-              <DialogDescription>
-                Some items have less stock than requested. Reduce them to continue.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2">
-              {stockModal.items.map((item) => (
-                <div key={item.menuItemId} className="flex justify-between text-sm">
-                  <span>{item.name}</span>
-                  <span className="font-mono text-slate-600">
-                    {item.available} available · {item.requested} requested
-                  </span>
-                </div>
-              ))}
-            </div>
-            <DialogFooter className="flex justify-end gap-2">
-              <Button variant="outline" onClick={handleDismissStockModal}>
-                Cancel
-              </Button>
-              <Button onClick={handleReduceStock}>Reduce & Continue</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
         <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
           <DialogContent>
             <DialogHeader>
@@ -1161,7 +922,6 @@ export default function NewOrderForm({
             disabled={
               loading ||
               orderItems.length === 0 ||
-              stockWarnings.length > 0 ||
               (isCashPayment && cashReceivedAmount < orderSummary.total)
             }
             size="lg"
@@ -1173,11 +933,7 @@ export default function NewOrderForm({
           <Button
             type="button"
             onClick={handleSaveAsPending}
-            disabled={
-              loading ||
-              orderItems.length === 0 ||
-              stockWarnings.length > 0
-            }
+            disabled={loading || orderItems.length === 0}
             variant="outline"
             size="lg"
             className="w-full"

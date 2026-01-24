@@ -16,9 +16,9 @@ export async function POST(request: Request) {
       data: {
         name: data.name,
         unit: data.unit,
-        stockQuantity: data.stockQuantity,
+        stockQuantity: 999999, // Default high value - stock tracking disabled
         costPerUnit: data.costPerUnit,
-        minStockLevel: data.minStockLevel,
+        minStockLevel: 0, // Default value - stock tracking disabled
         supplier: data.supplier,
         notes: data.notes,
         restaurantId: session.user.restaurantId,

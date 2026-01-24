@@ -26,19 +26,6 @@ export async function POST(
         status: 'PENDING',
       },
       include: {
-        items: {
-          include: {
-            menuItem: {
-              include: {
-                ingredients: {
-                  include: {
-                    ingredient: true,
-                  },
-                },
-              },
-            },
-          },
-        },
         table: true,
       },
     })
@@ -48,48 +35,6 @@ export async function POST(
     }
 
     const order = await prisma.$transaction(async (tx) => {
-      const ingredientUsage = new Map<string, number>()
-
-      existing.items.forEach((item) => {
-        item.menuItem.ingredients.forEach((ing) => {
-          const currentUsage = ingredientUsage.get(ing.ingredientId) || 0
-          ingredientUsage.set(
-            ing.ingredientId,
-            currentUsage + ing.quantity * item.quantity
-          )
-        })
-      })
-
-      for (const [ingredientId, usage] of ingredientUsage.entries()) {
-        const ingredient = await tx.ingredient.findUnique({
-          where: { id: ingredientId },
-        })
-
-        if (!ingredient) {
-          throw new Error(`Ingredient not found: ${ingredientId}`)
-        }
-
-        if (ingredient.stockQuantity < usage) {
-          throw new Error(
-            `Insufficient stock for ${ingredient.name}. Need ${usage.toFixed(2)} ${ingredient.unit}, have ${ingredient.stockQuantity.toFixed(2)} ${ingredient.unit}`
-          )
-        }
-
-        await tx.ingredient.update({
-          where: { id: ingredientId },
-          data: { stockQuantity: { decrement: usage } },
-        })
-
-        await tx.stockAdjustment.create({
-          data: {
-            ingredientId,
-            quantityChange: -usage,
-            reason: 'sale_deduction',
-            notes: `Order ${existing.orderNumber} completed`,
-          },
-        })
-      }
-
       // Update table status if assigned
       if (existing.tableId) {
         await tx.table.update({

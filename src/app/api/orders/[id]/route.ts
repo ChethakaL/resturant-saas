@@ -65,92 +65,26 @@ export async function PATCH(
         id: params.id,
         restaurantId: session.user.restaurantId,
       },
-      include: {
-        items: {
-          include: {
-            menuItem: {
-              include: {
-                ingredients: {
-                  include: {
-                    ingredient: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
     })
 
     if (!existing) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    const order = await prisma.$transaction(async (tx) => {
-      // If changing to PREPARING, deduct inventory
-      if (data.status === 'PREPARING' && existing.status === 'PENDING') {
-        const ingredientUsage = new Map<string, number>()
-
-        existing.items.forEach((item) => {
-          item.menuItem.ingredients.forEach((ing) => {
-            const currentUsage = ingredientUsage.get(ing.ingredientId) || 0
-            ingredientUsage.set(
-              ing.ingredientId,
-              currentUsage + ing.quantity * item.quantity
-            )
-          })
-        })
-
-        // Check stock availability
-        for (const [ingredientId, usage] of Array.from(ingredientUsage.entries())) {
-          const ingredient = await tx.ingredient.findUnique({
-            where: { id: ingredientId },
-          })
-
-          if (!ingredient) {
-            throw new Error(`Ingredient not found`)
-          }
-
-          if (ingredient.stockQuantity < usage) {
-            throw new Error(
-              `Insufficient stock for ${ingredient.name}. Need ${usage.toFixed(2)} ${ingredient.unit}, have ${ingredient.stockQuantity.toFixed(2)} ${ingredient.unit}`
-            )
-          }
-        }
-
-        // Deduct inventory
-        for (const [ingredientId, usage] of Array.from(ingredientUsage.entries())) {
-          await tx.ingredient.update({
-            where: { id: ingredientId },
-            data: { stockQuantity: { decrement: usage } },
-          })
-
-          await tx.stockAdjustment.create({
-            data: {
-              ingredientId,
-              quantityChange: -usage,
-              reason: 'sale_deduction',
-              notes: `Order ${existing.orderNumber}`,
-            },
-          })
-        }
-      }
-
-      return tx.sale.update({
-        where: { id: params.id },
-        data: {
-          status: data.status,
-        },
-        include: {
-          items: {
-            include: {
-              menuItem: true,
-            },
+    const order = await prisma.sale.update({
+      where: { id: params.id },
+      data: {
+        status: data.status,
+      },
+      include: {
+        items: {
+          include: {
+            menuItem: true,
           },
-          table: true,
-          waiter: true,
         },
-      })
+        table: true,
+        waiter: true,
+      },
     })
 
     return NextResponse.json(order)
@@ -173,83 +107,34 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const order = await prisma.$transaction(async (tx) => {
-      const sale = await tx.sale.findFirst({
-        where: {
-          id: params.id,
-          restaurantId: session.user.restaurantId,
-        },
-        include: {
-          items: {
-            include: {
-              menuItem: {
-                include: {
-                  ingredients: true,
-                },
-              },
-            },
-          },
-        },
-      })
-
-      if (!sale) {
-        return null
-      }
-
-      if (sale.status === 'CANCELLED') {
-        throw new Error('Order already cancelled')
-      }
-
-      const ingredientUsage = new Map<string, number>()
-
-      sale.items.forEach((item) => {
-        item.menuItem.ingredients.forEach((ing) => {
-          const currentUsage = ingredientUsage.get(ing.ingredientId) || 0
-          ingredientUsage.set(
-            ing.ingredientId,
-            currentUsage + ing.quantity * item.quantity
-          )
-        })
-      })
-
-      for (const [ingredientId, usage] of Array.from(ingredientUsage.entries())) {
-        await tx.ingredient.update({
-          where: { id: ingredientId },
-          data: {
-            stockQuantity: {
-              increment: usage,
-            },
-          },
-        })
-
-        await tx.stockAdjustment.create({
-          data: {
-            ingredientId,
-            quantityChange: usage,
-            reason: 'order_cancel',
-            notes: `Order ${sale.orderNumber} cancelled`,
-          },
-        })
-      }
-
-      return tx.sale.update({
-        where: { id: sale.id },
-        data: {
-          status: 'CANCELLED',
-        },
-        include: {
-          items: {
-            include: {
-              menuItem: true,
-            },
-          },
-        },
-      })
+    const sale = await prisma.sale.findFirst({
+      where: {
+        id: params.id,
+        restaurantId: session.user.restaurantId,
+      },
     })
 
-    if (!order) {
+    if (!sale) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
+
+    if (sale.status === 'CANCELLED') {
+      return NextResponse.json({ error: 'Order already cancelled' }, { status: 400 })
+    }
+
+    const order = await prisma.sale.update({
+      where: { id: sale.id },
+      data: {
+        status: 'CANCELLED',
+      },
+      include: {
+        items: {
+          include: {
+            menuItem: true,
+          },
+        },
+      },
+    })
 
     return NextResponse.json(order)
   } catch (error: any) {

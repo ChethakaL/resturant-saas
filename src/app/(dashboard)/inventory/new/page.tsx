@@ -16,9 +16,7 @@ export default function NewIngredientPage() {
   const [formData, setFormData] = useState({
     name: '',
     unit: '',
-    stockQuantity: '',
     costPerUnit: '',
-    minStockLevel: '',
     supplier: '',
     notes: '',
   })
@@ -34,9 +32,7 @@ export default function NewIngredientPage() {
         body: JSON.stringify({
           name: formData.name,
           unit: formData.unit,
-          stockQuantity: parseFloat(formData.stockQuantity),
           costPerUnit: parseFloat(formData.costPerUnit),
-          minStockLevel: parseFloat(formData.minStockLevel),
           supplier: formData.supplier || null,
           notes: formData.notes || null,
         }),
@@ -105,21 +101,6 @@ export default function NewIngredientPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="stockQuantity">
-                  Current Stock <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="stockQuantity"
-                  type="number"
-                  step="0.01"
-                  required
-                  value={formData.stockQuantity}
-                  onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="costPerUnit">
                   Cost Per Unit (IQD) <span className="text-red-500">*</span>
                 </Label>
@@ -132,24 +113,6 @@ export default function NewIngredientPage() {
                   onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
                   placeholder="0.00"
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="minStockLevel">
-                  Minimum Stock Level <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="minStockLevel"
-                  type="number"
-                  step="0.01"
-                  required
-                  value={formData.minStockLevel}
-                  onChange={(e) => setFormData({ ...formData, minStockLevel: e.target.value })}
-                  placeholder="0.00"
-                />
-                <p className="text-xs text-slate-500">
-                  Alert when stock falls below this level
-                </p>
               </div>
 
               <div className="space-y-2">
