@@ -44,15 +44,15 @@ Based on typical restaurant portions for Middle Eastern/Iraqi cuisine, estimate:
 
 Consider typical ingredients and portion sizes. Be realistic - a main dish might have 300-700 calories, appetizers 100-300 calories, desserts 200-500 calories.
 
-IMPORTANT: Return your response in this exact JSON format only, no additional text:
+IMPORTANT: Return your response as JSON that matches this structure (replace the placeholder values with the actual estimates):
 {
-  "calories": 450,
-  "protein": 25,
-  "carbs": 40,
+  "calories": 0,
+  "protein": 0,
+  "carbs": 0,
   "reasoning": "Brief explanation of the estimate"
 }
 
-Return ONLY valid JSON, no markdown or additional text.`
+Use numbers for calories/protein/carbs and base your reasoning on the provided dish details. Return ONLY valid JSON, no markdown or additional text.`
 
     const result = await model.generateContent(prompt)
     const responseText = result.response.text()

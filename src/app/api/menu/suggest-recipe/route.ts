@@ -73,13 +73,14 @@ Please provide a detailed recipe with:
 4. Estimated calories per serving
 5. Any tips for best results
 
-IMPORTANT: Return your response in this exact JSON format:
+IMPORTANT: Return your response in this exact JSON format, replacing the placeholder numbers with realistic values:
 {
   "recipeName": "Name of the dish",
   "servings": 1,
   "prepTime": "10 minutes",
   "cookTime": "20 minutes",
-  "calories": 450,
+  "price": 0,
+  "calories": 0,
   "ingredients": [
     {
       "name": "Ingredient name",

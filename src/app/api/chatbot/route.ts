@@ -104,13 +104,14 @@ You: "Found it! Creating your menu item with image now... [GENERATE_IMAGE: profe
 {
   "name": "BBQ Devilled Chicken",
   "description": "Tender chicken pieces marinated in smoky BBQ sauce with a spicy kick...",
-  "price": 2500,
+  "price": 0,
   "categoryId": "select-appropriate-category-id",
   "available": true,
-  "calories": 450,
+  "calories": 0,
   "tags": ["spicy", "non-vegetarian"],
   "imageUrl": null
 }
+Replace the placeholder numeric values (price/calories) with realistic estimates derived from the dish before returning the JSON.
 
 **DO NOT include ingredients array - it causes errors!**
 **Choose categoryId from the available categories list above**
