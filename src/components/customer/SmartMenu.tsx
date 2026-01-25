@@ -927,18 +927,18 @@ const getLocalizedAddOnName = (name: string) => {
                       return (
                         <div
                           key={item.id}
-                          className="min-w-[170px] flex-shrink-0 divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/5 shadow-lg shadow-black/40 backdrop-blur"
+                          className="min-w-[150px] flex-shrink-0 divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/5 shadow-lg shadow-black/40 backdrop-blur"
                         >
-                          <div className="h-28 w-full overflow-hidden rounded-t-2xl">
+                          <div className="aspect-square w-36 sm:w-40 overflow-hidden rounded-t-2xl">
                             <img
                               src={
                                 item.imageUrl ||
                                 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=60'
                               }
                               alt={item.name}
-                              className="h-28 w-full object-cover transition duration-200 hover:scale-105"
-                            />
-                          </div>
+                                className="h-full w-full object-cover transition duration-200 hover:scale-105"
+                              />
+                            </div>
                           <div className="space-y-1 px-3 py-3 text-sm">
                             <p className="font-semibold text-white line-clamp-2">
                               {displayName}
@@ -1142,60 +1142,61 @@ const getLocalizedAddOnName = (name: string) => {
                         className="overflow-hidden bg-white/95 backdrop-blur text-slate-900 hover:shadow-lg transition-all"
                         onClick={() => setSelectedItemForDetail(item)}
                       >
-                        <div className="flex">
+                        <div className="flex min-h-[120px] sm:min-h-[140px]">
                           {/* Left side - Content */}
-                          <div className="flex-1 p-3 min-w-0">
-                            {/* Title & Price Row */}
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <h3 className="text-base font-semibold leading-tight line-clamp-2">
-                                {displayName}
-                              </h3>
-                              <p className="text-lg font-bold text-emerald-700 flex-shrink-0">
-                                {formatCurrency(item.price)}
+                          <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
+                            <div>
+                              {/* Title & Price Row */}
+                              <div className="flex items-start justify-between gap-2 mb-0.5">
+                                <h3 className="text-sm font-semibold leading-tight line-clamp-2">
+                                  {displayName}
+                                </h3>
+                                <p className="text-base font-bold text-emerald-700 flex-shrink-0">
+                                  {formatCurrency(item.price)}
+                                </p>
+                              </div>
+
+                              {/* Category */}
+                              <p className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">
+                                {getLocalizedCategoryName(item.category?.name)}
                               </p>
+
+                              {/* Description */}
+                              {displayDescription && (
+                                <p className="text-[11px] text-slate-600 line-clamp-2 mb-1">
+                                  {displayDescription}
+                                </p>
+                              )}
+
+                              {/* Macros & Tags Row */}
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                {macroSegments.length > 0 && (
+                                  <span className="text-[9px] text-slate-500">
+                                    {macroSegments.join(' · ')}
+                                  </span>
+                                )}
+                                {item.tags && item.tags.length > 0 && (
+                                  <>
+                                    {macroSegments.length > 0 && <span className="text-slate-300">|</span>}
+                                    {item.tags.slice(0, 2).map((tag) => {
+                                      const tagLabel = getLocalizedTagLabel(tag)
+                                      return (
+                                        <span
+                                          key={tag}
+                                          className="inline-flex items-center gap-0.5 text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
+                                        >
+                                          {getTagIcon(tag)}
+                                          {tagLabel}
+                                        </span>
+                                      )
+                                    })}
+                                  </>
+                                )}
+                              </div>
                             </div>
 
-                            {/* Category */}
-                            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
-                              {getLocalizedCategoryName(item.category?.name)}
-                            </p>
-
-                            {/* Description */}
-                            {displayDescription && (
-                              <p className="text-xs text-slate-600 line-clamp-2 mb-2">
-                                {displayDescription}
-                              </p>
-                            )}
-
-                            {/* Macros */}
-                            {macroSegments.length > 0 && (
-                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500 mb-2">
-                                {macroSegments.map((segment) => (
-                                  <span key={segment}>{segment}</span>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Tags */}
-                            {item.tags && item.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                {item.tags.slice(0, 3).map((tag) => {
-                                  const tagLabel = getLocalizedTagLabel(tag)
-                                  return (
-                                    <span
-                                      key={tag}
-                                      className="inline-flex items-center gap-0.5 text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
-                                    >
-                                      {getTagIcon(tag)}
-                                      {tagLabel}
-                                    </span>
-                                  )
-                                })}
-                              </div>
-                            )}
-
                             {/* Action Buttons */}
-                            <div className="flex items-center gap-2 pt-1">
+                            <div className="flex items-center gap-2 mt-1">
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -1206,7 +1207,7 @@ const getLocalizedAddOnName = (name: string) => {
                                   loadingSuggestions &&
                                   selectedItemForPairing?.id === item.id
                                 }
-                                className="flex items-center gap-1 text-[10px] font-medium text-emerald-700 hover:text-emerald-800 transition-colors"
+                                className="flex items-center gap-1 text-[9px] font-medium text-emerald-700 hover:text-emerald-800 transition-colors"
                               >
                                 {loadingSuggestions &&
                                 selectedItemForPairing?.id === item.id ? (
@@ -1223,25 +1224,25 @@ const getLocalizedAddOnName = (name: string) => {
                                   e.stopPropagation()
                                   setSelectedItemForDetail(item)
                                 }}
-                                className="text-[10px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                                className="text-[9px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
                               >
                                 More info
                               </button>
                             </div>
                           </div>
 
-                          {/* Right side - Image */}
-                          <div className="relative w-28 sm:w-36 flex-shrink-0">
+                          {/* Right side - Square Image with margin and centered */}
+                          <div className="relative flex-shrink-0 w-[146px] sm:w-[146px] aspect-square flex items-center justify-center p-2">
                             <img
                               src={
                                 item.imageUrl ||
                                 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
                               }
                               alt={item.name}
-                              className="w-full h-full object-cover rounded-r-xl"
+                              className="w-full h-full object-cover rounded"
                             />
                             {item.popularityScore != null && item.popularityScore > 50 && (
-                              <span className="absolute top-1.5 right-1.5 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                              <span className="absolute top-2 right-2 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
                                 Popular
                               </span>
                             )}
