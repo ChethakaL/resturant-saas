@@ -933,7 +933,7 @@ const getLocalizedAddOnName = (name: string) => {
                     Highlights
                   </p>
                   <span className="text-xs text-emerald-300">
-                    {hasChefPicksConfigured ? 'Chef picks' : 'High-margin picks'}
+                    {hasChefPicksConfigured ? 'Chef picks' : 'Chef Picks'}
                   </span>
                 </div>
                 <div className="overflow-x-auto px-4">
