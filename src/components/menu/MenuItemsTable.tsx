@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
-import { Edit, Trash } from 'lucide-react'
+import { Edit, Loader2, Trash } from 'lucide-react'
 
 export interface MenuItemWithMetrics {
   id: string
@@ -28,6 +28,7 @@ export interface MenuItemWithMetrics {
   category: {
     name: string
   }
+  chefPickOrder?: number | null
 }
 
 function getMarginColor(margin: number) {
@@ -46,6 +47,7 @@ export default function MenuItemsTable({
   const [items, setItems] = useState(menuItems)
   const [updatingIds, setUpdatingIds] = useState<string[]>([])
   const [deletingIds, setDeletingIds] = useState<string[]>([])
+  const [chefPickUpdatingIds, setChefPickUpdatingIds] = useState<string[]>([])
   const [menuItemToDelete, setMenuItemToDelete] =
     useState<MenuItemWithMetrics | null>(null)
   const itemsRef = useRef(items)
@@ -95,6 +97,82 @@ export default function MenuItemsTable({
       }
     },
     [updatingIds]
+  )
+
+  const toggleChefPick = useCallback(
+    async (id: string) => {
+      if (chefPickUpdatingIds.includes(id)) return
+
+      const target = itemsRef.current.find((item) => item.id === id)
+      if (!target) return
+
+      setChefPickUpdatingIds((prev) => [...prev, id])
+
+      const isChefPick = target.chefPickOrder != null
+
+      try {
+        if (isChefPick) {
+          const response = await fetch(`/api/chef-picks/${id}`, {
+            method: 'DELETE',
+          })
+
+          if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}))
+            throw new Error(
+              errorBody?.error || 'Failed to remove item from Chef picks.'
+            )
+          }
+
+          setItems((prev) =>
+            prev.map((item) =>
+              item.id === id ? { ...item, chefPickOrder: null } : item
+            )
+          )
+        } else {
+          const response = await fetch('/api/chef-picks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ menuItemId: id }),
+          })
+
+          if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}))
+            throw new Error(
+              errorBody?.error || 'Failed to add item to Chef picks.'
+            )
+          }
+
+          const data = await response.json()
+
+          setItems((prev) =>
+            prev.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    chefPickOrder:
+                      typeof data.displayOrder === 'number'
+                        ? data.displayOrder
+                        : null,
+                  }
+                : item
+            )
+          )
+        }
+      } catch (error) {
+        console.error('Failed to update chef pick', error)
+        toast({
+          title: 'Chef pick update failed',
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Something went wrong. Please try again.',
+          variant: 'destructive',
+        })
+      } finally {
+        setChefPickUpdatingIds((prev) => prev.filter((itemId) => itemId !== id))
+      }
+    },
+    [chefPickUpdatingIds, toast]
   )
 
   const confirmDelete = useCallback(async () => {
@@ -172,6 +250,9 @@ export default function MenuItemsTable({
               <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
                 Margin
               </th>
+              <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                Chef's pick
+              </th>
               <th className="text-center py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
                 Status
               </th>
@@ -184,6 +265,8 @@ export default function MenuItemsTable({
             {items.map((item) => {
               const isUpdating = updatingIds.includes(item.id)
               const isDeleting = deletingIds.includes(item.id)
+              const isChefPick = item.chefPickOrder != null
+              const isChefPickUpdating = chefPickUpdatingIds.includes(item.id)
               return (
                 <tr
                   key={item.id}
@@ -227,6 +310,29 @@ export default function MenuItemsTable({
                     )}`}
                   >
                     {formatPercentage(item.margin)}
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <div className="flex flex-col items-end gap-1">
+                      {isChefPick && (
+                        <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                          Chef pick #{item.chefPickOrder ?? '-'}
+                        </span>
+                      )}
+                      <Button
+                        size="sm"
+                        variant={isChefPick ? 'outline' : 'ghost'}
+                        onClick={() => toggleChefPick(item.id)}
+                        disabled={isChefPickUpdating}
+                      >
+                        {isChefPickUpdating ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : isChefPick ? (
+                          'Remove'
+                        ) : (
+                          'Add'
+                        )}
+                      </Button>
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-center">
                     <button

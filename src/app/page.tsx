@@ -31,6 +31,12 @@ async function getMenuData() {
     orderBy: { price: 'asc' },
   })) as any[]
 
+  const chefPicks = await prisma.chefPick.findMany({
+    where: { restaurantId: restaurant.id },
+    orderBy: { displayOrder: 'asc' },
+  })
+  const chefPickOrderById = new Map(chefPicks.map((pick) => [pick.menuItemId, pick.displayOrder]))
+
   const enrichedMenuItems = menuItems.map((item: any) => {
     const cost = item.ingredients.reduce(
       (sum: number, ing: any) => sum + ing.quantity * ing.ingredient.costPerUnit,
@@ -44,6 +50,7 @@ async function getMenuData() {
       ...rest,
       cost,
       margin,
+      chefPickOrder: chefPickOrderById.get(item.id) ?? null,
       updatedAt: item.updatedAt.toISOString(),
       addOns: menuItemAddOns
         .filter((ma: any) => ma.addOn.available)

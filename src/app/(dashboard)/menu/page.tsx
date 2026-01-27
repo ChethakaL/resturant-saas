@@ -34,48 +34,55 @@ async function getMenuData(
   }
 
   // Run count and paginated fetch in parallel
-  const [totalCount, menuItems, categories, ingredients, avgMarginResult] = await Promise.all([
-    prisma.menuItem.count({ where }),
-    prisma.menuItem.findMany({
-      where,
-      include: {
-        category: true,
-        ingredients: {
-          include: {
-            ingredient: true,
-          },
-        },
-      },
-      orderBy: { name: 'asc' },
-      skip,
-      take: PAGE_SIZE,
-    }),
-    prisma.category.findMany({
-      where: { restaurantId },
-      orderBy: { displayOrder: 'asc' },
-    }),
-    prisma.ingredient.findMany({
-      where: { restaurantId },
-      orderBy: { name: 'asc' },
-    }),
-    // Calculate average margin from all items (lightweight query for summary)
-    prisma.menuItem.findMany({
-      where,
-      select: {
-        price: true,
-        ingredients: {
-          select: {
-            quantity: true,
-            ingredient: {
-              select: { costPerUnit: true },
+  const [totalCount, menuItems, categories, ingredients, avgMarginResult, chefPicks] =
+    await Promise.all([
+      prisma.menuItem.count({ where }),
+      prisma.menuItem.findMany({
+        where,
+        include: {
+          category: true,
+          ingredients: {
+            include: {
+              ingredient: true,
             },
           },
         },
-      },
-    }),
-  ])
+        orderBy: { name: 'asc' },
+        skip,
+        take: PAGE_SIZE,
+      }),
+      prisma.category.findMany({
+        where: { restaurantId },
+        orderBy: { displayOrder: 'asc' },
+      }),
+      prisma.ingredient.findMany({
+        where: { restaurantId },
+        orderBy: { name: 'asc' },
+      }),
+      // Calculate average margin from all items (lightweight query for summary)
+      prisma.menuItem.findMany({
+        where,
+        select: {
+          price: true,
+          ingredients: {
+            select: {
+              quantity: true,
+              ingredient: {
+                select: { costPerUnit: true },
+              },
+            },
+          },
+        },
+      }),
+      prisma.chefPick.findMany({
+        where: { restaurantId },
+        orderBy: { displayOrder: 'asc' },
+      }),
+    ])
 
   // Calculate cost and margin for paginated items
+  const chefPickOrderById = new Map(chefPicks.map((pick) => [pick.menuItemId, pick.displayOrder]))
+
   const itemsWithMetrics = menuItems.map((item) => {
     const cost = item.ingredients.reduce(
       (sum, ing) => sum + ing.quantity * ing.ingredient.costPerUnit,
@@ -88,6 +95,7 @@ async function getMenuData(
       cost,
       margin,
       profit: item.price - cost,
+      chefPickOrder: chefPickOrderById.get(item.id) ?? null,
     }
   })
 

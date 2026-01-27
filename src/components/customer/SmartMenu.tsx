@@ -30,6 +30,7 @@ interface MenuItem {
   tags?: string[]
   popularityScore?: number
   margin?: number
+  chefPickOrder?: number | null
   protein?: number | null
   carbs?: number | null
   category?: { name: string | null; id: string } | null
@@ -534,26 +535,33 @@ export default function SmartMenu({
   }, [menuItems])
 
   // Filter and sort menu items
-  const highlightItemIds = useMemo(() => {
-    const topCandidates = [...menuItems].sort((a, b) => {
-      const popularityDiff =
-        (b.popularityScore || 0) - (a.popularityScore || 0)
-      if (popularityDiff !== 0) {
-        return popularityDiff
-      }
+  const highlightItems = useMemo(() => {
+    const chefPicks = [...menuItems]
+      .filter((item) => item.chefPickOrder != null)
+      .sort(
+        (a, b) =>
+          (a.chefPickOrder ?? 0) - (b.chefPickOrder ?? 0)
+      )
 
-      return (b.margin || 0) - (a.margin || 0)
-    })
+    if (chefPicks.length === 0) {
+      return [...menuItems]
+        .filter((item) => item.margin != null)
+        .sort((a, b) => (b.margin ?? 0) - (a.margin ?? 0))
+        .slice(0, 6)
+    }
 
-    return topCandidates.slice(0, 5).map((item) => item.id)
-  }, [menuItems])
-
-  const highMarginItems = useMemo(() => {
-    return [...menuItems]
-      .filter((item) => item.margin != null)
+    const chefPickIds = new Set(chefPicks.map((item) => item.id))
+    const remaining = [...menuItems]
+      .filter((item) => !chefPickIds.has(item.id) && item.margin != null)
       .sort((a, b) => (b.margin ?? 0) - (a.margin ?? 0))
-      .slice(0, 6)
+
+    return [...chefPicks, ...remaining].slice(0, 6)
   }, [menuItems])
+
+  const highlightItemIds = useMemo(
+    () => highlightItems.slice(0, 5).map((item) => item.id),
+    [highlightItems]
+  )
 
   const filteredItems = useMemo(() => {
     let items = menuItems
@@ -657,6 +665,11 @@ export default function SmartMenu({
     language,
     translationCache,
   ])
+
+  const hasChefPicksConfigured = useMemo(
+    () => menuItems.some((item) => item.chefPickOrder != null),
+    [menuItems]
+  )
 
   const summaryTemplate =
     filteredItems.length === 1
@@ -913,17 +926,19 @@ const getLocalizedAddOnName = (name: string) => {
               </div>
             </div>
 
-            {highMarginItems.length > 0 && (
+            {highlightItems.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-4">
                   <p className="text-xs uppercase tracking-[0.4em] text-white/60">
                     Highlights
                   </p>
-                  <span className="text-xs text-emerald-300">Chef picks</span>
+                  <span className="text-xs text-emerald-300">
+                    {hasChefPicksConfigured ? 'Chef picks' : 'High-margin picks'}
+                  </span>
                 </div>
                 <div className="overflow-x-auto px-4">
                   <div className="flex gap-3 py-2">
-                    {highMarginItems.map((item) => {
+                    {highlightItems.map((item) => {
                       const translation =
                         translationCache[language]?.[item.id]
                       const displayName = translation?.name || item.name

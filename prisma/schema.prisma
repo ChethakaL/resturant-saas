@@ -38,6 +38,7 @@ model Restaurant {
   tables              Table[]
   users               User[]
   wasteRecords        WasteRecord[]
+  chefPicks           ChefPick[]
 
   @@map("restaurants")
 }
@@ -167,12 +168,29 @@ model MenuItem {
   restaurant      Restaurant            @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   preppedStock    PreppedDishStock?
   saleItems       SaleItem[]
+  chefPicks       ChefPick[]
 
   @@index([restaurantId])
   @@index([categoryId])
   @@index([available])
   @@index([popularityScore])
   @@map("menu_items")
+}
+
+model ChefPick {
+  id            String      @id @default(cuid())
+  restaurantId  String
+  menuItemId    String
+  displayOrder  Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  restaurant    Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItem      MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, menuItemId])
+  @@index([restaurantId])
+  @@map("chef_picks")
 }
 
 model MenuItemIngredient {
