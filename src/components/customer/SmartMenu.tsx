@@ -630,19 +630,23 @@ export default function SmartMenu({
       }
     })
 
-    const highlightSet = new Set(highlightItemIds)
-    const highlighted: MenuItem[] = []
-    const others: MenuItem[] = []
+    if (sortBy === 'popular') {
+      const highlightSet = new Set(highlightItemIds)
+      const highlighted: MenuItem[] = []
+      const others: MenuItem[] = []
 
-    items.forEach((item) => {
-      if (highlightSet.has(item.id)) {
-        highlighted.push(item)
-      } else {
-        others.push(item)
-      }
-    })
+      items.forEach((item) => {
+        if (highlightSet.has(item.id)) {
+          highlighted.push(item)
+        } else {
+          others.push(item)
+        }
+      })
 
-    return [...highlighted, ...others]
+      return [...highlighted, ...others]
+    }
+
+    return items
   }, [
     menuItems,
     searchTokens,
