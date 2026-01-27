@@ -28,7 +28,7 @@ async function getMenuData() {
         },
       },
     },
-    orderBy: [{ popularityScore: 'desc' }, { name: 'asc' }],
+    orderBy: { price: 'asc' },
   })) as any[]
 
   const enrichedMenuItems = menuItems.map((item: any) => {
