@@ -61,25 +61,11 @@ export async function POST(request: NextRequest) {
     const prompt = `You are a bilingual Erbil Iraqi chef rewriting menu content for local diners in ${languageLabel}. Translate every text element below, keep all digits exactly as they already appear (do NOT convert them to Arabic-script numerals), and return the following EXACT JSON structure with no extra text:\n{\n  "id": "item-id",\n  "name": "localized name",\n  "description": "Concise ${languageLabel} description",\n  "aiDescription": "Two-sentence expressive story in ${languageLabel}",\n  "protein": 25,\n  "carbs": 40\n}\nKeep the original ID and include a localized name, a short description, an AI-crafted story, and integer protein/carbs estimates. Numbers should stay as ASCII digits. Here is the item to translate:\n${snippet}`
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
-    // Try gemini-2.5-flash-image first (higher quota), fallback to gemini-2.0-flash-exp
-    let model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-image',
+    // Use gemini-2.5-flash for text translation (stable, generateContent supported)
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
     })
-
-    let aiResult
-    try {
-      aiResult = await model.generateContent(prompt)
-    } catch (error: any) {
-      // If model not available, fallback to gemini-2.0-flash-exp
-      if (error?.message?.includes('not found') || error?.status === 404) {
-        model = genAI.getGenerativeModel({
-          model: 'gemini-2.0-flash-exp',
-        })
-        aiResult = await model.generateContent(prompt)
-      } else {
-        throw error
-      }
-    }
+    const aiResult = await model.generateContent(prompt)
     
     const rawText = aiResult.response.text()
 
