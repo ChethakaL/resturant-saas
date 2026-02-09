@@ -637,6 +637,7 @@ model Supplier {
   address         String?
   lat             Float?
   lng             Float?
+  deliveryAreas   String[]               @default([]) @map("delivery_areas")
   status          SupplierAccountStatus  @default(PENDING)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
@@ -737,6 +738,7 @@ model SupplierPrice {
   currency          String
   effectiveFrom     DateTime       @map("effective_from")
   effectiveTo       DateTime?      @map("effective_to")
+  minOrderQty       Float?         @map("min_order_qty")
   createdAt         DateTime       @default(now())
   createdByUserId   String?        @map("created_by_user_id")
   supplierProduct   SupplierProduct @relation(fields: [supplierProductId], references: [id], onDelete: Cascade)

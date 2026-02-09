@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Package, Plus, Pencil, Trash2, DollarSign } from 'lucide-react'
+import { Package, Plus, Pencil, Trash2, DollarSign, History } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -37,6 +38,16 @@ type SupplierProduct = {
   prices: { price: number; currency: string }[]
 }
 
+type PriceHistory = {
+  id: string
+  price: number
+  currency: string
+  effectiveFrom: string
+  effectiveTo: string | null
+  minOrderQty: number | null
+  createdAt: string
+}
+
 export default function SupplierProductsPage() {
   const [products, setProducts] = useState<SupplierProduct[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,9 +65,20 @@ export default function SupplierProductsPage() {
   const [saving, setSaving] = useState(false)
   const [priceModalOpen, setPriceModalOpen] = useState(false)
   const [priceProductId, setPriceProductId] = useState<string | null>(null)
-  const [priceForm, setPriceForm] = useState({ price: '', currency: 'IQD', effectiveFrom: '' })
+  const [priceProductName, setPriceProductName] = useState<string>('')
+  const [priceForm, setPriceForm] = useState({
+    price: '',
+    currency: 'IQD',
+    effectiveFrom: '',
+    effectiveTo: '',
+    minOrderQty: '',
+  })
   const [priceSaving, setPriceSaving] = useState(false)
+  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([])
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   const { toast } = useToast()
+  const searchParams = useSearchParams()
 
   const categories = ['Produce', 'Dairy', 'Meat', 'Seafood', 'Dry Goods', 'Beverages', 'Alcohol', 'Other']
 
@@ -76,6 +98,24 @@ export default function SupplierProductsPage() {
   useEffect(() => {
     fetchProducts()
   }, [])
+
+  // Open add-product modal when arriving from dashboard quick action (?add=1)
+  useEffect(() => {
+    if (searchParams.get('add') === '1') {
+      setEditingId(null)
+      setForm({
+        name: '',
+        category: 'Produce',
+        packSize: '',
+        packUnit: 'kg',
+        brand: '',
+        sku: '',
+        isActive: true,
+      })
+      setModalOpen(true)
+      window.history.replaceState({}, '', '/supplier/products')
+    }
+  }, [searchParams])
 
   const openCreate = () => {
     setEditingId(null)
@@ -159,14 +199,55 @@ export default function SupplierProductsPage() {
     }
   }
 
-  const openPrice = (productId: string) => {
-    setPriceProductId(productId)
+  const handleToggleActive = async (product: SupplierProduct) => {
+    setTogglingId(product.id)
+    try {
+      const res = await fetch(`/api/supplier/products/${product.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !product.isActive }),
+      })
+      if (!res.ok) throw new Error('Toggle failed')
+      toast({
+        title: product.isActive ? 'Deactivated' : 'Activated',
+        description: `${product.name} is now ${product.isActive ? 'inactive' : 'active'}`,
+      })
+      fetchProducts()
+    } catch (e) {
+      toast({ title: 'Error', description: 'Could not update availability', variant: 'destructive' })
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const fetchPriceHistory = useCallback(async (productId: string) => {
+    setPriceHistoryLoading(true)
+    try {
+      const res = await fetch(`/api/supplier/products/${productId}/prices`)
+      if (!res.ok) throw new Error('Failed to load price history')
+      const data = await res.json()
+      setPriceHistory(data)
+    } catch (e) {
+      toast({ title: 'Error', description: 'Could not load price history', variant: 'destructive' })
+      setPriceHistory([])
+    } finally {
+      setPriceHistoryLoading(false)
+    }
+  }, [toast])
+
+  const openPrice = (product: SupplierProduct) => {
+    setPriceProductId(product.id)
+    setPriceProductName(product.name)
     setPriceForm({
       price: '',
       currency: 'IQD',
       effectiveFrom: new Date().toISOString().slice(0, 10),
+      effectiveTo: '',
+      minOrderQty: '',
     })
+    setPriceHistory([])
     setPriceModalOpen(true)
+    fetchPriceHistory(product.id)
   }
 
   const handleSavePrice = async () => {
@@ -180,17 +261,40 @@ export default function SupplierProductsPage() {
           price: Number(priceForm.price),
           currency: priceForm.currency,
           effectiveFrom: priceForm.effectiveFrom || new Date().toISOString(),
+          effectiveTo: priceForm.effectiveTo || null,
+          minOrderQty: priceForm.minOrderQty ? Number(priceForm.minOrderQty) : null,
         }),
       })
       if (!res.ok) throw new Error('Failed to add price')
       toast({ title: 'Price added', description: 'New price is now active' })
-      setPriceModalOpen(false)
-      setPriceProductId(null)
+      // Refresh price history without closing the modal
+      fetchPriceHistory(priceProductId)
+      // Reset form fields but keep the modal open
+      setPriceForm({
+        price: '',
+        currency: priceForm.currency,
+        effectiveFrom: new Date().toISOString().slice(0, 10),
+        effectiveTo: '',
+        minOrderQty: '',
+      })
       fetchProducts()
     } catch (e) {
       toast({ title: 'Error', description: 'Could not add price', variant: 'destructive' })
     } finally {
       setPriceSaving(false)
+    }
+  }
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '—'
+    try {
+      return new Date(dateStr).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    } catch {
+      return dateStr
     }
   }
 
@@ -253,9 +357,18 @@ export default function SupplierProductsPage() {
                       {[p.brand, p.sku].filter(Boolean).join(' / ') || '—'}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={p.isActive ? 'default' : 'secondary'}>
-                        {p.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0"
+                        disabled={togglingId === p.id}
+                        onClick={() => handleToggleActive(p)}
+                        title={p.isActive ? 'Click to deactivate' : 'Click to activate'}
+                      >
+                        <Badge variant={p.isActive ? 'default' : 'secondary'} className="cursor-pointer">
+                          {togglingId === p.id ? '...' : p.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </Button>
                     </TableCell>
                     <TableCell>
                       {p.prices[0] ? (
@@ -265,7 +378,7 @@ export default function SupplierProductsPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => openPrice(p.id)} title="Set price">
+                      <Button variant="ghost" size="icon" onClick={() => openPrice(p)} title="Set price / Price history">
                         <DollarSign className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="icon" onClick={() => openEdit(p)} title="Edit">
@@ -283,6 +396,7 @@ export default function SupplierProductsPage() {
         </CardContent>
       </Card>
 
+      {/* Add / Edit product modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -372,45 +486,127 @@ export default function SupplierProductsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={priceModalOpen} onOpenChange={setPriceModalOpen}>
-        <DialogContent className="max-w-sm">
+      {/* Price history + Add price modal */}
+      <Dialog open={priceModalOpen} onOpenChange={(open) => {
+        setPriceModalOpen(open)
+        if (!open) {
+          setPriceProductId(null)
+          setPriceProductName('')
+          setPriceHistory([])
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Set new price</DialogTitle>
-            <DialogDescription>Add a new price. The previous price is kept for historical costing.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Pricing &mdash; {priceProductName}
+            </DialogTitle>
+            <DialogDescription>
+              View price history and add new prices. Previous prices are kept for historical costing.
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+
+          {/* Price history section */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-slate-700">Price history</h3>
+            {priceHistoryLoading ? (
+              <p className="text-slate-500 text-sm py-4 text-center">Loading price history...</p>
+            ) : priceHistory.length === 0 ? (
+              <p className="text-slate-400 text-sm py-4 text-center">
+                No price records yet. Add the first price below.
+              </p>
+            ) : (
+              <div className="border rounded-md overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Currency</TableHead>
+                      <TableHead>Effective from</TableHead>
+                      <TableHead>Effective to</TableHead>
+                      <TableHead>Min order qty</TableHead>
+                      <TableHead>Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {priceHistory.map((ph) => (
+                      <TableRow key={ph.id}>
+                        <TableCell className="font-medium">{ph.price}</TableCell>
+                        <TableCell>{ph.currency}</TableCell>
+                        <TableCell>{formatDate(ph.effectiveFrom)}</TableCell>
+                        <TableCell>{formatDate(ph.effectiveTo)}</TableCell>
+                        <TableCell>{ph.minOrderQty ?? '—'}</TableCell>
+                        <TableCell className="text-slate-500">{formatDate(ph.createdAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="border-t my-2" />
+
+          {/* Add new price form */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-slate-700">Add new price</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Price per pack</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={priceForm.price}
+                  onChange={(e) => setPriceForm((f) => ({ ...f, price: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Currency</Label>
+                <select
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                  value={priceForm.currency}
+                  onChange={(e) => setPriceForm((f) => ({ ...f, currency: e.target.value }))}
+                >
+                  <option value="IQD">IQD</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Effective from</Label>
+                <Input
+                  type="date"
+                  value={priceForm.effectiveFrom}
+                  onChange={(e) => setPriceForm((f) => ({ ...f, effectiveFrom: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Effective to (optional)</Label>
+                <Input
+                  type="date"
+                  value={priceForm.effectiveTo}
+                  onChange={(e) => setPriceForm((f) => ({ ...f, effectiveTo: e.target.value }))}
+                />
+              </div>
+            </div>
             <div className="grid gap-2">
-              <Label>Price per pack</Label>
+              <Label>Min order qty (optional)</Label>
               <Input
                 type="number"
-                step="any"
-                value={priceForm.price}
-                onChange={(e) => setPriceForm((f) => ({ ...f, price: e.target.value }))}
-                placeholder="0"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Currency</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                value={priceForm.currency}
-                onChange={(e) => setPriceForm((f) => ({ ...f, currency: e.target.value }))}
-              >
-                <option value="IQD">IQD</option>
-                <option value="USD">USD</option>
-              </select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Effective from</Label>
-              <Input
-                type="date"
-                value={priceForm.effectiveFrom}
-                onChange={(e) => setPriceForm((f) => ({ ...f, effectiveFrom: e.target.value }))}
+                step="1"
+                min="0"
+                value={priceForm.minOrderQty}
+                onChange={(e) => setPriceForm((f) => ({ ...f, minOrderQty: e.target.value }))}
+                placeholder="e.g. 5"
               />
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPriceModalOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setPriceModalOpen(false)}>Close</Button>
             <Button onClick={handleSavePrice} disabled={priceSaving || !priceForm.price}>
               {priceSaving ? 'Adding...' : 'Add price'}
             </Button>

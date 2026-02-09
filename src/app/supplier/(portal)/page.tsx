@@ -83,7 +83,7 @@ export default async function SupplierDashboardPage() {
           <Link href="/supplier/products">
             <Button>My Products</Button>
           </Link>
-          <Link href="/supplier/products/new">
+          <Link href="/supplier/products?add=1">
             <Button variant="outline">Add product</Button>
           </Link>
           <Link href="/supplier/stock-requests">

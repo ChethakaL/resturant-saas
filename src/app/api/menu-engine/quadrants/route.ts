@@ -5,6 +5,8 @@ import { NextResponse } from 'next/server'
 import { classifyQuadrant } from '@/lib/menu-engine'
 import type { EngineMenuItem, EngineCategory } from '@/lib/menu-engine'
 
+export const dynamic = 'force-dynamic'
+
 /** Admin-only: returns quadrant classification with CMS/PS (margin/sales) data. */
 export async function GET() {
   try {

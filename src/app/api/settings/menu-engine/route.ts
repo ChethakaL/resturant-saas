@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { DEFAULT_MENU_ENGINE_SETTINGS } from '@/lib/menu-engine-defaults'
 
+export const dynamic = 'force-dynamic'
+
 const menuEngineSchema = z.object({
   mode: z.enum(['classic', 'profit', 'adaptive']).optional(),
   moodFlow: z.boolean().optional(),

@@ -11,6 +11,7 @@ import {
   MapPin,
   LogOut,
   ShoppingCart,
+  User,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Restaurants', href: '/supplier/restaurants', icon: Store },
   { name: 'Analytics', href: '/supplier/analytics', icon: BarChart3 },
   { name: 'Map', href: '/supplier/map', icon: MapPin },
+  { name: 'Profile', href: '/supplier/profile', icon: User },
 ]
 
 interface SupplierSidebarProps {

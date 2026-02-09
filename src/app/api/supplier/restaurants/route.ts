@@ -1,9 +1,9 @@
 import { getServerSession } from 'next-auth'
-
-export const dynamic = 'force-dynamic'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
@@ -44,6 +44,26 @@ export async function GET() {
       },
     })
 
+    // Stock requests grouped by restaurantId for this supplier
+    const stockRequestAgg = await prisma.stockRequest.groupBy({
+      by: ['restaurantId'],
+      where: { supplierId },
+      _count: { id: true },
+      _max: { createdAt: true },
+    })
+
+    // Build a lookup map: restaurantId -> { count, lastDate }
+    const stockRequestMap = new Map<
+      string,
+      { count: number; lastDate: Date | null }
+    >()
+    for (const sr of stockRequestAgg) {
+      stockRequestMap.set(sr.restaurantId, {
+        count: sr._count.id,
+        lastDate: sr._max.createdAt,
+      })
+    }
+
     const byRestaurant = new Map<
       string,
       { restaurant: { id: string; name: string; city: string | null; address: string | null; lat: number | null; lng: number | null }; menuItemIds: Set<string> }
@@ -83,16 +103,21 @@ export async function GET() {
       byRestaurant.get(rid)!.menuItemIds.add(u.menuItemId)
     }
 
-    const list = Array.from(byRestaurant.entries()).map(([restaurantId, data]) => ({
-      restaurantId,
-      restaurantName: data.restaurant.name,
-      city: data.restaurant.city,
-      address: data.restaurant.address,
-      lat: data.restaurant.lat,
-      lng: data.restaurant.lng,
-      menuItemsImpacted: data.menuItemIds.size,
-      status: 'active' as const,
-    }))
+    const list = Array.from(byRestaurant.entries()).map(([restaurantId, data]) => {
+      const srData = stockRequestMap.get(restaurantId)
+      return {
+        restaurantId,
+        restaurantName: data.restaurant.name,
+        city: data.restaurant.city,
+        address: data.restaurant.address,
+        lat: data.restaurant.lat,
+        lng: data.restaurant.lng,
+        menuItemsImpacted: data.menuItemIds.size,
+        status: 'active' as const,
+        lastStockRequestDate: srData?.lastDate?.toISOString() ?? null,
+        stockRequestCount: srData?.count ?? 0,
+      }
+    })
 
     return NextResponse.json(list)
   } catch (error) {

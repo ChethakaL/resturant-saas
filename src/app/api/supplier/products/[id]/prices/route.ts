@@ -56,7 +56,7 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { price, currency, effectiveFrom } = body
+    const { price, currency, effectiveFrom, effectiveTo, minOrderQty } = body
     if (price == null || !currency) {
       return NextResponse.json(
         { error: 'Missing required fields: price, currency' },
@@ -65,15 +65,18 @@ export async function POST(
     }
 
     const effectiveFromDate = effectiveFrom ? new Date(effectiveFrom) : new Date()
+    const effectiveToDate = effectiveTo ? new Date(effectiveTo) : null
 
-    // End the current active price if it exists
-    await prisma.supplierPrice.updateMany({
-      where: {
-        supplierProductId: productId,
-        effectiveTo: null,
-      },
-      data: { effectiveTo: effectiveFromDate },
-    })
+    // End the current active price if it exists (only if new price has no end date, i.e. it becomes the active one)
+    if (!effectiveToDate) {
+      await prisma.supplierPrice.updateMany({
+        where: {
+          supplierProductId: productId,
+          effectiveTo: null,
+        },
+        data: { effectiveTo: effectiveFromDate },
+      })
+    }
 
     const newPrice = await prisma.supplierPrice.create({
       data: {
@@ -81,6 +84,8 @@ export async function POST(
         price: Number(price),
         currency: String(currency),
         effectiveFrom: effectiveFromDate,
+        effectiveTo: effectiveToDate,
+        minOrderQty: minOrderQty ? Number(minOrderQty) : null,
         createdByUserId: session.user.id,
       },
     })

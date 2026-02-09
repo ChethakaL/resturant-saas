@@ -30,6 +30,7 @@ import {
   MenuItemAddOn,
   MenuItemTranslation,
 } from '@prisma/client'
+import { RefreshCw } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { buildTranslationSeed, TranslationSeedPayload } from '@/lib/menu-translation-seed'
 import {
@@ -399,6 +400,21 @@ export default function MenuForm({
     })) || []
   )
 
+  // Data loss prevention: warn before navigating away with unsaved changes (must run after formData and recipe are declared)
+  const formDirtyRef = useRef(false)
+  const initialLoadRef = useRef(true)
+  useEffect(() => {
+    if (initialLoadRef.current) { initialLoadRef.current = false; return }
+    formDirtyRef.current = true
+  }, [formData, recipe])
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (formDirtyRef.current) { e.preventDefault() }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [])
+
   // Store recipe steps and tips
   const [recipeSteps, setRecipeSteps] = useState<string[]>(menuItem?.recipeSteps || [])
   const [recipeTips, setRecipeTips] = useState<string[]>(menuItem?.recipeTips || [])
@@ -430,25 +446,49 @@ export default function MenuForm({
     return [...ingredients, ...newOnes]
   }, [ingredients, newlyCreatedIngredients])
 
+  // Supplier products for recipe costing (4.1)
+  type SupplierProductOption = {
+    id: string; name: string; packSize: number; packUnit: string; supplierName: string;
+    supplierId: string; price: number | null; currency: string; unitCost: number;
+    globalIngredientId: string | null; category: string; brand: string | null
+  }
+  const [supplierProducts, setSupplierProducts] = useState<SupplierProductOption[]>([])
+  useEffect(() => {
+    fetch('/api/recipe-supplier-products')
+      .then((r) => r.ok ? r.json() : [])
+      .then(setSupplierProducts)
+      .catch(() => {})
+  }, [])
+
   // Valid recipe lines (ingredient + quantity > 0) for submit and badges
   const validRecipeLines = useMemo(
     () => recipe.filter((item) => item.ingredientId && item.quantity > 0),
     [recipe]
   )
 
-  // Calculate real-time cost and margin
-  const calculations = useMemo(() => {
-    const cost = recipe.reduce((sum, item) => {
-      const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
-      return sum + (ingredient ? ingredient.costPerUnit * item.quantity : 0)
-    }, 0)
+  // Calculate real-time cost and margin — prefer supplier unitCost, fall back to ingredient.costPerUnit
+  const getItemCost = (item: RecipeIngredient) => {
+    // If supplier product selected and has cached cost, use it
+    if (item.unitCostCached != null && item.unitCostCached > 0) {
+      return item.unitCostCached * item.quantity
+    }
+    // If supplier product selected, compute from supplier product data
+    if (item.supplierProductId) {
+      const sp = supplierProducts.find((p) => p.id === item.supplierProductId)
+      if (sp && sp.unitCost > 0) return sp.unitCost * item.quantity
+    }
+    // Fall back to ingredient base cost
+    const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
+    return ingredient ? ingredient.costPerUnit * item.quantity : 0
+  }
 
+  const calculations = useMemo(() => {
+    const cost = recipe.reduce((sum, item) => sum + getItemCost(item), 0)
     const price = parseFloat(formData.price) || 0
     const profit = price - cost
     const margin = price > 0 ? ((profit / price) * 100) : 0
-
     return { cost, profit, margin }
-  }, [recipe, formData.price, allIngredients])
+  }, [recipe, formData.price, allIngredients, supplierProducts])
 
   const addIngredient = () => {
     // Add new ingredient at the TOP of the list so user can see it
@@ -511,6 +551,46 @@ export default function MenuForm({
     const newRecipe = [...recipe]
     newRecipe[index] = { ...newRecipe[index], [field]: value }
     setRecipe(newRecipe)
+  }
+
+  const selectSupplierProduct = (index: number, supplierProductId: string) => {
+    const sp = supplierProducts.find((p) => p.id === supplierProductId)
+    const newRecipe = [...recipe]
+    if (sp) {
+      newRecipe[index] = {
+        ...newRecipe[index],
+        supplierProductId,
+        unitCostCached: sp.unitCost,
+        currency: sp.currency,
+        lastPricedAt: new Date().toISOString(),
+      }
+    } else {
+      // Cleared supplier
+      newRecipe[index] = {
+        ...newRecipe[index],
+        supplierProductId: null,
+        unitCostCached: null,
+        currency: null,
+        lastPricedAt: null,
+      }
+    }
+    setRecipe(newRecipe)
+  }
+
+  const refreshAllCosts = () => {
+    const newRecipe = recipe.map((item) => {
+      if (!item.supplierProductId) return item
+      const sp = supplierProducts.find((p) => p.id === item.supplierProductId)
+      if (!sp) return item
+      return {
+        ...item,
+        unitCostCached: sp.unitCost,
+        currency: sp.currency,
+        lastPricedAt: new Date().toISOString(),
+      }
+    })
+    setRecipe(newRecipe)
+    toast({ title: 'Costs refreshed', description: 'All recipe costs updated to latest supplier prices' })
   }
 
   const generateImage = async () => {
@@ -1267,6 +1347,7 @@ export default function MenuForm({
       if (saveStatus === 'ACTIVE') {
         setMenuItemStatus('ACTIVE')
       }
+      formDirtyRef.current = false
       router.push('/dashboard/menu')
       router.refresh()
     } catch (error) {
@@ -2108,6 +2189,12 @@ export default function MenuForm({
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Recipe Builder</CardTitle>
                 <div className="flex gap-2">
+                  {recipe.some((r) => r.supplierProductId) && (
+                    <Button type="button" variant="outline" size="sm" onClick={refreshAllCosts} title="Refresh all supplier costs to latest prices">
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh Costs
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
@@ -2134,7 +2221,17 @@ export default function MenuForm({
                   <div className="space-y-3">
                       {recipe.map((item, index) => {
                         const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
-                        const itemCost = ingredient ? ingredient.costPerUnit * item.quantity : 0
+                        const itemCost = getItemCost(item)
+                        const matchingSupplierProducts = supplierProducts.filter((sp) => {
+                          if (!ingredient) return true
+                          // Match by globalIngredientId or by name similarity
+                          if (ingredient.globalIngredientId && sp.globalIngredientId) {
+                            return ingredient.globalIngredientId === sp.globalIngredientId
+                          }
+                          return sp.name.toLowerCase().includes(ingredient.name.toLowerCase()) ||
+                            ingredient.name.toLowerCase().includes(sp.name.toLowerCase())
+                        })
+                        const allSPOptions = matchingSupplierProducts.length > 0 ? matchingSupplierProducts : supplierProducts
                         const countLabel = formatCountLabel(
                           getCountLabelForIngredient(ingredient, item.pieceCount, item.quantity),
                           item.pieceCount || undefined
@@ -2250,6 +2347,31 @@ export default function MenuForm({
                               </div>
                             </div>
                           </div>
+
+                          {/* Supplier product selection (4.1) */}
+                          {supplierProducts.length > 0 && (
+                            <div className="space-y-1">
+                              <Label className="text-xs">Supplier product</Label>
+                              <select
+                                className="flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs"
+                                value={item.supplierProductId ?? ''}
+                                onChange={(e) => selectSupplierProduct(index, e.target.value)}
+                              >
+                                <option value="">No supplier (use base cost)</option>
+                                {allSPOptions.map((sp) => (
+                                  <option key={sp.id} value={sp.id}>
+                                    {sp.name} — {sp.supplierName} ({sp.packSize}{sp.packUnit} @ {sp.price ?? 0} {sp.currency})
+                                  </option>
+                                ))}
+                              </select>
+                              {item.supplierProductId && item.unitCostCached != null && (
+                                <p className="text-[10px] text-slate-400">
+                                  Unit cost: {item.unitCostCached.toFixed(2)} {item.currency}/{ingredient?.unit || 'unit'}
+                                  {item.lastPricedAt && ` — priced ${new Date(item.lastPricedAt).toLocaleDateString()}`}
+                                </p>
+                              )}
+                            </div>
+                          )}
 
                           {ingredient && (
                             <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded">

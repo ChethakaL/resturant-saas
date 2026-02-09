@@ -17,7 +17,8 @@ const PAGE_SIZE = 20
 async function getMenuData(
   restaurantId: string,
   page: number,
-  search?: string
+  search?: string,
+  statusFilter?: string
 ) {
   const skip = (page - 1) * PAGE_SIZE
 
@@ -32,6 +33,9 @@ async function getMenuData(
           },
         }
       : {}),
+    ...(statusFilter === 'DRAFT' ? { status: 'DRAFT' } : {}),
+    ...(statusFilter === 'ACTIVE' ? { status: 'ACTIVE' } : {}),
+    ...(statusFilter === 'COSTING_INCOMPLETE' ? { costingStatus: 'INCOMPLETE' } : {}),
   }
 
   // Run count and paginated fetch in parallel
@@ -97,6 +101,8 @@ async function getMenuData(
       margin,
       profit: item.price - cost,
       chefPickOrder: chefPickOrderById.get(item.id) ?? null,
+      status: (item as any).status ?? 'DRAFT',
+      costingStatus: (item as any).costingStatus ?? 'INCOMPLETE',
     }
   })
 
@@ -125,7 +131,7 @@ async function getMenuData(
 export default async function MenuPage({
   searchParams,
 }: {
-  searchParams?: { page?: string; search?: string | string[] }
+  searchParams?: { page?: string; search?: string | string[]; status?: string }
 }) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
@@ -137,18 +143,18 @@ export default async function MenuPage({
       : Array.isArray(rawSearch)
       ? rawSearch[0]?.trim() ?? ''
       : ''
+  const statusFilter = searchParams?.status ?? ''
 
   const [data, user] = await Promise.all([
-    getMenuData(restaurantId, page, normalizedSearch),
+    getMenuData(restaurantId, page, normalizedSearch, statusFilter),
     prisma.user.findUnique({
       where: { id: session!.user.id },
       select: { defaultBackgroundPrompt: true },
     }),
   ])
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
-  const searchQuery = normalizedSearch
-    ? `&search=${encodeURIComponent(normalizedSearch)}`
-    : ''
+  const searchQuery = (normalizedSearch ? `&search=${encodeURIComponent(normalizedSearch)}` : '')
+    + (statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : '')
 
   return (
     <div className="space-y-6">
@@ -217,11 +223,21 @@ export default async function MenuPage({
                 defaultValue={normalizedSearch}
                 className="min-w-0"
               />
+              <select
+                name="status"
+                defaultValue={statusFilter}
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="">All statuses</option>
+                <option value="DRAFT">Draft</option>
+                <option value="ACTIVE">Published</option>
+                <option value="COSTING_INCOMPLETE">Costing incomplete</option>
+              </select>
               <Button size="sm" type="submit">
                 Search
               </Button>
             </div>
-            {normalizedSearch && (
+            {(normalizedSearch || statusFilter) && (
               <Link href="/dashboard/menu?page=1">
                 <Button variant="outline" size="sm">
                   Clear

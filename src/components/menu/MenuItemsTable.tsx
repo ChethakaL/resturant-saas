@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
+import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import { Edit, Loader2, Trash, Check, X } from 'lucide-react'
 
@@ -25,6 +26,8 @@ export interface MenuItemWithMetrics {
   profit: number
   margin: number
   available: boolean
+  status?: string
+  costingStatus?: string
   category: {
     name: string
   }
@@ -379,8 +382,14 @@ export default function MenuItemsTable({
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="font-medium text-slate-900 truncate">
+                          <div className="font-medium text-slate-900 truncate flex items-center gap-2">
                             {item.name}
+                            {item.status === 'DRAFT' && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Draft</Badge>
+                            )}
+                            {item.costingStatus === 'INCOMPLETE' && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600">Costing incomplete</Badge>
+                            )}
                           </div>
                           {item.chefPickOrder != null && (
                             <span className="text-[10px] uppercase tracking-wide text-amber-600">
