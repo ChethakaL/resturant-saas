@@ -15,6 +15,9 @@ model Restaurant {
   email               String?
   phone               String?
   address             String?
+  city                String?
+  lat                 Float?
+  lng                 Float?
   logo                String?
   currency            String               @default("IQD")
   timezone            String               @default("Asia/Baghdad")
@@ -35,10 +38,13 @@ model Restaurant {
   preppedDishStocks   PreppedDishStock[]
   sales               Sale[]
   shifts              Shift[]
+  stockRequests       StockRequest[]
   tables              Table[]
   users               User[]
   wasteRecords        WasteRecord[]
   chefPicks           ChefPick[]
+  menuShowcases       MenuShowcase[]
+  supplierLinks       RestaurantSupplierLink[]
 
   @@map("restaurants")
 }
@@ -62,27 +68,33 @@ model User {
 }
 
 model Ingredient {
-  id                  String                   @id @default(cuid())
-  name                String
-  unit                String
-  stockQuantity       Float
-  costPerUnit         Float
-  minStockLevel       Float
-  supplier            String?
-  notes               String?
-  restaurantId        String
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  deliveries          Delivery[]
-  expenseTransactions ExpenseTransaction[]
-  restaurant          Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  mealPrepUsages      MealPrepInventoryUsage[]
-  menuItemIngredients MenuItemIngredient[]
-  stockAdjustments    StockAdjustment[]
-  wasteRecords        WasteRecord[]
+  id                    String                   @id @default(cuid())
+  name                  String
+  unit                  String
+  stockQuantity         Float
+  costPerUnit           Float
+  minStockLevel         Float
+  supplier              String?
+  notes                 String?
+  restaurantId          String
+  globalIngredientId    String?
+  preferredSupplierId   String?                  @map("preferred_supplier_id")
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  deliveries            Delivery[]
+  expenseTransactions   ExpenseTransaction[]
+  restaurant            Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  globalIngredient      GlobalIngredient?       @relation(fields: [globalIngredientId], references: [id], onDelete: SetNull)
+  preferredSupplier     Supplier?               @relation(fields: [preferredSupplierId], references: [id], onDelete: SetNull)
+  mealPrepUsages        MealPrepInventoryUsage[]
+  menuItemIngredients   MenuItemIngredient[]
+  stockAdjustments      StockAdjustment[]
+  wasteRecords          WasteRecord[]
 
   @@index([restaurantId])
   @@index([stockQuantity])
+  @@index([globalIngredientId])
+  @@index([preferredSupplierId])
   @@map("ingredients")
 }
 
@@ -129,11 +141,13 @@ model Category {
   name         String
   description  String?
   displayOrder Int        @default(0)
+  showOnMenu   Boolean    @default(true)
   restaurantId String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  menuItems    MenuItem[]
+  restaurant    Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItems     MenuItem[]
+  menuShowcases MenuShowcase[]
 
   @@index([restaurantId])
   @@index([displayOrder])
@@ -147,6 +161,8 @@ model MenuItem {
   price           Float
   imageUrl        String?
   available       Boolean               @default(true)
+  status          MenuItemStatus        @default(DRAFT)
+  costingStatus   CostingStatus         @default(INCOMPLETE)
   categoryId      String
   restaurantId    String
   createdAt       DateTime              @default(now())
@@ -169,6 +185,7 @@ model MenuItem {
   preppedStock    PreppedDishStock?
   saleItems       SaleItem[]
   chefPicks       ChefPick[]
+  showcaseItems   MenuShowcaseItem[]
 
   @@index([restaurantId])
   @@index([categoryId])
@@ -194,18 +211,25 @@ model ChefPick {
 }
 
 model MenuItemIngredient {
-  id           String     @id @default(cuid())
-  menuItemId   String
-  ingredientId String
-  quantity     Float
-  createdAt    DateTime   @default(now())
-  pieceCount   Float?
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  id                String         @id @default(cuid())
+  menuItemId        String
+  ingredientId      String
+  quantity          Float
+  unit              String?
+  supplierProductId String?
+  unitCostCached    Float?
+  currency          String?
+  lastPricedAt      DateTime?
+  createdAt         DateTime       @default(now())
+  pieceCount        Float?
+  ingredient        Ingredient     @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  menuItem          MenuItem       @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  supplierProduct   SupplierProduct? @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
 
   @@unique([menuItemId, ingredientId])
   @@index([menuItemId])
   @@index([ingredientId])
+  @@index([supplierProductId])
   @@map("menu_item_ingredients")
 }
 
@@ -548,6 +572,203 @@ model Shift {
   @@map("shifts")
 }
 
+model MenuShowcase {
+  id                    String             @id @default(cuid())
+  restaurantId          String
+  title                 String             @default("Featured")
+  type                  ShowcaseType       @default(RECOMMENDATIONS)
+  position              String             @default("top")
+  insertAfterCategoryId String?
+  displayOrder          Int                @default(0)
+  isActive              Boolean            @default(true)
+  schedule              Json?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  restaurant            Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  items                 MenuShowcaseItem[]
+  insertAfterCategory   Category?          @relation(fields: [insertAfterCategoryId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId])
+  @@map("menu_showcases")
+}
+
+model MenuShowcaseItem {
+  id           String       @id @default(cuid())
+  showcaseId   String
+  menuItemId   String
+  displayOrder Int          @default(0)
+  createdAt    DateTime     @default(now())
+
+  showcase     MenuShowcase @relation(fields: [showcaseId], references: [id], onDelete: Cascade)
+  menuItem     MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@unique([showcaseId, menuItemId])
+  @@index([showcaseId])
+  @@map("menu_showcase_items")
+}
+
+// ----- Supplier portal & global ingredients -----
+model GlobalIngredient {
+  id             String            @id @default(cuid())
+  name           String
+  category       String
+  defaultUnit    String            @map("default_unit")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  ingredients    Ingredient[]
+  supplierProducts SupplierProduct[]
+
+  @@index([category])
+  @@map("global_ingredients")
+}
+
+enum SupplierAccountStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+model Supplier {
+  id              String                 @id @default(cuid())
+  name            String
+  email           String
+  phone           String?
+  address         String?
+  lat             Float?
+  lng             Float?
+  status          SupplierAccountStatus  @default(PENDING)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  users           SupplierUser[]
+  products        SupplierProduct[]
+  restaurantLinks RestaurantSupplierLink[]
+  stockRequests   StockRequest[]
+  ingredients     Ingredient[]
+
+  @@index([status])
+  @@map("suppliers")
+}
+
+enum StockRequestStatus {
+  PENDING
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
+model StockRequest {
+  id           String             @id @default(cuid())
+  restaurantId String             @map("restaurant_id")
+  supplierId   String             @map("supplier_id")
+  status       StockRequestStatus  @default(PENDING)
+  notes        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  supplier     Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  lines        StockRequestLine[]
+
+  @@index([supplierId])
+  @@index([restaurantId])
+  @@map("stock_requests")
+}
+
+model StockRequestLine {
+  id                String         @id @default(cuid())
+  stockRequestId    String         @map("stock_request_id")
+  supplierProductId String         @map("supplier_product_id")
+  quantity          Float
+  unit              String
+  notes             String?
+  stockRequest      StockRequest   @relation(fields: [stockRequestId], references: [id], onDelete: Cascade)
+  supplierProduct   SupplierProduct @relation(fields: [supplierProductId], references: [id], onDelete: Cascade)
+
+  @@index([stockRequestId])
+  @@map("stock_request_lines")
+}
+
+model SupplierUser {
+  id           String    @id @default(cuid())
+  supplierId   String    @map("supplier_id")
+  name         String
+  email        String
+  passwordHash String    @map("password_hash")
+  role         String    @default("user")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  supplier     Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, email])
+  @@index([supplierId])
+  @@map("supplier_users")
+}
+
+model SupplierProduct {
+  id                 String          @id @default(cuid())
+  supplierId         String          @map("supplier_id")
+  globalIngredientId String?         @map("global_ingredient_id")
+  name               String
+  category           String
+  packSize           Float           @map("pack_size")
+  packUnit           String          @map("pack_unit")
+  brand              String?
+  sku                String?
+  isActive           Boolean         @default(true) @map("is_active")
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  supplier           Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  globalIngredient   GlobalIngredient? @relation(fields: [globalIngredientId], references: [id], onDelete: SetNull)
+  prices             SupplierPrice[]
+  menuItemIngredients MenuItemIngredient[]
+  stockRequestLines   StockRequestLine[]
+
+  @@index([supplierId])
+  @@index([globalIngredientId])
+  @@index([isActive])
+  @@map("supplier_products")
+}
+
+model SupplierPrice {
+  id                String         @id @default(cuid())
+  supplierProductId String         @map("supplier_product_id")
+  price             Float
+  currency          String
+  effectiveFrom     DateTime       @map("effective_from")
+  effectiveTo       DateTime?      @map("effective_to")
+  createdAt         DateTime       @default(now())
+  createdByUserId   String?        @map("created_by_user_id")
+  supplierProduct   SupplierProduct @relation(fields: [supplierProductId], references: [id], onDelete: Cascade)
+
+  @@index([supplierProductId])
+  @@index([effectiveFrom])
+  @@map("supplier_prices")
+}
+
+model RestaurantSupplierLink {
+  restaurantId String    @map("restaurant_id")
+  supplierId   String    @map("supplier_id")
+  firstSeenAt  DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt   DateTime  @updatedAt @map("last_seen_at")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  supplier     Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@id([restaurantId, supplierId])
+  @@index([supplierId])
+  @@map("restaurant_supplier_links")
+}
+
+enum MenuItemStatus {
+  DRAFT
+  ACTIVE
+}
+
+enum CostingStatus {
+  INCOMPLETE
+  COMPLETE
+}
+
 enum UserRole {
   OWNER
   MANAGER
@@ -634,4 +855,9 @@ enum PayrollStatus {
   PENDING
   PAID
   CANCELLED
+}
+
+enum ShowcaseType {
+  CHEFS_HIGHLIGHTS
+  RECOMMENDATIONS
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,22 +9,42 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
-import { Ingredient } from '@prisma/client'
+
+type IngredientWithSupplier = {
+  id: string
+  name: string
+  unit: string
+  costPerUnit: number
+  minStockLevel: number
+  supplier: string | null
+  notes: string | null
+  preferredSupplierId: string | null
+}
+
+type SupplierOption = { id: string; name: string }
 
 export default function IngredientEditForm({
   ingredient,
 }: {
-  ingredient: Ingredient
+  ingredient: IngredientWithSupplier
 }) {
   const router = useRouter()
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: ingredient.name,
     unit: ingredient.unit,
     costPerUnit: ingredient.costPerUnit.toString(),
     supplier: ingredient.supplier || '',
+    preferredSupplierId: ingredient.preferredSupplierId || '',
     notes: ingredient.notes || '',
   })
+
+  useEffect(() => {
+    fetch('/api/suppliers')
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setSuppliers)
+  }, [])
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,6 +59,7 @@ export default function IngredientEditForm({
           unit: formData.unit,
           costPerUnit: parseFloat(formData.costPerUnit),
           supplier: formData.supplier || null,
+          preferredSupplierId: formData.preferredSupplierId || null,
           notes: formData.notes || null,
         }),
       })
@@ -150,12 +171,32 @@ export default function IngredientEditForm({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="supplier">Supplier</Label>
+                <Label htmlFor="supplier">Supplier (text)</Label>
                 <Input
                   id="supplier"
                   value={formData.supplier}
                   onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                  placeholder="e.g. Al-Anbar Rice Traders"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="preferredSupplierId">Preferred supplier (for Request stock)</Label>
+                <select
+                  id="preferredSupplierId"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={formData.preferredSupplierId}
+                  onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
+                >
+                  <option value="">— None —</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">
+                  Choose a supplier to enable &quot;Request more&quot; on the inventory page.
+                </p>
               </div>
             </div>
 

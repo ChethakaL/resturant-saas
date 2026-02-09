@@ -1,12 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
-import { Plus, Trash2, Download, Edit } from 'lucide-react'
+import {
+  Plus,
+  Trash2,
+  Download,
+  Edit,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  ShoppingCart,
+  Wallet,
+  AlertTriangle,
+} from 'lucide-react'
 import AddExpenseModal from './AddExpenseModal'
 import AddWasteModal from './AddWasteModal'
 import DatePicker from '@/components/ui/date-picker'
@@ -74,6 +85,8 @@ interface PnLData {
     expenses: number
     payroll: number
     netProfit: number
+    cogsCoveragePercent?: number
+    revenueWithCosting?: number
   }
   expenseByCategory: Record<string, number>
   expenseTransactions: any[]
@@ -97,17 +110,37 @@ type TransactionRow = {
   editPayload?: any
 }
 
+/** Helper: format a date as YYYY-MM-DD */
+function toDateString(d: Date) {
+  return d.toISOString().split('T')[0]
+}
+
+/** Quick-period date ranges */
+function getQuickPeriod(period: 'today' | 'week' | 'month') {
+  const now = new Date()
+  switch (period) {
+    case 'today':
+      return { start: toDateString(now), end: toDateString(now) }
+    case 'week': {
+      const day = now.getDay()
+      const monday = new Date(now)
+      monday.setDate(now.getDate() - ((day + 6) % 7))
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      return { start: toDateString(monday), end: toDateString(sunday) }
+    }
+    case 'month': {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      return { start: toDateString(start), end: toDateString(end) }
+    }
+  }
+}
+
 export default function ProfitLossPageClient() {
   const { toast } = useToast()
-  const [dateRange, setDateRange] = useState(() => {
-    const now = new Date()
-    const start = new Date(now.getFullYear(), now.getMonth(), 1)
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    return {
-      start: start.toISOString().split('T')[0],
-      end: end.toISOString().split('T')[0],
-    }
-  })
+  const [activePeriod, setActivePeriod] = useState<string>('month')
+  const [dateRange, setDateRange] = useState(() => getQuickPeriod('month'))
   const [data, setData] = useState<PnLData | null>(null)
   const [loading, setLoading] = useState(true)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
@@ -144,6 +177,11 @@ export default function ProfitLossPageClient() {
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange.start, dateRange.end])
+
+  const handleQuickPeriod = (period: 'today' | 'week' | 'month') => {
+    setActivePeriod(period)
+    setDateRange(getQuickPeriod(period))
+  }
 
   const handleDeleteExpense = async (id: string) => {
     if (!confirm('Are you sure you want to delete this expense?')) return
@@ -223,6 +261,58 @@ export default function ProfitLossPageClient() {
       })
     }
   }
+
+  // ── Loss Forecasting ──
+  const forecast = useMemo(() => {
+    if (!data) return null
+
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const daysInMonth = monthEnd.getDate()
+    const daysElapsed = Math.max(now.getDate(), 1)
+
+    // Only show forecast when viewing this month
+    const rangeStart = new Date(dateRange.start)
+    const rangeEnd = new Date(dateRange.end)
+    const isCurrentMonth =
+      rangeStart.getFullYear() === monthStart.getFullYear() &&
+      rangeStart.getMonth() === monthStart.getMonth() &&
+      rangeEnd.getFullYear() === monthEnd.getFullYear() &&
+      rangeEnd.getMonth() === monthEnd.getMonth()
+
+    if (!isCurrentMonth) return null
+
+    const projectedRevenue =
+      (data.summary.revenue / daysElapsed) * daysInMonth
+    const projectedCogs = (data.summary.cogs / daysElapsed) * daysInMonth
+    const projectedExpenses =
+      (data.summary.expenses / daysElapsed) * daysInMonth
+    const projectedPayroll =
+      (data.summary.payroll / daysElapsed) * daysInMonth
+    const projectedGrossProfit = projectedRevenue - projectedCogs
+    const projectedNetProfit =
+      projectedGrossProfit - projectedExpenses - projectedPayroll
+
+    // Top cost drivers
+    const drivers: Array<{ label: string; amount: number }> = []
+    if (projectedCogs > 0)
+      drivers.push({ label: 'COGS', amount: projectedCogs })
+    if (projectedPayroll > 0)
+      drivers.push({ label: 'Labor', amount: projectedPayroll })
+    if (projectedExpenses > 0)
+      drivers.push({ label: 'Operating Expenses', amount: projectedExpenses })
+    drivers.sort((a, b) => b.amount - a.amount)
+
+    return {
+      projectedRevenue,
+      projectedNetProfit,
+      daysElapsed,
+      daysInMonth,
+      isLoss: projectedNetProfit < 0,
+      drivers: drivers.slice(0, 3),
+    }
+  }, [data, dateRange])
 
   if (loading || !data) {
     return (
@@ -433,34 +523,275 @@ export default function ProfitLossPageClient() {
         </div>
       </div>
 
-      {/* Date Range Selector */}
+      {/* ── COGS incomplete warning ── */}
+      {data.summary.revenue > 0 &&
+        typeof data.summary.cogsCoveragePercent === 'number' &&
+        data.summary.cogsCoveragePercent < 100 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-amber-800">COGS is incomplete</h3>
+                <p className="text-sm text-amber-700 mt-1">
+                  Only {data.summary.cogsCoveragePercent}% of sales are covered by items with
+                  complete costing. Add recipe costs to menu items for accurate COGS and gross
+                  profit.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {/* ── Loss Forecasting Alert ── */}
+      {forecast?.isLoss && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-800">
+                Projected net loss this month: {formatCurrency(Math.abs(forecast.projectedNetProfit))}
+              </h3>
+              <p className="text-sm text-red-700 mt-1">
+                Based on {forecast.daysElapsed} of {forecast.daysInMonth} days elapsed,
+                projected revenue is {formatCurrency(forecast.projectedRevenue)}.
+              </p>
+              {forecast.drivers.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-red-700 uppercase tracking-wide">
+                    Top cost drivers:
+                  </p>
+                  <ul className="mt-1 space-y-0.5">
+                    {forecast.drivers.map((d) => (
+                      <li
+                        key={d.label}
+                        className="text-sm text-red-700 flex items-center justify-between max-w-xs"
+                      >
+                        <span>{d.label}</span>
+                        <span className="font-mono">
+                          {formatCurrency(d.amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Date range — one card, no overlap */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
-              <Label htmlFor="start-date">From</Label>
-              <DatePicker
-                value={dateRange.start}
-                onChange={(value) =>
-                  setDateRange({ ...dateRange, start: value })
-                }
-              />
+          <div className="flex flex-col gap-6">
+            {/* Presets: horizontal segmented control */}
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit">
+              {[
+                { key: 'today', label: 'Today' },
+                { key: 'week', label: 'This week' },
+                { key: 'month', label: 'This month' },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleQuickPeriod(key)}
+                  className={`rounded-md px-4 py-2 text-sm font-medium transition-colors min-w-[88px] ${
+                    activePeriod === key
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-            <div className="flex-1">
-              <Label htmlFor="end-date">To</Label>
-              <DatePicker
-                value={dateRange.end}
-                onChange={(value) =>
-                  setDateRange({ ...dateRange, end: value })
-                }
-              />
+            {/* Custom range: From / To with clear spacing */}
+            <div className="flex flex-wrap items-end gap-6">
+              <div className="flex items-end gap-2">
+                <Label htmlFor="pnl-start-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">From</Label>
+                <div className="w-[160px]">
+                  <DatePicker
+                    value={dateRange.start}
+                    onChange={(value) => {
+                      setActivePeriod('custom')
+                      setDateRange({ ...dateRange, start: value })
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="flex items-end gap-2">
+                <Label htmlFor="pnl-end-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">To</Label>
+                <div className="w-[160px]">
+                  <DatePicker
+                    value={dateRange.end}
+                    onChange={(value) => {
+                      setActivePeriod('custom')
+                      setDateRange({ ...dateRange, end: value })
+                    }}
+                  />
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant={activePeriod === 'custom' ? 'default' : 'outline'}
+                onClick={() => {
+                  setActivePeriod('custom')
+                  fetchData()
+                }}
+                className="shrink-0 mb-0.5"
+              >
+                Apply
+              </Button>
             </div>
-            <Button onClick={fetchData}>Apply</Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Summary Table - Top Section */}
+      {/* ── Summary Card Tiles ── */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-green-100 p-2">
+                <DollarSign className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Revenue
+                </p>
+                <p className="text-xl font-bold text-green-600 font-mono">
+                  {formatCurrency(data.summary.revenue)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-amber-100 p-2">
+                <ShoppingCart className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  COGS
+                </p>
+                <p className="text-xl font-bold text-amber-600 font-mono">
+                  {formatCurrency(data.summary.cogs)}
+                </p>
+                {typeof data.summary.cogsCoveragePercent === 'number' && (
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Coverage: {data.summary.cogsCoveragePercent}%
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-emerald-100 p-2">
+                <TrendingUp className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Gross Profit
+                </p>
+                <p className="text-xl font-bold text-emerald-600 font-mono">
+                  {formatCurrency(data.summary.grossProfit)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-red-100 p-2">
+                <Wallet className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Expenses
+                </p>
+                <p className="text-xl font-bold text-red-600 font-mono">
+                  {formatCurrency(data.summary.expenses + data.summary.payroll)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div
+                className={`rounded-lg p-2 ${
+                  data.summary.netProfit >= 0
+                    ? 'bg-green-100'
+                    : 'bg-red-100'
+                }`}
+              >
+                {data.summary.netProfit >= 0 ? (
+                  <TrendingUp className="h-5 w-5 text-green-600" />
+                ) : (
+                  <TrendingDown className="h-5 w-5 text-red-600" />
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Net Profit
+                </p>
+                <p
+                  className={`text-xl font-bold font-mono ${
+                    data.summary.netProfit >= 0
+                      ? 'text-green-600'
+                      : 'text-red-600'
+                  }`}
+                >
+                  {formatCurrency(data.summary.netProfit)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div
+                className={`rounded-lg p-2 ${
+                  profitMargin >= 0 ? 'bg-blue-100' : 'bg-red-100'
+                }`}
+              >
+                {profitMargin >= 0 ? (
+                  <TrendingUp className="h-5 w-5 text-blue-600" />
+                ) : (
+                  <TrendingDown className="h-5 w-5 text-red-600" />
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Profit Margin
+                </p>
+                <p
+                  className={`text-xl font-bold font-mono ${
+                    profitMargin >= 0 ? 'text-blue-600' : 'text-red-600'
+                  }`}
+                >
+                  {profitMargin.toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* P&L Summary Table */}
       <Card>
         <CardHeader className="bg-slate-800 text-white">
           <CardTitle className="text-white">PROFIT AND LOSS SUMMARY</CardTitle>

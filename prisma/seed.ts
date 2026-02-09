@@ -1,7 +1,55 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import * as fs from 'fs'
+import * as path from 'path'
 
 const prisma = new PrismaClient()
+
+/** Parse a single CSV line respecting double-quoted fields */
+function parseCSVLine(line: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (c === '"') {
+      inQuotes = !inQuotes
+    } else if (c === ',' && !inQuotes) {
+      result.push(current.trim())
+      current = ''
+    } else {
+      current += c
+    }
+  }
+  result.push(current.trim())
+  return result
+}
+
+function parseCSV(content: string): Record<string, string>[] {
+  const lines = content.trim().split(/\r?\n/).filter((l) => l.length > 0)
+  if (lines.length < 2) return []
+  const header = parseCSVLine(lines[0])
+  const rows: Record<string, string>[] = []
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCSVLine(lines[i])
+    const row: Record<string, string> = {}
+    header.forEach((h, j) => {
+      row[h] = values[j] ?? ''
+    })
+    rows.push(row)
+  }
+  return rows
+}
+
+function readCSV(filename: string): Record<string, string>[] {
+  const filePath = path.join(process.cwd(), 'data', filename)
+  if (!fs.existsSync(filePath)) {
+    console.log(`⚠️  ${filename} not found, skipping supplier seed from CSV`)
+    return []
+  }
+  const content = fs.readFileSync(filePath, 'utf-8')
+  return parseCSV(content)
+}
 
 // Unsplash image IDs for Iraqi/Middle Eastern food
 const foodImages = {
@@ -1748,6 +1796,328 @@ async function main() {
 
   console.log('✅ Created AI insights')
 
+  // ═══════════════════════════════════════════════════════════════
+  // SUPPLIER PORTAL SEED (from data/*.csv)
+  // ═══════════════════════════════════════════════════════════════
+  const suppliersRows = readCSV('suppliers.csv')
+  const supplierUsersRows = readCSV('suppliers_users.csv')
+  const globalIngredientsRows = readCSV('global_ingredients.csv')
+  const supplierProductsRows = readCSV('supplier_products.csv')
+  const supplierPricesRows = readCSV('supplier_prices.csv')
+
+  let suppliersSeeded = 0
+  if (suppliersRows.length > 0) {
+    console.log('')
+    console.log('🏭 Seeding suppliers from CSV...')
+
+    const globalIngredientByName = new Map<string, string>()
+    for (const row of globalIngredientsRows) {
+      const name = (row.name ?? '').trim()
+      const category = (row.category ?? 'Other').trim()
+      const defaultUnit = (row.default_unit ?? 'kg').trim()
+      if (!name) continue
+      const existing = await prisma.globalIngredient.findFirst({
+        where: { name, category, defaultUnit },
+      })
+      if (existing) {
+        globalIngredientByName.set(name.toLowerCase(), existing.id)
+      } else {
+        const created = await prisma.globalIngredient.create({
+          data: { name, category, defaultUnit },
+        })
+        globalIngredientByName.set(name.toLowerCase(), created.id)
+      }
+    }
+    if (globalIngredientsRows.length > 0) {
+      console.log(`   • Global ingredients: ${globalIngredientByName.size}`)
+    }
+
+    const supplierByEmail = new Map<string, string>()
+    for (const row of suppliersRows) {
+      const email = (row.email ?? '').trim()
+      if (!email) continue
+      const name = (row.name ?? '').trim()
+      const status = (row.status ?? 'PENDING').trim().toUpperCase()
+      const validStatus = ['PENDING', 'APPROVED', 'SUSPENDED'].includes(status) ? status : 'PENDING'
+      const existing = await prisma.supplier.findFirst({ where: { email } })
+      const supplier = existing
+        ? await prisma.supplier.update({
+            where: { id: existing.id },
+            data: {
+              name: name || email,
+              phone: (row.phone ?? '').trim() || null,
+              address: (row.address ?? '').trim() || null,
+              lat: row.lat ? parseFloat(row.lat) : null,
+              lng: row.lng ? parseFloat(row.lng) : null,
+              status: validStatus as 'PENDING' | 'APPROVED' | 'SUSPENDED',
+            },
+          })
+        : await prisma.supplier.create({
+            data: {
+              name: name || email,
+              email,
+              phone: (row.phone ?? '').trim() || null,
+              address: (row.address ?? '').trim() || null,
+              lat: row.lat ? parseFloat(row.lat) : null,
+              lng: row.lng ? parseFloat(row.lng) : null,
+              status: validStatus as 'PENDING' | 'APPROVED' | 'SUSPENDED',
+            },
+          })
+      supplierByEmail.set(email, supplier.id)
+    }
+    suppliersSeeded = supplierByEmail.size
+    console.log(`   • Suppliers: ${suppliersSeeded}`)
+
+    for (const row of supplierUsersRows) {
+      const supplierEmail = (row.supplier_email ?? '').trim()
+      const supplierId = supplierByEmail.get(supplierEmail)
+      if (!supplierId) continue
+      const email = (row.email ?? '').trim()
+      const name = (row.name ?? '').trim()
+      const plainPassword = (row.password ?? 'password123').trim()
+      const passwordHash = await bcrypt.hash(plainPassword, 10)
+      await prisma.supplierUser.upsert({
+        where: {
+          supplierId_email: { supplierId, email },
+        },
+        create: {
+          supplierId,
+          name: name || email,
+          email,
+          passwordHash,
+          role: 'user',
+        },
+        update: { name: name || email, passwordHash },
+      })
+    }
+    console.log(`   • Supplier users: ${supplierUsersRows.length}`)
+
+    const productsBySupplierAndName = new Map<string, { id: string; packSize: number }[]>()
+    for (const row of supplierProductsRows) {
+      const supplierEmail = (row.supplier_email ?? '').trim()
+      const supplierId = supplierByEmail.get(supplierEmail)
+      if (!supplierId) continue
+      const name = (row.name ?? '').trim()
+      const category = (row.category ?? 'Other').trim()
+      const packSize = parseFloat(row.pack_size) || 0
+      const packUnit = (row.pack_unit ?? 'kg').trim()
+      const isActive = (row.is_active ?? 'true').toLowerCase() !== 'false'
+      const globalIngredientId = row.name
+        ? globalIngredientByName.get((row.name ?? '').split(' - ')[0]?.toLowerCase() ?? '')
+        : null
+      let product = await prisma.supplierProduct.findFirst({
+        where: { supplierId, name, packSize },
+      })
+      if (!product) {
+        product = await prisma.supplierProduct.create({
+          data: {
+            supplierId,
+            name,
+            category,
+            packSize,
+            packUnit,
+            brand: (row.brand ?? '').trim() || null,
+            sku: (row.sku ?? '').trim() || null,
+            isActive,
+            globalIngredientId: globalIngredientId ?? null,
+          },
+        })
+      }
+      const key = `${supplierEmail}|${name}`
+      if (!productsBySupplierAndName.has(key)) {
+        productsBySupplierAndName.set(key, [])
+      }
+      productsBySupplierAndName.get(key)!.push({ id: product.id, packSize })
+    }
+    for (const arr of productsBySupplierAndName.values()) {
+      arr.sort((a, b) => b.packSize - a.packSize)
+    }
+
+    let pricesSeeded = 0
+    const priceRowQueueByKey = new Map<string, { price: number; currency: string; effectiveFrom: Date }[]>()
+    for (const row of supplierPricesRows) {
+      const supplierEmail = (row.supplier_email ?? '').trim()
+      const productName = (row.product_name ?? '').trim()
+      const price = parseFloat(row.price) || 0
+      const currency = (row.currency ?? 'IQD').trim()
+      const effectiveFrom = row.effective_from ? new Date(row.effective_from) : new Date()
+      const key = `${supplierEmail}|${productName}`
+      if (!priceRowQueueByKey.has(key)) priceRowQueueByKey.set(key, [])
+      priceRowQueueByKey.get(key)!.push({ price, currency, effectiveFrom })
+    }
+    for (const [key, queue] of priceRowQueueByKey) {
+      const [supplierEmail, productName] = key.split('|')
+      const products = productsBySupplierAndName.get(key) ?? []
+      for (let i = 0; i < queue.length && i < products.length; i++) {
+        const { price, currency, effectiveFrom } = queue[i]
+        const existing = await prisma.supplierPrice.findFirst({
+          where: { supplierProductId: products[i].id, effectiveFrom },
+        })
+        if (!existing) {
+          await prisma.supplierPrice.create({
+            data: {
+              supplierProductId: products[i].id,
+              price,
+              currency,
+              effectiveFrom,
+            },
+          })
+          pricesSeeded++
+        }
+      }
+      if (products.length === 0) {
+        const supplierId = supplierByEmail.get(supplierEmail)
+        const product = supplierId
+          ? await prisma.supplierProduct.findFirst({
+              where: { supplierId, name: productName },
+            })
+          : null
+        if (product && queue.length > 0) {
+          const existing = await prisma.supplierPrice.findFirst({
+            where: { supplierProductId: product.id, effectiveFrom: queue[0].effectiveFrom },
+          })
+          if (!existing) {
+            await prisma.supplierPrice.create({
+              data: {
+                supplierProductId: product.id,
+                price: queue[0].price,
+                currency: queue[0].currency,
+                effectiveFrom: queue[0].effectiveFrom,
+              },
+            })
+            pricesSeeded++
+          }
+        }
+      }
+    }
+    console.log(`   • Supplier products: ${supplierProductsRows.length}`)
+    console.log(`   • Supplier prices: ${pricesSeeded}`)
+
+    // Link demo data: restaurant location, ingredient→supplier, recipe lines→supplier products, stock requests
+    const supplierIdForLink = supplierByEmail.get('support@caff.iq')
+    if (supplierIdForLink) {
+      await prisma.restaurant.update({
+        where: { id: restaurant.id },
+        data: {
+          city: 'Baghdad',
+          address: restaurant.address || 'Baghdad, Iraq',
+          lat: 33.3152,
+          lng: 44.3661,
+        },
+      })
+      const supplierProducts = await prisma.supplierProduct.findMany({
+        where: { supplierId: supplierIdForLink },
+        include: {
+          prices: {
+            where: { effectiveTo: null },
+            orderBy: { effectiveFrom: 'desc' },
+            take: 1,
+          },
+        },
+      })
+      const firstProduct = supplierProducts.find((p) =>
+        p.name.toLowerCase().includes('rice')
+      ) || supplierProducts[0]
+      let riceIngredient = await prisma.ingredient.findFirst({
+        where: { restaurantId: restaurant.id, name: 'Basmati Rice' },
+      })
+      if (!riceIngredient) {
+        riceIngredient = await prisma.ingredient.findFirst({
+          where: { restaurantId: restaurant.id },
+          orderBy: { name: 'asc' },
+        })
+      }
+      let recipeLines: { id: string }[] = []
+      if (riceIngredient && firstProduct) {
+        await prisma.ingredient.update({
+          where: { id: riceIngredient.id },
+          data: { preferredSupplierId: supplierIdForLink },
+        })
+        const activePrice = firstProduct.prices[0]
+        const unitCost = activePrice
+          ? activePrice.price / firstProduct.packSize
+          : 0
+        recipeLines = await prisma.menuItemIngredient.findMany({
+          where: { ingredientId: riceIngredient.id },
+          select: { id: true },
+        })
+        for (const line of recipeLines) {
+          await prisma.menuItemIngredient.update({
+            where: { id: line.id },
+            data: {
+              supplierProductId: firstProduct.id,
+              unitCostCached: unitCost,
+              currency: activePrice?.currency ?? 'IQD',
+              lastPricedAt: new Date(),
+            },
+          })
+        }
+      }
+      // Always create link and stock requests so supplier dashboard has data
+      await prisma.restaurantSupplierLink.upsert({
+        where: {
+          restaurantId_supplierId: {
+            restaurantId: restaurant.id,
+            supplierId: supplierIdForLink,
+          },
+        },
+        create: {
+          restaurantId: restaurant.id,
+          supplierId: supplierIdForLink,
+        },
+        update: {},
+      })
+      if (firstProduct) {
+        await prisma.stockRequest.create({
+          data: {
+            restaurantId: restaurant.id,
+            supplierId: supplierIdForLink,
+            status: 'PENDING',
+            notes: 'Weekly rice order',
+            lines: {
+              create: [
+                {
+                  supplierProductId: firstProduct.id,
+                  quantity: 50,
+                  unit: firstProduct.packUnit,
+                  notes: 'Restock',
+                },
+              ],
+            },
+          },
+        })
+        if (supplierProducts.length > 1) {
+          const secondProduct = supplierProducts.find(
+            (p) => p.id !== firstProduct.id && p.name.toLowerCase().includes('rice')
+          ) || supplierProducts[1]
+          if (secondProduct) {
+            await prisma.stockRequest.create({
+              data: {
+                restaurantId: restaurant.id,
+                supplierId: supplierIdForLink,
+                status: 'CONFIRMED',
+                notes: 'Urgent order',
+                lines: {
+                  create: [
+                    {
+                      supplierProductId: secondProduct.id,
+                      quantity: 20,
+                      unit: secondProduct.packUnit,
+                    },
+                  ],
+                },
+              },
+            })
+          }
+        }
+        console.log(`   • Linked restaurant to supplier; recipe lines updated: ${recipeLines.length}; stock requests: 2`)
+      } else {
+        console.log(`   • Linked restaurant to supplier (no products yet)`)
+      }
+    }
+    console.log('✅ Supplier CSV seed done')
+  }
+
   console.log('')
   console.log('═══════════════════════════════════════════════════════════════')
   console.log('🎉 SEED COMPLETED SUCCESSFULLY!')
@@ -1762,6 +2132,9 @@ async function main() {
   console.log(`   • Menu Items: ${menuItems.length}`)
   console.log(`   • Sales Orders: ${sales.length} (30 days history)`)
   console.log(`   • AI Insights: 5`)
+  if (suppliersSeeded > 0) {
+    console.log(`   • Suppliers: ${suppliersSeeded} (login at /supplier/login)`)
+  }
   console.log('')
   console.log('🌐 You can now login and explore the dashboard!')
   console.log('═══════════════════════════════════════════════════════════════')

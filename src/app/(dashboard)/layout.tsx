@@ -15,6 +15,10 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
+  if (session.user.type === 'supplier') {
+    redirect('/supplier')
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
@@ -23,8 +27,8 @@ export default async function DashboardLayout({
         userRole={session.user.role}
       />
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto bg-slate-50 min-h-screen">
+      {/* Main Content - min-h-0 lets flex child shrink so scroll height = content only (no extra white space) */}
+      <div className="flex-1 min-h-0 overflow-auto bg-slate-50">
         <div className="p-8">
           {children}
         </div>

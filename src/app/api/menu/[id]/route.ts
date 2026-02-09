@@ -31,9 +31,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 })
     }
 
+    const validIngredients = (data.ingredients || []).filter(
+      (ing: any) => ing.ingredientId && ing.quantity > 0
+    )
+    const hasRecipe = validIngredients.length > 0
+    const hasCosting = validIngredients.some((ing: any) => ing.unitCostCached != null)
+    const costingStatus = hasRecipe && hasCosting ? 'COMPLETE' : 'INCOMPLETE'
+
     // Update menu item and ingredients in a transaction
     const menuItem = await prisma.$transaction(async (tx) => {
-      // Update the menu item
       const item = await tx.menuItem.update({
         where: { id: params.id },
         data: {
@@ -42,14 +48,13 @@ export async function PATCH(
           price: data.price,
           imageUrl: data.imageUrl,
           available: data.available,
-          category: {
-            connect: { id: data.categoryId },
-          },
+          ...(data.status && { status: data.status }),
+          costingStatus,
+          category: { connect: { id: data.categoryId } },
           calories: data.calories,
           protein: data.protein,
           carbs: data.carbs,
           tags: data.tags || [],
-          // Recipe details
           prepTime: data.prepTime || null,
           cookTime: data.cookTime || null,
           recipeSteps: data.recipeSteps || [],
@@ -57,19 +62,22 @@ export async function PATCH(
         },
       })
 
-      // Delete existing ingredients
       await tx.menuItemIngredient.deleteMany({
         where: { menuItemId: params.id },
       })
 
-      // Create new ingredients
-      if (data.ingredients && data.ingredients.length > 0) {
+      if (validIngredients.length > 0) {
         await tx.menuItemIngredient.createMany({
-          data: data.ingredients.map((ing: any) => ({
+          data: validIngredients.map((ing: any) => ({
             menuItemId: item.id,
             ingredientId: ing.ingredientId,
             quantity: ing.quantity,
             pieceCount: ing.pieceCount || null,
+            unit: ing.unit || null,
+            supplierProductId: ing.supplierProductId || null,
+            unitCostCached: ing.unitCostCached ?? null,
+            currency: ing.currency || null,
+            lastPricedAt: ing.lastPricedAt ? new Date(ing.lastPricedAt) : null,
           })),
         })
       }

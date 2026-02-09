@@ -1,0 +1,5 @@
+supplier_email,name,category,pack_size,pack_unit,brand,sku,is_active
+support@caff.iq,Rice - Al Burj - Rashi,Dry Goods,18,kg,Al Burj (البرج),97932-1,true
+support@caff.iq,Rice - Abu Kas,Dry Goods,30,kg,Abu Kas (ابو كاس),95363-1,true
+support@caff.iq,Rice - Abu Kas,Dry Goods,4.5,kg,Abu Kas (ابو كاس),95363-2,true
+support@caff.iq,Rice - Abu Kas,Dry Goods,0.9,kg,Abu Kas (ابو كاس),95363-3,true

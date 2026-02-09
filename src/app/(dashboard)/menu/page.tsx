@@ -9,6 +9,7 @@ import { formatPercentage } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import BulkMenuImport from '@/components/menu/BulkMenuImport'
+import ImportByDigitalMenu from '@/components/menu/ImportByDigitalMenu'
 import MenuItemsTable from '@/components/menu/MenuItemsTable'
 
 const PAGE_SIZE = 20
@@ -151,6 +152,7 @@ export default async function MenuPage({
         </div>
         <div className="flex gap-2">
           <BulkMenuImport categories={data.categories} ingredients={data.ingredients} />
+          <ImportByDigitalMenu categories={data.categories} ingredients={data.ingredients} />
           <Link href="/dashboard/menu/new">
             <Button>
               <Plus className="h-4 w-4 mr-2" />

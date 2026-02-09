@@ -13,6 +13,15 @@ export function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
+/** For customer menu: no currency symbol, no .00 — e.g. "12,000". Use in engine / SmartMenu only. */
+export function formatMenuPrice(amount: number): string {
+  const n = Math.round(amount)
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(n)
+}
+
 export function formatPercentage(value: number, decimals: number = 1): string {
   return `${value.toFixed(decimals)}%`
 }

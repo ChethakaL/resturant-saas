@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:seed": "tsx prisma/seed.ts",
-    "db:seed-pnl": "tsx prisma/seed-pnl.ts"
+    "db:seed-pnl": "tsx prisma/seed-pnl.ts",
+    "db:demo-connect": "tsx scripts/demo-connect-supplier.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -34,6 +35,8 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "3.6.0",
+    "embla-carousel-autoplay": "^8.6.0",
+    "embla-carousel-react": "^8.6.0",
     "lucide-react": "^0.562.0",
     "next": "14.2.5",
     "next-auth": "^4.24.13",

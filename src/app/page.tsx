@@ -1,8 +1,24 @@
 import { prisma } from '@/lib/prisma'
 import SmartMenu from '@/components/customer/SmartMenu'
+import { runMenuEngine } from '@/lib/menu-engine'
+import type { EngineMenuItem, EngineCategory, CoPurchasePair } from '@/lib/menu-engine'
+import { DEFAULT_MENU_ENGINE_SETTINGS } from '@/lib/menu-engine-defaults'
+import type { MenuEngineSettings } from '@/types/menu-engine'
+import { suggestCarouselItems, getTimeSlotLabel } from '@/lib/carousel-ai'
 
 // Revalidate on every request - ensures fresh menu data
 export const revalidate = 0
+
+/** Day 6–12, Evening 12–18, Night 18–6 (local time in tz) */
+function getCurrentTimeSlot(tz: string): 'day' | 'evening' | 'night' {
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date()),
+    10
+  )
+  if (hour >= 6 && hour < 12) return 'day'
+  if (hour >= 12 && hour < 18) return 'evening'
+  return 'night'
+}
 
 async function getMenuData() {
   const restaurant = await prisma.restaurant.findFirst({
@@ -13,43 +29,86 @@ async function getMenuData() {
     return null
   }
 
-  const menuItems = (await prisma.menuItem.findMany({
-    where: { available: true, restaurantId: restaurant.id },
-    include: {
-      category: true,
-      ingredients: {
-        include: {
-          ingredient: true,
-        },
-      },
-      addOns: {
-        include: {
-          addOn: true,
-        },
-      },
-    },
-    orderBy: { price: 'asc' },
-  })) as any[]
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
 
-  const chefPicks = await prisma.chefPick.findMany({
-    where: { restaurantId: restaurant.id },
-    orderBy: { displayOrder: 'asc' },
-  })
-  const chefPickOrderById = new Map(chefPicks.map((pick) => [pick.menuItemId, pick.displayOrder]))
+  const [menuItems, chefPicks, showcases, categories, salesLast30d, preppedStocksRows, salesToday] =
+    await Promise.all([
+      prisma.menuItem.findMany({
+        where: { available: true, status: 'ACTIVE', restaurantId: restaurant.id },
+        include: {
+          category: true,
+          ingredients: { include: { ingredient: true } },
+          addOns: { include: { addOn: true } },
+        },
+        orderBy: { price: 'asc' },
+      }) as Promise<any[]>,
 
-  const enrichedMenuItems = menuItems.map((item: any) => {
-    const cost = item.ingredients.reduce(
+      prisma.chefPick.findMany({
+        where: { restaurantId: restaurant.id },
+        orderBy: { displayOrder: 'asc' },
+      }),
+
+      prisma.menuShowcase.findMany({
+        where: { restaurantId: restaurant.id, isActive: true },
+        orderBy: { displayOrder: 'asc' },
+        include: {
+          items: {
+            orderBy: { displayOrder: 'asc' },
+            include: { menuItem: true },
+          },
+        },
+      }),
+
+      prisma.category.findMany({
+        where: { restaurantId: restaurant.id },
+        orderBy: { displayOrder: 'asc' },
+      }),
+
+      prisma.sale.findMany({
+        where: { restaurantId: restaurant.id, timestamp: { gte: thirtyDaysAgo } },
+        include: { items: true },
+      }),
+
+      prisma.preppedDishStock.findMany({
+        where: { restaurantId: restaurant.id },
+        select: { menuItemId: true, availableQuantity: true },
+      }),
+
+      prisma.sale.findMany({
+        where: { restaurantId: restaurant.id, timestamp: { gte: todayStart } },
+        include: { items: true },
+      }),
+    ])
+
+  const visibleCategoryIds = new Set(
+    categories.filter((c: { showOnMenu?: boolean }) => c.showOnMenu !== false).map((c: { id: string }) => c.id)
+  )
+  const categoriesForMenu = categories.filter((c: { showOnMenu?: boolean }) => c.showOnMenu !== false)
+
+  const chefPickOrderById = new Map(
+    chefPicks.map((pick) => [pick.menuItemId, pick.displayOrder])
+  )
+
+  const menuItemsInVisibleCategories = menuItems.filter((item: any) => visibleCategoryIds.has(item.categoryId))
+
+  // Compute a featured score for each item (server-only, never sent to client)
+  const enrichedMenuItems = menuItemsInVisibleCategories.map((item: any) => {
+    const ingredientTotal = item.ingredients.reduce(
       (sum: number, ing: any) => sum + ing.quantity * ing.ingredient.costPerUnit,
       0
     )
-    const margin =
-      item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0
+    const _featuredScore =
+      item.price > 0
+        ? ((item.price - ingredientTotal) / item.price) * 100
+        : 0
 
     const { ingredients, addOns: menuItemAddOns, ...rest } = item
     return {
       ...rest,
-      cost,
-      margin,
+      _featuredScore,
       chefPickOrder: chefPickOrderById.get(item.id) ?? null,
       updatedAt: item.updatedAt.toISOString(),
       addOns: menuItemAddOns
@@ -63,7 +122,264 @@ async function getMenuData() {
     }
   })
 
-  return { restaurant, menuItems: enrichedMenuItems }
+  const settings = (restaurant.settings as Record<string, unknown>) || {}
+  const timezone = (settings.menuTimezone as string) || restaurant.timezone || 'Asia/Baghdad'
+  const currentSlot = getCurrentTimeSlot(timezone)
+
+  // Build showcase data — time-based schedule (when enabled), manual items, or AI by time of day
+  const scheduleType = (s: typeof showcases[0]) => s.schedule as { useTimeSlots?: boolean; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] } } | null
+  const fullCarouselPool = enrichedMenuItems.map((item: any) => ({
+    id: item.id,
+    name: item.name,
+    category: item.category?.name,
+    price: item.price,
+    marginPercent: item._featuredScore ?? 0,
+  }))
+  const timeSlotLabel = getTimeSlotLabel(currentSlot)
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: (settings.menuTimezone as string) || restaurant.timezone || 'Asia/Baghdad' }).format(new Date()),
+    10
+  )
+
+  const applyAiRotation = (suggestedIds: string[], size: number) => {
+    const step = suggestedIds.length > size ? size : 0
+    const offset = step > 0 ? (hour % 2) * step : 0
+    return suggestedIds.slice(offset, offset + size)
+  }
+
+  const showcaseData = await Promise.all(
+    showcases.map(async (showcase) => {
+      let showcaseMenuItems: typeof enrichedMenuItems
+      const schedule = scheduleType(showcase)
+      const useTimeSlots = schedule?.useTimeSlots === true
+      const slotItemIds = useTimeSlots ? schedule?.[currentSlot]?.itemIds : undefined
+
+      if (slotItemIds && slotItemIds.length > 0) {
+        const idToOrder = new Map(slotItemIds.map((id: string, i: number) => [id, i]))
+        showcaseMenuItems = enrichedMenuItems
+          .filter((item: any) => idToOrder.has(item.id))
+          .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
+      } else if (useTimeSlots && showcase.items.length > 0) {
+        // Time slots on but this slot empty; manual items chosen → AI picks best for this time from chosen items
+        const chosenPool = fullCarouselPool.filter((item) =>
+          showcase.items.some((si: any) => si.menuItemId === item.id)
+        )
+        const suggestedIds = await suggestCarouselItems(chosenPool, timeSlotLabel, { maxItems: 16 })
+        const idsToShow = applyAiRotation(suggestedIds.length > 0 ? suggestedIds : chosenPool.map((i) => i.id), 8)
+        const idToOrder = new Map(idsToShow.map((id, i) => [id, i]))
+        showcaseMenuItems = enrichedMenuItems
+          .filter((item: any) => idToOrder.has(item.id))
+          .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
+      } else if (showcase.items.length > 0) {
+        const pickedItemIds = new Set(showcase.items.map((si: any) => si.menuItemId))
+        showcaseMenuItems = enrichedMenuItems
+          .filter((item: any) => pickedItemIds.has(item.id))
+          .sort((a: any, b: any) => {
+            const orderA =
+              showcase.items.find((si: any) => si.menuItemId === a.id)
+                ?.displayOrder ?? 0
+            const orderB =
+              showcase.items.find((si: any) => si.menuItemId === b.id)
+                ?.displayOrder ?? 0
+            return orderA - orderB
+          })
+      } else {
+        // Nothing chosen anywhere: AI suggests by time of day and relevance (variety); fallback order if needed
+        const suggestedIds = await suggestCarouselItems(fullCarouselPool, timeSlotLabel, { maxItems: 16 })
+        const idsToShow =
+          suggestedIds.length > 0
+            ? applyAiRotation(suggestedIds, 8)
+            : fullCarouselPool
+                .slice()
+                .sort((a, b) => b.marginPercent - a.marginPercent)
+                .map((i) => i.id)
+                .slice(0, 8)
+        const idToOrder = new Map(idsToShow.map((id, i) => [id, i]))
+        showcaseMenuItems = enrichedMenuItems
+          .filter((item: any) => idToOrder.has(item.id))
+          .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
+      }
+
+      return {
+        id: showcase.id,
+        title: showcase.title,
+        type: showcase.type ?? 'RECOMMENDATIONS',
+        position: showcase.position,
+        insertAfterCategoryId: showcase.insertAfterCategoryId,
+        items: showcaseMenuItems.map(
+          ({ _featuredScore: _fs, ...item }: any) => item
+        ),
+      }
+    })
+  )
+
+  // Fallback: if no showcases configured, build from chefPicks or auto-populate
+  if (showcaseData.length === 0) {
+    const chefPickItems = enrichedMenuItems
+      .filter((item) => item.chefPickOrder != null)
+      .sort(
+        (a, b) => (a.chefPickOrder ?? 0) - (b.chefPickOrder ?? 0)
+      )
+
+    const recommendedItems =
+      chefPickItems.length > 0
+        ? chefPickItems
+        : [...enrichedMenuItems]
+            .sort(
+              (a, b) =>
+                (b._featuredScore ?? 0) - (a._featuredScore ?? 0)
+            )
+            .slice(0, 8)
+
+    showcaseData.push({
+      id: 'default-top',
+      title: "Chef's Selection",
+      type: 'CHEFS_HIGHLIGHTS',
+      position: 'top',
+      insertAfterCategoryId: null,
+      items: recommendedItems.map(
+        ({ _featuredScore: _fs, ...item }) => item
+      ),
+    })
+  }
+
+  // --- Menu engine: aggregate sales and build co-purchase pairs (server-only)
+  const salesByItem = new Map<string, { quantity: number; costSum: number }>()
+  for (const sale of salesLast30d) {
+    for (const si of sale.items) {
+      const cur = salesByItem.get(si.menuItemId) ?? { quantity: 0, costSum: 0 }
+      cur.quantity += si.quantity
+      cur.costSum += (si.cost ?? 0) * si.quantity
+      salesByItem.set(si.menuItemId, cur)
+    }
+  }
+  const todaySalesByItem: Record<string, number> = {}
+  for (const sale of salesToday) {
+    for (const si of sale.items) {
+      todaySalesByItem[si.menuItemId] = (todaySalesByItem[si.menuItemId] ?? 0) + si.quantity
+    }
+  }
+  const preppedStocks: Record<string, number> = {}
+  for (const row of preppedStocksRows) {
+    preppedStocks[row.menuItemId] = row.availableQuantity
+  }
+  const pairCounts = new Map<string, number>()
+  const ordersWithItem = new Map<string, number>()
+  for (const sale of salesLast30d) {
+    const itemIds = [...new Set(sale.items.map((i: { menuItemId: string }) => i.menuItemId))]
+    for (const id of itemIds) {
+      ordersWithItem.set(id, (ordersWithItem.get(id) ?? 0) + 1)
+    }
+    for (let i = 0; i < itemIds.length; i++) {
+      for (let j = i + 1; j < itemIds.length; j++) {
+        const key = itemIds[i] < itemIds[j] ? `${itemIds[i]}-${itemIds[j]}` : `${itemIds[j]}-${itemIds[i]}`
+        pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1)
+      }
+    }
+  }
+  const coPurchasePairs: CoPurchasePair[] = []
+  for (const [key, pairCount] of pairCounts) {
+    const [itemIdA, itemIdB] = key.split('-')
+    const totalA = ordersWithItem.get(itemIdA) ?? 0
+    const totalB = ordersWithItem.get(itemIdB) ?? 0
+    let totalOrdersWithEither = totalA + totalB
+    const both = pairCount
+    coPurchasePairs.push({
+      itemIdA,
+      itemIdB,
+      pairCount: both,
+      totalOrdersWithEither: Math.max(totalOrdersWithEither, both),
+    })
+  }
+
+  const menuEngineSettings: MenuEngineSettings = {
+    ...DEFAULT_MENU_ENGINE_SETTINGS,
+    ...((settings.menuEngine as Partial<MenuEngineSettings>) ?? {}),
+  }
+
+  const engineItems: EngineMenuItem[] = enrichedMenuItems.map((item: any) => {
+    const agg = salesByItem.get(item.id)
+    const unitsSold = agg?.quantity ?? 0
+    const marginPercent =
+      item._featuredScore != null ? item._featuredScore : item.price > 0 && agg ? ((item.price - agg.costSum / Math.max(1, agg.quantity)) / item.price) * 100 : 0
+    const foodCost = item.price > 0 ? item.price * (1 - marginPercent / 100) : 0
+    return {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      categoryId: item.categoryId,
+      categoryName: item.category?.name ?? undefined,
+      _cost: foodCost,
+      _marginPercent: marginPercent,
+      _unitsSold: unitsSold,
+    }
+  })
+
+  const categoryIdToItems = new Map<string, typeof enrichedMenuItems>()
+  for (const item of enrichedMenuItems) {
+    const list = categoryIdToItems.get(item.categoryId) ?? []
+    list.push(item)
+    categoryIdToItems.set(item.categoryId, list)
+  }
+  const engineCategories: EngineCategory[] = categoriesForMenu.map((c: any) => {
+    const catItems = categoryIdToItems.get(c.id) ?? []
+    const ids = catItems.map((i: any) => i.id)
+    const engineCatItems = engineItems.filter((e) => e.categoryId === c.id)
+    const avgUnits = engineCatItems.length ? engineCatItems.reduce((s, i) => s + i._unitsSold, 0) / engineCatItems.length : 0
+    const avgMargin = engineCatItems.length ? engineCatItems.reduce((s, i) => s + i._marginPercent, 0) / engineCatItems.length : 0
+    return {
+      id: c.id,
+      name: c.name,
+      displayOrder: c.displayOrder,
+      itemIds: ids,
+      _avgUnitsSold: avgUnits,
+      _avgMargin: avgMargin,
+    }
+  })
+
+  const engineOutput = runMenuEngine({
+    settings: menuEngineSettings,
+    items: engineItems,
+    categories: engineCategories,
+    coPurchasePairs,
+    preppedStocks,
+    todaySalesByItem,
+  })
+
+  // Attach display-safe hints to each item; strip all internal scoring
+  const clientMenuItems = enrichedMenuItems.map((item: any) => {
+    const { _featuredScore: _fs, ...rest } = item
+    const hints = engineOutput.itemHints[item.id]
+    return {
+      ...rest,
+      _hints: hints ?? undefined,
+    }
+  })
+
+  // Extract theme from restaurant settings
+  const themeFromSettings = (settings.theme as Record<string, unknown>) || {}
+  const theme = {
+    ...themeFromSettings,
+    themePreset: settings.themePreset ?? null,
+    backgroundImageUrl: settings.backgroundImageUrl ?? null,
+  }
+
+  return {
+    restaurant,
+    menuItems: clientMenuItems,
+    showcases: showcaseData,
+    categories: categoriesForMenu.map((c: { id: string; name: string; displayOrder: number }) => ({
+      id: c.id,
+      name: c.name,
+      displayOrder: c.displayOrder,
+    })),
+    theme,
+    engineMode: engineOutput.engineMode,
+    bundles: engineOutput.bundles,
+    moods: engineOutput.moods,
+    upsellMap: engineOutput.upsellMap,
+    categoryOrder: engineOutput.categoryOrder,
+  }
 }
 
 export default async function Home() {
@@ -81,6 +397,16 @@ export default async function Home() {
     <SmartMenu
       restaurantId={data.restaurant.id}
       menuItems={data.menuItems}
+      showcases={data.showcases}
+      categories={data.categories}
+      theme={data.theme}
+      restaurantName={data.restaurant.name}
+      restaurantLogo={data.restaurant.logo}
+      engineMode={data.engineMode}
+      bundles={data.bundles}
+      moods={data.moods}
+      upsellMap={data.upsellMap}
+      categoryOrder={data.categoryOrder}
     />
   )
 }

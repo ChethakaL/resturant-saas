@@ -16,10 +16,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { formatCurrency, formatPercentage } from '@/lib/utils'
+import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
 import {
   Category,
   Ingredient,
@@ -44,12 +45,22 @@ interface RecipeIngredient {
   ingredientId: string
   quantity: number
   pieceCount?: number | null
+  unit?: string | null
+  supplierProductId?: string | null
+  unitCostCached?: number | null
+  currency?: string | null
+  lastPricedAt?: string | null
 }
 
 const translationLanguages = [
   { code: 'ar', label: 'Iraqi Arabic' },
   { code: 'ku', label: 'Sorani Kurdish' },
 ] as const
+
+const SAMPLE_AI_PROMPT = `Chicken Biryani. Main course. Price 12,000 IQD. Fragrant basmati rice with tender chicken, layered with saffron, fried onions, and mint. Served with raita. Calories about 450 per serving, 28g protein, 42g carbs. Tags: halal, spicy.
+Prep time: 15 minutes. Cook time: 35 minutes.
+Steps: Marinate chicken in yogurt and spices. Soak rice 20 min. Fry onions until golden. Layer rice and chicken in pot, add saffron and ghee. Cook on low 25 min. Fluff and serve with raita.
+Tips: Use aged basmati for best fragrance. Let rest 5 min before opening lid.`
 
 type LanguageCode = (typeof translationLanguages)[number]['code']
 
@@ -132,6 +143,17 @@ export default function MenuForm({
   // AI description and nutrition state
   const [generatingDescription, setGeneratingDescription] = useState(false)
   const [estimatingNutrition, setEstimatingNutrition] = useState(false)
+
+  // AI Assistant tab: free-text → auto-fill form
+  const [aiAssistantText, setAiAssistantText] = useState('')
+  const [aiParseLoading, setAiParseLoading] = useState(false)
+
+  // Guided next-step: which tab to show and which field to highlight after AI fill
+  const [activeTab, setActiveTab] = useState<string>(mode === 'edit' ? 'overview' : 'ai')
+  const [nextStepHighlight, setNextStepHighlight] = useState<'category' | 'image' | 'recipe' | null>(null)
+  // Ingredients from AI prompt that weren't found in inventory (show in Recipe tab with glow)
+  const [unmatchedIngredientsFromPrompt, setUnmatchedIngredientsFromPrompt] = useState<string[]>([])
+
   const initialFormData = {
     name: menuItem?.name || '',
     description: menuItem?.description || '',
@@ -369,6 +391,11 @@ export default function MenuForm({
       ingredientId: ing.ingredientId,
       quantity: ing.quantity,
       pieceCount: (ing as any).pieceCount || null,
+      unit: (ing as any).unit ?? null,
+      supplierProductId: (ing as any).supplierProductId ?? null,
+      unitCostCached: (ing as any).unitCostCached ?? null,
+      currency: (ing as any).currency ?? null,
+      lastPricedAt: (ing as any).lastPricedAt ? new Date((ing as any).lastPricedAt).toISOString() : null,
     })) || []
   )
 
@@ -380,6 +407,11 @@ export default function MenuForm({
 
   // Track newly created ingredients (so they show in the recipe builder before page refresh)
   const [newlyCreatedIngredients, setNewlyCreatedIngredients] = useState<Ingredient[]>([])
+
+  // Draft / active status (draft = save without blocking on recipe)
+  const [menuItemStatus, setMenuItemStatus] = useState<'DRAFT' | 'ACTIVE'>(
+    (menuItem as any)?.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT'
+  )
 
   // Selected add-ons for this menu item
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>(
@@ -398,6 +430,12 @@ export default function MenuForm({
     return [...ingredients, ...newOnes]
   }, [ingredients, newlyCreatedIngredients])
 
+  // Valid recipe lines (ingredient + quantity > 0) for submit and badges
+  const validRecipeLines = useMemo(
+    () => recipe.filter((item) => item.ingredientId && item.quantity > 0),
+    [recipe]
+  )
+
   // Calculate real-time cost and margin
   const calculations = useMemo(() => {
     const cost = recipe.reduce((sum, item) => {
@@ -415,7 +453,27 @@ export default function MenuForm({
   const addIngredient = () => {
     // Add new ingredient at the TOP of the list so user can see it
     setRecipe([{ ingredientId: '', quantity: 0, pieceCount: null }, ...recipe])
+    setNextStepHighlight(null)
   }
+
+  // Clear next-step highlight when user has added ingredients or after 10s
+  useEffect(() => {
+    if (nextStepHighlight === 'recipe' && recipe.length > 0) {
+      setNextStepHighlight(null)
+    }
+  }, [nextStepHighlight, recipe.length])
+
+  useEffect(() => {
+    if (nextStepHighlight === 'image' && formData.imageUrl?.trim()) {
+      setNextStepHighlight(null)
+    }
+  }, [nextStepHighlight, formData.imageUrl])
+
+  useEffect(() => {
+    if (!nextStepHighlight) return
+    const t = setTimeout(() => setNextStepHighlight(null), 10000)
+    return () => clearTimeout(t)
+  }, [nextStepHighlight])
 
   const addRecipeStep = () => {
     setRecipeSteps((prev) => [...prev, ''])
@@ -777,6 +835,160 @@ export default function MenuForm({
     }
   }
 
+  const fillFormFromAI = async () => {
+    const text = aiAssistantText.trim()
+    if (!text) {
+      toast({ title: 'Enter a description', description: 'Paste or type the menu item info you have (name, price, description, etc.)', variant: 'destructive' })
+      return
+    }
+    setAiParseLoading(true)
+    try {
+      const res = await fetch('/api/menu/parse-with-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          categoryNames: categories.map((c) => c.name),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Failed to parse')
+      const categoryId = data.categoryName
+        ? categories.find(
+            (c) => c.name.toLowerCase() === (data.categoryName as string).toLowerCase()
+          )?.id ?? ''
+        : ''
+      setFormData((prev) => ({
+        ...prev,
+        name: data.name || prev.name,
+        description: data.description || prev.description,
+        price: data.price != null ? String(data.price) : prev.price,
+        categoryId: categoryId || prev.categoryId,
+        calories: data.calories != null ? String(data.calories) : prev.calories,
+        protein: data.protein != null ? String(data.protein) : prev.protein,
+        carbs: data.carbs != null ? String(data.carbs) : prev.carbs,
+        tags: Array.isArray(data.tags) ? data.tags.join(', ') : prev.tags,
+      }))
+      if (Array.isArray(data.recipeSteps) && data.recipeSteps.length > 0) {
+        setRecipeSteps(data.recipeSteps)
+      }
+      if (Array.isArray(data.recipeTips) && data.recipeTips.length > 0) {
+        setRecipeTips(data.recipeTips)
+      }
+      if (data.prepTime) setPrepTime(data.prepTime)
+      if (data.cookTime) setCookTime(data.cookTime)
+
+      // Match parsed ingredients to inventory and fill recipe; track unmatched for UI
+      let filledRecipeCount = 0
+      if (Array.isArray(data.ingredients) && data.ingredients.length > 0) {
+        const newRecipe: RecipeIngredient[] = []
+        const unmatched: string[] = []
+        for (const ing of data.ingredients) {
+          const nameLower = (ing.name || '').toLowerCase().trim()
+          const match = allIngredients.find((i) => {
+            const n = i.name.toLowerCase().trim()
+            return n === nameLower || n.includes(nameLower) || nameLower.includes(n)
+          })
+          if (match) {
+            const converted = convertRecipeUnitToBaseUnit(
+              ing.quantity,
+              ing.unit,
+              match.unit,
+              match.name
+            )
+            newRecipe.push({
+              ingredientId: match.id,
+              quantity: converted.quantity,
+              pieceCount: converted.pieceCount,
+            })
+            filledRecipeCount++
+          } else {
+            unmatched.push(ing.name.trim() || ing.name)
+          }
+        }
+        setRecipe(newRecipe)
+        setUnmatchedIngredientsFromPrompt(unmatched)
+      } else {
+        setUnmatchedIngredientsFromPrompt([])
+      }
+
+      // If nutrition or tags were not in the prompt, estimate nutrition and suggest tags
+      const missingNutrition =
+        data.calories == null || data.protein == null || data.carbs == null
+      const missingTags = !Array.isArray(data.tags) || data.tags.length === 0
+      const categoryName = categories.find((c) => c.id === categoryId)?.name
+
+      if ((missingNutrition || missingTags) && (data.name || data.description)) {
+        try {
+          if (missingNutrition) {
+            const nutRes = await fetch('/api/menu/estimate-nutrition', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                itemName: data.name || '',
+                description: data.description || '',
+                category: categoryName,
+              }),
+            })
+            const nutData = await nutRes.json()
+            if (nutRes.ok && (nutData.calories != null || nutData.protein != null || nutData.carbs != null)) {
+              setFormData((prev) => ({
+                ...prev,
+                ...(nutData.calories != null && { calories: String(nutData.calories) }),
+                ...(nutData.protein != null && { protein: String(nutData.protein) }),
+                ...(nutData.carbs != null && { carbs: String(nutData.carbs) }),
+              }))
+            }
+          }
+          // Tags: parse API now always suggests when missing; no extra call needed
+        } catch (_) {
+          // Non-blocking; form still has parsed data
+        }
+      }
+
+      // Guide user to the next required step (category → image → recipe)
+      const needsCategory = !categoryId && categories.length > 0
+      const needsImage = !formData.imageUrl?.trim()
+      const hasUnmatchedIngredients = (data.ingredients?.length ?? 0) > 0 && filledRecipeCount < (data.ingredients?.length ?? 0)
+      const needsIngredients = filledRecipeCount === 0
+      if (needsCategory) {
+        setActiveTab('details')
+        setNextStepHighlight('category')
+        toast({
+          title: 'Form filled',
+          description: 'Select a category in the Details tab to continue.',
+        })
+      } else if (needsImage) {
+        setActiveTab('details')
+        setNextStepHighlight('image')
+        toast({
+          title: 'Form filled',
+          description: 'Add an image in the Details tab, then continue to Recipe.',
+        })
+      } else if (hasUnmatchedIngredients || needsIngredients) {
+        setActiveTab('recipe')
+        setNextStepHighlight('recipe')
+        toast({
+          title: 'Form filled',
+          description: hasUnmatchedIngredients
+            ? 'Some ingredients weren\'t found in your inventory. See the Recipe tab to add them or use AI Recipe.'
+            : 'Add at least one ingredient in the Recipe tab, then save.',
+        })
+      } else {
+        setActiveTab('details')
+        toast({ title: 'Form filled', description: 'Review and save when ready.' })
+      }
+    } catch (err) {
+      toast({
+        title: 'Could not parse',
+        description: err instanceof Error ? err.message : 'Something went wrong.',
+        variant: 'destructive',
+      })
+    } finally {
+      setAiParseLoading(false)
+    }
+  }
+
   // Convert recipe units to ingredient base units
   const convertRecipeUnitToBaseUnit = (
     recipeQuantity: number,
@@ -970,21 +1182,15 @@ export default function MenuForm({
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
+  const handleSave = async (saveStatus: 'DRAFT' | 'ACTIVE') => {
     if (!formData.categoryId) {
       toast({ title: 'Missing Information', description: 'Please select a category', variant: 'destructive' })
       return
     }
 
-    if (recipe.length === 0) {
-      toast({ title: 'Missing Ingredients', description: 'Please add at least one ingredient to the recipe', variant: 'destructive' })
-      return
-    }
-
-    if (recipe.some((item) => !item.ingredientId || item.quantity <= 0)) {
-      toast({ title: 'Invalid Quantities', description: 'Please complete all recipe ingredients with valid quantities', variant: 'destructive' })
+    // Allow save without recipe (draft). Only validate recipe lines when present.
+    if (recipe.length > 0 && recipe.some((item) => item.ingredientId && item.quantity <= 0)) {
+      toast({ title: 'Invalid Quantities', description: 'Please set valid quantities for all ingredients or remove empty lines', variant: 'destructive' })
       return
     }
 
@@ -1028,23 +1234,27 @@ export default function MenuForm({
           categoryId: formData.categoryId,
           available: formData.available,
           imageUrl: formData.imageUrl || null,
+          status: saveStatus,
           calories: formData.calories ? parseInt(formData.calories) : null,
           protein: formData.protein ? parseInt(formData.protein) : null,
           carbs: formData.carbs ? parseInt(formData.carbs) : null,
           tags: formData.tags
             ? formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
             : [],
-          ingredients: recipe.map((item) => ({
+          ingredients: validRecipeLines.map((item) => ({
             ingredientId: item.ingredientId,
             quantity: item.quantity,
             pieceCount: item.pieceCount || null,
+            unit: item.unit || null,
+            supplierProductId: item.supplierProductId || null,
+            unitCostCached: item.unitCostCached ?? null,
+            currency: item.currency || null,
+            lastPricedAt: item.lastPricedAt || null,
           })),
-          // Recipe details
           prepTime: prepTime || null,
           cookTime: cookTime || null,
           recipeSteps: recipeSteps,
           recipeTips: recipeTips,
-          // Add-ons
           addOnIds: selectedAddOnIds,
           translations: preparedTranslations,
         }),
@@ -1054,6 +1264,9 @@ export default function MenuForm({
         throw new Error('Failed to save menu item')
       }
 
+      if (saveStatus === 'ACTIVE') {
+        setMenuItemStatus('ACTIVE')
+      }
       router.push('/dashboard/menu')
       router.refresh()
     } catch (error) {
@@ -1161,12 +1374,207 @@ export default function MenuForm({
               ? 'Create a new menu item with recipe'
               : 'Update menu item details and recipe'}
           </p>
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <Badge variant={menuItemStatus === 'ACTIVE' ? 'default' : 'secondary'}>
+              {menuItemStatus === 'ACTIVE' ? 'Published' : 'Draft'}
+            </Badge>
+            <Badge variant={validRecipeLines.length > 0 && validRecipeLines.every((r) => r.unitCostCached != null) ? 'default' : 'secondary'}>
+              Costing: {validRecipeLines.length > 0 && validRecipeLines.every((r) => r.unitCostCached != null) ? 'Complete' : 'Incomplete'}
+            </Badge>
+          </div>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={(e) => e.preventDefault()}>
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2">
+            <Tabs
+              value={activeTab}
+              onValueChange={(v) => {
+                setActiveTab(v)
+                setNextStepHighlight(null)
+              }}
+              className="space-y-4"
+            >
+              <TabsList className="grid w-full grid-cols-4">
+                {mode === 'edit' ? (
+                  <TabsTrigger value="overview" className="flex items-center gap-2">
+                    <LayoutDashboard className="h-4 w-4" />
+                    Overview
+                  </TabsTrigger>
+                ) : (
+                  <TabsTrigger value="ai" className="flex items-center gap-2">
+                    <BotMessageSquare className="h-4 w-4" />
+                    AI Assistant
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="details" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Details
+                </TabsTrigger>
+                <TabsTrigger value="recipe" className="flex items-center gap-2">
+                  <ChefHat className="h-4 w-4" />
+                  Recipe
+                </TabsTrigger>
+                <TabsTrigger value="more" className="flex items-center gap-2">
+                  <MoreHorizontal className="h-4 w-4" />
+                  More
+                </TabsTrigger>
+              </TabsList>
+              {mode === 'edit' && (
+              <TabsContent value="overview" className="space-y-4 mt-0">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>How it looks</CardTitle>
+                    <CardDescription>
+                      Preview of this menu item. Use the other tabs to edit, or the Edit assistant below to update from new text.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                      {(formData.imageUrl || menuItem?.imageUrl) ? (
+                        <div className="aspect-[4/3] relative w-full">
+                          <img
+                            src={formData.imageUrl || menuItem?.imageUrl || ''}
+                            alt={formData.name || 'Menu item'}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400'
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="aspect-[4/3] bg-slate-200 flex items-center justify-center text-slate-500 text-sm">
+                          No image
+                        </div>
+                      )}
+                      <div className="p-4 space-y-2">
+                        <p className="text-xs uppercase tracking-wider text-slate-500">
+                          {categories.find((c) => c.id === formData.categoryId)?.name || 'Uncategorized'}
+                        </p>
+                        <h3 className="text-xl font-semibold text-slate-900">
+                          {formData.name || 'Untitled item'}
+                        </h3>
+                        <p className="text-sm text-slate-600 line-clamp-3">
+                          {formData.description || 'No description.'}
+                        </p>
+                        <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                          {formData.calories && <span>{formData.calories} cal</span>}
+                          {formData.protein && <span>{formData.protein}g protein</span>}
+                          {formData.carbs && <span>{formData.carbs}g carbs</span>}
+                          {formData.tags && formData.tags.split(',').map((t) => t.trim()).filter(Boolean).map((tag) => (
+                            <span key={tag} className="rounded-full bg-slate-200 px-2 py-0.5">{tag}</span>
+                          ))}
+                        </div>
+                        <p className="text-lg font-bold text-emerald-700">
+                          {formatCurrency(parseFloat(formData.price) || 0)}
+                        </p>
+                        {selectedAddOnIds.length > 0 && (
+                          <div className="pt-2 border-t border-slate-200">
+                            <p className="text-xs font-medium text-slate-500 mb-1">Add-ons</p>
+                            <div className="flex flex-wrap gap-1">
+                              {addOns.filter((a) => selectedAddOnIds.includes(a.id)).map((addOn) => (
+                                <span key={addOn.id} className="text-xs text-slate-600">
+                                  +{addOn.name} ({formatCurrency(addOn.price)})
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-emerald-500" />
+                      Edit assistant
+                    </CardTitle>
+                    <CardDescription>
+                      Paste updated info (e.g. new description or price) and we&apos;ll update the form. Then review in Details, Recipe, or More.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Textarea
+                      placeholder="e.g.: Update price to 14,000 IQD. New description: Slow-cooked with saffron..."
+                      value={aiAssistantText}
+                      onChange={(e) => setAiAssistantText(e.target.value)}
+                      rows={5}
+                      className="resize-y"
+                    />
+                    <Button
+                      type="button"
+                      onClick={fillFormFromAI}
+                      disabled={aiParseLoading || !aiAssistantText.trim()}
+                    >
+                      {aiParseLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Updating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Update form from text
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              )}
+              <TabsContent value="ai" className="space-y-4 mt-0">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-emerald-500" />
+                      AI Assistant
+                    </CardTitle>
+                    <CardDescription>
+                      Paste or type any info you have about the dish (name, price, description, ingredients, steps). We&apos;ll fill the form for you. You can then review and edit in the other tabs.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-sm text-slate-600">Your description</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setAiAssistantText(SAMPLE_AI_PROMPT)}
+                      >
+                        Try sample prompt
+                      </Button>
+                    </div>
+                    <Textarea
+                      placeholder="e.g.: Chicken Biryani, 12,000 IQD. Main course. Spiced rice with chicken, served with raita. Calories ~450. Prep 15 min, cook 35 min. Steps: marinate chicken, fry onions..."
+                      value={aiAssistantText}
+                      onChange={(e) => setAiAssistantText(e.target.value)}
+                      rows={8}
+                      className="resize-y"
+                    />
+                    <Button
+                      type="button"
+                      onClick={fillFormFromAI}
+                      disabled={aiParseLoading || !aiAssistantText.trim()}
+                    >
+                      {aiParseLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Filling form...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Fill form from description
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              <TabsContent value="details" className="space-y-6 mt-0">
             <Card>
               <CardHeader>
                 <CardTitle>Menu Item Details</CardTitle>
@@ -1186,26 +1594,42 @@ export default function MenuForm({
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="categoryId">
-                      Category <span className="text-red-500">*</span>
-                    </Label>
-                    <Select
-                      value={formData.categoryId}
-                      onValueChange={(value) => setFormData({ ...formData, categoryId: value })}
-                      required
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div
+                    className={cn(
+                      'rounded-lg p-3 transition-all duration-300',
+                      nextStepHighlight === 'category' && 'ring-2 ring-emerald-400 ring-offset-2 bg-emerald-50/70'
+                    )}
+                  >
+                    {nextStepHighlight === 'category' && (
+                      <p className="text-sm font-medium text-emerald-700 mb-2 flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        Select a category to continue
+                      </p>
+                    )}
+                    <div className="space-y-2">
+                      <Label htmlFor="categoryId">
+                        Category <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={formData.categoryId}
+                        onValueChange={(value) => {
+                          setFormData({ ...formData, categoryId: value })
+                          setNextStepHighlight(null)
+                        }}
+                        required
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -1271,43 +1695,59 @@ export default function MenuForm({
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="imageUrl">Image URL (optional)</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="imageUrl"
-                      value={formData.imageUrl}
-                      onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                      placeholder="https://example.com/image.jpg"
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setShowPromptDialog(true)}
-                      disabled={generatingImage}
-                      title="Generate image with AI"
-                    >
-                      {generatingImage ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                  {formData.imageUrl && (
-                    <div className="mt-2 border rounded-md p-2">
-                      <img
-                        src={formData.imageUrl}
-                        alt="Menu item preview"
-                        className="w-full h-48 object-cover rounded"
-                        onError={(e) => {
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400'
-                        }}
-                      />
-                    </div>
+                <div
+                  className={cn(
+                    'rounded-lg p-3 transition-all duration-300',
+                    nextStepHighlight === 'image' && 'ring-2 ring-emerald-400 ring-offset-2 bg-emerald-50/70'
                   )}
+                >
+                  {nextStepHighlight === 'image' && (
+                    <p className="text-sm font-medium text-emerald-700 mb-2 flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Add an image for this item (paste a URL or generate with AI)
+                    </p>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="imageUrl">Image URL (optional)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="imageUrl"
+                        value={formData.imageUrl}
+                        onChange={(e) => {
+                          setFormData({ ...formData, imageUrl: e.target.value })
+                          setNextStepHighlight(null)
+                        }}
+                        placeholder="https://example.com/image.jpg"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setShowPromptDialog(true)}
+                        disabled={generatingImage}
+                        title="Generate image with AI"
+                      >
+                        {generatingImage ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    {formData.imageUrl && (
+                      <div className="mt-2 border rounded-md p-2">
+                        <img
+                          src={formData.imageUrl}
+                          alt="Menu item preview"
+                          className="w-full h-48 object-cover rounded"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400'
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -1375,7 +1815,8 @@ export default function MenuForm({
                 </div>
               </CardContent>
             </Card>
-
+              </TabsContent>
+              <TabsContent value="more" className="space-y-6 mt-0">
             <Card>
               <CardHeader>
                 <CardTitle>Menu Translations</CardTitle>
@@ -1518,7 +1959,39 @@ export default function MenuForm({
                 </div>
               </CardContent>
             </Card>
-
+              </TabsContent>
+              <TabsContent value="recipe" className="space-y-6 mt-0">
+            {unmatchedIngredientsFromPrompt.length > 0 && (
+              <div
+                className={cn(
+                  'rounded-lg p-4 transition-all duration-300',
+                  nextStepHighlight === 'recipe' && 'ring-2 ring-amber-400 ring-offset-2 bg-amber-50'
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">
+                      These ingredients from your description weren&apos;t found in your inventory:
+                    </p>
+                    <p className="mt-1 text-sm text-amber-700">
+                      {unmatchedIngredientsFromPrompt.join(', ')}
+                    </p>
+                    <p className="mt-2 text-xs text-amber-600">
+                      Add them under Inventory first, or use &quot;AI Recipe&quot; below to create a full recipe with suggestions.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setUnmatchedIngredientsFromPrompt([])}
+                    className="text-amber-700 hover:text-amber-900 shrink-0"
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            )}
             <Card>
               <CardHeader className="flex items-center justify-between gap-3">
                 <CardTitle>Recipe Instructions</CardTitle>
@@ -1619,6 +2092,18 @@ export default function MenuForm({
               </CardContent>
             </Card>
 
+            <div
+              className={cn(
+                'rounded-lg p-3 transition-all duration-300',
+                nextStepHighlight === 'recipe' && 'ring-2 ring-emerald-400 ring-offset-2 bg-emerald-50/70'
+              )}
+            >
+              {nextStepHighlight === 'recipe' && (
+                <p className="text-sm font-medium text-emerald-700 mb-3 flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Add at least one ingredient to continue (or use AI Recipe)
+                </p>
+              )}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Recipe Builder</CardTitle>
@@ -1643,7 +2128,7 @@ export default function MenuForm({
               <CardContent>
                 {recipe.length === 0 ? (
                   <div className="text-center py-8 text-slate-500">
-                    No ingredients added. Click "Add Ingredient" or use "AI Recipe" to get suggestions.
+                    No ingredients added. Click &quot;Add Ingredient&quot; or use &quot;AI Recipe&quot; to get suggestions.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1778,7 +2263,9 @@ export default function MenuForm({
                 )}
               </CardContent>
             </Card>
-
+            </div>
+              </TabsContent>
+              <TabsContent value="more" className="space-y-6 mt-0">
             {/* Add-ons Section */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -1920,6 +2407,8 @@ export default function MenuForm({
                 )}
               </CardContent>
             </Card>
+              </TabsContent>
+            </Tabs>
           </div>
 
           <div className="space-y-6">
@@ -1982,13 +2471,25 @@ export default function MenuForm({
             </Card>
 
             <div className="flex flex-col gap-3">
-              <Button type="submit" disabled={loading} size="lg" className="w-full">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                size="lg"
+                className="w-full"
+                onClick={() => handleSave('DRAFT')}
+              >
                 <Save className="h-4 w-4 mr-2" />
-                {loading
-                  ? 'Saving...'
-                  : mode === 'create'
-                  ? 'Create Menu Item'
-                  : 'Save Changes'}
+                {loading ? 'Saving...' : 'Save as draft'}
+              </Button>
+              <Button
+                type="button"
+                disabled={loading}
+                size="lg"
+                className="w-full"
+                onClick={() => handleSave('ACTIVE')}
+              >
+                {loading ? 'Saving...' : mode === 'create' ? 'Create & publish to menu' : 'Publish to menu'}
               </Button>
               <Link href="/dashboard/menu" className="w-full">
                 <Button type="button" variant="outline" disabled={loading} className="w-full">

@@ -3,27 +3,65 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { formatCurrency } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
+import { InventoryTable } from '@/app/(dashboard)/inventory/InventoryTable'
 
 const PAGE_SIZE = 25
+
+type IngredientSelectRow = {
+  id: string
+  name: string
+  unit: string
+  costPerUnit: number
+  supplier: string | null
+  preferredSupplierId: string | null
+}
 
 async function getInventoryData(restaurantId: string, page: number) {
   const skip = (page - 1) * PAGE_SIZE
 
-  const [totalCount, ingredients] = await Promise.all([
+  const [totalCount, ingredientsRaw] = await Promise.all([
     prisma.ingredient.count({ where: { restaurantId } }),
     prisma.ingredient.findMany({
       where: { restaurantId },
       orderBy: { name: 'asc' },
       skip,
       take: PAGE_SIZE,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        costPerUnit: true,
+        supplier: true,
+        preferredSupplierId: true,
+      } as any,
     }),
   ])
+  const ingredients = ingredientsRaw as unknown as IngredientSelectRow[]
+
+  const supplierIds = Array.from(new Set(ingredients.map((i) => i.preferredSupplierId).filter(Boolean))) as string[]
+  const suppliers =
+    supplierIds.length > 0
+      ? await (prisma as any).supplier.findMany({
+          where: { id: { in: supplierIds } },
+          select: { id: true, name: true },
+        })
+      : []
+  const supplierById = Object.fromEntries(suppliers.map((s) => [s.id, s]))
 
   return {
-    ingredients,
+    ingredients: ingredients.map((i) => ({
+      id: i.id,
+      name: i.name,
+      unit: i.unit,
+      costPerUnit: i.costPerUnit,
+      supplier: i.supplier,
+      preferredSupplier: i.preferredSupplierId
+        ? { id: i.preferredSupplierId, name: supplierById[i.preferredSupplierId]?.name ?? '' }
+        : null,
+    })),
     totalCount,
     totalPages: Math.ceil(totalCount / PAGE_SIZE),
   }
@@ -63,75 +101,13 @@ export default async function InventoryPage({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200">
-                  <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    Ingredient
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    Unit
-                  </th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    Cost/Unit
-                  </th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.ingredients.map((ingredient) => (
-                  <tr key={ingredient.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-3 px-4">
-                      <div className="font-medium text-slate-900">{ingredient.name}</div>
-                      {ingredient.supplier && (
-                        <div className="text-sm text-slate-500">{ingredient.supplier}</div>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-slate-600">{ingredient.unit}</td>
-                    <td className="py-3 px-4 text-right font-mono">
-                      {formatCurrency(ingredient.costPerUnit)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <Link href={`/inventory/${ingredient.id}`}>
-                        <Button variant="ghost" size="sm">
-                          Edit
-                        </Button>
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {data.ingredients.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-slate-500">No ingredients found. Add your first ingredient to get started.</p>
-              </div>
-            )}
+            <InventoryTable
+              ingredients={data.ingredients}
+              totalCount={data.totalCount}
+              totalPages={data.totalPages}
+              currentPage={page}
+            />
           </div>
-
-          {/* Pagination */}
-          {data.totalPages > 1 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 mt-4">
-              <p className="text-sm text-slate-500">
-                Page {page} of {data.totalPages} ({data.totalCount} ingredients)
-              </p>
-              <div className="flex items-center gap-2">
-                <Link href={`/dashboard/inventory?page=${Math.max(page - 1, 1)}`}>
-                  <Button variant="outline" size="sm" disabled={page <= 1}>
-                    Previous
-                  </Button>
-                </Link>
-                <Link href={`/dashboard/inventory?page=${Math.min(page + 1, data.totalPages)}`}>
-                  <Button variant="outline" size="sm" disabled={page >= data.totalPages}>
-                    Next
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

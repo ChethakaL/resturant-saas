@@ -7,8 +7,11 @@ declare module 'next-auth' {
       email: string
       name: string
       role: string
-      restaurantId: string
-      restaurantName: string
+      type: 'restaurant' | 'supplier'
+      restaurantId?: string
+      restaurantName?: string
+      supplierId?: string
+      supplierName?: string
     }
   }
 
@@ -17,8 +20,11 @@ declare module 'next-auth' {
     email: string
     name: string
     role: string
-    restaurantId: string
-    restaurantName: string
+    type: 'restaurant' | 'supplier'
+    restaurantId?: string
+    restaurantName?: string
+    supplierId?: string
+    supplierName?: string
   }
 }
 
@@ -26,7 +32,10 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string
     role: string
-    restaurantId: string
-    restaurantName: string
+    type: 'restaurant' | 'supplier'
+    restaurantId?: string
+    restaurantName?: string
+    supplierId?: string
+    supplierName?: string
   }
 }

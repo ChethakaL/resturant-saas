@@ -502,6 +502,28 @@ async function getDashboardData(restaurantId: string) {
   const monthlyMargin = monthlyRevenue > 0 ? (monthlyNetProfit / monthlyRevenue) * 100 : 0
   const foodCostPercent = monthlyRevenue > 0 ? (monthlyCOGS / monthlyRevenue) * 100 : 0
 
+  // MTD run-rate forecast for "early warning likely losses this month"
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const daysElapsed = Math.max(now.getDate(), 1)
+  const projectedRevenue = (monthlyRevenue / daysElapsed) * daysInMonth
+  const projectedCOGS = (monthlyCOGS / daysElapsed) * daysInMonth
+  const projectedExpenses = (totalOperatingExpenses / daysElapsed) * daysInMonth
+  const projectedPayroll = (payrollTotal / daysElapsed) * daysInMonth
+  const projectedNetProfit = projectedRevenue - projectedCOGS - projectedExpenses - projectedPayroll
+  const forecastDrivers: Array<{ label: string; amount: number }> = []
+  if (projectedCOGS > 0) forecastDrivers.push({ label: 'COGS', amount: projectedCOGS })
+  if (projectedPayroll > 0) forecastDrivers.push({ label: 'Labor', amount: projectedPayroll })
+  if (projectedExpenses > 0) forecastDrivers.push({ label: 'Operating Expenses', amount: projectedExpenses })
+  forecastDrivers.sort((a, b) => b.amount - a.amount)
+  const projectedLossForecast = {
+    projectedNetProfit,
+    isLoss: projectedNetProfit < 0,
+    projectedRevenue,
+    daysElapsed,
+    daysInMonth,
+    drivers: forecastDrivers.slice(0, 3),
+  }
+
   // Top selling items (this week)
   const topItems = await prisma.saleItem.groupBy({
     by: ['menuItemId'],
@@ -659,6 +681,7 @@ async function getDashboardData(restaurantId: string) {
       margin: monthlyMargin,
       foodCostPercent,
     },
+    projectedLossForecast,
     topItems: topItemsData,
     topWaiters: topWaitersData,
     inventory: {
@@ -689,6 +712,41 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <PnLReminder />
+      {data.projectedLossForecast.isLoss && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-800">
+                Projected net loss this month: {formatCurrency(Math.abs(data.projectedLossForecast.projectedNetProfit))}
+              </h3>
+              <p className="text-sm text-red-700 mt-1">
+                Based on {data.projectedLossForecast.daysElapsed} of {data.projectedLossForecast.daysInMonth} days,
+                projected revenue is {formatCurrency(data.projectedLossForecast.projectedRevenue)}.
+              </p>
+              {data.projectedLossForecast.drivers.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-red-700 uppercase tracking-wide">Top cost drivers</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {data.projectedLossForecast.drivers.map((d) => (
+                      <li key={d.label} className="text-sm text-red-700 flex justify-between max-w-xs">
+                        <span>{d.label}</span>
+                        <span className="font-mono">{formatCurrency(d.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <a
+                href="/profit-loss"
+                className="inline-block mt-3 text-sm font-medium text-red-700 hover:text-red-800 underline"
+              >
+                View P&L details →
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
         <p className="text-slate-500 mt-1">Welcome back, {session!.user.name}</p>

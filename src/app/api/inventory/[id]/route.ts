@@ -28,16 +28,28 @@ export async function PATCH(
       return NextResponse.json({ error: 'Ingredient not found' }, { status: 404 })
     }
 
+    const updateData: {
+      name?: string
+      unit?: string
+      costPerUnit?: number
+      minStockLevel?: number
+      supplier?: string | null
+      notes?: string | null
+      preferredSupplierId?: string | null
+    } = {
+      name: data.name,
+      unit: data.unit,
+      costPerUnit: data.costPerUnit,
+      minStockLevel: data.minStockLevel,
+      supplier: data.supplier,
+      notes: data.notes,
+    }
+    if (data.preferredSupplierId !== undefined) {
+      updateData.preferredSupplierId = data.preferredSupplierId === '' || data.preferredSupplierId == null ? null : data.preferredSupplierId
+    }
     const ingredient = await prisma.ingredient.update({
       where: { id: resolvedParams.id },
-      data: {
-        name: data.name,
-        unit: data.unit,
-        costPerUnit: data.costPerUnit,
-        minStockLevel: data.minStockLevel,
-        supplier: data.supplier,
-        notes: data.notes,
-      },
+      data: updateData,
     })
 
     return NextResponse.json(ingredient)

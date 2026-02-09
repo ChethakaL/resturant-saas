@@ -19,44 +19,51 @@ export async function POST(request: Request) {
     // Create menu item with ingredients in a transaction
     const menuItem = await prisma.$transaction(async (tx) => {
       // Create the menu item
-      const item = await tx.menuItem.create({
-        data: {
-          name: data.name,
-          description: data.description,
-          price: data.price,
-          imageUrl: data.imageUrl,
-          available: data.available,
-          categoryId: data.categoryId,
-          restaurantId: session.user.restaurantId,
-          calories: data.calories,
-          protein: data.protein,
-          carbs: data.carbs,
-          tags: data.tags || [],
-          // Recipe details
-          prepTime: data.prepTime || null,
-          cookTime: data.cookTime || null,
-          recipeSteps: data.recipeSteps || [],
-          recipeTips: data.recipeTips || [],
-        },
+      const validIngredients = (data.ingredients || []).filter(
+      (ing: any) => ing.ingredientId && ing.quantity > 0
+    )
+    const hasRecipe = validIngredients.length > 0
+    const hasCosting = validIngredients.some((ing: any) => ing.unitCostCached != null)
+    const status = data.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT'
+    const costingStatus = hasRecipe && hasCosting ? 'COMPLETE' : 'INCOMPLETE'
+
+    const item = await tx.menuItem.create({
+      data: {
+        name: data.name,
+        description: data.description,
+        price: data.price,
+        imageUrl: data.imageUrl,
+        available: data.available,
+        status,
+        costingStatus,
+        categoryId: data.categoryId,
+        restaurantId: session.user.restaurantId,
+        calories: data.calories,
+        protein: data.protein,
+        carbs: data.carbs,
+        tags: data.tags || [],
+        prepTime: data.prepTime || null,
+        cookTime: data.cookTime || null,
+        recipeSteps: data.recipeSteps || [],
+        recipeTips: data.recipeTips || [],
+      },
+    })
+
+    if (validIngredients.length > 0) {
+      await tx.menuItemIngredient.createMany({
+        data: validIngredients.map((ing: any) => ({
+          menuItemId: item.id,
+          ingredientId: ing.ingredientId,
+          quantity: ing.quantity,
+          pieceCount: ing.pieceCount || null,
+          unit: ing.unit || null,
+          supplierProductId: ing.supplierProductId || null,
+          unitCostCached: ing.unitCostCached ?? null,
+          currency: ing.currency || null,
+          lastPricedAt: ing.lastPricedAt ? new Date(ing.lastPricedAt) : null,
+        })),
       })
-
-      // Create recipe ingredients - only if valid ingredient IDs are provided
-      if (data.ingredients && data.ingredients.length > 0) {
-        const validIngredients = data.ingredients.filter(
-          (ing: any) => ing.ingredientId && ing.quantity > 0
-        )
-
-        if (validIngredients.length > 0) {
-          await tx.menuItemIngredient.createMany({
-            data: validIngredients.map((ing: any) => ({
-              menuItemId: item.id,
-              ingredientId: ing.ingredientId,
-              quantity: ing.quantity,
-              pieceCount: ing.pieceCount || null,
-            })),
-          })
-        }
-      }
+    }
 
       // Create add-on associations
       if (data.addOnIds && data.addOnIds.length > 0) {

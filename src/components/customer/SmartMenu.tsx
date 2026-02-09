@@ -1,11 +1,11 @@
 'use client'
 
-import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
+import { useMemo, useState, useEffect, useCallback, useRef, useReducer } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatMenuPrice } from '@/lib/utils'
 import Image from 'next/image'
 import {
   Dialog,
@@ -18,6 +18,15 @@ import {
 import { Sparkles, Flame, Leaf, X, Loader2, Globe, Funnel } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
+import { MenuCarousel } from './MenuCarousel'
+import { MenuItemCard } from './MenuItemCard'
+import { MoodSelector } from './MoodSelector'
+import { CartDrawer } from './CartDrawer'
+import { SequentialUpsell } from './SequentialUpsell'
+import { BundleCarousel } from './BundleCarousel'
+import { CheckoutNudge } from './CheckoutNudge'
+import { IdleUpsellPopup } from './IdleUpsellPopup'
+import type { ItemDisplayHints, BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
 
 interface MenuItem {
   id: string
@@ -26,10 +35,8 @@ interface MenuItem {
   price: number
   imageUrl?: string | null
   calories?: number | null
-  cost?: number | null
   tags?: string[]
   popularityScore?: number
-  margin?: number
   chefPickOrder?: number | null
   protein?: number | null
   carbs?: number | null
@@ -41,11 +48,46 @@ interface MenuItem {
     price: number
     description?: string | null
   }>
+  _hints?: ItemDisplayHints
+}
+
+interface ShowcaseSection {
+  id: string
+  title: string
+  type?: 'CHEFS_HIGHLIGHTS' | 'RECOMMENDATIONS'
+  position: string
+  insertAfterCategoryId: string | null
+  items: MenuItem[]
+}
+
+interface CategorySection {
+  id: string
+  name: string
+  displayOrder: number
+}
+
+interface MenuTheme {
+  primaryColor?: string
+  accentColor?: string
+  backgroundStyle?: 'dark' | 'light' | 'gradient'
+  fontFamily?: 'sans' | 'serif' | 'display'
+  logoUrl?: string | null
+  backgroundImageUrl?: string | null
 }
 
 interface SmartMenuProps {
   restaurantId: string
   menuItems: MenuItem[]
+  showcases?: ShowcaseSection[]
+  categories?: CategorySection[]
+  theme?: MenuTheme | null
+  restaurantName?: string
+  restaurantLogo?: string | null
+  engineMode?: 'classic' | 'profit' | 'adaptive'
+  bundles?: BundleHint[]
+  moods?: MoodOption[]
+  upsellMap?: Record<string, UpsellSuggestion[]>
+  categoryOrder?: string[]
 }
 
 type LanguageCode = 'en' | 'ar' | 'ku'
@@ -240,6 +282,75 @@ const uiCopyMap: Record<
   },
 }
 
+const engineCopyMap: Record<
+  LanguageCode,
+  {
+    showAll: string
+    viewOrder: string
+    placeOrder: string
+    cartTitle: string
+    addLabel: string
+    skipLabel: string
+    addBundleLabel: string
+    bundlesTitle: string
+    checkoutNudgeBeverage: string
+    checkoutNudgeDessert: string
+    addToOrder: string
+    dismissLabel: string
+    idleMessage: string
+    jumpToSection: string
+  }
+> = {
+  en: {
+    showAll: 'Show all',
+    viewOrder: 'View order',
+    placeOrder: 'Place order',
+    cartTitle: 'Your order',
+    addLabel: 'Add',
+    skipLabel: 'Skip',
+    addBundleLabel: 'Add bundle',
+    bundlesTitle: 'Popular combos',
+    checkoutNudgeBeverage: 'Most guests complete with a refreshing drink.',
+    checkoutNudgeDessert: 'End your meal on a sweet note?',
+    addToOrder: 'Add to order',
+    dismissLabel: 'No thanks',
+    idleMessage: 'Looking for something? Try our',
+    jumpToSection: 'Jump to',
+  },
+  ar: {
+    showAll: 'عرض الكل',
+    viewOrder: 'عرض الطلب',
+    placeOrder: 'تأكيد الطلب',
+    cartTitle: 'طلبك',
+    addLabel: 'إضافة',
+    skipLabel: 'تخطي',
+    addBundleLabel: 'إضافة المجموعة',
+    bundlesTitle: 'تركيبات شائعة',
+    checkoutNudgeBeverage: 'معظم الضيوف يكمّلون مع مشروب منعش.',
+    checkoutNudgeDessert: 'اختم وجبتك بحلوى؟',
+    addToOrder: 'إضافة للطلب',
+    dismissLabel: 'لا شكراً',
+    idleMessage: 'تبحث عن شيء؟ جرّب',
+    jumpToSection: 'انتقل إلى',
+  },
+  ku: {
+    showAll: 'هەموویان',
+    viewOrder: 'بینینی داواکاری',
+    placeOrder: 'داواکاری بدە',
+    cartTitle: 'داواکاریی تۆ',
+    addLabel: 'زیاد بکە',
+    skipLabel: 'تێپەڕە',
+    addBundleLabel: 'کۆمەڵە زیاد بکە',
+    bundlesTitle: 'کۆمەڵە باوەکان',
+    checkoutNudgeBeverage: 'زۆربەی میوانەکان لەگەڵ خواردنەوەیەک تەواو دەکەن.',
+    checkoutNudgeDessert: 'نانی خواردنت بە شیرینێک تەواو بکە؟',
+    addToOrder: 'زیاد بکە بۆ داواکاری',
+    dismissLabel: 'نەخێر',
+    idleMessage: 'شتیک دەگەڕیت؟ تاقی',
+    jumpToSection: 'بڕو بۆ',
+  },
+}
+
 const SMART_SEARCH_STOP_WORDS = new Set(['or', 'and'])
 
 const formatTemplate = (
@@ -251,9 +362,66 @@ const formatTemplate = (
   }, template)
 }
 
+type CartLine = { menuItemId: string; name: string; price: number; quantity: number }
+type CartAction =
+  | { type: 'ADD_ITEM'; item: MenuItem; quantity?: number }
+  | { type: 'REMOVE_ITEM'; menuItemId: string }
+  | { type: 'UPDATE_QUANTITY'; menuItemId: string; delta: number }
+  | { type: 'ADD_BUNDLE'; itemIds: string[]; items: MenuItem[]; bundlePrice: number }
+  | { type: 'CLEAR' }
+
+function cartReducer(state: CartLine[], action: CartAction): CartLine[] {
+  switch (action.type) {
+    case 'ADD_ITEM': {
+      const q = action.quantity ?? 1
+      const existing = state.find((l) => l.menuItemId === action.item.id)
+      if (existing) {
+        return state.map((l) =>
+          l.menuItemId === action.item.id ? { ...l, quantity: l.quantity + q } : l
+        )
+      }
+      return [...state, { menuItemId: action.item.id, name: action.item.name, price: action.item.price, quantity: q }]
+    }
+    case 'REMOVE_ITEM':
+      return state.filter((l) => l.menuItemId !== action.menuItemId)
+    case 'UPDATE_QUANTITY': {
+      const line = state.find((l) => l.menuItemId === action.menuItemId)
+      if (!line) return state
+      const next = line.quantity + action.delta
+      if (next <= 0) return state.filter((l) => l.menuItemId !== action.menuItemId)
+      return state.map((l) =>
+        l.menuItemId === action.menuItemId ? { ...l, quantity: next } : l
+      )
+    }
+    case 'ADD_BUNDLE': {
+      const byId = new Map(action.items.map((i) => [i.id, i]))
+      const newLines: CartLine[] = []
+      for (const id of action.itemIds) {
+        const item = byId.get(id)
+        if (item) newLines.push({ menuItemId: item.id, name: item.name, price: item.price, quantity: 1 })
+      }
+      return [...state, ...newLines]
+    }
+    case 'CLEAR':
+      return []
+    default:
+      return state
+  }
+}
+
 export default function SmartMenu({
   restaurantId,
   menuItems,
+  showcases,
+  categories: categoriesProp,
+  theme,
+  restaurantName,
+  restaurantLogo,
+  engineMode = 'classic',
+  bundles = [],
+  moods = [],
+  upsellMap = {},
+  categoryOrder,
 }: SmartMenuProps) {
   // Safety check for menuItems
   if (!menuItems || !Array.isArray(menuItems)) {
@@ -308,6 +476,22 @@ export default function SmartMenu({
   const [descriptionLoadingItem, setDescriptionLoadingItem] =
     useState<string | null>(null)
   const [descriptionError, setDescriptionError] = useState<string | null>(null)
+  const [cart, dispatchCart] = useReducer(cartReducer, [])
+  const [selectedMoodId, setSelectedMoodId] = useState<string | null>(null)
+  const [upsellAfterAdd, setUpsellAfterAdd] = useState<{ itemId: string } | null>(null)
+  const [upsellIndex, setUpsellIndex] = useState(0)
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false)
+  const [idleUpsellDismissed, setIdleUpsellDismissed] = useState(false)
+  const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
+  const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
+    if (el) sectionRefs.current.set(id, el)
+    else sectionRefs.current.delete(id)
+  }, [])
+  const scrollToSection = useCallback((categoryId: string) => {
+    sectionRefs.current.get(categoryId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
   const trimmedSearch = search.trim()
   const searchTokens = useMemo(() => {
     if (!trimmedSearch) {
@@ -483,6 +667,7 @@ export default function SmartMenu({
   }, [isSmartSearchActive])
 
   const currentCopy = uiCopyMap[language]
+  const currentEngineCopy = engineCopyMap[language]
   const currentLanguageLabel =
     languageOptions.find((option) => option.value === language)?.label || ''
   const buildMacroSegments = (
@@ -535,34 +720,6 @@ export default function SmartMenu({
   }, [menuItems])
 
   // Filter and sort menu items
-  const highlightItems = useMemo(() => {
-    const chefPicks = [...menuItems]
-      .filter((item) => item.chefPickOrder != null)
-      .sort(
-        (a, b) =>
-          (a.chefPickOrder ?? 0) - (b.chefPickOrder ?? 0)
-      )
-
-    if (chefPicks.length === 0) {
-      return [...menuItems]
-        .filter((item) => item.margin != null)
-        .sort((a, b) => (b.margin ?? 0) - (a.margin ?? 0))
-        .slice(0, 6)
-    }
-
-    const chefPickIds = new Set(chefPicks.map((item) => item.id))
-    const remaining = [...menuItems]
-      .filter((item) => !chefPickIds.has(item.id) && item.margin != null)
-      .sort((a, b) => (b.margin ?? 0) - (a.margin ?? 0))
-
-    return [...chefPicks, ...remaining].slice(0, 6)
-  }, [menuItems])
-
-  const highlightItemIds = useMemo(
-    () => highlightItems.slice(0, 5).map((item) => item.id),
-    [highlightItems]
-  )
-
   const filteredItems = useMemo(() => {
     let items = menuItems
 
@@ -605,6 +762,15 @@ export default function SmartMenu({
       )
     }
 
+    // Mood filter (engine)
+    if (selectedMoodId && moods.length > 0) {
+      const mood = moods.find((m) => m.id === selectedMoodId)
+      if (mood && mood.itemIds.length > 0) {
+        const moodIds = new Set(mood.itemIds)
+        items = items.filter((item) => moodIds.has(item.id))
+      }
+    }
+
     // Sort
     const macroValue = (item: MenuItem, key: 'protein' | 'carbs') => {
       const translation = translationCache[language]?.[item.id]
@@ -638,38 +804,18 @@ export default function SmartMenu({
       }
     })
 
-    if (sortBy === 'popular') {
-      const highlightSet = new Set(highlightItemIds)
-      const highlighted: MenuItem[] = []
-      const others: MenuItem[] = []
-
-      items.forEach((item) => {
-        if (highlightSet.has(item.id)) {
-          highlighted.push(item)
-        } else {
-          others.push(item)
-        }
-      })
-
-      return [...highlighted, ...others]
-    }
-
     return items
   }, [
     menuItems,
     searchTokens,
     selectedCategory,
     selectedTags,
+    selectedMoodId,
+    moods,
     sortBy,
-    highlightItemIds,
     language,
     translationCache,
   ])
-
-  const hasChefPicksConfigured = useMemo(
-    () => menuItems.some((item) => item.chefPickOrder != null),
-    [menuItems]
-  )
 
   const summaryTemplate =
     filteredItems.length === 1
@@ -853,10 +999,127 @@ const getLocalizedAddOnName = (name: string) => {
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
+  // Theme computation
+  const themeStyle = useMemo(() => {
+    if (!theme) return {}
+    return {
+      '--menu-primary': theme.primaryColor || '#10b981',
+      '--menu-accent': theme.accentColor || '#f59e0b',
+    } as React.CSSProperties
+  }, [theme])
+
+  const fontClass =
+    theme?.fontFamily === 'serif'
+      ? 'font-serif'
+      : theme?.fontFamily === 'display'
+        ? 'font-serif italic'
+        : ''
+
+  const bgClass =
+    theme?.backgroundStyle === 'light'
+      ? 'bg-slate-100 text-slate-900'
+      : theme?.backgroundStyle === 'gradient'
+        ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white'
+        : 'bg-slate-950 text-white'
+
+  const isDarkBg = theme?.backgroundStyle !== 'light'
+  const bgImageStyle = theme?.backgroundImageUrl
+    ? {
+        backgroundImage: `url(${theme.backgroundImageUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }
+    : undefined
+
+  // Category sections for the menu grid (use categoryOrder from engine when present)
+  const categorizedSections = useMemo(() => {
+    if (!categoriesProp || categoriesProp.length === 0) {
+      return [{ category: null as CategorySection | null, items: filteredItems }]
+    }
+
+    const sections: Array<{ category: CategorySection | null; items: MenuItem[] }> = []
+    const sortedCategories =
+      categoryOrder && categoryOrder.length > 0
+        ? [...categoriesProp].sort(
+            (a, b) =>
+              (categoryOrder.indexOf(a.id) === -1 ? 999 : categoryOrder.indexOf(a.id)) -
+              (categoryOrder.indexOf(b.id) === -1 ? 999 : categoryOrder.indexOf(b.id))
+          )
+        : [...categoriesProp].sort((a, b) => a.displayOrder - b.displayOrder)
+
+    for (const cat of sortedCategories) {
+      const categoryItems = filteredItems.filter(
+        (item) => item.category?.id === cat.id
+      )
+      if (categoryItems.length > 0) {
+        sections.push({ category: cat, items: categoryItems })
+      }
+    }
+
+    const uncategorized = filteredItems.filter(
+      (item) =>
+        !categoriesProp.some((c) => c.id === item.category?.id)
+    )
+    if (uncategorized.length > 0) {
+      sections.push({ category: null, items: uncategorized })
+    }
+
+    return sections
+  }, [filteredItems, categoriesProp, categoryOrder])
+
+  // Highlight which section is in view (for the sticky nav)
+  useEffect(() => {
+    const sections = categorizedSections.filter((s): s is typeof s & { category: NonNullable<typeof s.category> } => !!s.category)
+    if (sections.length === 0) return
+    const firstId = sections[0]?.category.id ?? null
+    setActiveSectionId((prev) => prev ?? firstId)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue
+          const id = (entry.target as HTMLElement).getAttribute('data-section-id')
+          if (id) setActiveSectionId(id)
+        }
+      },
+      { rootMargin: '-80px 0px -60% 0px', threshold: 0 }
+    )
+    const raf = requestAnimationFrame(() => {
+      sections.forEach((s) => {
+        const el = sectionRefs.current.get(s.category.id)
+        if (el) {
+          el.setAttribute('data-section-id', s.category.id)
+          observer.observe(el)
+        }
+      })
+    })
+    return () => {
+      cancelAnimationFrame(raf)
+      observer.disconnect()
+    }
+  }, [categorizedSections])
+
+  const topShowcases = useMemo(
+    () => (showcases || []).filter((s) => s.position === 'top'),
+    [showcases]
+  )
+
+  const betweenShowcases = useMemo(
+    () => (showcases || []).filter((s) => s.position === 'between-categories'),
+    [showcases]
+  )
+
+  const logoSrc = theme?.logoUrl || restaurantLogo || '/logo.png'
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+    <div
+      className={`min-h-screen ${bgClass} ${fontClass}`}
+      style={{ ...themeStyle, ...bgImageStyle }}
+    >
+      {theme?.backgroundImageUrl && (
+        <div className="fixed inset-0 bg-black/40 pointer-events-none z-0" aria-hidden />
+      )}
       <div
-        className={`relative overflow-hidden transition-all duration-300 ${
+        className={`relative overflow-hidden transition-all duration-300 ${theme?.backgroundImageUrl ? 'z-10' : ''} ${
           isSmartSearchActive ? 'pointer-events-none blur-sm' : 'pointer-events-auto'
         }`}
       >
@@ -873,16 +1136,16 @@ const getLocalizedAddOnName = (name: string) => {
             <div className="flex items-center justify-between gap-6">
               <div className="flex-shrink-0">
                 <Image
-                  src="/logo.png"
+                  src={logoSrc}
                   width={42}
                   height={42}
-                  alt="iServePlus logo"
-                  className="w-16 h-16 rounded-full border border-white/20 bg-white/5 p-1 shadow-lg object-contain"
+                  alt={restaurantName || 'Restaurant logo'}
+                  className={`w-16 h-16 rounded-full border ${isDarkBg ? 'border-white/20 bg-white/5' : 'border-slate-200 bg-white'} p-1 shadow-lg object-contain`}
                 />
               </div>
               <div className="flex-1 text-center">
-                <p className="text-4xl sm:text-5xl font-bold tracking-tight text-white">
-                  Menu
+                <p className={`text-4xl sm:text-5xl font-bold tracking-tight ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                  {restaurantName || 'Menu'}
                 </p>
               </div>
               <div className="flex-shrink-0">
@@ -926,56 +1189,23 @@ const getLocalizedAddOnName = (name: string) => {
               </div>
             </div>
 
-            {highlightItems.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between px-4">
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/60">
-                    Highlights
-                  </p>
-                  <span className="text-xs text-emerald-300">
-                    {hasChefPicksConfigured ? 'Chef picks' : 'Chef Picks'}
-                  </span>
-                </div>
-                <div className="overflow-x-auto px-4">
-                  <div className="flex gap-3 py-2">
-                    {highlightItems.map((item) => {
-                      const translation =
-                        translationCache[language]?.[item.id]
-                      const displayName = translation?.name || item.name
-
-                      return (
-                        <div
-                          key={item.id}
-                          className="min-w-[150px] flex-shrink-0 divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/5 shadow-lg shadow-black/40 backdrop-blur"
-                        >
-                          <div className="aspect-square w-36 sm:w-40 overflow-hidden rounded-t-2xl">
-                            <img
-                              src={
-                                item.imageUrl ||
-                                'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=60'
-                              }
-                              alt={item.name}
-                                className="h-full w-full object-cover transition duration-200 hover:scale-105"
-                              />
-                            </div>
-                          <div className="space-y-1 px-3 py-3 text-sm">
-                            <p className="font-semibold text-white line-clamp-2">
-                              {displayName}
-                            </p>
-                            <p className="text-xs uppercase tracking-[0.3em] text-white/60">
-                              {getLocalizedCategoryName(item.category?.name)}
-                            </p>
-                            <div className="flex items-center justify-between text-xs text-white/70">
-                              <span>{formatCurrency(item.price)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
+            {topShowcases.map((showcase) => (
+              <MenuCarousel
+                key={showcase.id}
+                title={showcase.title}
+                type={showcase.type}
+                items={showcase.items}
+                onItemClick={(item) =>
+                  setSelectedItemForDetail(item as MenuItem)
+                }
+                getDisplayName={(id) =>
+                  translationCache[language]?.[id]?.name
+                }
+                getCategoryName={getLocalizedCategoryName}
+                accentColor={theme?.accentColor}
+                primaryColor={theme?.primaryColor}
+              />
+            ))}
             {/* Search + Filter */}
             <div className="flex justify-center">
               <div
@@ -1140,137 +1370,149 @@ const getLocalizedAddOnName = (name: string) => {
               </div>
             )}
 
-            {/* Menu Items Grid */}
-            <div className="space-y-4 relative px-4">
-              {filteredItems.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-white/60">{currentCopy.noItemsMessage}</p>
-                </div>
-              ) : (
-                <div className="grid gap-3">
-                  {filteredItems.map((item) => {
-                    const translation =
-                      translationCache[language]?.[item.id]
-                    const displayName = translation?.name || item.name
-                    const displayDescription =
-                      translation?.description || item.description || ''
-                    const macroSegments = buildMacroSegments(item, translation)
+            {engineMode !== 'classic' && moods.length > 0 && (
+              <div className="px-4 pb-2">
+                <MoodSelector
+                  moods={moods}
+                  language={language}
+                  selectedMoodId={selectedMoodId}
+                  onSelectMood={setSelectedMoodId}
+                  showAllLabel={currentEngineCopy.showAll}
+                />
+              </div>
+            )}
+
+            {engineMode !== 'classic' && bundles.length > 0 && (
+              <div className="px-4">
+                <BundleCarousel
+                  bundles={bundles}
+                  itemNames={Object.fromEntries(menuItems.map((i) => [i.id, i.name]))}
+                  itemImageUrls={Object.fromEntries(menuItems.map((i) => [i.id, i.imageUrl]))}
+                  onAddBundle={(bundle) => {
+                    const items = bundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
+                    if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: bundle.itemIds, items, bundlePrice: bundle.bundlePrice })
+                  }}
+                  title={currentEngineCopy.bundlesTitle}
+                  addBundleLabel={currentEngineCopy.addBundleLabel}
+                />
+              </div>
+            )}
+
+            {/* Sticky section quick-jump — discover sections without scrolling */}
+            {categorizedSections.length >= 2 && categorizedSections.some((s) => s.category) && (
+              <nav
+                className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-slate-900/95 backdrop-blur-md border-b border-white/10 shadow-lg"
+                aria-label="Jump to menu section"
+              >
+                <p className="text-[10px] uppercase tracking-wider text-white/50 mb-2 px-0.5">
+                  {currentEngineCopy.jumpToSection}
+                </p>
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-0.5">
+                  {categorizedSections.filter((s) => s.category).map((section) => {
+                    const isActive = activeSectionId === section.category!.id
                     return (
-                      <Card
-                        key={item.id}
-                        className="overflow-hidden bg-white/95 backdrop-blur text-slate-900 hover:shadow-lg transition-all"
-                        onClick={() => setSelectedItemForDetail(item)}
+                      <button
+                        key={section.category!.id}
+                        type="button"
+                        onClick={() => scrollToSection(section.category!.id)}
+                        className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                          isActive
+                            ? 'bg-amber-500 text-white shadow-md'
+                            : 'bg-white/10 text-white hover:bg-amber-500/80 hover:text-white'
+                        }`}
                       >
-                        <div className="flex min-h-[120px] sm:min-h-[140px]">
-                          {/* Left side - Content */}
-                          <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
-                            <div>
-                              {/* Title & Price Row */}
-                              <div className="flex items-start justify-between gap-2 mb-0.5">
-                                <h3 className="text-sm font-semibold leading-tight line-clamp-2">
-                                  {displayName}
-                                </h3>
-                                <p className="text-base font-bold text-emerald-700 flex-shrink-0">
-                                  {formatCurrency(item.price)}
-                                </p>
-                              </div>
-
-                              {/* Category */}
-                              <p className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">
-                                {getLocalizedCategoryName(item.category?.name)}
-                              </p>
-
-                              {/* Description */}
-                              {displayDescription && (
-                                <p className="text-[11px] text-slate-600 line-clamp-2 mb-1">
-                                  {displayDescription}
-                                </p>
-                              )}
-
-                              {/* Macros & Tags Row */}
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                {macroSegments.length > 0 && (
-                                  <span className="text-[9px] text-slate-500">
-                                    {macroSegments.join(' · ')}
-                                  </span>
-                                )}
-                                {item.tags && item.tags.length > 0 && (
-                                  <>
-                                    {macroSegments.length > 0 && <span className="text-slate-300">|</span>}
-                                    {item.tags.slice(0, 2).map((tag) => {
-                                      const tagLabel = getLocalizedTagLabel(tag)
-                                      return (
-                                        <span
-                                          key={tag}
-                                          className="inline-flex items-center gap-0.5 text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
-                                        >
-                                          {getTagIcon(tag)}
-                                          {tagLabel}
-                                        </span>
-                                      )
-                                    })}
-                                  </>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-2 mt-1">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  fetchPairingSuggestions(item)
-                                }}
-                                disabled={
-                                  loadingSuggestions &&
-                                  selectedItemForPairing?.id === item.id
-                                }
-                                className="flex items-center gap-1 text-[9px] font-medium text-emerald-700 hover:text-emerald-800 transition-colors"
-                              >
-                                {loadingSuggestions &&
-                                selectedItemForPairing?.id === item.id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Sparkles className="h-3 w-3" />
-                                )}
-                                <span>Pairings</span>
-                              </button>
-                              <span className="text-slate-300">•</span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setSelectedItemForDetail(item)
-                                }}
-                                className="text-[9px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
-                              >
-                                More info
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Right side - Square Image with margin and centered */}
-                          <div className="relative flex-shrink-0 w-[146px] sm:w-[146px] aspect-square flex items-center justify-center p-2">
-                            <img
-                              src={
-                                item.imageUrl ||
-                                'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
-                              }
-                              alt={item.name}
-                              className="w-full h-full object-cover rounded"
-                            />
-                            {item.popularityScore != null && item.popularityScore > 50 && (
-                              <span className="absolute top-2 right-2 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
-                                Popular
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </Card>
+                        {getLocalizedCategoryName(section.category!.name)}
+                      </button>
                     )
                   })}
                 </div>
+              </nav>
+            )}
+
+            {/* Menu Items — grouped by category with carousels between */}
+            <div className="space-y-6 relative px-4">
+              {filteredItems.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className={isDarkBg ? 'text-white/60' : 'text-slate-500'}>{currentCopy.noItemsMessage}</p>
+                </div>
+              ) : (
+                categorizedSections.map((section) => (
+                  <div
+                    key={section.category?.id || 'uncategorized'}
+                    ref={section.category ? setSectionRef(section.category.id) : undefined}
+                    className="scroll-mt-24"
+                  >
+                    {section.category && (
+                      <div className="mb-3">
+                        <h2 className={`text-lg font-bold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                          {getLocalizedCategoryName(section.category.name)}
+                        </h2>
+                      </div>
+                    )}
+
+                    <div className="grid gap-3">
+                      {section.items.map((item) => {
+                        const translation =
+                          translationCache[language]?.[item.id]
+                        const displayName = translation?.name || item.name
+                        const displayDescription =
+                          translation?.description || item.description || ''
+                        const macroSegments = buildMacroSegments(item, translation)
+                        const handleAddToOrder = () => {
+                          dispatchCart({ type: 'ADD_ITEM', item })
+                          const suggestions = upsellMap[item.id]
+                          if (suggestions?.length) {
+                            setUpsellAfterAdd({ itemId: item.id })
+                            setUpsellIndex(0)
+                          }
+                        }
+                        return (
+                          <MenuItemCard
+                            key={item.id}
+                            item={item}
+                            hints={item._hints}
+                            displayName={displayName}
+                            displayDescription={displayDescription}
+                            macroSegments={macroSegments}
+                            getLocalizedCategoryName={getLocalizedCategoryName}
+                            getLocalizedTagLabel={getLocalizedTagLabel}
+                            getTagIcon={getTagIcon}
+                            onDetail={() => setSelectedItemForDetail(item)}
+                            onPairings={() => fetchPairingSuggestions(item)}
+                            onAddToOrder={handleAddToOrder}
+                            loadingPairings={loadingSuggestions}
+                            isSelectedForPairing={selectedItemForPairing?.id === item.id}
+                          />
+                        )
+                      })}
+                    </div>
+
+                    {/* Insert carousels configured for after this category */}
+                    {betweenShowcases
+                      .filter(
+                        (s) =>
+                          s.insertAfterCategoryId === section.category?.id
+                      )
+                      .map((showcase) => (
+                        <div key={showcase.id} className="py-4">
+                          <MenuCarousel
+                            title={showcase.title}
+                            type={showcase.type}
+                            items={showcase.items}
+                            onItemClick={(item) =>
+                              setSelectedItemForDetail(item as MenuItem)
+                            }
+                            getDisplayName={(id) =>
+                              translationCache[language]?.[id]?.name
+                            }
+                            getCategoryName={getLocalizedCategoryName}
+                            accentColor={theme?.accentColor}
+                            primaryColor={theme?.primaryColor}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                ))
               )}
             </div>
             <footer className="pt-10">
@@ -1616,6 +1858,130 @@ const getLocalizedAddOnName = (name: string) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CartDrawer
+        lines={cart}
+        total={cart.reduce((s, l) => s + l.price * l.quantity, 0)}
+        viewOrderLabel={currentEngineCopy.viewOrder}
+        placeOrderLabel={currentEngineCopy.placeOrder}
+        cartTitle={currentEngineCopy.cartTitle}
+        onUpdateQuantity={(menuItemId, delta) =>
+          dispatchCart({ type: 'UPDATE_QUANTITY', menuItemId, delta })
+        }
+        onRemove={(menuItemId) => dispatchCart({ type: 'REMOVE_ITEM', menuItemId })}
+        onPlaceOrder={async () => {
+          if (cart.length === 0) return
+          setIsPlacingOrder(true)
+          try {
+            const res = await fetch('/api/public/orders', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                restaurantId,
+                items: cart.map((l) => ({ menuItemId: l.menuItemId, quantity: l.quantity })),
+              }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Order failed')
+            dispatchCart({ type: 'CLEAR' })
+            toast({ title: 'Order placed', description: data.orderNumber ? `Order ${data.orderNumber}` : undefined })
+          } catch (e: any) {
+            toast({ variant: 'destructive', title: 'Order failed', description: e.message })
+          } finally {
+            setIsPlacingOrder(false)
+          }
+        }}
+        restaurantId={restaurantId}
+        isPlacing={isPlacingOrder}
+      >
+        {engineMode !== 'classic' && cart.length > 0 && (() => {
+          const hasBeverage = cart.some((l) => {
+            const item = menuItems.find((m) => m.id === l.menuItemId)
+            const name = (item?.category?.name ?? '').toLowerCase()
+            return /drink|beverage|coffee/.test(name)
+          })
+          const hasDessert = cart.some((l) => {
+            const item = menuItems.find((m) => m.id === l.menuItemId)
+            const name = (item?.category?.name ?? '').toLowerCase()
+            return name.includes('dessert')
+          })
+          const topBeverage = menuItems.find((m) => /drink|beverage|coffee/.test((m.category?.name ?? '').toLowerCase()))
+          const topDessert = menuItems.find((m) => (m.category?.name ?? '').toLowerCase().includes('dessert'))
+          if (!hasBeverage && topBeverage)
+            return (
+              <CheckoutNudge
+                message={currentEngineCopy.checkoutNudgeBeverage}
+                itemName={topBeverage.name}
+                itemPrice={formatMenuPrice(topBeverage.price)}
+                onAdd={() => dispatchCart({ type: 'ADD_ITEM', item: topBeverage })}
+                addLabel={currentEngineCopy.addLabel}
+                dismissLabel={currentEngineCopy.dismissLabel}
+                onDismiss={() => {}}
+              />
+            )
+          if (!hasDessert && topDessert)
+            return (
+              <CheckoutNudge
+                message={currentEngineCopy.checkoutNudgeDessert}
+                itemName={topDessert.name}
+                itemPrice={formatMenuPrice(topDessert.price)}
+                onAdd={() => dispatchCart({ type: 'ADD_ITEM', item: topDessert })}
+                addLabel={currentEngineCopy.addLabel}
+                dismissLabel={currentEngineCopy.dismissLabel}
+                onDismiss={() => {}}
+              />
+            )
+          return null
+        })()}
+      </CartDrawer>
+
+      {upsellAfterAdd && (() => {
+        const suggestions = upsellMap[upsellAfterAdd.itemId] ?? []
+        const current = suggestions[upsellIndex]
+        const upsellItem = current ? menuItems.find((m) => m.id === current.itemId) : null
+        if (!current || !upsellItem) return null
+        return (
+          <SequentialUpsell
+            suggestions={suggestions}
+            currentIndex={upsellIndex}
+            itemName={upsellItem.name}
+            itemPrice={formatMenuPrice(upsellItem.price)}
+            itemImageUrl={upsellItem.imageUrl}
+            onAccept={() => {
+              dispatchCart({ type: 'ADD_ITEM', item: upsellItem })
+              if (upsellIndex + 1 < suggestions.length) setUpsellIndex((i) => i + 1)
+              else setUpsellAfterAdd(null)
+            }}
+            onSkip={() => {
+              if (upsellIndex + 1 < suggestions.length) setUpsellIndex((i) => i + 1)
+              else setUpsellAfterAdd(null)
+            }}
+            onClose={() => setUpsellAfterAdd(null)}
+            addLabel={currentEngineCopy.addLabel}
+            skipLabel={currentEngineCopy.skipLabel}
+          />
+        )
+      })()}
+
+      {engineMode !== 'classic' && !idleUpsellDismissed && (() => {
+        const starItem = menuItems.find((m) => m._hints?.displayTier === 'hero' || m._hints?.displayTier === 'featured')
+        if (!starItem) return null
+        return (
+          <IdleUpsellPopup
+            starItemName={starItem.name}
+            starItemId={starItem.id}
+            message={currentEngineCopy.idleMessage}
+            idleDelayMs={6000}
+            dismissAfterMs={4000}
+            onAddItem={(id) => {
+              const item = menuItems.find((m) => m.id === id)
+              if (item) dispatchCart({ type: 'ADD_ITEM', item })
+            }}
+            onDismiss={() => setIdleUpsellDismissed(true)}
+            show={true}
+          />
+        )
+      })()}
     </div>
   )
 }

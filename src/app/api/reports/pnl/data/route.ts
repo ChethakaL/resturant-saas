@@ -171,6 +171,18 @@ export async function GET(request: Request) {
     // Calculate revenue
     const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0)
 
+    // Revenue from items with complete costing (cost is set and numeric) for COGS coverage %
+    let revenueWithCosting = 0
+    sales.forEach((sale) => {
+      sale.items.forEach((item: { price: number; quantity: number; cost: number | null }) => {
+        const itemRevenue = item.price * item.quantity
+        const hasCosting = typeof item.cost === 'number' && item.cost >= 0
+        if (hasCosting) revenueWithCosting += itemRevenue
+      })
+    })
+    const cogsCoveragePercent =
+      totalRevenue > 0 ? Math.round((revenueWithCosting / totalRevenue) * 100) : 100
+
     // Calculate COGS from sales (ingredients used in completed orders)
     const totalCOGS = sales.reduce(
       (sum, sale) =>
@@ -267,6 +279,8 @@ export async function GET(request: Request) {
         expenses: totalExpenses,
         payroll: payrollTotal,
         netProfit,
+        cogsCoveragePercent,
+        revenueWithCosting,
       },
       expenseByCategory,
       expenseTransactions,

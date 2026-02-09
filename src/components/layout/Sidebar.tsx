@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import {
+  Home,
   UtensilsCrossed,
   ShoppingCart,
   Receipt,
@@ -12,18 +13,29 @@ import {
   LogOut,
   PlusCircle,
   Layers,
+  Settings,
+  TrendingUp,
+  Users,
+  Clock,
+  Wallet,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
 const navigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
   { name: 'Add-ons', href: '/addons', icon: PlusCircle },
   { name: 'Categories', href: '/categories', icon: Layers },
   { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart },
   { name: 'Orders', href: '/orders', icon: Receipt },
   { name: 'Inventory', href: '/inventory', icon: Package },
+  { name: 'HR', href: '/hr/employees', icon: Users },
+  { name: 'Shifts', href: '/hr/shifts', icon: Clock },
+  { name: 'Payroll', href: '/hr/payroll', icon: Wallet },
+  { name: 'P&L', href: '/profit-loss', icon: TrendingUp },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
 interface SidebarProps {

@@ -39,21 +39,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Build orientation / size hints and merge with provided prompt
+    // Build orientation / size hints
     const orientationHint = imageOrientationPrompts[orientation] ?? ''
     const sizeHint = imageSizePrompts[sizePreset] ?? ''
 
-    const basePrompt =
-      !prompt || !prompt.trim()
-        ? `Professional food photography of ${itemName}${
-            category ? ` (${category})` : ''
-          }${description ? `, ${description}` : ''}. IMPORTANT: The dish must be fully visible and centered in the frame - do not crop or cut off any part of the food. Show the complete dish from a slightly elevated angle. High-quality, appetizing presentation on a clean plate with beautiful lighting, garnish, and styling. Leave adequate margin around the food. Restaurant menu quality, photorealistic, full dish visible with nothing cut off.`
-        : prompt.trim()
+    // Always describe the dish first (recipe name + details). Custom/saved prompt is only for style/background.
+    const dishPart =
+      itemName?.trim() || 'the dish'
+    const dishDescription = [
+      dishPart,
+      category?.trim() ? `(${category})` : '',
+      description?.trim() ? `: ${description}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+
+    const corePrompt = `Professional food photography of ${dishDescription}. The image must show this specific dish only - do not show other foods, drinks, or unrelated items. IMPORTANT: The dish must be fully visible and centered in the frame - do not crop or cut off any part of the food. Show the complete dish from a slightly elevated angle. High-quality, appetizing presentation on a clean plate with beautiful lighting, garnish, and styling. Leave adequate margin around the food. Restaurant menu quality, photorealistic, full dish visible with nothing cut off.`
+
+    const stylePart =
+      prompt?.trim()
+        ? ` Background and styling (apply to the dish above): ${prompt.trim()}.`
+        : ''
 
     const hintParts = [orientationHint, sizeHint].filter(Boolean)
     const imagePrompt = hintParts.length
-      ? `${basePrompt} ${hintParts.join(' ')}`
-      : basePrompt
+      ? `${corePrompt}${stylePart} ${hintParts.join(' ')}`
+      : `${corePrompt}${stylePart}`
 
     console.log('Generating image with Gemini 2.5 Flash Image:', imagePrompt)
 

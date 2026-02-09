@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { Trash } from 'lucide-react'
+import { Trash, Eye, EyeOff } from 'lucide-react'
 import { Category } from '@prisma/client'
 
 interface CategoriesManagerProps {
@@ -22,7 +22,36 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
   const [deletingIds, setDeletingIds] = useState<string[]>([])
+  const [updatingVisibilityIds, setUpdatingVisibilityIds] = useState<string[]>([])
   const { toast } = useToast()
+
+  const toggleShowOnMenu = async (categoryId: string) => {
+    const cat = categories.find((c) => c.id === categoryId)
+    if (!cat) return
+    const next = !(cat.showOnMenu !== false)
+    setUpdatingVisibilityIds((prev) => [...prev, categoryId])
+    try {
+      const response = await fetch(`/api/categories/${categoryId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ showOnMenu: next }),
+      })
+      if (!response.ok) throw new Error('Failed to update')
+      setCategories((prev) =>
+        prev.map((c) => (c.id === categoryId ? { ...c, showOnMenu: next } : c))
+      )
+      toast({
+        title: next ? 'Section visible on menu' : 'Section hidden from menu',
+      })
+    } catch {
+      toast({
+        title: 'Could not update visibility',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingVisibilityIds((prev) => prev.filter((id) => id !== categoryId))
+    }
+  }
 
   const handleAddCategory = async () => {
     const trimmedName = name.trim()
@@ -133,7 +162,7 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
       <Card>
         <CardHeader>
           <CardTitle>Current Categories</CardTitle>
-          <CardDescription>Reorder your menu by adding and deleting rows</CardDescription>
+          <CardDescription>Reorder your menu. Turn off &quot;Show on menu&quot; to hide a section from the customer menu.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {categories.length === 0 ? (
@@ -154,6 +183,21 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant={category.showOnMenu !== false ? 'outline' : 'secondary'}
+                    size="sm"
+                    onClick={() => toggleShowOnMenu(category.id)}
+                    disabled={updatingVisibilityIds.includes(category.id)}
+                    title={category.showOnMenu !== false ? 'Visible on menu (click to hide)' : 'Hidden from menu (click to show)'}
+                  >
+                    {updatingVisibilityIds.includes(category.id) ? (
+                      <span className="text-xs">…</span>
+                    ) : category.showOnMenu !== false ? (
+                      <Eye className="h-4 w-4" />
+                    ) : (
+                      <EyeOff className="h-4 w-4" />
+                    )}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

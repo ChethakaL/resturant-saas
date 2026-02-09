@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
-import { Edit, Loader2, Trash } from 'lucide-react'
+import { Edit, Loader2, Trash, Check, X } from 'lucide-react'
 
 export interface MenuItemWithMetrics {
   id: string
@@ -31,12 +31,20 @@ export interface MenuItemWithMetrics {
   chefPickOrder?: number | null
 }
 
+/** 30% food cost target → 70% gross profit margin */
+const TARGET_FOOD_COST = 0.3
+
 function getMarginColor(margin: number) {
   if (margin >= 60) return 'text-green-600'
   if (margin >= 40) return 'text-amber-600'
   if (margin >= 20) return 'text-yellow-600'
   if (margin >= 0) return 'text-red-600'
   return 'text-red-700'
+}
+
+function getSuggestedPrice(cost: number): number {
+  if (cost <= 0) return 0
+  return Math.ceil(cost / TARGET_FOOD_COST)
 }
 
 export default function MenuItemsTable({
@@ -53,6 +61,12 @@ export default function MenuItemsTable({
   const itemsRef = useRef(items)
   const { toast } = useToast()
 
+  // Inline price editing state
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
+  const [editingPriceValue, setEditingPriceValue] = useState('')
+  const [savingPriceId, setSavingPriceId] = useState<string | null>(null)
+  const priceInputRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     setItems(menuItems)
   }, [menuItems])
@@ -60,6 +74,13 @@ export default function MenuItemsTable({
   useEffect(() => {
     itemsRef.current = items
   }, [items])
+
+  useEffect(() => {
+    if (editingPriceId && priceInputRef.current) {
+      priceInputRef.current.focus()
+      priceInputRef.current.select()
+    }
+  }, [editingPriceId])
 
   const toggleAvailability = useCallback(
     async (id: string) => {
@@ -216,6 +237,78 @@ export default function MenuItemsTable({
     }
   }, [deletingIds, menuItemToDelete, toast])
 
+  const startEditingPrice = (item: MenuItemWithMetrics) => {
+    setEditingPriceId(item.id)
+    setEditingPriceValue(String(item.price))
+  }
+
+  const cancelEditingPrice = () => {
+    setEditingPriceId(null)
+    setEditingPriceValue('')
+  }
+
+  const savePrice = async () => {
+    if (!editingPriceId) return
+
+    const newPrice = parseFloat(editingPriceValue)
+    if (isNaN(newPrice) || newPrice < 0) {
+      toast({
+        title: 'Invalid price',
+        description: 'Price must be a non-negative number.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSavingPriceId(editingPriceId)
+
+    try {
+      const response = await fetch(`/api/menu/${editingPriceId}/price`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price: newPrice }),
+      })
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        throw new Error(errorBody?.error || 'Failed to update price')
+      }
+
+      // Update local state — recompute dependent columns
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== editingPriceId) return item
+          const profit = newPrice - item.cost
+          const margin = newPrice > 0 ? (profit / newPrice) * 100 : 0
+          return { ...item, price: newPrice, profit, margin }
+        })
+      )
+
+      toast({ title: 'Price updated' })
+      setEditingPriceId(null)
+      setEditingPriceValue('')
+    } catch (error) {
+      console.error('Failed to update price', error)
+      toast({
+        title: 'Price update failed',
+        description:
+          error instanceof Error ? error.message : 'Something went wrong.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingPriceId(null)
+    }
+  }
+
+  const handlePriceKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      savePrice()
+    } else if (e.key === 'Escape') {
+      cancelEditingPrice()
+    }
+  }
+
   return (
     <div className="overflow-x-auto">
       {items.length === 0 ? (
@@ -229,197 +322,268 @@ export default function MenuItemsTable({
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200">
-              <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Image
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Item Name
-              </th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Category
-              </th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Price
-              </th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Cost
-              </th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Profit
-              </th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Margin
-              </th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Chef's pick
-              </th>
-              <th className="text-center py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Status
-              </th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => {
-              const isUpdating = updatingIds.includes(item.id)
-              const isDeleting = deletingIds.includes(item.id)
-              const isChefPick = item.chefPickOrder != null
-              const isChefPickUpdating = chefPickUpdatingIds.includes(item.id)
-              return (
-                <tr
-                  key={item.id}
-                  className="border-b border-slate-100 hover:bg-slate-50"
-                >
-                  <td className="py-3 px-4">
-                    <div className="h-12 w-16 overflow-hidden rounded-md bg-slate-100">
-                      <img
-                        src={
-                          item.imageUrl ||
-                          'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
-                        }
-                        alt={item.name}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="font-medium text-slate-900">{item.name}</div>
-                    {item.description && (
-                      <div className="text-sm text-slate-500 line-clamp-1">
-                        {item.description}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-slate-600">
-                    {item.category.name}
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono font-medium">
-                    {formatCurrency(item.price)}
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono">
-                    {formatCurrency(item.cost)}
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono text-green-600 font-medium">
-                    {formatCurrency(item.profit)}
-                  </td>
-                  <td
-                    className={`py-3 px-4 text-right font-mono font-bold ${getMarginColor(
-                      item.margin
-                    )}`}
+                <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Item Name
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Category
+                </th>
+                <th className="text-center py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Availability
+                </th>
+                <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Direct Cost
+                </th>
+                <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Gross Profit
+                </th>
+                <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Suggested Price
+                </th>
+                <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Price
+                </th>
+                <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const isUpdating = updatingIds.includes(item.id)
+                const isDeleting = deletingIds.includes(item.id)
+                const isEditingPrice = editingPriceId === item.id
+                const isSavingPrice = savingPriceId === item.id
+                const costPercent =
+                  item.price > 0 ? (item.cost / item.price) * 100 : 0
+                const profitPercent = item.margin
+                const suggestedPrice = getSuggestedPrice(item.cost)
+                const priceDiff =
+                  suggestedPrice > 0 ? item.price - suggestedPrice : 0
+
+                return (
+                  <tr
+                    key={item.id}
+                    className="border-b border-slate-100 hover:bg-slate-50"
                   >
-                    {formatPercentage(item.margin)}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex flex-col items-end gap-1">
-                      {isChefPick && (
-                        <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                          Chef pick #{item.chefPickOrder ?? '-'}
-                        </span>
-                      )}
-                      <Button
-                        size="sm"
-                        variant={isChefPick ? 'outline' : 'ghost'}
-                        onClick={() => toggleChefPick(item.id)}
-                        disabled={isChefPickUpdating}
-                      >
-                        {isChefPickUpdating ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : isChefPick ? (
-                          'Remove'
-                        ) : (
-                          'Add'
+                    {/* Item Name */}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        {item.imageUrl && (
+                          <div className="h-10 w-10 overflow-hidden rounded-md bg-slate-100 flex-shrink-0">
+                            <img
+                              src={item.imageUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
                         )}
-                      </Button>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <button
-                      type="button"
-                      disabled={isUpdating}
-                      onClick={() => toggleAvailability(item.id)}
-                      className={`inline-flex items-center justify-center min-w-[120px] rounded-full px-3 py-1 text-xs font-semibold transition ${
-                        item.available
-                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                          : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                      } ${isUpdating ? 'opacity-70 cursor-wait' : ''}`}
-                    >
-                      {isUpdating
-                        ? 'Saving...'
-                        : item.available
-                        ? 'Available'
-                        : 'Sold Out'}
-                    </button>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link href={`/dashboard/menu/${item.id}`}>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="h-4 w-4 mr-1" />
-                          Edit
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={isDeleting}
-                        onClick={() => setMenuItemToDelete(item)}
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-900 truncate">
+                            {item.name}
+                          </div>
+                          {item.chefPickOrder != null && (
+                            <span className="text-[10px] uppercase tracking-wide text-amber-600">
+                              Chef pick #{item.chefPickOrder}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Category */}
+                    <td className="py-3 px-4 text-slate-600">
+                      {item.category.name}
+                    </td>
+
+                    {/* Availability */}
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() => toggleAvailability(item.id)}
+                        className={`inline-flex items-center justify-center min-w-[100px] rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          item.available
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                        } ${isUpdating ? 'opacity-70 cursor-wait' : ''}`}
                       >
-                        <Trash className="h-4 w-4 mr-1" />
-                        {isDeleting ? 'Deleting...' : 'Delete'}
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-        <Dialog
-          open={Boolean(menuItemToDelete)}
-          onOpenChange={(open) => {
-            if (!open) {
-              setMenuItemToDelete(null)
-            }
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete menu item</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to remove{' '}
-                <span className="font-medium">
-                  {menuItemToDelete?.name ?? 'this item'}
-                </span>{' '}
-                from your menu? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setMenuItemToDelete(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={
-                  !menuItemToDelete ||
-                  deletingIds.includes(menuItemToDelete.id)
-                }
-                onClick={confirmDelete}
-              >
-                {menuItemToDelete && deletingIds.includes(menuItemToDelete.id)
-                  ? 'Deleting...'
-                  : 'Delete'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </>
+                        {isUpdating
+                          ? 'Saving...'
+                          : item.available
+                          ? 'Available'
+                          : 'Sold Out'}
+                      </button>
+                    </td>
+
+                    {/* Direct Cost (number + %) */}
+                    <td className="py-3 px-4 text-right">
+                      <div className="font-mono text-sm">
+                        {formatCurrency(item.cost)}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {formatPercentage(costPercent)}
+                      </div>
+                    </td>
+
+                    {/* Gross Profit (number + %) */}
+                    <td className="py-3 px-4 text-right">
+                      <div
+                        className={`font-mono text-sm font-medium ${getMarginColor(profitPercent)}`}
+                      >
+                        {formatCurrency(item.profit)}
+                      </div>
+                      <div
+                        className={`text-xs font-bold ${getMarginColor(profitPercent)}`}
+                      >
+                        {formatPercentage(profitPercent)}
+                      </div>
+                    </td>
+
+                    {/* Suggested Price */}
+                    <td className="py-3 px-4 text-right">
+                      {suggestedPrice > 0 ? (
+                        <div>
+                          <div className="font-mono text-sm text-slate-700">
+                            {formatCurrency(suggestedPrice)}
+                          </div>
+                          {priceDiff !== 0 && (
+                            <div
+                              className={`text-xs ${
+                                priceDiff > 0
+                                  ? 'text-green-600'
+                                  : 'text-red-600'
+                              }`}
+                            >
+                              {priceDiff > 0 ? '+' : ''}
+                              {formatCurrency(priceDiff)}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+
+                    {/* Price (editable, last column) */}
+                    <td className="py-3 px-4 text-right">
+                      {isEditingPrice ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <input
+                            ref={priceInputRef}
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={editingPriceValue}
+                            onChange={(e) =>
+                              setEditingPriceValue(e.target.value)
+                            }
+                            onKeyDown={handlePriceKeyDown}
+                            disabled={isSavingPrice}
+                            className="w-24 rounded border border-slate-300 px-2 py-1 text-right text-sm font-mono focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={savePrice}
+                            disabled={isSavingPrice}
+                            className="rounded p-1 text-green-600 hover:bg-green-50"
+                            title="Save"
+                          >
+                            {isSavingPrice ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Check className="h-4 w-4" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditingPrice}
+                            disabled={isSavingPrice}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100"
+                            title="Cancel"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startEditingPrice(item)}
+                          className="font-mono font-bold text-sm text-slate-900 hover:text-emerald-700 hover:underline cursor-pointer transition"
+                          title="Click to edit price"
+                        >
+                          {formatCurrency(item.price)}
+                        </button>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Link href={`/dashboard/menu/${item.id}`}>
+                          <Button variant="ghost" size="sm">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isDeleting}
+                          onClick={() => setMenuItemToDelete(item)}
+                        >
+                          <Trash className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          <Dialog
+            open={Boolean(menuItemToDelete)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setMenuItemToDelete(null)
+              }
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete menu item</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to remove{' '}
+                  <span className="font-medium">
+                    {menuItemToDelete?.name ?? 'this item'}
+                  </span>{' '}
+                  from your menu? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMenuItemToDelete(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={
+                    !menuItemToDelete ||
+                    deletingIds.includes(menuItemToDelete.id)
+                  }
+                  onClick={confirmDelete}
+                >
+                  {menuItemToDelete && deletingIds.includes(menuItemToDelete.id)
+                    ? 'Deleting...'
+                    : 'Delete'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
       )}
     </div>
   )

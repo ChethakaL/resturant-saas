@@ -38,7 +38,8 @@ export async function POST(request: Request) {
       data: {
         name: data.name,
         description: data.description,
-        displayOrder: data.displayOrder || 0,
+        displayOrder: data.displayOrder ?? 0,
+        showOnMenu: data.showOnMenu !== false,
         restaurantId: session.user.restaurantId,
       },
     })

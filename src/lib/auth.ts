@@ -79,8 +79,58 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           role: user.role,
+          type: 'restaurant' as const,
           restaurantId: user.restaurantId,
           restaurantName: user.restaurant.name,
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: 'supplier-credentials',
+      name: 'Supplier',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Invalid credentials')
+        }
+
+        const supplierUser = await prisma.supplierUser.findFirst({
+          where: { email: credentials.email },
+          include: { supplier: true },
+        })
+
+        if (!supplierUser) {
+          throw new Error('Invalid credentials')
+        }
+
+        if (supplierUser.supplier.status === 'SUSPENDED') {
+          throw new Error('Account suspended')
+        }
+
+        const valid = await bcrypt.compare(
+          credentials.password,
+          supplierUser.passwordHash
+        )
+        if (!valid) {
+          throw new Error('Invalid credentials')
+        }
+
+        await prisma.supplierUser.update({
+          where: { id: supplierUser.id },
+          data: { lastLoginAt: new Date() },
+        })
+
+        return {
+          id: supplierUser.id,
+          email: supplierUser.email,
+          name: supplierUser.name,
+          role: supplierUser.role,
+          type: 'supplier' as const,
+          supplierId: supplierUser.supplierId,
+          supplierName: supplierUser.supplier.name,
         }
       },
     }),
@@ -90,8 +140,11 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         token.role = user.role
+        token.type = user.type
         token.restaurantId = user.restaurantId
         token.restaurantName = user.restaurantName
+        token.supplierId = user.supplierId
+        token.supplierName = user.supplierName
       }
       return token
     },
@@ -99,8 +152,11 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         session.user.id = token.id as string
         session.user.role = token.role as string
-        session.user.restaurantId = token.restaurantId as string
-        session.user.restaurantName = token.restaurantName as string
+        session.user.type = (token.type as 'restaurant' | 'supplier') ?? 'restaurant'
+        session.user.restaurantId = token.restaurantId as string | undefined
+        session.user.restaurantName = token.restaurantName as string | undefined
+        session.user.supplierId = token.supplierId as string | undefined
+        session.user.supplierName = token.supplierName as string | undefined
       }
       return session
     },
