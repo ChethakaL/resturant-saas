@@ -26,6 +26,7 @@ import { Separator } from '@/components/ui/separator'
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
+  { name: 'P&L', href: '/profit-loss', icon: TrendingUp },
   { name: 'Add-ons', href: '/addons', icon: PlusCircle },
   { name: 'Categories', href: '/categories', icon: Layers },
   { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart },
@@ -34,7 +35,6 @@ const navigation = [
   { name: 'HR', href: '/hr/employees', icon: Users },
   { name: 'Shifts', href: '/hr/shifts', icon: Clock },
   { name: 'Payroll', href: '/hr/payroll', icon: Wallet },
-  { name: 'P&L', href: '/profit-loss', icon: TrendingUp },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 

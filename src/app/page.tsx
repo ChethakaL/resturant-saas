@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import SmartMenu from '@/components/customer/SmartMenu'
 import { runMenuEngine } from '@/lib/menu-engine'
@@ -5,9 +6,26 @@ import type { EngineMenuItem, EngineCategory, CoPurchasePair } from '@/lib/menu-
 import { DEFAULT_MENU_ENGINE_SETTINGS } from '@/lib/menu-engine-defaults'
 import type { MenuEngineSettings } from '@/types/menu-engine'
 import { suggestCarouselItems, getTimeSlotLabel } from '@/lib/carousel-ai'
+import type { CarouselMenuItem } from '@/lib/carousel-ai'
 
-// Revalidate on every request - ensures fresh menu data
+// Revalidate on every request for DB data; AI carousel suggestions cached 5 min to avoid slow Gemini on every load
 export const revalidate = 0
+
+const CAROUSEL_CACHE_SECONDS = 300 // 5 min
+
+/** Cached AI carousel suggestion so the page doesn't wait on Gemini every request */
+async function getCachedCarouselSuggestions(
+  restaurantId: string,
+  timeSlotLabel: string,
+  pool: CarouselMenuItem[]
+): Promise<string[]> {
+  const poolKey = pool.map((i) => i.id).sort().join(',')
+  return unstable_cache(
+    () => suggestCarouselItems(pool, timeSlotLabel as 'Morning' | 'Lunch' | 'Evening' | 'Night', { maxItems: 16 }),
+    [`carousel-ai`, restaurantId, timeSlotLabel, poolKey],
+    { revalidate: CAROUSEL_CACHE_SECONDS }
+  )()
+}
 
 /** Day 6–12, Evening 12–18, Night 18–6 (local time in tz) */
 function getCurrentTimeSlot(tz: string): 'day' | 'evening' | 'night' {
@@ -160,11 +178,11 @@ async function getMenuData() {
           .filter((item: any) => idToOrder.has(item.id))
           .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
       } else if (useTimeSlots && showcase.items.length > 0) {
-        // Time slots on but this slot empty; manual items chosen → AI picks best for this time from chosen items
+        // Time slots on but this slot empty; manual items chosen → AI picks best for this time from chosen items (cached)
         const chosenPool = fullCarouselPool.filter((item) =>
           showcase.items.some((si: any) => si.menuItemId === item.id)
         )
-        const suggestedIds = await suggestCarouselItems(chosenPool, timeSlotLabel, { maxItems: 16 })
+        const suggestedIds = await getCachedCarouselSuggestions(restaurant.id, timeSlotLabel, chosenPool)
         const idsToShow = applyAiRotation(suggestedIds.length > 0 ? suggestedIds : chosenPool.map((i) => i.id), 8)
         const idToOrder = new Map(idsToShow.map((id, i) => [id, i]))
         showcaseMenuItems = enrichedMenuItems
@@ -184,8 +202,8 @@ async function getMenuData() {
             return orderA - orderB
           })
       } else {
-        // Nothing chosen anywhere: AI suggests by time of day and relevance (variety); fallback order if needed
-        const suggestedIds = await suggestCarouselItems(fullCarouselPool, timeSlotLabel, { maxItems: 16 })
+        // Nothing chosen anywhere: AI suggests by time of day and relevance (variety), cached 5 min
+        const suggestedIds = await getCachedCarouselSuggestions(restaurant.id, timeSlotLabel, fullCarouselPool)
         const idsToShow =
           suggestedIds.length > 0
             ? applyAiRotation(suggestedIds, 8)
