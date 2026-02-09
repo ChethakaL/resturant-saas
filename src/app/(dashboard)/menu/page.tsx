@@ -138,7 +138,14 @@ export default async function MenuPage({
       ? rawSearch[0]?.trim() ?? ''
       : ''
 
-  const data = await getMenuData(restaurantId, page, normalizedSearch)
+  const [data, user] = await Promise.all([
+    getMenuData(restaurantId, page, normalizedSearch),
+    prisma.user.findUnique({
+      where: { id: session!.user.id },
+      select: { defaultBackgroundPrompt: true },
+    }),
+  ])
+  const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
   const searchQuery = normalizedSearch
     ? `&search=${encodeURIComponent(normalizedSearch)}`
     : ''
@@ -151,8 +158,8 @@ export default async function MenuPage({
           <p className="text-slate-500 mt-1">Manage menu items and recipes</p>
         </div>
         <div className="flex gap-2">
-          <BulkMenuImport categories={data.categories} ingredients={data.ingredients} />
-          <ImportByDigitalMenu categories={data.categories} ingredients={data.ingredients} />
+          <BulkMenuImport categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
+          <ImportByDigitalMenu categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
           <Link href="/dashboard/menu/new">
             <Button>
               <Plus className="h-4 w-4 mr-2" />
