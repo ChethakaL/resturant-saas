@@ -648,18 +648,18 @@ export default function ProfitLossPageClient() {
       </Card>
 
       {/* ── Summary Card Tiles ── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-green-100 p-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="rounded-lg bg-green-100 p-2 flex-shrink-0">
                 <DollarSign className="h-5 w-5 text-green-600" />
               </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                   Revenue
                 </p>
-                <p className="text-xl font-bold text-green-600 font-mono">
+                <p className="text-base sm:text-lg xl:text-xl font-bold text-green-600 font-mono break-all">
                   {formatCurrency(data.summary.revenue)}
                 </p>
               </div>
@@ -669,15 +669,15 @@ export default function ProfitLossPageClient() {
 
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-amber-100 p-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="rounded-lg bg-amber-100 p-2 flex-shrink-0">
                 <ShoppingCart className="h-5 w-5 text-amber-600" />
               </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                   COGS
                 </p>
-                <p className="text-xl font-bold text-amber-600 font-mono">
+                <p className="text-base sm:text-lg xl:text-xl font-bold text-amber-600 font-mono break-all">
                   {formatCurrency(data.summary.cogs)}
                 </p>
                 {typeof data.summary.cogsCoveragePercent === 'number' && (
@@ -692,15 +692,15 @@ export default function ProfitLossPageClient() {
 
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-emerald-100 p-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="rounded-lg bg-emerald-100 p-2 flex-shrink-0">
                 <TrendingUp className="h-5 w-5 text-emerald-600" />
               </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                   Gross Profit
                 </p>
-                <p className="text-xl font-bold text-emerald-600 font-mono">
+                <p className="text-base sm:text-lg xl:text-xl font-bold text-emerald-600 font-mono break-all">
                   {formatCurrency(data.summary.grossProfit)}
                 </p>
               </div>
@@ -710,15 +710,15 @@ export default function ProfitLossPageClient() {
 
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-red-100 p-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="rounded-lg bg-red-100 p-2 flex-shrink-0">
                 <Wallet className="h-5 w-5 text-red-600" />
               </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                   Expenses
                 </p>
-                <p className="text-xl font-bold text-red-600 font-mono">
+                <p className="text-base sm:text-lg xl:text-xl font-bold text-red-600 font-mono break-all">
                   {formatCurrency(data.summary.expenses + data.summary.payroll)}
                 </p>
               </div>
@@ -728,9 +728,9 @@ export default function ProfitLossPageClient() {
 
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <div
-                className={`rounded-lg p-2 ${
+                className={`rounded-lg p-2 flex-shrink-0 ${
                   data.summary.netProfit >= 0
                     ? 'bg-green-100'
                     : 'bg-red-100'
@@ -742,12 +742,12 @@ export default function ProfitLossPageClient() {
                   <TrendingDown className="h-5 w-5 text-red-600" />
                 )}
               </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                   Net Profit
                 </p>
                 <p
-                  className={`text-xl font-bold font-mono ${
+                  className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${
                     data.summary.netProfit >= 0
                       ? 'text-green-600'
                       : 'text-red-600'
@@ -762,9 +762,9 @@ export default function ProfitLossPageClient() {
 
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <div
-                className={`rounded-lg p-2 ${
+                className={`rounded-lg p-2 flex-shrink-0 ${
                   profitMargin >= 0 ? 'bg-blue-100' : 'bg-red-100'
                 }`}
               >
@@ -774,12 +774,12 @@ export default function ProfitLossPageClient() {
                   <TrendingDown className="h-5 w-5 text-red-600" />
                 )}
               </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                   Profit Margin
                 </p>
                 <p
-                  className={`text-xl font-bold font-mono ${
+                  className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${
                     profitMargin >= 0 ? 'text-blue-600' : 'text-red-600'
                   }`}
                 >
