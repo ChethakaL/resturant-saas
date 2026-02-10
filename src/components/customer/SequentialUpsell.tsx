@@ -71,13 +71,13 @@ export function SequentialUpsell({
           >
             {addLabel}
           </Button>
-          <Button
-            variant="outline"
+          <button
+            type="button"
             onClick={onSkip}
-            className="flex-1 border-white/30 text-white hover:bg-white/10"
+            className="flex-1 rounded-md border border-white/30 bg-white/10 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
           >
             {skipLabel}
-          </Button>
+          </button>
         </div>
       </div>
     </>
