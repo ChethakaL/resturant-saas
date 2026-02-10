@@ -1398,10 +1398,8 @@ const getLocalizedAddOnName = (name: string) => {
                     {Array.from(new Set(lastOrder.names)).slice(0, 3).join(', ')}
                     {lastOrder.names.length > 3 ? '…' : ''}
                   </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className={isDarkBg ? 'border-white/30 text-white hover:bg-white/10' : ''}
+                  <button
+                    type="button"
                     onClick={() => {
                       const byId = new Map(menuItems.map((m) => [m.id, m]))
                       for (const id of lastOrder.itemIds) {
@@ -1409,9 +1407,14 @@ const getLocalizedAddOnName = (name: string) => {
                         if (item) dispatchCart({ type: 'ADD_ITEM', item })
                       }
                     }}
+                    className={
+                      isDarkBg
+                        ? 'rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/25'
+                        : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-100'
+                    }
                   >
                     Order again
-                  </Button>
+                  </button>
                 </div>
               </div>
             )}
