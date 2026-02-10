@@ -12,6 +12,8 @@ interface BundleCarouselProps {
   onAddBundle: (bundle: BundleHint) => void
   title: string
   addBundleLabel: string
+  /** When false (light theme), use dark text so heading and controls are visible. */
+  isDarkTheme?: boolean
 }
 
 export function BundleCarousel({
@@ -21,6 +23,7 @@ export function BundleCarousel({
   onAddBundle,
   title,
   addBundleLabel,
+  isDarkTheme = true,
 }: BundleCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -32,15 +35,20 @@ export function BundleCarousel({
 
   if (bundles.length === 0) return null
 
+  const titleClass = isDarkTheme ? 'text-white' : 'text-slate-900'
+  const btnClass = isDarkTheme
+    ? 'bg-white/10 text-white hover:bg-white/20'
+    : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
+
   return (
-    <div className="py-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
-        <div className="flex gap-1">
+    <div className="py-4 sm:py-5">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h3 className={`text-base sm:text-lg font-semibold ${titleClass} truncate min-w-0`}>{title}</h3>
+        <div className="flex-shrink-0 flex gap-1">
           <button
             type="button"
             onClick={() => scroll('left')}
-            className="p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            className={`p-2 rounded-full transition-colors ${btnClass}`}
             aria-label="Scroll left"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -48,7 +56,7 @@ export function BundleCarousel({
           <button
             type="button"
             onClick={() => scroll('right')}
-            className="p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            className={`p-2 rounded-full transition-colors ${btnClass}`}
             aria-label="Scroll right"
           >
             <ChevronRight className="h-5 w-5" />
@@ -57,7 +65,7 @@ export function BundleCarousel({
       </div>
       <div
         ref={scrollRef}
-        className="flex gap-4 overflow-x-auto scroll-smooth scrollbar-hide pb-2 -mx-2 px-2"
+        className="flex gap-3 sm:gap-4 overflow-x-auto scroll-smooth scrollbar-hide pb-2 scroll-px-3 -mx-3 px-3"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {bundles.map((bundle) => (

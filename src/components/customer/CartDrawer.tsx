@@ -24,6 +24,9 @@ interface CartDrawerProps {
   restaurantId: string
   isPlacing?: boolean
   children?: React.ReactNode
+  /** When provided, drawer is controlled by parent (e.g. header cart icon). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export function CartDrawer({
@@ -38,8 +41,13 @@ export function CartDrawer({
   restaurantId,
   isPlacing = false,
   children,
+  open: controlledOpen,
+  onOpenChange,
 }: CartDrawerProps) {
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined && onOpenChange != null
+  const open = isControlled ? controlledOpen : internalOpen
+  const setOpen = isControlled ? onOpenChange : setInternalOpen
   const itemCount = lines.reduce((s, l) => s + l.quantity, 0)
 
   return (

@@ -11,8 +11,6 @@ import {
   Receipt,
   Package,
   LogOut,
-  PlusCircle,
-  Layers,
   Settings,
   TrendingUp,
   Users,
@@ -27,15 +25,13 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
   { name: 'P&L', href: '/profit-loss', icon: TrendingUp },
-  { name: 'Add-ons', href: '/addons', icon: PlusCircle },
-  { name: 'Categories', href: '/categories', icon: Layers },
   { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart },
   { name: 'Orders', href: '/orders', icon: Receipt },
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'HR', href: '/hr/employees', icon: Users },
   { name: 'Shifts', href: '/hr/shifts', icon: Clock },
   { name: 'Payroll', href: '/hr/payroll', icon: Wallet },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Restaurant theme and design', href: '/settings', icon: Settings },
 ]
 
 interface SidebarProps {

@@ -6,11 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatPercentage } from '@/lib/utils'
-import { Plus } from 'lucide-react'
+import { Plus, Layers, PlusCircle } from 'lucide-react'
 import Link from 'next/link'
 import BulkMenuImport from '@/components/menu/BulkMenuImport'
 import ImportByDigitalMenu from '@/components/menu/ImportByDigitalMenu'
 import MenuItemsTable from '@/components/menu/MenuItemsTable'
+import MenuPageTabs from '@/components/menu/MenuPageTabs'
 
 const PAGE_SIZE = 20
 
@@ -145,28 +146,75 @@ export default async function MenuPage({
       : ''
   const statusFilter = searchParams?.status ?? ''
 
-  const [data, user] = await Promise.all([
+  const [data, user, restaurant, showcases, allMenuItemsForOptimization] = await Promise.all([
     getMenuData(restaurantId, page, normalizedSearch, statusFilter),
     prisma.user.findUnique({
       where: { id: session!.user.id },
       select: { defaultBackgroundPrompt: true },
     }),
+    prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { settings: true },
+    }),
+    prisma.menuShowcase.findMany({
+      where: { restaurantId },
+      orderBy: { displayOrder: 'asc' },
+      include: {
+        items: {
+          orderBy: { displayOrder: 'asc' },
+          include: {
+            menuItem: {
+              select: { id: true, name: true, imageUrl: true, price: true },
+            },
+          },
+        },
+      },
+    }),
+    prisma.menuItem.findMany({
+      where: { restaurantId, available: true },
+      select: { id: true, name: true, imageUrl: true, price: true },
+      orderBy: { name: 'asc' },
+    }),
   ])
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
   const searchQuery = (normalizedSearch ? `&search=${encodeURIComponent(normalizedSearch)}` : '')
     + (statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : '')
+  const settings = (restaurant?.settings as Record<string, unknown>) || {}
+  const menuEngineSettings = (settings.menuEngine as Record<string, unknown>) || null
+  const categoryOptions = data.categories.map((c) => ({ id: c.id, name: c.name, displayOrder: c.displayOrder }))
+  const showcasesSerialized = JSON.parse(JSON.stringify(showcases))
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-slate-900">Menu</h1>
+        <p className="text-slate-500 mt-1">Menu items, categories, add-ons, and how the digital menu suggests items to guests.</p>
+      </div>
+      <MenuPageTabs
+        categories={categoryOptions}
+        showcases={showcasesSerialized}
+        menuItems={allMenuItemsForOptimization}
+        menuEngineSettings={menuEngineSettings}
+      >
+        <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Menu Management</h1>
-          <p className="text-slate-500 mt-1">Manage menu items and recipes</p>
-        </div>
-        <div className="flex gap-2">
+        <div />
+        <div className="flex flex-wrap gap-2">
+          <Link href="/categories">
+            <Button variant="outline">
+              <Layers className="h-4 w-4 mr-2" />
+              Categories
+            </Button>
+          </Link>
+          <Link href="/addons">
+            <Button variant="outline">
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Add-ons
+            </Button>
+          </Link>
           <BulkMenuImport categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
           <ImportByDigitalMenu categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
-          <Link href="/dashboard/menu/new">
+          <Link href="/menu/new">
             <Button>
               <Plus className="h-4 w-4 mr-2" />
               Add Menu Item
@@ -277,6 +325,8 @@ export default async function MenuPage({
           )}
         </CardContent>
       </Card>
+        </div>
+      </MenuPageTabs>
     </div>
   )
 }

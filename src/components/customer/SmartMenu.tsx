@@ -96,7 +96,7 @@ interface SmartMenuProps {
   maxInitialItemsPerCategory?: number
 }
 
-type LanguageCode = 'en' | 'ar' | 'ku'
+type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
 
 interface MenuItemTranslation {
   name: string
@@ -111,7 +111,7 @@ type TranslationCache = Partial<Record<LanguageCode, Record<string, MenuItemTran
 const languageOptions: { value: LanguageCode; label: string }[] = [
   { value: 'en', label: 'English' },
   { value: 'ku', label: 'كوردي' },
-  { value: 'ar', label: 'عربي' },
+  { value: 'ar_fusha', label: 'Arabic Fusha (العربية الفصحى)' },
 ]
 
 const sortOptions: {
@@ -255,6 +255,37 @@ const uiCopyMap: Record<
     noMatchesTitle: 'لا توجد نتائج حتى الآن.',
     noMatchesDescription: 'حاول عبارة مختلفة أو وسّع نطاق البحث.',
   },
+  ar_fusha: {
+    searchPlaceholder: 'ابحث عن الأطباق…',
+    filtersLabel: 'الفلاتر النشطة:',
+    whatGoesWithThis: 'ما الذي ينسجم مع هذا؟',
+    noItemsMessage: 'لا توجد أطباق تطابق الفلاتر',
+    languageLabel: 'اللغة',
+    costLabel: 'التكلفة',
+    proteinLabel: 'البروتين',
+    carbsLabel: 'الكربوهيدرات',
+    addOnsLabel: 'الإضافات المتاحة',
+    viewDetails: 'عرض الوصف الكامل',
+    detailTitle: 'لمحات الشيف',
+    pairingTitle: 'مقترحات مثالية لـ',
+    pairingDescription:
+      'توصيات مدعومة بالذكاء الاصطناعي بناءً على نكهات وتركيبات شهيرة',
+    pairingAnalyzing: 'يتم تحليل نكهات الطعام...',
+    pairingNoSuggestions: 'لا توجد اقتراحات حالياً.',
+    loadingLabel: 'جارٍ التحميل...',
+    smartSearchLabel: 'البحث الذكي',
+    smartSearchPrompt: 'قل لنا ما تهتم به',
+    smartSearchDescription:
+      'استخدم اسم طبق، مكوّن أو شعور وسنُظهر خيارات متناسبة.',
+    smartSearchInputPlaceholder: 'ابحث عن مكوّن، نكهة أو مزاج...',
+    smartSearchFilters: 'اكتشف',
+    smartSearchClear: 'مسح',
+    resultsHeadingPrefix: 'النتائج لـ',
+    resultsSummarySingular: 'وجدنا {count} طبقًا مستوحى من "{query}".',
+    resultsSummaryPlural: 'وجدنا {count} أطباقًا مستوحاة من "{query}".',
+    noMatchesTitle: 'لا توجد نتائج حتى الآن.',
+    noMatchesDescription: 'حاول عبارة مختلفة أو وسّع نطاق البحث.',
+  },
   ku: {
     searchPlaceholder: 'ئێستا خواردنەکان بگەڕە…',
     filtersLabel: 'فلتەری کارکردن:',
@@ -335,6 +366,22 @@ const engineCopyMap: Record<
     checkoutNudgeBeverage: 'معظم الضيوف يكمّلون مع مشروب منعش.',
     checkoutNudgeDessert: 'اختم وجبتك بحلوى؟',
     addToOrder: 'إضافة للطلب',
+    dismissLabel: 'لا شكراً',
+    idleMessage: 'تبحث عن شيء؟ جرّب',
+    jumpToSection: 'انتقل إلى',
+  },
+  ar_fusha: {
+    showAll: 'عرض الكل',
+    viewOrder: 'عرض الطلب',
+    placeOrder: 'تأكيد الطلب',
+    cartTitle: 'طلبك',
+    addLabel: 'إضافة',
+    skipLabel: 'تخطي',
+    addBundleLabel: 'إضافة المجموعة',
+    bundlesTitle: 'تركيبات شائعة',
+    checkoutNudgeBeverage: 'معظم الضيوف يكملون مع مشروب منعش.',
+    checkoutNudgeDessert: 'اختم وجبتك بحلوى؟',
+    addToOrder: 'إضافة إلى الطلب',
     dismissLabel: 'لا شكراً',
     idleMessage: 'تبحث عن شيء؟ جرّب',
     jumpToSection: 'انتقل إلى',
@@ -469,22 +516,13 @@ export default function SmartMenu({
   const [translatedCount, setTranslatedCount] = useState<Record<LanguageCode, number>>({
     en: 0,
     ar: 0,
+    ar_fusha: 0,
     ku: 0,
   })
   const [selectedItemForDetail, setSelectedItemForDetail] =
     useState<MenuItem | null>(null)
   const { toast } = useToast()
   const isDetailOpen = Boolean(selectedItemForDetail)
-  const [descriptionCache, setDescriptionCache] = useState<
-    Record<LanguageCode, Record<string, string>>
-  >({
-    en: {},
-    ar: {},
-    ku: {},
-  })
-  const [descriptionLoadingItem, setDescriptionLoadingItem] =
-    useState<string | null>(null)
-  const [descriptionError, setDescriptionError] = useState<string | null>(null)
   const [cart, dispatchCart] = useReducer(cartReducer, [])
   const [selectedMoodId, setSelectedMoodId] = useState<string | null>(null)
   const [upsellAfterAdd, setUpsellAfterAdd] = useState<{ itemId: string } | null>(null)
@@ -693,19 +731,12 @@ export default function SmartMenu({
     [menuItems, toast]
   )
 
+  // Load English immediately (no API call). Load ar/ku only when user switches language to avoid slow initial load.
   useEffect(() => {
     fetchTranslations('en')
   }, [fetchTranslations])
 
   useEffect(() => {
-    // Preload all supported languages so cross-language queries match translations.
-    fetchTranslations('ar')
-    fetchTranslations('ku')
-  }, [fetchTranslations])
-
-  useEffect(() => {
-    // Always fetch translations when language changes, even if cache exists
-    // The fetchTranslations function will check if items are actually translated
     fetchTranslations(language)
   }, [language, fetchTranslations])
 
@@ -922,74 +953,6 @@ export default function SmartMenu({
     }
   }
 
-  const generateDescription = useCallback(
-    async (item: MenuItem, lang: LanguageCode) => {
-      setDescriptionError(null)
-      setDescriptionLoadingItem(item.id)
-      try {
-        const response = await fetch('/api/public/menu/item-description', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            menuItemId: item.id,
-            language: lang,
-          }),
-        })
-
-        const data = await response.json()
-        if (!response.ok) {
-          throw new Error(data?.error || 'Failed to generate AI description')
-        }
-
-        const description = (data.description || '').trim()
-        if (!description) {
-          throw new Error('AI description was empty')
-        }
-
-        setDescriptionCache((prev) => ({
-          ...prev,
-          [lang]: {
-            ...(prev[lang] || {}),
-            [item.id]: description,
-          },
-        }))
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'Unable to generate AI description'
-        setDescriptionError(message)
-        toast({
-          title: 'AI description failed',
-          description: message,
-          variant: 'destructive',
-        })
-      } finally {
-        setDescriptionLoadingItem((current) =>
-          current === item.id ? null : current
-        )
-      }
-    },
-    [toast]
-  )
-
-  const generatedDescription =
-    selectedItemForDetail && descriptionCache[language]
-      ? descriptionCache[language][selectedItemForDetail.id]
-      : undefined
-
-  useEffect(() => {
-    if (!selectedItemForDetail || generatedDescription) {
-      return
-    }
-    generateDescription(selectedItemForDetail, language)
-  }, [
-    selectedItemForDetail,
-    language,
-    generatedDescription,
-    generateDescription,
-  ])
-
   const getTagIcon = (tag: string) => {
     const lowerTag = tag.toLowerCase()
     if (lowerTag.includes('spicy') || lowerTag.includes('hot')) {
@@ -1008,20 +971,23 @@ export default function SmartMenu({
 const getLocalizedTagLabel = (tag: string) => {
   if (language === 'en') return tag
   const normalized = tag.toLowerCase()
-  return tagTranslations[normalized]?.[language] || tag
+  const lang = language === 'ar_fusha' ? 'ar' : language
+  return tagTranslations[normalized]?.[lang] || tag
 }
 
 const getLocalizedCategoryName = (category?: string | null) => {
   if (!category) return 'General'
   if (language === 'en') return category
   const normalized = category.toLowerCase()
-  return categoryTranslations[normalized]?.[language] || category
+  const lang = language === 'ar_fusha' ? 'ar' : language
+  return categoryTranslations[normalized]?.[lang] || category
 }
 
 const getLocalizedAddOnName = (name: string) => {
   if (language === 'en') return name
   const normalized = name.toLowerCase()
-  return addOnTranslations[normalized]?.[language] || name
+  const lang = language === 'ar_fusha' ? 'ar' : language
+  return addOnTranslations[normalized]?.[lang] || name
 }
 
   const pairingItemTranslation = selectedItemForPairing
@@ -1036,33 +1002,32 @@ const getLocalizedAddOnName = (name: string) => {
   const detailMacroSegments = selectedItemForDetail
     ? buildMacroSegments(selectedItemForDetail, detailTranslation)
     : []
-  const isDescriptionLoading =
-    Boolean(selectedItemForDetail) &&
-    descriptionLoadingItem === selectedItemForDetail?.id
   const detailDescriptionText =
-    generatedDescription ||
     detailTranslation?.aiDescription ||
     selectedItemForDetail?.description ||
-    'An AI-crafted description is on the way.'
+    ''
 
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
+  const [cartOpen, setCartOpen] = useState(false)
 
-  // Theme computation
-  const themeStyle = useMemo(() => {
-    if (!theme) return {}
+  // Theme computation: CSS vars for colors and font pair (display + body)
+  const themeStyle = useMemo((): React.CSSProperties => {
+    const displayVar =
+      theme?.fontFamily === 'serif'
+        ? 'var(--font-playfair)'
+        : theme?.fontFamily === 'display'
+          ? 'var(--font-cormorant)'
+          : 'var(--font-dm-sans)'
     return {
-      '--menu-primary': theme.primaryColor || '#10b981',
-      '--menu-accent': theme.accentColor || '#f59e0b',
+      '--menu-primary': theme?.primaryColor || '#10b981',
+      '--menu-accent': theme?.accentColor || '#f59e0b',
+      '--font-display': displayVar,
+      '--font-body': 'var(--font-dm-sans)',
     } as React.CSSProperties
   }, [theme])
 
-  const fontClass =
-    theme?.fontFamily === 'serif'
-      ? 'font-serif'
-      : theme?.fontFamily === 'display'
-        ? 'font-serif italic'
-        : ''
+  const fontClass = 'font-body'
 
   const bgClass =
     theme?.backgroundStyle === 'light'
@@ -1080,7 +1045,11 @@ const getLocalizedAddOnName = (name: string) => {
       }
     : undefined
 
-  // Category sections for the menu grid (use categoryOrder from engine when present)
+  // Tier order for placement: hero=0, featured=1, standard=2, minimal=3 (DOG last)
+  const tierOrder = (tier: ItemDisplayHints['displayTier']) =>
+    tier === 'hero' ? 0 : tier === 'featured' ? 1 : tier === 'standard' ? 2 : 3
+
+  // Category sections with placement-based item order: anchor first, then by engine position, DOG last
   const categorizedSections = useMemo(() => {
     if (!categoriesProp || categoriesProp.length === 0) {
       return [{ category: null as CategorySection | null, items: filteredItems }]
@@ -1100,8 +1069,19 @@ const getLocalizedAddOnName = (name: string) => {
       const categoryItems = filteredItems.filter(
         (item) => item.category?.id === cat.id
       )
-      if (categoryItems.length > 0) {
-        sections.push({ category: cat, items: categoryItems })
+      // Place: first = price anchor (highest margin), middle = WORKHORSE, bottom = DOG
+      const ordered = [...categoryItems].sort((a, b) => {
+        const hintsA = a._hints
+        const hintsB = b._hints
+        if (hintsA?.isAnchor && !hintsB?.isAnchor) return -1
+        if (!hintsA?.isAnchor && hintsB?.isAnchor) return 1
+        const posA = hintsA?.position ?? 999
+        const posB = hintsB?.position ?? 999
+        if (posA !== posB) return posA - posB
+        return tierOrder(hintsA?.displayTier ?? 'standard') - tierOrder(hintsB?.displayTier ?? 'standard')
+      })
+      if (ordered.length > 0) {
+        sections.push({ category: cat, items: ordered })
       }
     }
 
@@ -1179,40 +1159,82 @@ const getLocalizedAddOnName = (name: string) => {
           <div className="absolute bottom-20 left-1/2 h-60 w-60 rounded-full bg-blue-400 blur-[140px]" />
         </div>
 
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-4 sm:py-6">
-          <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-6">
-              <div className="flex-shrink-0">
-                <Image
-                  src={logoSrc}
-                  width={42}
-                  height={42}
-                  alt={restaurantName || 'Restaurant logo'}
-                  className={`w-16 h-16 rounded-full border ${isDarkBg ? 'border-white/20 bg-white/5' : 'border-slate-200 bg-white'} p-1 shadow-lg object-contain`}
-                />
-              </div>
-              <div className="flex-1 text-center">
-                <p className={`text-4xl sm:text-5xl font-bold tracking-tight ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+        <div className="relative mx-auto max-w-7xl px-3 sm:px-6 pt-3 sm:pt-6">
+          {/* Header: logo left, category tabs center, cart + language right */}
+          <header className="flex items-center gap-2 sm:gap-4">
+              <div className="flex-shrink-0 flex items-center gap-2 min-w-0">
+                {logoSrc ? (
+                  <Image
+                    src={logoSrc}
+                    width={40}
+                    height={40}
+                    alt=""
+                    className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg object-contain shrink-0 ${isDarkBg ? 'bg-white/10 border border-white/20' : 'bg-white border border-slate-200'}`}
+                  />
+                ) : (
+                  <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${isDarkBg ? 'bg-white/10 text-white border border-white/20' : 'bg-slate-800 text-white border border-slate-200'}`}>
+                    {(restaurantName || 'M').slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <span className={`font-display font-semibold text-sm sm:text-base truncate max-w-[90px] sm:max-w-[140px] ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
                   {restaurantName || 'Menu'}
-                </p>
+                </span>
               </div>
-              <div className="flex-shrink-0">
+              <nav className="flex-1 min-w-0 flex justify-center overflow-x-auto scrollbar-hide scroll-px-3 -mx-1">
+                <div className="flex gap-1.5 sm:gap-2 py-1 px-1">
+                  {categorizedSections.filter((s) => s.category).map((section) => {
+                    const isActive = activeSectionId === section.category!.id
+                    return (
+                      <button
+                        key={section.category!.id}
+                        type="button"
+                        onClick={() => scrollToSection(section.category!.id)}
+                        className={`flex-shrink-0 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                          isActive
+                            ? isDarkBg
+                              ? 'bg-[var(--menu-accent,theme colors.amber.500)] text-white'
+                              : 'bg-slate-800 text-white'
+                            : isDarkBg
+                              ? 'text-white/80 hover:bg-white/10'
+                              : 'text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {getLocalizedCategoryName(section.category!.name)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </nav>
+              <div className="flex-shrink-0 flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`relative h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
+                  onClick={() => setCartOpen(true)}
+                  aria-label="Open cart"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                  {cart.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[var(--menu-accent,#f59e0b)] text-white text-[10px] font-bold flex items-center justify-center">
+                      {cart.reduce((n, line) => n + line.quantity, 0)}
+                    </span>
+                  )}
+                </Button>
                 <Popover open={isLanguageMenuOpen} onOpenChange={setIsLanguageMenuOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/5 p-0 text-slate-100 transition hover:bg-white/10"
                       size="sm"
-                      aria-label={`Display language: ${currentLanguageLabel}`}
+                      className={`h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
+                      aria-label={`Language: ${currentLanguageLabel}`}
                     >
-                      <Globe className="h-4 w-4 text-emerald-200" />
+                      <Globe className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent
                     align="end"
                     sideOffset={8}
-                    className="w-40 rounded-lg border border-white/20 bg-slate-950/95 p-1 text-[13px] text-white shadow-2xl"
+                    className={`w-40 rounded-xl p-1 shadow-xl ${isDarkBg ? 'border-white/20 bg-slate-900' : 'border-slate-200 bg-white'} text-sm`}
                   >
                     {languageOptions.map((option) => (
                       <button
@@ -1221,67 +1243,118 @@ const getLocalizedAddOnName = (name: string) => {
                           setLanguage(option.value)
                           setIsLanguageMenuOpen(false)
                         }}
-                        className={`flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-2 text-left transition ${
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${
                           language === option.value
-                            ? 'bg-emerald-500/20 text-white'
-                            : 'text-white/70 hover:bg-white/5'
+                            ? 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-200'
+                            : isDarkBg ? 'text-white/80 hover:bg-white/5' : 'text-slate-700 hover:bg-slate-100'
                         }`}
                       >
                         <span>{option.label}</span>
-                        {language === option.value && (
-                          <span className="text-emerald-300">✓</span>
-                        )}
+                        {language === option.value && <span>✓</span>}
                       </button>
                     ))}
                   </PopoverContent>
                 </Popover>
               </div>
-            </div>
+          </header>
+        </div>
 
-            {topShowcases.map((showcase) => (
-              <MenuCarousel
-                key={showcase.id}
-                title={showcase.title}
-                type={showcase.type}
-                items={showcase.items}
-                onItemClick={(item) =>
-                  setSelectedItemForDetail(item as MenuItem)
-                }
-                getDisplayName={(id) =>
-                  translationCache[language]?.[id]?.name
-                }
-                getCategoryName={getLocalizedCategoryName}
-                accentColor={theme?.accentColor}
-                primaryColor={theme?.primaryColor}
-              />
-            ))}
-            {/* Search + Filter */}
-            <div className="flex justify-center">
-              <div
-                className={`flex w-full max-w-md items-center gap-3 transition duration-300 ${
-                  isSmartSearchActive ? 'opacity-0 pointer-events-none' : ''
-                }`}
-              >
+        {/* Full-width hero carousel (edge to edge, premium look) */}
+        {topShowcases.length > 0 && (
+          <div className="w-full mt-4">
+            <MenuCarousel
+              key={topShowcases[0].id}
+              title={topShowcases[0].title}
+              type={topShowcases[0].type}
+              variant="hero"
+              items={topShowcases[0].items}
+              onItemClick={(item) =>
+                setSelectedItemForDetail(item as MenuItem)
+              }
+              getDisplayName={(id) =>
+                translationCache[language]?.[id]?.name
+              }
+              getDescription={(id) =>
+                translationCache[language]?.[id]?.aiDescription || menuItems.find((m) => m.id === id)?.description
+              }
+              getCategoryName={getLocalizedCategoryName}
+              accentColor={theme?.accentColor}
+              primaryColor={theme?.primaryColor}
+              displayFontClassName="font-display"
+            />
+          </div>
+        )}
+
+        <div className="relative mx-auto max-w-7xl px-3 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6">
+          {/* Remaining top showcases (non-hero) */}
+          {topShowcases.slice(1).map((showcase) => (
+            <MenuCarousel
+              key={showcase.id}
+              title={showcase.title}
+              type={showcase.type}
+              variant="default"
+              items={showcase.items}
+              onItemClick={(item) =>
+                setSelectedItemForDetail(item as MenuItem)
+              }
+              getDisplayName={(id) =>
+                translationCache[language]?.[id]?.name
+              }
+              getDescription={(id) =>
+                translationCache[language]?.[id]?.aiDescription || menuItems.find((m) => m.id === id)?.description
+              }
+              getCategoryName={getLocalizedCategoryName}
+              accentColor={theme?.accentColor}
+              primaryColor={theme?.primaryColor}
+              isDarkTheme={isDarkBg}
+              displayFontClassName="font-display"
+            />
+          ))}
+            {/* Search + Mood row */}
+            <div
+              className={`flex flex-col sm:flex-row w-full gap-3 transition duration-300 ${
+                isSmartSearchActive ? 'opacity-0 pointer-events-none' : ''
+              }`}
+            >
+              <div className="flex flex-1 min-w-0 gap-2">
                 <Input
                   placeholder={currentCopy.searchPlaceholder}
                   value={search}
                   onFocus={() => setIsSearchFocused(true)}
                   onChange={(event) => setSearch(event.target.value)}
-                  className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/50 h-10 text-sm"
+                  className={`flex-1 h-10 rounded-xl text-sm ${
+                    isDarkBg
+                      ? 'bg-white/10 border-white/20 text-white placeholder:text-white/50'
+                      : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-500'
+                  }`}
                 />
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="flex h-9 rounded-full border border-white/20 bg-white/5 px-3 py-0.5 text-white transition hover:bg-white/10"
+                  className={`flex h-10 rounded-xl px-3 sm:px-4 shrink-0 ${
+                    isDarkBg
+                      ? 'border border-white/20 bg-white/5 text-white hover:bg-white/10'
+                      : 'border border-slate-200 bg-slate-100 text-slate-800 hover:bg-slate-200'
+                  }`}
                   onClick={() => setIsFilterDialogOpen(true)}
-                  aria-label="Open filters"
+                  aria-label="Discover filters"
                 >
                   <SlidersHorizontal className="h-4 w-4" />
-                  <span className="ml-2 text-xs font-semibold uppercase tracking-[0.3em]">
-                    Discover
-                  </span>
+                  <span className="ml-1.5 sm:ml-2 text-xs font-semibold uppercase tracking-wider hidden sm:inline">Discover</span>
                 </Button>
               </div>
+              {engineMode !== 'classic' && moods.length > 0 && (
+                <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
+                  <MoodSelector
+                    moods={moods}
+                    language={language}
+                    selectedMoodId={selectedMoodId}
+                    onSelectMood={setSelectedMoodId}
+                    showAllLabel={currentEngineCopy.showAll}
+                    isDarkTheme={isDarkBg}
+                  />
+                </div>
+              )}
             </div>
             
             <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
@@ -1484,20 +1557,8 @@ const getLocalizedAddOnName = (name: string) => {
               </div>
             )}
 
-            {engineMode !== 'classic' && moods.length > 0 && (
-              <div className="px-4 pb-2">
-                <MoodSelector
-                  moods={moods}
-                  language={language}
-                  selectedMoodId={selectedMoodId}
-                  onSelectMood={setSelectedMoodId}
-                  showAllLabel={currentEngineCopy.showAll}
-                />
-              </div>
-            )}
-
             {engineMode !== 'classic' && bundles.length > 0 && (
-              <div className="px-4">
+              <div className="px-3 sm:px-4">
                 <BundleCarousel
                   bundles={bundles}
                   itemNames={Object.fromEntries(menuItems.map((i) => [i.id, i.name]))}
@@ -1508,43 +1569,13 @@ const getLocalizedAddOnName = (name: string) => {
                   }}
                   title={currentEngineCopy.bundlesTitle}
                   addBundleLabel={currentEngineCopy.addBundleLabel}
+                  isDarkTheme={isDarkBg}
                 />
               </div>
             )}
 
-            {/* Sticky section quick-jump — discover sections without scrolling */}
-            {categorizedSections.length >= 2 && categorizedSections.some((s) => s.category) && (
-              <nav
-                className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-slate-900/95 backdrop-blur-md border-b border-white/10 shadow-lg"
-                aria-label="Jump to menu section"
-              >
-                <p className="text-[10px] uppercase tracking-wider text-white/50 mb-2 px-0.5">
-                  {currentEngineCopy.jumpToSection}
-                </p>
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-0.5">
-                  {categorizedSections.filter((s) => s.category).map((section) => {
-                    const isActive = activeSectionId === section.category!.id
-                    return (
-                      <button
-                        key={section.category!.id}
-                        type="button"
-                        onClick={() => scrollToSection(section.category!.id)}
-                        className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-                          isActive
-                            ? 'bg-amber-500 text-white shadow-md'
-                            : 'bg-white/10 text-white hover:bg-amber-500/80 hover:text-white'
-                        }`}
-                      >
-                        {getLocalizedCategoryName(section.category!.name)}
-                      </button>
-                    )
-                  })}
-                </div>
-              </nav>
-            )}
-
             {/* Menu Items — grouped by category with carousels between */}
-            <div className="space-y-6 relative px-4">
+            <div className="space-y-8 sm:space-y-6 relative px-3 sm:px-4">
               {filteredItems.length === 0 ? (
                 <div className="text-center py-12">
                   <p className={isDarkBg ? 'text-white/60' : 'text-slate-500'}>{currentCopy.noItemsMessage}</p>
@@ -1557,8 +1588,8 @@ const getLocalizedAddOnName = (name: string) => {
                     className="scroll-mt-24"
                   >
                     {section.category && (
-                      <div className="mb-3">
-                        <h2 className={`text-lg font-bold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                      <div className="mb-4 mt-6 sm:mt-4 first:mt-0">
+                        <h2 className={`text-xl sm:text-lg font-bold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
                           {getLocalizedCategoryName(section.category.name)}
                         </h2>
                       </div>
@@ -1573,8 +1604,8 @@ const getLocalizedAddOnName = (name: string) => {
                             className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}
                           >
                             <div>
-                              <p className="font-semibold text-white/90">{anchorBundle.name}</p>
-                              <p className="text-xs text-white/60">{anchorBundle.savingsText}</p>
+                              <p className={`font-semibold ${isDarkBg ? 'text-white/90' : 'text-slate-900'}`}>{anchorBundle.name}</p>
+                              <p className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-600'}`}>{anchorBundle.savingsText}</p>
                             </div>
                             <Button
                               size="sm"
@@ -1624,6 +1655,7 @@ const getLocalizedAddOnName = (name: string) => {
                             onAddToOrder={handleAddToOrder}
                             loadingPairings={loadingSuggestions}
                             isSelectedForPairing={selectedItemForPairing?.id === item.id}
+                            isDarkTheme={isDarkBg}
                           />
                         )
                       })}
@@ -1657,9 +1689,14 @@ const getLocalizedAddOnName = (name: string) => {
                             getDisplayName={(id) =>
                               translationCache[language]?.[id]?.name
                             }
+                            getDescription={(id) =>
+                              translationCache[language]?.[id]?.aiDescription || menuItems.find((m) => m.id === id)?.description
+                            }
                             getCategoryName={getLocalizedCategoryName}
                             accentColor={theme?.accentColor}
                             primaryColor={theme?.primaryColor}
+                            isDarkTheme={isDarkBg}
+                            displayFontClassName="font-display"
                           />
                         </div>
                       ))}
@@ -1668,7 +1705,7 @@ const getLocalizedAddOnName = (name: string) => {
               )}
             </div>
             <footer className="pt-10">
-              <div className="flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.3em] text-white/60">
+              <div className={`flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.3em] ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>
                 <span>Powered by</span>
                 <span className="font-bold bg-gradient-to-r from-emerald-400 to-amber-400 bg-clip-text text-transparent">
                   Invisible AI
@@ -1677,7 +1714,6 @@ const getLocalizedAddOnName = (name: string) => {
             </footer>
           </div>
         </div>
-      </div>
 
       {isSmartSearchActive && (
         <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-10 sm:pt-16">
@@ -1905,8 +1941,6 @@ const getLocalizedAddOnName = (name: string) => {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedItemForDetail(null)
-            setDescriptionError(null)
-            setDescriptionLoadingItem(null)
           }
         }}
       >
@@ -1918,21 +1952,9 @@ const getLocalizedAddOnName = (name: string) => {
             </DialogTitle>
             <DialogDescription className="text-sm text-slate-600 space-y-1">
               <span className="flex items-center gap-2">
-                {currentCopy.detailTitle} —{' '}
-                {isDescriptionLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
-                    Generating AI description...
-                  </>
-                ) : (
-                  detailDescriptionText
-                )}
+                {currentCopy.detailTitle}
+                {detailDescriptionText ? ` — ${detailDescriptionText}` : ''}
               </span>
-              {descriptionError && (
-                <span className="text-xs text-red-300">
-                  {descriptionError}
-                </span>
-              )}
             </DialogDescription>
           </DialogHeader>
           {selectedItemForDetail && (
@@ -2012,6 +2034,8 @@ const getLocalizedAddOnName = (name: string) => {
       </Dialog>
 
       <CartDrawer
+        open={cartOpen}
+        onOpenChange={setCartOpen}
         lines={cart}
         total={cart.reduce((s, l) => s + l.price * l.quantity, 0)}
         viewOrderLabel={currentEngineCopy.viewOrder}

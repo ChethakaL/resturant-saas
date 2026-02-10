@@ -203,12 +203,28 @@ model MenuItem {
   saleItems       SaleItem[]
   chefPicks       ChefPick[]
   showcaseItems   MenuShowcaseItem[]
+  pairingSuggestionsFor MenuItemPairing[] @relation("PairingFor")
+  suggestedPairings    MenuItemPairing[] @relation("PairingSuggested")
 
   @@index([restaurantId])
   @@index([categoryId])
   @@index([available])
   @@index([popularityScore])
   @@map("menu_items")
+}
+
+model MenuItemPairing {
+  id                   String   @id @default(cuid())
+  menuItemId           String   @map("menu_item_id")
+  suggestedMenuItemId  String   @map("suggested_menu_item_id")
+  displayOrder         Int      @default(0)
+  createdAt            DateTime @default(now())
+  menuItem             MenuItem @relation("PairingFor", fields: [menuItemId], references: [id], onDelete: Cascade)
+  suggestedMenuItem    MenuItem @relation("PairingSuggested", fields: [suggestedMenuItemId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, suggestedMenuItemId])
+  @@index([menuItemId])
+  @@map("menu_item_pairings")
 }
 
 model ChefPick {
@@ -804,6 +820,7 @@ enum PaymentMethod {
 enum MenuItemTranslationLanguage {
   en
   ar
+  ar_fusha
   ku
 }
 

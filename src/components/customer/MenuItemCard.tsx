@@ -30,10 +30,20 @@ interface MenuItemCardProps {
   onAddToOrder: () => void
   loadingPairings?: boolean
   isSelectedForPairing?: boolean
+  /** When true, use dark card and light text (theme-aware). */
+  isDarkTheme?: boolean
 }
 
 const defaultPlaceholderImage =
   'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
+
+function getBadgeLabel(tier: ItemDisplayHints['displayTier'], badgeText?: string, isAnchor?: boolean): string | null {
+  if (badgeText) return badgeText
+  if (tier === 'hero' || isAnchor) return '★ SIGNATURE'
+  if (tier === 'featured') return '★ MOST LOVED'
+  if (tier === 'standard') return '💎 CHEF\'S SELECTION'
+  return null
+}
 
 export function MenuItemCard({
   item,
@@ -49,55 +59,84 @@ export function MenuItemCard({
   onAddToOrder,
   loadingPairings = false,
   isSelectedForPairing = false,
+  isDarkTheme = false,
 }: MenuItemCardProps) {
   const tier = hints?.displayTier ?? 'standard'
   const showImage = hints?.showImage ?? true
   const priceDisplay = hints?.priceDisplay ?? String(Math.round(item.price))
   const badgeText = hints?.badgeText
+  const isLimitedToday = hints?.isLimitedToday
   const isHero = tier === 'hero'
   const isFeatured = tier === 'featured'
   const isMinimal = tier === 'minimal'
+  const badgeLabel = getBadgeLabel(tier, badgeText, hints?.isAnchor)
+
+  const cardBg = isDarkTheme ? 'bg-white/10 border-white/20' : 'bg-white border-slate-200'
+  const textMain = isDarkTheme ? 'text-white' : 'text-slate-900'
+  const textMuted = isDarkTheme ? 'text-white/70' : 'text-slate-500'
+  const textPrice = isDarkTheme ? 'text-[var(--menu-accent,#f59e0b)]' : 'text-emerald-700'
+  const btnLink = isDarkTheme ? 'text-[var(--menu-accent,#f59e0b)] hover:text-white/90' : 'text-emerald-700 hover:text-emerald-800'
 
   return (
     <Card
-      className={`overflow-hidden bg-white/95 backdrop-blur text-slate-900 hover:shadow-lg transition-all ${
-        isHero ? 'ring-2 ring-amber-400/80' : ''
-      } ${isFeatured ? 'border-l-4 border-amber-500' : ''}`}
+      className={`overflow-hidden backdrop-blur hover:shadow-lg transition-all border ${cardBg} ${textMain} ${
+        isHero ? 'ring-2 ring-[var(--menu-accent,#f59e0b)]/80' : ''
+      } ${isFeatured && !isHero ? 'border-l-4 border-[var(--menu-accent,#f59e0b)]' : ''}`}
       onClick={onDetail}
     >
       <div className={`flex min-h-[120px] sm:min-h-[140px] ${isHero ? 'flex-col sm:flex-row' : ''}`}>
+        {showImage && !isMinimal && (
+          <div
+            className={`relative flex-shrink-0 flex items-center justify-center p-2 order-first sm:order-none ${
+              isHero ? 'w-full sm:w-[200px] aspect-video sm:aspect-square' : 'w-24 sm:w-28 aspect-square rounded-xl overflow-hidden'
+            }`}
+          >
+            <img
+              src={item.imageUrl || defaultPlaceholderImage}
+              alt={item.name}
+              className={`w-full h-full object-cover ${isHero ? 'rounded-lg' : 'rounded-xl'}`}
+            />
+            {badgeLabel && (
+              <span className="absolute top-2 left-2 bg-[var(--menu-accent,#f59e0b)] text-white text-[9px] font-bold px-2 py-0.5 rounded-md shadow-sm">
+                {badgeLabel}
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
           <div>
             <h3 className="text-sm font-semibold leading-tight line-clamp-2 mb-0.5">{displayName}</h3>
-
-            <p className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">
+            <p className={`text-[9px] uppercase tracking-wider ${textMuted} mb-1`}>
               {getLocalizedCategoryName(item.category?.name)}
             </p>
-
-            <p className="text-[11px] text-slate-600 line-clamp-2 mb-1">
+            <p className={`text-[11px] ${textMuted} line-clamp-2 mb-1`}>
               {displayDescription ? (
                 <>
                   {displayDescription}
-                  <span className="font-semibold text-emerald-700 ml-1.5">{priceDisplay}</span>
+                  <span className={`font-semibold ${textPrice} ml-1.5`}>{priceDisplay}</span>
                 </>
               ) : (
-                <span className="font-semibold text-emerald-700">{priceDisplay}</span>
+                <span className={`font-semibold ${textPrice}`}>{priceDisplay}</span>
               )}
             </p>
-
+            {isLimitedToday && (
+              <p className="text-[10px] text-white/60 flex items-center gap-1 mb-1">
+                <span>ⓘ</span> Limited Today
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {macroSegments.length > 0 && (
-                <span className="text-[9px] text-slate-500">{macroSegments.join(' · ')}</span>
+                <span className={`text-[9px] ${textMuted}`}>{macroSegments.join(' · ')}</span>
               )}
               {item.tags && item.tags.length > 0 && (
                 <>
-                  {macroSegments.length > 0 && <span className="text-slate-300">|</span>}
+                  {macroSegments.length > 0 && <span className={textMuted}>|</span>}
                   {item.tags.slice(0, 2).map((tag) => {
                     const tagLabel = getLocalizedTagLabel(tag)
                     return (
                       <span
                         key={tag}
-                        className="inline-flex items-center gap-0.5 text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
+                        className={`inline-flex items-center gap-0.5 text-[9px] ${isDarkTheme ? 'bg-white/10 text-white/80' : 'bg-slate-100 text-slate-600'} px-1.5 py-0.5 rounded`}
                       >
                         {getTagIcon(tag)}
                         {tagLabel}
@@ -108,71 +147,29 @@ export function MenuItemCard({
               )}
             </div>
           </div>
-
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onPairings()
-              }}
+              onClick={(e) => { e.stopPropagation(); onPairings() }}
               disabled={loadingPairings && isSelectedForPairing}
-              className="flex items-center gap-1 text-[9px] font-medium text-emerald-700 hover:text-emerald-800 transition-colors"
+              className={`flex items-center gap-1 text-[9px] font-medium ${btnLink} transition-colors`}
             >
-              {loadingPairings && isSelectedForPairing ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Sparkles className="h-3 w-3" />
-              )}
+              {loadingPairings && isSelectedForPairing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
               <span>Pairings</span>
             </button>
-            <span className="text-slate-300">&bull;</span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDetail()
-              }}
-              className="text-[9px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
-            >
+            <span className={textMuted}>&bull;</span>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onDetail() }} className={`text-[9px] font-medium ${textMuted} hover:underline`}>
               More info
             </button>
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onAddToOrder()
-              }}
-              className="ml-auto text-[9px] font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+              onClick={(e) => { e.stopPropagation(); onAddToOrder() }}
+              className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold ${isDarkTheme ? 'bg-[var(--menu-accent,#f59e0b)] text-white hover:opacity-90' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
             >
               Add to order
             </button>
           </div>
         </div>
-
-        {showImage && !isMinimal && (
-          <div
-            className={`relative flex-shrink-0 flex items-center justify-center p-2 ${
-              isHero ? 'w-full sm:w-[200px] aspect-video sm:aspect-square' : 'w-[146px] sm:w-[146px] aspect-square'
-            }`}
-          >
-            <img
-              src={item.imageUrl || defaultPlaceholderImage}
-              alt={item.name}
-              className="w-full h-full object-cover rounded"
-            />
-            {(badgeText || (item.popularityScore != null && item.popularityScore > 50)) && (
-              <span className="absolute top-2 right-2 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
-                {badgeText ?? 'Popular'}
-              </span>
-            )}
-            {isFeatured && !badgeText && (
-              <span className="absolute top-2 right-2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
-                Chef&apos;s Pick
-              </span>
-            )}
-          </div>
-        )}
       </div>
     </Card>
   )

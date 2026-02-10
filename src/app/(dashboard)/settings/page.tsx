@@ -13,7 +13,7 @@ export default async function SettingsPage() {
     redirect('/orders')
   }
 
-  const [restaurant, user, categories, showcases, menuItems] = await Promise.all([
+  const [restaurant, user] = await Promise.all([
     prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
       select: { id: true, name: true, logo: true, settings: true },
@@ -22,33 +22,6 @@ export default async function SettingsPage() {
     prisma.user.findUnique({
       where: { id: session.user.id! },
       select: { defaultBackgroundPrompt: true },
-    }),
-
-    prisma.category.findMany({
-      where: { restaurantId: session.user.restaurantId },
-      orderBy: { displayOrder: 'asc' },
-      select: { id: true, name: true, displayOrder: true },
-    }),
-
-    prisma.menuShowcase.findMany({
-      where: { restaurantId: session.user.restaurantId },
-      orderBy: { displayOrder: 'asc' },
-      include: {
-        items: {
-          orderBy: { displayOrder: 'asc' },
-          include: {
-            menuItem: {
-              select: { id: true, name: true, imageUrl: true, price: true },
-            },
-          },
-        },
-      },
-    }),
-
-    prisma.menuItem.findMany({
-      where: { restaurantId: session.user.restaurantId, available: true },
-      select: { id: true, name: true, imageUrl: true, price: true },
-      orderBy: { name: 'asc' },
     }),
   ])
 
@@ -59,19 +32,15 @@ export default async function SettingsPage() {
     menuTimezone: (settings.menuTimezone as string) || 'Asia/Baghdad',
     themePreset: (settings.themePreset as string) ?? null,
     backgroundImageUrl: (settings.backgroundImageUrl as string) ?? '',
+    managementLanguage: (settings.managementLanguage as string) || 'en',
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
-  const menuEngineSettings = (settings.menuEngine as Record<string, unknown>) || null
 
   return (
     <SettingsClient
       currentTheme={currentTheme}
       defaultBackgroundPrompt={defaultBackgroundPrompt}
-      categories={categories}
-      showcases={JSON.parse(JSON.stringify(showcases))}
-      menuItems={menuItems}
-      menuEngineSettings={menuEngineSettings}
     />
   )
 }

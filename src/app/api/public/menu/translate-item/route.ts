@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-type LanguageCode = 'en' | 'ar' | 'ku'
+type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
 
 const LANGUAGE_LABELS: Record<LanguageCode, string> = {
   en: 'English',
   ar: 'Iraqi Arabic',
+  ar_fusha: 'Fusha Arabic (Modern Standard Arabic)',
   ku: 'Sorani Kurdish',
 }
 

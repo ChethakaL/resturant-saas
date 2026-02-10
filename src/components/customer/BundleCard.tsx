@@ -23,8 +23,8 @@ export function BundleCard({
   addBundleLabel,
 }: BundleCardProps) {
   return (
-    <div className="flex-shrink-0 w-[280px] rounded-xl overflow-hidden bg-white/95 backdrop-blur text-slate-900 shadow-md hover:shadow-lg transition-shadow">
-      <div className="flex gap-2 p-3">
+    <div className="flex-shrink-0 w-[min(280px,82vw)] sm:w-[280px] rounded-xl overflow-hidden bg-white border border-slate-200 shadow-md hover:shadow-lg transition-shadow text-slate-900">
+      <div className="flex gap-1.5 sm:gap-2 p-2.5 sm:p-3">
         {bundle.itemIds.slice(0, 3).map((id) => (
           <div
             key={id}
@@ -38,11 +38,11 @@ export function BundleCard({
           </div>
         ))}
       </div>
-      <div className="p-3 border-t border-slate-100">
-        <p className="font-semibold text-sm line-clamp-2 mb-1">{bundle.name}</p>
-        <div className="flex items-center gap-2 mb-2">
+      <div className="p-2.5 sm:p-3 border-t border-slate-100">
+        <p className="font-semibold text-sm text-slate-900 line-clamp-2 mb-1">{bundle.name}</p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
           <span className="text-slate-400 line-through text-xs">{formatMenuPrice(bundle.originalPrice)}</span>
-          <span className="text-emerald-700 font-bold">{formatMenuPrice(bundle.bundlePrice)}</span>
+          <span className="text-emerald-700 font-bold text-sm">{formatMenuPrice(bundle.bundlePrice)}</span>
           <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
             {bundle.savingsText}
           </span>
@@ -50,7 +50,7 @@ export function BundleCard({
         <Button
           onClick={onAddBundle}
           size="sm"
-          className="w-full bg-amber-500 hover:bg-amber-600 text-white font-medium"
+          className="w-full bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm"
         >
           {addBundleLabel}
         </Button>

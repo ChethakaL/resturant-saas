@@ -16,6 +16,7 @@ const themeSchema = z.object({
   menuTimezone: z.string().optional(),
   themePreset: z.enum(['classy', 'fast_food', 'cozy', 'minimal', 'luxe']).nullable().optional(),
   backgroundImageUrl: z.string().url().nullable().optional(),
+  managementLanguage: z.enum(['en', 'ku', 'ar-fusha']).optional(),
 })
 
 export async function GET() {
@@ -36,6 +37,7 @@ export async function GET() {
       menuTimezone: settings.menuTimezone ?? 'Asia/Baghdad',
       themePreset: settings.themePreset ?? null,
       backgroundImageUrl: settings.backgroundImageUrl ?? null,
+      managementLanguage: settings.managementLanguage ?? 'en',
     })
   } catch (error) {
     console.error('Error fetching theme settings:', error)
@@ -68,13 +70,14 @@ export async function PUT(request: Request) {
     })
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const { menuTimezone, themePreset, backgroundImageUrl, ...themeData } = parsed.data
+    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, ...themeData } = parsed.data
     const newSettings = {
       ...currentSettings,
       theme: themeData,
       ...(menuTimezone !== undefined && { menuTimezone }),
       ...(themePreset !== undefined && { themePreset }),
       ...(backgroundImageUrl !== undefined && { backgroundImageUrl }),
+      ...(managementLanguage !== undefined && { managementLanguage }),
     }
 
     await prisma.restaurant.update({
@@ -89,6 +92,7 @@ export async function PUT(request: Request) {
       menuTimezone: menuTimezone ?? currentSettings.menuTimezone,
       themePreset: themePreset ?? currentSettings.themePreset,
       backgroundImageUrl: backgroundImageUrl ?? currentSettings.backgroundImageUrl,
+      managementLanguage: managementLanguage ?? currentSettings.managementLanguage ?? 'en',
     })
   } catch (error) {
     console.error('Error updating theme settings:', error)

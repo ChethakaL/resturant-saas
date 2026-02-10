@@ -54,7 +54,7 @@ interface RecipeIngredient {
 }
 
 const translationLanguages = [
-  { code: 'ar', label: 'Iraqi Arabic' },
+  { code: 'ar_fusha', label: 'Arabic Fusha (العربية الفصحى)' },
   { code: 'ku', label: 'Sorani Kurdish' },
 ] as const
 
