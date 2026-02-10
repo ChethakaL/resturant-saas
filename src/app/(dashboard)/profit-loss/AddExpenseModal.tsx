@@ -202,6 +202,17 @@ export default function AddExpenseModal({
           payload.ingredientId = formData.ingredientId
           payload.quantity = parseFloat(formData.quantity)
           payload.unitCost = parseFloat(formData.unitCost)
+        } else if (
+          formData.ingredientId &&
+          formData.quantity &&
+          formData.unitCost &&
+          parseFloat(formData.quantity) > 0 &&
+          parseFloat(formData.unitCost) > 0
+        ) {
+          // Optional: link this expense to an ingredient so inventory cost per unit is updated (e.g. market run)
+          payload.ingredientId = formData.ingredientId
+          payload.quantity = parseFloat(formData.quantity)
+          payload.unitCost = parseFloat(formData.unitCost)
         }
 
         response = await fetch(
@@ -421,6 +432,64 @@ export default function AddExpenseModal({
                   required
                 />
               </div>
+              {/* Optional: link expense to an ingredient to update inventory cost (e.g. market purchase) */}
+              {formData.type === 'ONE_TIME' && (
+                <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Also update inventory cost (optional)</p>
+                    <p className="text-xs text-slate-500 mt-0.5">e.g. bought from market — we&apos;ll update this ingredient&apos;s cost per unit</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <Label htmlFor="opt-ingredient">Ingredient</Label>
+                      <Select
+                        value={formData.ingredientId}
+                        onValueChange={(v) => setFormData({ ...formData, ingredientId: v })}
+                      >
+                        <SelectTrigger id="opt-ingredient">
+                          <SelectValue placeholder="Select ingredient" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ingredients.map((i) => (
+                            <SelectItem key={i.id} value={i.id}>
+                              {i.name} ({i.unit})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="opt-quantity">Quantity</Label>
+                      <Input
+                        id="opt-quantity"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.quantity}
+                        onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="opt-unitCost">Unit cost (IQD)</Label>
+                      <Input
+                        id="opt-unitCost"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.unitCost}
+                        onChange={(e) => setFormData({ ...formData, unitCost: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  {formData.ingredientId && formData.quantity && formData.unitCost && parseFloat(formData.quantity) > 0 && parseFloat(formData.unitCost) > 0 && (
+                    <p className="text-xs text-slate-600">
+                      Inventory will be updated: +{formData.quantity} units at weighted average cost.
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
 

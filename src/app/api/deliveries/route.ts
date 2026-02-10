@@ -127,12 +127,13 @@ export async function POST(request: Request) {
         newTotalQuantity > 0
           ? (currentTotalValue + newTotalValue) / newTotalQuantity
           : data.unitCost
+      const costPerUnitRounded = Math.round(newAverageCost * 100) / 100
 
       await tx.ingredient.update({
         where: { id: data.ingredientId },
         data: {
           stockQuantity: newTotalQuantity,
-          costPerUnit: newAverageCost,
+          costPerUnit: costPerUnitRounded,
         },
       })
 

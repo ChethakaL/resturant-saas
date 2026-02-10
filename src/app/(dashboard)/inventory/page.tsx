@@ -98,6 +98,9 @@ export default async function InventoryPage({
       <Card>
         <CardHeader>
           <CardTitle>All Ingredients</CardTitle>
+          <p className="text-sm text-slate-500 font-normal mt-1">
+            Cost per unit is updated automatically when you record a delivery or an expense in P&L linked to an ingredient (quantity + unit cost). You don&apos;t need to change it here unless you want to correct a value.
+          </p>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

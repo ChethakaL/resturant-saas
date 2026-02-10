@@ -67,10 +67,12 @@ export async function POST(request: Request) {
     const body = await request.json()
     const data = expenseTransactionSchema.parse(body)
 
-    // If this is an inventory purchase, update the ingredient stock
-    if (data.category === 'INVENTORY_PURCHASE' && data.ingredientId && data.quantity && data.unitCost) {
+    // When ingredient + quantity + unitCost are provided (any category), update ingredient stock and cost.
+    // This lets "Other - market run" or any expense also update inventory cost when they link an ingredient.
+    const hasInventoryLink = data.ingredientId && data.quantity != null && data.quantity > 0 && data.unitCost != null && data.unitCost > 0
+
+    if (hasInventoryLink) {
       const result = await prisma.$transaction(async (tx) => {
-        // Create the expense transaction
         const transaction = await tx.expenseTransaction.create({
           data: {
             name: data.name,
@@ -83,46 +85,40 @@ export async function POST(request: Request) {
             unitCost: data.unitCost,
             restaurantId: session.user.restaurantId,
           },
-          include: {
-            ingredient: true,
-          },
+          include: { ingredient: true },
         })
 
-        // Update ingredient stock and cost
         const ingredient = await tx.ingredient.findUnique({
-          where: { id: data.ingredientId },
+          where: { id: data.ingredientId! },
         })
 
-        if (!ingredient) {
-          throw new Error('Ingredient not found')
+        if (ingredient && ingredient.restaurantId === session.user.restaurantId) {
+          const currentTotalValue = ingredient.stockQuantity * ingredient.costPerUnit
+          const newTotalValue = data.quantity! * data.unitCost!
+          const newTotalQuantity = ingredient.stockQuantity + data.quantity!
+          const newAverageCost =
+            newTotalQuantity > 0
+              ? (currentTotalValue + newTotalValue) / newTotalQuantity
+              : data.unitCost!
+          const costPerUnitRounded = Math.round(newAverageCost * 100) / 100
+
+          await tx.ingredient.update({
+            where: { id: data.ingredientId! },
+            data: {
+              stockQuantity: newTotalQuantity,
+              costPerUnit: costPerUnitRounded,
+            },
+          })
+
+          await tx.stockAdjustment.create({
+            data: {
+              ingredientId: data.ingredientId!,
+              quantityChange: data.quantity!,
+              reason: 'purchase',
+              notes: `Expense: ${data.name}`,
+            },
+          })
         }
-
-        // Calculate weighted average cost
-        const currentTotalValue = ingredient.stockQuantity * ingredient.costPerUnit
-        const newTotalValue = data.quantity * data.unitCost
-        const newTotalQuantity = ingredient.stockQuantity + data.quantity
-        const newAverageCost = newTotalQuantity > 0 
-          ? (currentTotalValue + newTotalValue) / newTotalQuantity 
-          : data.unitCost
-
-        // Update ingredient
-        await tx.ingredient.update({
-          where: { id: data.ingredientId },
-          data: {
-            stockQuantity: newTotalQuantity,
-            costPerUnit: newAverageCost,
-          },
-        })
-
-        // Create stock adjustment record
-        await tx.stockAdjustment.create({
-          data: {
-            ingredientId: data.ingredientId,
-            quantityChange: data.quantity,
-            reason: 'purchase',
-            notes: `Purchase via expense transaction: ${data.name}`,
-          },
-        })
 
         return transaction
       })
@@ -130,7 +126,7 @@ export async function POST(request: Request) {
       return NextResponse.json(result)
     }
 
-    // Regular expense transaction (not inventory purchase)
+    // Regular expense transaction (no ingredient link)
     const transaction = await prisma.expenseTransaction.create({
       data: {
         name: data.name,

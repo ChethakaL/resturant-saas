@@ -365,13 +365,15 @@ async function getMenuData() {
     todaySalesByItem,
   })
 
-  // Attach display-safe hints to each item; strip all internal scoring
+  // Attach display-safe hints and popularity so "Sort by: Most Popular" works
   const clientMenuItems = enrichedMenuItems.map((item: any) => {
     const { _featuredScore: _fs, ...rest } = item
     const hints = engineOutput.itemHints[item.id]
+    const unitsSold = salesByItem.get(item.id)?.quantity ?? 0
     return {
       ...rest,
       _hints: hints ?? undefined,
+      popularityScore: unitsSold,
     }
   })
 

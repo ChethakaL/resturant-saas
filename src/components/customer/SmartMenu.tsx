@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sparkles, Flame, Leaf, X, Loader2, Globe, Funnel } from 'lucide-react'
+import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
@@ -492,6 +492,8 @@ export default function SmartMenu({
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
   const [idleUpsellDismissed, setIdleUpsellDismissed] = useState(false)
   const [lastOrder, setLastOrder] = useState<{ itemIds: string[]; names: string[] } | null>(null)
+  const [nextOrderSuggestion, setNextOrderSuggestion] = useState<{ itemId: string; name: string; message: string } | null>(null)
+  const [nextOrderSuggestionLoading, setNextOrderSuggestionLoading] = useState(false)
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set())
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
@@ -503,6 +505,33 @@ export default function SmartMenu({
   useEffect(() => {
     setLastOrder(getStoredLastOrder(restaurantId))
   }, [restaurantId])
+
+  useEffect(() => {
+    if (!lastOrder?.itemIds?.length) {
+      setNextOrderSuggestion(null)
+      return
+    }
+    const uniqueIds = Array.from(new Set(lastOrder.itemIds))
+    setNextOrderSuggestionLoading(true)
+    setNextOrderSuggestion(null)
+    fetch('/api/public/menu/suggest-next-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId, lastOrderItemIds: uniqueIds }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.suggestedItemId && data.suggestedItemName && data.message) {
+          setNextOrderSuggestion({
+            itemId: data.suggestedItemId,
+            name: data.suggestedItemName,
+            message: data.message,
+          })
+        }
+      })
+      .catch(() => setNextOrderSuggestion(null))
+      .finally(() => setNextOrderSuggestionLoading(false))
+  }, [restaurantId, lastOrder?.itemIds?.join(',')])
 
   useEffect(() => {
     logMenuEvent(restaurantId, 'menu_view', {}, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
@@ -1247,7 +1276,7 @@ const getLocalizedAddOnName = (name: string) => {
                   onClick={() => setIsFilterDialogOpen(true)}
                   aria-label="Open filters"
                 >
-                  <Funnel className="h-4 w-4" />
+                  <SlidersHorizontal className="h-4 w-4" />
                   <span className="ml-2 text-xs font-semibold uppercase tracking-[0.3em]">
                     Discover
                   </span>
@@ -1393,28 +1422,52 @@ const getLocalizedAddOnName = (name: string) => {
             {lastOrder && lastOrder.itemIds.length > 0 && (
               <div className="px-4 py-2">
                 <div className={`rounded-xl border p-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-2">Your last order</p>
-                  <p className="text-sm text-white/90 mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-1">Last time you ordered</p>
+                  <p className="text-sm text-white/90 mb-3">
                     {Array.from(new Set(lastOrder.names)).slice(0, 3).join(', ')}
                     {lastOrder.names.length > 3 ? '…' : ''}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const byId = new Map(menuItems.map((m) => [m.id, m]))
-                      for (const id of lastOrder.itemIds) {
-                        const item = byId.get(id)
-                        if (item) dispatchCart({ type: 'ADD_ITEM', item })
-                      }
-                    }}
-                    className={
-                      isDarkBg
-                        ? 'rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/25'
-                        : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-100'
-                    }
-                  >
-                    Order again
-                  </button>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const byId = new Map(menuItems.map((m) => [m.id, m]))
+                          for (const id of lastOrder.itemIds) {
+                            const item = byId.get(id)
+                            if (item) dispatchCart({ type: 'ADD_ITEM', item })
+                          }
+                        }}
+                        className={
+                          isDarkBg
+                            ? 'rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/25'
+                            : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-100'
+                        }
+                      >
+                        Order again
+                      </button>
+                      {nextOrderSuggestionLoading && (
+                        <span className="text-xs text-white/60 py-1.5">Suggesting…</span>
+                      )}
+                      {!nextOrderSuggestionLoading && nextOrderSuggestion && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const item = menuItems.find((m) => m.id === nextOrderSuggestion.itemId)
+                            if (item) dispatchCart({ type: 'ADD_ITEM', item })
+                          }}
+                          className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
+                        >
+                          Try {nextOrderSuggestion.name}
+                        </button>
+                      )}
+                    </div>
+                    {!nextOrderSuggestionLoading && nextOrderSuggestion && (
+                      <p className="text-xs text-white/70 leading-snug">
+                        {nextOrderSuggestion.message}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -1685,7 +1738,7 @@ const getLocalizedAddOnName = (name: string) => {
                     }}
                     aria-label="Open filters"
                   >
-                    <Funnel className="h-4 w-4" />
+                    <SlidersHorizontal className="h-4 w-4" />
                     <span className="ml-2 text-xs font-semibold uppercase tracking-[0.3em]">
                       {currentCopy.smartSearchFilters}
                     </span>
