@@ -75,15 +75,18 @@ export function classifyQuadrant(
   return 'DOG'
 }
 
+/** Rule 10: 1 hero per category; WORKHORSE = text only (no image). */
 function computeDisplayHints(
   item: EngineMenuItem,
   quadrant: MenuQuadrant,
   mode: EngineMode,
   position: number,
   isAnchor: boolean,
-  subGroup?: string,
-  badgeText?: string,
-  scrollDepthHide?: boolean
+  subGroup: string | undefined,
+  badgeText: string | undefined,
+  scrollDepthHide: boolean | undefined,
+  isFirstHeroInCategory: boolean,
+  priceModifierPercent: number
 ): ItemDisplayHints {
   if (mode === 'classic') {
     return {
@@ -101,24 +104,29 @@ function computeDisplayHints(
   let showImage = true
   let hide = false
   if (quadrant === 'STAR') {
-    displayTier = position <= 2 ? 'hero' : 'featured'
+    displayTier = isFirstHeroInCategory ? 'hero' : 'featured'
     showImage = true
   } else if (quadrant === 'PUZZLE') {
     displayTier = 'featured'
     showImage = true
   } else if (quadrant === 'WORKHORSE') {
     displayTier = 'standard'
-    showImage = true
+    showImage = false
   } else {
     displayTier = 'minimal'
     showImage = false
     hide = scrollDepthHide ?? false
   }
+  const finalPrice =
+    priceModifierPercent > 0 && priceModifierPercent < 100
+      ? item.price * (1 - priceModifierPercent / 100)
+      : item.price
   return {
     displayTier,
     position,
     showImage,
-    priceDisplay: formatMenuPrice(item.price),
+    priceDisplay: formatMenuPrice(finalPrice),
+    ...(priceModifierPercent > 0 && { priceModifierPercent }),
     isAnchor,
     subGroup,
     isLimitedToday: !!badgeText && badgeText !== '',
@@ -280,12 +288,16 @@ function computeScarcityBadges(
   preppedStocks: Record<string, number>,
   todaySales: Record<string, number>,
   avgDailySales: number
-): string | undefined {
+): { badge?: string; priceModifierPercent: number } {
   const stock = preppedStocks[itemId]
   const sold = todaySales[itemId] ?? 0
-  if (typeof stock === 'number' && stock > 0 && stock <= 5) return 'Limited Today'
-  if (avgDailySales > 0 && sold < avgDailySales * 0.5) return "Today's Selection"
-  return undefined
+  if (typeof stock === 'number' && stock > 0 && stock <= 5) {
+    return { badge: 'Limited Today', priceModifierPercent: 5 }
+  }
+  if (avgDailySales > 0 && sold < avgDailySales * 0.5) {
+    return { badge: "Today's Selection", priceModifierPercent: 5 }
+  }
+  return { priceModifierPercent: 0 }
 }
 
 export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
@@ -309,6 +321,8 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
   const itemCount = items.length
   const avgDailySales = itemCount > 0 ? totalDailySales / itemCount : 0
 
+  const categoryAnchorBundle: Record<string, BundleHint> = {}
+
   for (const cat of categoryList) {
     const catItems = items.filter((i) => i.categoryId === cat.id)
     const withQuadrant = catItems.map((item) => ({
@@ -323,6 +337,7 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
     const { ordered: orderedItems, anchors } = computePriceAnchoring(catItems, mode)
     const groups = applyItemCap(orderedItems.map((i) => i.id), maxPerCat)
 
+    let heroAssignedInCategory = false
     let pos = 0
     for (const group of groups) {
       for (const id of group.itemIds) {
@@ -330,9 +345,13 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
         if (!item) continue
         pos++
         const quadrant = quadrants[id]
-        const badge = opts.scarcityBadges
-          ? computeScarcityBadges(id, preppedStocks, todaySalesByItem, avgDailySales)
-          : undefined
+        const scarcity =
+          opts.scarcityBadges
+            ? computeScarcityBadges(id, preppedStocks, todaySalesByItem, avgDailySales)
+            : { badge: undefined as string | undefined, priceModifierPercent: 0 }
+        const isFirstHeroInCategory =
+          !heroAssignedInCategory && (quadrant === 'STAR')
+        if (isFirstHeroInCategory && quadrant === 'STAR') heroAssignedInCategory = true
         itemHints[id] = computeDisplayHints(
           item,
           quadrant,
@@ -340,8 +359,10 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
           pos,
           anchors.has(id),
           group.subGroup !== 'default' ? group.subGroup : undefined,
-          badge,
-          quadrant === 'DOG'
+          scarcity.badge,
+          quadrant === 'DOG',
+          isFirstHeroInCategory,
+          scarcity.priceModifierPercent
         )
         if (itemHints[id].moodTags) {
           const moodIds = Object.keys(MOOD_LABELS).filter((moodId) => {
@@ -367,6 +388,20 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
     }
   }
 
+  // Bundle as anchor when no high-priced item in category (Rule 7)
+  const avgPrice =
+    items.length > 0 ? items.reduce((s, i) => s + i.price, 0) / items.length : 0
+  const highAnchorThreshold = Math.max(avgPrice * 0.8, 8000)
+  for (const cat of categoryList) {
+    const catItems = items.filter((i) => i.categoryId === cat.id)
+    const maxPriceInCat = catItems.length ? Math.max(...catItems.map((i) => i.price)) : 0
+    if (maxPriceInCat >= highAnchorThreshold || bundles.length === 0) continue
+    const catItemIds = new Set(catItems.map((i) => i.id))
+    const bundlesForCat = bundles.filter((b) => b.itemIds.some((id) => catItemIds.has(id)))
+    const best = bundlesForCat.sort((a, b) => b.bundlePrice - a.bundlePrice)[0]
+    if (best) categoryAnchorBundle[cat.id] = best
+  }
+
   return {
     engineMode: mode,
     categoryOrder,
@@ -374,5 +409,6 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
     bundles,
     moods,
     upsellMap,
+    categoryAnchorBundle: Object.keys(categoryAnchorBundle).length > 0 ? categoryAnchorBundle : undefined,
   }
 }

@@ -26,6 +26,9 @@ import { SequentialUpsell } from './SequentialUpsell'
 import { BundleCarousel } from './BundleCarousel'
 import { CheckoutNudge } from './CheckoutNudge'
 import { IdleUpsellPopup } from './IdleUpsellPopup'
+import { getStoredLastOrder, setStoredLastOrder, getOrCreateGuestId } from './MenuPersonalizationWrapper'
+import { getAllVariants } from '@/lib/experiments'
+import { logMenuEvent } from '@/lib/menu-events'
 import type { ItemDisplayHints, BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
 
 interface MenuItem {
@@ -88,6 +91,9 @@ interface SmartMenuProps {
   moods?: MoodOption[]
   upsellMap?: Record<string, UpsellSuggestion[]>
   categoryOrder?: string[]
+  tableSize?: number
+  categoryAnchorBundle?: Record<string, BundleHint>
+  maxInitialItemsPerCategory?: number
 }
 
 type LanguageCode = 'en' | 'ar' | 'ku'
@@ -422,6 +428,9 @@ export default function SmartMenu({
   moods = [],
   upsellMap = {},
   categoryOrder,
+  tableSize,
+  categoryAnchorBundle = {},
+  maxInitialItemsPerCategory = 3,
 }: SmartMenuProps) {
   // Safety check for menuItems
   if (!menuItems || !Array.isArray(menuItems)) {
@@ -482,12 +491,23 @@ export default function SmartMenu({
   const [upsellIndex, setUpsellIndex] = useState(0)
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
   const [idleUpsellDismissed, setIdleUpsellDismissed] = useState(false)
+  const [lastOrder, setLastOrder] = useState<{ itemIds: string[]; names: string[] } | null>(null)
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set())
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)
     else sectionRefs.current.delete(id)
   }, [])
+
+  useEffect(() => {
+    setLastOrder(getStoredLastOrder(restaurantId))
+  }, [restaurantId])
+
+  useEffect(() => {
+    logMenuEvent(restaurantId, 'menu_view', {}, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
+  }, [restaurantId])
+
   const scrollToSection = useCallback((categoryId: string) => {
     sectionRefs.current.get(categoryId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
@@ -1370,6 +1390,44 @@ const getLocalizedAddOnName = (name: string) => {
               </div>
             )}
 
+            {lastOrder && lastOrder.itemIds.length > 0 && (
+              <div className="px-4 py-2">
+                <div className={`rounded-xl border p-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-2">Your last order</p>
+                  <p className="text-sm text-white/90 mb-2">
+                    {Array.from(new Set(lastOrder.names)).slice(0, 3).join(', ')}
+                    {lastOrder.names.length > 3 ? '…' : ''}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={isDarkBg ? 'border-white/30 text-white hover:bg-white/10' : ''}
+                    onClick={() => {
+                      const byId = new Map(menuItems.map((m) => [m.id, m]))
+                      for (const id of lastOrder.itemIds) {
+                        const item = byId.get(id)
+                        if (item) dispatchCart({ type: 'ADD_ITEM', item })
+                      }
+                    }}
+                  >
+                    Order again
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {tableSize != null && tableSize > 3 && moods.some((m) => m.id === 'sharing') && (
+              <div className="px-4 py-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMoodId('sharing')}
+                  className={`text-sm font-medium px-3 py-2 rounded-lg w-full text-left transition ${isDarkBg ? 'bg-amber-500/20 text-amber-200 hover:bg-amber-500/30' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
+                >
+                  Dining with a group? Try something to share.
+                </button>
+              </div>
+            )}
+
             {engineMode !== 'classic' && moods.length > 0 && (
               <div className="px-4 pb-2">
                 <MoodSelector
@@ -1450,8 +1508,35 @@ const getLocalizedAddOnName = (name: string) => {
                       </div>
                     )}
 
+                    {section.category && categoryAnchorBundle[section.category.id] && (() => {
+                      const anchorBundle = categoryAnchorBundle[section.category!.id]
+                      if (!anchorBundle) return null
+                      return (
+                        <div className="mb-3">
+                          <div
+                            className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}
+                          >
+                            <div>
+                              <p className="font-semibold text-white/90">{anchorBundle.name}</p>
+                              <p className="text-xs text-white/60">{anchorBundle.savingsText}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              className="bg-amber-500 hover:bg-amber-600"
+                              onClick={() => {
+                                const items = anchorBundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
+                                if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: anchorBundle.itemIds, items, bundlePrice: anchorBundle.bundlePrice })
+                              }}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
                     <div className="grid gap-3">
-                      {section.items.map((item) => {
+                      {(expandedCategoryIds.has(section.category?.id ?? '') ? section.items : section.items.slice(0, maxInitialItemsPerCategory)).map((item) => {
                         const translation =
                           translationCache[language]?.[item.id]
                         const displayName = translation?.name || item.name
@@ -1460,6 +1545,7 @@ const getLocalizedAddOnName = (name: string) => {
                         const macroSegments = buildMacroSegments(item, translation)
                         const handleAddToOrder = () => {
                           dispatchCart({ type: 'ADD_ITEM', item })
+                          logMenuEvent(restaurantId, 'add_to_cart', { menuItemId: item.id }, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
                           const suggestions = upsellMap[item.id]
                           if (suggestions?.length) {
                             setUpsellAfterAdd({ itemId: item.id })
@@ -1486,6 +1572,16 @@ const getLocalizedAddOnName = (name: string) => {
                         )
                       })}
                     </div>
+
+                    {section.category && section.items.length > maxInitialItemsPerCategory && !expandedCategoryIds.has(section.category.id) && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCategoryIds((prev) => new Set(prev).add(section.category!.id))}
+                        className={`mt-2 text-sm font-medium py-2 rounded-lg border ${isDarkBg ? 'border-white/20 text-white/80 hover:bg-white/10' : 'border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        See more ({section.items.length - maxInitialItemsPerCategory} more)
+                      </button>
+                    )}
 
                     {/* Insert carousels configured for after this category */}
                     {betweenShowcases
@@ -1871,6 +1967,7 @@ const getLocalizedAddOnName = (name: string) => {
         onRemove={(menuItemId) => dispatchCart({ type: 'REMOVE_ITEM', menuItemId })}
         onPlaceOrder={async () => {
           if (cart.length === 0) return
+          setStoredLastOrder(restaurantId, cart.map((l) => ({ menuItemId: l.menuItemId, name: l.name, quantity: l.quantity })))
           setIsPlacingOrder(true)
           try {
             const res = await fetch('/api/public/orders', {
@@ -1884,6 +1981,8 @@ const getLocalizedAddOnName = (name: string) => {
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || 'Order failed')
             dispatchCart({ type: 'CLEAR' })
+            setLastOrder(getStoredLastOrder(restaurantId))
+            logMenuEvent(restaurantId, 'checkout', { itemCount: cart.length, orderNumber: data.orderNumber }, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
             toast({ title: 'Order placed', description: data.orderNumber ? `Order ${data.orderNumber}` : undefined })
           } catch (e: any) {
             toast({ variant: 'destructive', title: 'Order failed', description: e.message })
@@ -1964,12 +2063,28 @@ const getLocalizedAddOnName = (name: string) => {
       })()}
 
       {engineMode !== 'classic' && !idleUpsellDismissed && (() => {
-        const starItem = menuItems.find((m) => m._hints?.displayTier === 'hero' || m._hints?.displayTier === 'featured')
-        if (!starItem) return null
+        const cartIds = new Set(cart.map((l) => l.menuItemId))
+        const sectionsWithCategory = categorizedSections.filter((s): s is typeof s & { category: NonNullable<typeof s.category> } => !!s.category)
+        const currentIndex = activeSectionId ? sectionsWithCategory.findIndex((s) => s.category.id === activeSectionId) : 0
+        let suggestedItem: MenuItem | null = null
+        if (currentIndex >= 0 && sectionsWithCategory[currentIndex]) {
+          const section = sectionsWithCategory[currentIndex]
+          suggestedItem = section.items.find((m) => !cartIds.has(m.id)) ?? null
+        }
+        if (!suggestedItem && sectionsWithCategory.length > 0) {
+          for (const section of sectionsWithCategory) {
+            suggestedItem = section.items.find((m) => !cartIds.has(m.id)) ?? null
+            if (suggestedItem) break
+          }
+        }
+        if (!suggestedItem) {
+          suggestedItem = menuItems.find((m) => m._hints?.displayTier === 'hero' || m._hints?.displayTier === 'featured') ?? menuItems[0]
+        }
+        if (!suggestedItem) return null
         return (
           <IdleUpsellPopup
-            starItemName={starItem.name}
-            starItemId={starItem.id}
+            starItemName={suggestedItem.name}
+            starItemId={suggestedItem.id}
             message={currentEngineCopy.idleMessage}
             idleDelayMs={6000}
             dismissAfterMs={4000}

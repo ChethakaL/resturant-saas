@@ -68,18 +68,22 @@ export function MenuItemCard({
       <div className={`flex min-h-[120px] sm:min-h-[140px] ${isHero ? 'flex-col sm:flex-row' : ''}`}>
         <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
           <div>
-            <div className="flex items-start justify-between gap-2 mb-0.5">
-              <h3 className="text-sm font-semibold leading-tight line-clamp-2">{displayName}</h3>
-              <p className="text-base font-bold text-emerald-700 flex-shrink-0">{priceDisplay}</p>
-            </div>
+            <h3 className="text-sm font-semibold leading-tight line-clamp-2 mb-0.5">{displayName}</h3>
 
             <p className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">
               {getLocalizedCategoryName(item.category?.name)}
             </p>
 
-            {displayDescription && (
-              <p className="text-[11px] text-slate-600 line-clamp-2 mb-1">{displayDescription}</p>
-            )}
+            <p className="text-[11px] text-slate-600 line-clamp-2 mb-1">
+              {displayDescription ? (
+                <>
+                  {displayDescription}
+                  <span className="font-semibold text-emerald-700 ml-1.5">{priceDisplay}</span>
+                </>
+              ) : (
+                <span className="font-semibold text-emerald-700">{priceDisplay}</span>
+              )}
+            </p>
 
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {macroSegments.length > 0 && (

@@ -45,8 +45,25 @@ model Restaurant {
   chefPicks           ChefPick[]
   menuShowcases       MenuShowcase[]
   supplierLinks       RestaurantSupplierLink[]
+  menuEvents          MenuEvent[]
 
   @@map("restaurants")
+}
+
+model MenuEvent {
+  id           String   @id @default(cuid())
+  restaurantId String   @map("restaurant_id")
+  eventType    String   @map("event_type")
+  payload      Json?
+  guestId      String?  @map("guest_id")
+  variant      String?  @map("variant")
+  createdAt    DateTime @default(now())
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("menu_events")
 }
 
 model User {

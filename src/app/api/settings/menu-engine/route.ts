@@ -17,6 +17,7 @@ const menuEngineSchema = z.object({
   priceAnchoring: z.boolean().optional(),
   bundleCorrelationThreshold: z.number().min(0.1).max(1).optional(),
   maxItemsPerCategory: z.number().int().min(3).max(15).optional(),
+  maxInitialItemsPerCategory: z.number().int().min(1).max(10).optional(),
   idleUpsellDelaySeconds: z.number().int().min(2).max(30).optional(),
 })
 

@@ -9,6 +9,7 @@ export const DEFAULT_MENU_ENGINE_SETTINGS: MenuEngineSettings = {
   priceAnchoring: true,
   bundleCorrelationThreshold: 0.35,
   maxItemsPerCategory: 7,
+  maxInitialItemsPerCategory: 3,
   idleUpsellDelaySeconds: 6,
 }
 

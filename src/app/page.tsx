@@ -1,6 +1,7 @@
+import { Suspense } from 'react'
 import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
-import SmartMenu from '@/components/customer/SmartMenu'
+import { MenuPersonalizationWrapper } from '@/components/customer/MenuPersonalizationWrapper'
 import { runMenuEngine } from '@/lib/menu-engine'
 import type { EngineMenuItem, EngineCategory, CoPurchasePair } from '@/lib/menu-engine'
 import { DEFAULT_MENU_ENGINE_SETTINGS } from '@/lib/menu-engine-defaults'
@@ -397,6 +398,8 @@ async function getMenuData() {
     moods: engineOutput.moods,
     upsellMap: engineOutput.upsellMap,
     categoryOrder: engineOutput.categoryOrder,
+    categoryAnchorBundle: engineOutput.categoryAnchorBundle,
+    maxInitialItemsPerCategory: menuEngineSettings.maxInitialItemsPerCategory ?? 3,
   }
 }
 
@@ -412,7 +415,8 @@ export default async function Home() {
   }
 
   return (
-    <SmartMenu
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center"><p className="text-white/70">Loading menu…</p></div>}>
+    <MenuPersonalizationWrapper
       restaurantId={data.restaurant.id}
       menuItems={data.menuItems}
       showcases={data.showcases}
@@ -425,6 +429,9 @@ export default async function Home() {
       moods={data.moods}
       upsellMap={data.upsellMap}
       categoryOrder={data.categoryOrder}
+      categoryAnchorBundle={data.categoryAnchorBundle}
+      maxInitialItemsPerCategory={data.maxInitialItemsPerCategory}
     />
+    </Suspense>
   )
 }

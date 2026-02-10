@@ -14,6 +14,8 @@ export interface ItemDisplayHints {
   showImage: boolean
   /** Formatted price string, no currency symbol (e.g. "12,000") */
   priceDisplay: string
+  /** Optional: slight reduction for "Today's Selection" etc.; no discount wording. 0-100. */
+  priceModifierPercent?: number
   isAnchor: boolean
   subGroup?: string
   isLimitedToday: boolean
@@ -54,6 +56,8 @@ export interface MenuEngineSettings {
   priceAnchoring: boolean
   bundleCorrelationThreshold: number
   maxItemsPerCategory: number
+  /** Max items shown before "See more" per category (decision flow). Default 3. */
+  maxInitialItemsPerCategory?: number
   idleUpsellDelaySeconds: number
 }
 
@@ -64,4 +68,6 @@ export interface MenuEngineOutput {
   bundles: BundleHint[]
   moods: MoodOption[]
   upsellMap: Record<string, UpsellSuggestion[]>
+  /** When category has no high-priced item, bundle to show as anchor (per category id). */
+  categoryAnchorBundle?: Record<string, BundleHint>
 }

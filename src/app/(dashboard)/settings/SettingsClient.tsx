@@ -107,10 +107,13 @@ export default function SettingsClient({
   const [priceAnchoring, setPriceAnchoring] = useState(defaultEngine.priceAnchoring)
   const [bundleCorrelationThreshold, setBundleCorrelationThreshold] = useState(defaultEngine.bundleCorrelationThreshold)
   const [maxItemsPerCategory, setMaxItemsPerCategory] = useState(defaultEngine.maxItemsPerCategory)
+  const [maxInitialItemsPerCategory, setMaxInitialItemsPerCategory] = useState((defaultEngine as { maxInitialItemsPerCategory?: number }).maxInitialItemsPerCategory ?? 3)
   const [idleUpsellDelaySeconds, setIdleUpsellDelaySeconds] = useState(defaultEngine.idleUpsellDelaySeconds)
   const [savingEngine, setSavingEngine] = useState(false)
   const [quadrantData, setQuadrantData] = useState<{ counts: Record<string, number>; items: Array<{ menuItemId: string; name: string; categoryName?: string; quadrant: string; marginPercent: number; unitsSold: number }> } | null>(null)
   const [loadingQuadrants, setLoadingQuadrants] = useState(false)
+  const [redFlags, setRedFlags] = useState<{ identicalDescriptionLength: Array<{ length: number; names: string[] }>; equalVisualWeight: Array<{ categoryName: string; names: string[] }> } | null>(null)
+  const [loadingRedFlags, setLoadingRedFlags] = useState(false)
 
   // Theme state
   const [primaryColor, setPrimaryColor] = useState(
@@ -551,6 +554,7 @@ export default function SettingsClient({
           priceAnchoring,
           bundleCorrelationThreshold,
           maxItemsPerCategory,
+          maxInitialItemsPerCategory,
           idleUpsellDelaySeconds,
         }),
       })
@@ -1300,6 +1304,17 @@ export default function SettingsClient({
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label>Max items before &quot;See more&quot; per category (1–10)</Label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={maxInitialItemsPerCategory}
+                    onChange={(e) => setMaxInitialItemsPerCategory(parseInt(e.target.value, 10) || 3)}
+                    className="w-full rounded border border-slate-200 px-3 py-2"
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label>Idle upsell delay (seconds, 2–30)</Label>
                   <input
                     type="number"
@@ -1365,6 +1380,68 @@ export default function SettingsClient({
                       </tbody>
                     </table>
                   </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Menu health (red flags)</CardTitle>
+              <p className="text-sm text-slate-500">
+                Identical description lengths and equal visual weight in a category can reduce variety. Fix in Menu.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  setLoadingRedFlags(true)
+                  try {
+                    const res = await fetch('/api/menu-engine/red-flags')
+                    if (!res.ok) throw new Error('Failed to load')
+                    const data = await res.json()
+                    setRedFlags({
+                      identicalDescriptionLength: data.identicalDescriptionLength ?? [],
+                      equalVisualWeight: (data.equalVisualWeight ?? []).map((r: { categoryName: string; names: string[] }) => ({ categoryName: r.categoryName, names: r.names })),
+                    })
+                  } catch {
+                    toast({ title: 'Could not load red flags', variant: 'destructive' })
+                  } finally {
+                    setLoadingRedFlags(false)
+                  }
+                }}
+                disabled={loadingRedFlags}
+                className="mb-4 gap-2"
+              >
+                {loadingRedFlags && <Loader2 className="h-4 w-4 animate-spin" />}
+                Check red flags
+              </Button>
+              {redFlags && (
+                <div className="space-y-4 text-sm">
+                  {redFlags.identicalDescriptionLength.length > 0 && (
+                    <div>
+                      <p className="font-medium text-amber-800 mb-1">Identical description length</p>
+                      <ul className="list-disc list-inside text-slate-600">
+                        {redFlags.identicalDescriptionLength.map((r, i) => (
+                          <li key={i}>{r.length} chars: {r.names.join(', ')}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {redFlags.equalVisualWeight.length > 0 && (
+                    <div>
+                      <p className="font-medium text-amber-800 mb-1">Equal visual weight (category)</p>
+                      <ul className="list-disc list-inside text-slate-600">
+                        {redFlags.equalVisualWeight.map((r, i) => (
+                          <li key={i}>{r.categoryName}: {r.names.join(', ')}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {redFlags.identicalDescriptionLength.length === 0 && redFlags.equalVisualWeight.length === 0 && (
+                    <p className="text-slate-500">No red flags found.</p>
+                  )}
                 </div>
               )}
             </CardContent>
