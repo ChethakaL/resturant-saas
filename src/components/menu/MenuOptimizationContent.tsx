@@ -430,12 +430,12 @@ export default function MenuOptimizationContent({
             How the digital menu suggests and orders items
           </CardTitle>
           <p className="text-sm text-slate-500">
-            Choose how items are ordered and which suggestions (e.g. &quot;add-ons&quot;, &quot;often bought together&quot;) guests see. You can keep the default order, or use profit and sales data to highlight items that make sense for your business. Data stays private and is never sent to the customer device.
+            Choose how the guest menu is ordered and what suggestions they see (e.g. add-ons, &quot;often bought together&quot;). You can show your menu exactly as you built it, or let the system use your sales and profit numbers to reorder and suggest—only you see that data; guests never do.
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label>Suggestion mode</Label>
+            <Label>How should we order items and show suggestions?</Label>
             <div className="grid gap-3 sm:grid-cols-3">
               {(['classic', 'profit', 'adaptive'] as const).map((mode) => (
                 <button
@@ -444,11 +444,15 @@ export default function MenuOptimizationContent({
                   onClick={() => setEngineMode(mode)}
                   className={`rounded-xl border-2 p-4 text-left transition ${engineMode === mode ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
                 >
-                  <span className="font-semibold capitalize">{mode === 'classic' ? 'Default' : mode === 'profit' ? 'Highlight profitable items' : 'Smart (data-based)'}</span>
+                  <span className="font-semibold">
+                    {mode === 'classic' && 'Keep My Menu Order'}
+                    {mode === 'profit' && 'Highlight My Most Profitable Items'}
+                    {mode === 'adaptive' && 'Order By Popularity And Profitability'}
+                  </span>
                   <p className="text-xs text-slate-500 mt-1">
-                    {mode === 'classic' && 'Show menu as you set it; no reordering or extra suggestions.'}
-                    {mode === 'profit' && 'Put higher-margin items first and suggest combos that make sense.'}
-                    {mode === 'adaptive' && 'Use your sales and margin data to order and suggest items.'}
+                    {mode === 'classic' && 'Guests see your categories and items in the order you set. No reordering and no extra suggestions (e.g. add-ons or combos).'}
+                    {mode === 'profit' && 'Items with higher profit margin appear first. We also suggest combos and add-ons. Uses your margin data only; guests never see it.'}
+                    {mode === 'adaptive' && 'We use your restaurant’s sales numbers and profit (margin) per item to decide the order guests see and which add-ons to suggest. This data stays in your dashboard; it is never shown to guests.'}
                   </p>
                 </button>
               ))}
