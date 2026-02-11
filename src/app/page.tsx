@@ -166,6 +166,10 @@ async function getMenuData() {
     return suggestedIds.slice(offset, offset + size)
   }
 
+  /** Order carousel/section: first = high margin + high cost, then high margin mid cost, then high margin lower cost. */
+  const sortByMarginThenCost = (a: { _featuredScore?: number; price: number }, b: { _featuredScore?: number; price: number }) =>
+    (b._featuredScore ?? 0) - (a._featuredScore ?? 0) || b.price - a.price
+
   const showcaseData = await Promise.all(
     showcases.map(async (showcase) => {
       let showcaseMenuItems: typeof enrichedMenuItems
@@ -178,6 +182,7 @@ async function getMenuData() {
         showcaseMenuItems = enrichedMenuItems
           .filter((item: any) => idToOrder.has(item.id))
           .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
+        showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
       } else if (useTimeSlots && showcase.items.length > 0) {
         // Time slots on but this slot empty; manual items chosen → AI picks best for this time from chosen items (cached)
         const chosenPool = fullCarouselPool.filter((item) =>
@@ -189,6 +194,7 @@ async function getMenuData() {
         showcaseMenuItems = enrichedMenuItems
           .filter((item: any) => idToOrder.has(item.id))
           .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
+        showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
       } else if (showcase.items.length > 0) {
         const pickedItemIds = new Set(showcase.items.map((si: any) => si.menuItemId))
         showcaseMenuItems = enrichedMenuItems
@@ -202,6 +208,7 @@ async function getMenuData() {
                 ?.displayOrder ?? 0
             return orderA - orderB
           })
+        showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
       } else {
         // Nothing chosen anywhere: AI suggests by time of day and relevance (variety), cached 5 min
         const suggestedIds = await getCachedCarouselSuggestions(restaurant.id, timeSlotLabel, fullCarouselPool)
@@ -217,6 +224,7 @@ async function getMenuData() {
         showcaseMenuItems = enrichedMenuItems
           .filter((item: any) => idToOrder.has(item.id))
           .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
+        showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
       }
 
       return {
@@ -242,12 +250,9 @@ async function getMenuData() {
 
     const recommendedItems =
       chefPickItems.length > 0
-        ? chefPickItems
+        ? [...chefPickItems].sort(sortByMarginThenCost)
         : [...enrichedMenuItems]
-            .sort(
-              (a, b) =>
-                (b._featuredScore ?? 0) - (a._featuredScore ?? 0)
-            )
+            .sort(sortByMarginThenCost)
             .slice(0, 8)
 
     showcaseData.push({

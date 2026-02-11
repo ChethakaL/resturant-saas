@@ -111,7 +111,7 @@ type TranslationCache = Partial<Record<LanguageCode, Record<string, MenuItemTran
 const languageOptions: { value: LanguageCode; label: string }[] = [
   { value: 'en', label: 'English' },
   { value: 'ku', label: 'كوردي' },
-  { value: 'ar_fusha', label: 'Arabic Fusha (العربية الفصحى)' },
+  { value: 'ar_fusha', label: 'Arabic' },
 ]
 
 const sortOptions: {
@@ -1310,7 +1310,28 @@ const getLocalizedAddOnName = (name: string) => {
               displayFontClassName="font-display"
             />
           ))}
-            {/* Search + Mood row */}
+            {/* "What do you feel like eating today?" section (mood options) */}
+            {engineMode !== 'classic' && moods.length > 0 && (
+              <section className="w-full space-y-3" aria-label="What do you feel like eating today?">
+                <h2 className={`text-base sm:text-lg font-semibold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                  {language === 'ar' || language === 'ar_fusha'
+                    ? 'ماذا تشتهي أن تأكل اليوم؟'
+                    : language === 'ku'
+                      ? 'ئەمڕۆ حەزت لە چی خواردنە؟'
+                      : 'What do you feel like eating today?'}
+                </h2>
+                <MoodSelector
+                  moods={moods}
+                  language={language}
+                  selectedMoodId={selectedMoodId}
+                  onSelectMood={setSelectedMoodId}
+                  showAllLabel={currentEngineCopy.showAll}
+                  isDarkTheme={isDarkBg}
+                />
+              </section>
+            )}
+
+            {/* Search row */}
             <div
               className={`flex flex-col sm:flex-row w-full gap-3 transition duration-300 ${
                 isSmartSearchActive ? 'opacity-0 pointer-events-none' : ''
@@ -1343,18 +1364,6 @@ const getLocalizedAddOnName = (name: string) => {
                   <span className="ml-1.5 sm:ml-2 text-xs font-semibold uppercase tracking-wider hidden sm:inline">Discover</span>
                 </Button>
               </div>
-              {engineMode !== 'classic' && moods.length > 0 && (
-                <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
-                  <MoodSelector
-                    moods={moods}
-                    language={language}
-                    selectedMoodId={selectedMoodId}
-                    onSelectMood={setSelectedMoodId}
-                    showAllLabel={currentEngineCopy.showAll}
-                    isDarkTheme={isDarkBg}
-                  />
-                </div>
-              )}
             </div>
             
             <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>

@@ -162,6 +162,7 @@ function applyItemCap(
   return groups
 }
 
+/** Order: high margin first, then high cost → mid cost → lower cost (margin DESC, then price DESC). */
 function computePriceAnchoring(
   items: EngineMenuItem[],
   mode: EngineMode
@@ -169,24 +170,12 @@ function computePriceAnchoring(
   if (mode === 'classic' || items.length === 0) {
     return { ordered: [...items], anchors: new Set() }
   }
-  const byPrice = [...items].sort((a, b) => b.price - a.price)
-  const premium = byPrice[0]
-  const cheapest = byPrice[byPrice.length - 1]
-  const mid = byPrice[Math.floor(byPrice.length / 2)]
-  const targetProfit = byPrice.find((i) => i._marginPercent >= 25 && i.id !== premium?.id) ?? byPrice[1]
-  const ordered: EngineMenuItem[] = []
+  // First = high margin + high cost, second = high margin + mid cost, third = high margin + lower cost
+  const ordered = [...items].sort(
+    (a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price)
+  )
   const anchors = new Set<string>()
-  if (premium) {
-    ordered.push(premium)
-    anchors.add(premium.id)
-  }
-  if (targetProfit && !ordered.find((i) => i.id === targetProfit.id)) ordered.push(targetProfit)
-  if (mid && !ordered.find((i) => i.id === mid.id)) ordered.push(mid)
-  const rest = items.filter((i) => !ordered.find((o) => o.id === i.id))
-  rest.sort((a, b) => b.price - a.price)
-  if (cheapest && !ordered.find((i) => i.id === cheapest.id)) ordered.push(cheapest)
-  const restWithoutCheapest = rest.filter((i) => i.id !== cheapest?.id)
-  ordered.splice(ordered.length - 1, 0, ...restWithoutCheapest)
+  if (ordered[0]) anchors.add(ordered[0].id)
   return { ordered, anchors }
 }
 

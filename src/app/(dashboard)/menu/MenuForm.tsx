@@ -54,7 +54,7 @@ interface RecipeIngredient {
 }
 
 const translationLanguages = [
-  { code: 'ar_fusha', label: 'Arabic Fusha (العربية الفصحى)' },
+  { code: 'ar_fusha', label: 'Arabic' },
   { code: 'ku', label: 'Sorani Kurdish' },
 ] as const
 
@@ -1635,23 +1635,32 @@ export default function MenuForm({
                       rows={8}
                       className="resize-y"
                     />
-                    <Button
-                      type="button"
-                      onClick={fillFormFromAI}
-                      disabled={aiParseLoading || !aiAssistantText.trim()}
-                    >
-                      {aiParseLoading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Filling form...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Fill form from description
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        onClick={fillFormFromAI}
+                        disabled={aiParseLoading || !aiAssistantText.trim()}
+                      >
+                        {aiParseLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Submit
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setActiveTab('details')}
+                      >
+                        Next
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -2598,7 +2607,7 @@ export default function MenuForm({
                 variant="outline"
                 disabled={loading}
                 size="lg"
-                className="w-full"
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white border-amber-600 hover:border-amber-700"
                 onClick={() => handleSave('DRAFT')}
               >
                 <Save className="h-4 w-4 mr-2" />
@@ -2608,13 +2617,13 @@ export default function MenuForm({
                 type="button"
                 disabled={loading}
                 size="lg"
-                className="w-full"
+                className="w-full bg-green-600 hover:bg-green-700 text-white"
                 onClick={() => handleSave('ACTIVE')}
               >
                 {loading ? 'Saving...' : mode === 'create' ? 'Create & publish to menu' : 'Publish to menu'}
               </Button>
               <Link href="/dashboard/menu" className="w-full">
-                <Button type="button" variant="outline" disabled={loading} className="w-full">
+                <Button type="button" variant="outline" disabled={loading} className="w-full border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700">
                   Cancel
                 </Button>
               </Link>

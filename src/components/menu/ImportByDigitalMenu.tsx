@@ -10,7 +10,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Link2, Loader2, CheckCircle, Sparkles, ImagePlus, Check, Trash2 } from 'lucide-react'
+import { Link2, Loader2, CheckCircle, Sparkles, ImagePlus, Check, Trash2, ChevronDown, ChevronUp, X, AlertCircle } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/select'
 import { Category, Ingredient } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
+import { Badge } from '@/components/ui/badge'
 
 interface ExtractedMenuItem {
   name: string
@@ -63,7 +64,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   const [step, setStep] = useState<'url' | 'extracting' | 'verifying' | 'complete'>('url')
   const [menuUrl, setMenuUrl] = useState('')
   const [extractedItems, setExtractedItems] = useState<ExtractedMenuItem[]>([])
-  const [currentItemIndex, setCurrentItemIndex] = useState(0)
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [editingItem, setEditingItem] = useState<ExtractedMenuItem | null>(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
@@ -75,6 +76,60 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   const [imageSizePreset, setImageSizePreset] = useState<ImageSizePreset>('medium')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const formUploadRef = useRef<HTMLInputElement | null>(null)
+
+  // --- Bulk verification helpers ---
+
+  const updateItem = (index: number, updates: Partial<ExtractedMenuItem>) => {
+    setExtractedItems(prev => prev.map((item, i) => i === index ? { ...item, ...updates } : item))
+  }
+
+  const deleteItem = (index: number) => {
+    setExtractedItems(prev => prev.filter((_, i) => i !== index))
+    if (expandedIndex === index) {
+      setExpandedIndex(null)
+      setEditingItem(null)
+    } else if (expandedIndex !== null && expandedIndex > index) {
+      setExpandedIndex(expandedIndex - 1)
+    }
+  }
+
+  const toggleExpand = (index: number) => {
+    if (expandedIndex === index) {
+      // Collapse — sync editingItem back
+      if (editingItem) {
+        setExtractedItems(prev => prev.map((item, i) => i === expandedIndex ? { ...editingItem } : item))
+      }
+      setExpandedIndex(null)
+      setEditingItem(null)
+    } else {
+      // Collapse previous if open, then expand new
+      if (expandedIndex !== null && editingItem) {
+        setExtractedItems(prev => prev.map((item, i) => i === expandedIndex ? { ...editingItem } : item))
+      }
+      setExpandedIndex(index)
+      setEditingItem({ ...extractedItems[index] })
+    }
+  }
+
+  const assignCategoryToUncategorized = (categoryId: string) => {
+    let count = 0
+    setExtractedItems(prev => prev.map(item => {
+      if (!item.categoryId) {
+        count++
+        return { ...item, categoryId }
+      }
+      return item
+    }))
+    if (count > 0) {
+      const catName = categories.find(c => c.id === categoryId)?.name
+      toast({ title: 'Category assigned', description: `Applied "${catName}" to ${count} uncategorized item${count > 1 ? 's' : ''}.` })
+    }
+  }
+
+  const itemsWithoutCategory = extractedItems.filter(i => !i.categoryId).length
+  const itemsWithIssues = extractedItems.filter(i => !i.categoryId || !i.name.trim() || !i.price || i.price <= 0).length
+
+  // --- Image dialog helpers (unchanged) ---
 
   const openImageDialog = () => {
     setPreviewImageUrl(null)
@@ -98,6 +153,8 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
     reader.readAsDataURL(file)
     e.target.value = ''
   }
+
+  // --- Scrape & extract ---
 
   const scrapeAndExtract = async () => {
     const url = menuUrl.trim()
@@ -140,7 +197,6 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       setExtractedItems(items)
       if (items.length > 0) {
         setStep('verifying')
-        setEditingItem({ ...items[0] })
       }
     } catch (error) {
       console.error('Import from URL error:', error)
@@ -154,6 +210,8 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       setIsProcessing(false)
     }
   }
+
+  // --- AI image generation (unchanged) ---
 
   const generateOrEnhanceImage = async () => {
     if (!editingItem) return
@@ -210,32 +268,49 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   const currentSizeOption =
     imageSizeOptions.find((o) => o.value === imageSizePreset) ?? imageSizeOptions[1]
 
-  const verifyAndNext = async () => {
-    if (!editingItem) return
+  // --- Create all items ---
 
-    if (!editingItem.categoryId) {
-      toast({ title: 'Missing Category', description: 'Please select a category for this item', variant: 'destructive' })
+  const handleCreateAll = async () => {
+    // Sync expanded item back first
+    if (expandedIndex !== null && editingItem) {
+      const synced = extractedItems.map((item, i) => i === expandedIndex ? { ...editingItem } : item)
+      setExtractedItems(synced)
+      setExpandedIndex(null)
+      setEditingItem(null)
+      // Validate synced items
+      const issues: string[] = []
+      synced.forEach((item, i) => {
+        if (!item.name.trim()) issues.push(`Item ${i + 1}: Missing name`)
+        if (!item.price || item.price <= 0) issues.push(`${item.name || `Item ${i + 1}`}: Invalid price`)
+        if (!item.categoryId) issues.push(`${item.name || `Item ${i + 1}`}: No category`)
+      })
+      if (issues.length > 0) {
+        toast({
+          title: `${issues.length} issue${issues.length > 1 ? 's' : ''} found`,
+          description: issues.length <= 3 ? issues.join('. ') : `${issues.slice(0, 3).join('. ')} and ${issues.length - 3} more.`,
+          variant: 'destructive',
+        })
+        return
+      }
+      await createAllItems(synced)
       return
     }
-    if (!editingItem.name.trim()) {
-      toast({ title: 'Missing Name', description: 'Please enter a name for this item', variant: 'destructive' })
+
+    const issues: string[] = []
+    extractedItems.forEach((item, i) => {
+      if (!item.name.trim()) issues.push(`Item ${i + 1}: Missing name`)
+      if (!item.price || item.price <= 0) issues.push(`${item.name || `Item ${i + 1}`}: Invalid price`)
+      if (!item.categoryId) issues.push(`${item.name || `Item ${i + 1}`}: No category`)
+    })
+    if (issues.length > 0) {
+      toast({
+        title: `${issues.length} issue${issues.length > 1 ? 's' : ''} found`,
+        description: issues.length <= 3 ? issues.join('. ') : `${issues.slice(0, 3).join('. ')} and ${issues.length - 3} more.`,
+        variant: 'destructive',
+      })
       return
     }
-    if (!editingItem.price || editingItem.price <= 0) {
-      toast({ title: 'Invalid Price', description: 'Please enter a valid price for this item', variant: 'destructive' })
-      return
-    }
-
-    const updatedItems = [...extractedItems]
-    updatedItems[currentItemIndex] = { ...editingItem, verified: true }
-    setExtractedItems(updatedItems)
-
-    if (currentItemIndex < extractedItems.length - 1) {
-      setCurrentItemIndex(currentItemIndex + 1)
-      setEditingItem({ ...updatedItems[currentItemIndex + 1] })
-    } else {
-      await createAllItems(updatedItems)
-    }
+    await createAllItems(extractedItems)
   }
 
   const createAllItems = async (items: ExtractedMenuItem[]) => {
@@ -300,7 +375,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
     setStep('url')
     setMenuUrl('')
     setExtractedItems([])
-    setCurrentItemIndex(0)
+    setExpandedIndex(null)
     setEditingItem(null)
   }
 
@@ -312,11 +387,11 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       </Button>
 
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetModal(); setIsOpen(open); }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Import Menu from Digital Menu Link</DialogTitle>
             <DialogDescription>
-              Paste a public link to a menu page (e.g. your website or a PDF menu). We’ll scrape the page and extract menu items.
+              Paste a public link to a menu page (e.g. your website or a PDF menu). We&apos;ll scrape the page and extract menu items.
             </DialogDescription>
           </DialogHeader>
 
@@ -347,167 +422,319 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
             </div>
           )}
 
-          {step === 'verifying' && editingItem && (
-            <div className="flex flex-col max-h-[85vh] py-4">
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 shrink-0">
-                <p className="text-sm text-emerald-800">
-                  Verifying item {currentItemIndex + 1} of {extractedItems.length}
-                </p>
-              </div>
-
-              <div className="grid gap-4 overflow-y-auto flex-1 min-h-0 pr-2 mt-4">
-                <div className="space-y-2">
-                  <Label>Item Name</Label>
-                  <Input
-                    value={editingItem.name}
-                    onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    value={editingItem.description}
-                    onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-                    rows={3}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Price (IQD)</Label>
-                    <Input
-                      type="number"
-                      value={editingItem.price}
-                      onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) })}
-                    />
+          {step === 'verifying' && extractedItems.length > 0 && (
+            <div className="flex flex-col flex-1 min-h-0">
+              {/* Top summary bar */}
+              <div className="shrink-0 space-y-3 pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800">
+                      {extractedItems.length} item{extractedItems.length !== 1 ? 's' : ''} extracted
+                    </p>
+                    {itemsWithoutCategory > 0 && (
+                      <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {itemsWithoutCategory} item{itemsWithoutCategory !== 1 ? 's' : ''} missing a category
+                      </p>
+                    )}
                   </div>
-                  <div className="space-y-2">
-                    <Label>Category</Label>
-                    <Select
-                      value={editingItem.categoryId}
-                      onValueChange={(value) => setEditingItem({ ...editingItem, categoryId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
+                  {itemsWithoutCategory > 0 && (
+                    <Select onValueChange={assignCategoryToUncategorized}>
+                      <SelectTrigger className="w-full sm:w-[220px] text-xs h-9 bg-white">
+                        <SelectValue placeholder={`Set category for ${itemsWithoutCategory} uncategorized`} />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Calories (optional)</Label>
-                  <Input
-                    type="number"
-                    value={editingItem.calories ?? ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, calories: parseInt(e.target.value) || undefined })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Dietary Tags (comma-separated)</Label>
-                  <Input
-                    value={(editingItem.tags || []).join(', ')}
-                    onChange={(e) => setEditingItem({ ...editingItem, tags: e.target.value.split(',').map((t) => t.trim()) })}
-                    placeholder="e.g. vegan, spicy, gluten-free"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Image (optional)</Label>
-                  <p className="text-xs text-slate-500">
-                    Paste a URL, upload a photo, or generate with AI (upload + AI = enhance / regenerate background).
-                  </p>
-                  <div className="flex gap-2 flex-wrap">
-                    <Input
-                      value={editingItem.imageUrl?.startsWith('http') ? editingItem.imageUrl : ''}
-                      onChange={(e) => {
-                        const v = e.target.value.trim()
-                        setEditingItem({ ...editingItem, imageUrl: v || undefined })
-                      }}
-                      placeholder="https://example.com/image.jpg"
-                      className="flex-1 min-w-[180px]"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => formUploadRef.current?.click()}
-                    >
-                      <ImagePlus className="h-4 w-4 mr-2" />
-                      Upload
-                    </Button>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      ref={formUploadRef}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (!file) return
-                        const reader = new FileReader()
-                        reader.onloadend = () => {
-                          setEditingItem({ ...editingItem, imageUrl: reader.result as string })
-                        }
-                        reader.readAsDataURL(file)
-                        e.target.value = ''
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={openImageDialog}
-                      disabled={isGeneratingImage}
-                    >
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Generate with AI
-                    </Button>
-                  </div>
-                  {editingItem.imageUrl && (
-                    <div className="border rounded-lg overflow-auto bg-slate-50 flex items-start justify-center min-h-[120px] max-h-[320px]">
-                      <img
-                        src={editingItem.imageUrl}
-                        alt={editingItem.name}
-                        className="max-w-full w-auto max-h-[300px] object-contain"
-                        onError={(e) => {
-                          e.currentTarget.src = ''
-                          setEditingItem({ ...editingItem, imageUrl: undefined })
-                        }}
-                      />
-                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-4 shrink-0 border-t pt-4 mt-4">
+              {/* Scrollable item list */}
+              <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
+                {extractedItems.map((item, index) => {
+                  const isExpanded = expandedIndex === index
+                  const hasIssues = !item.categoryId || !item.name.trim() || !item.price || item.price <= 0
+                  const categoryName = categories.find(c => c.id === item.categoryId)?.name
+
+                  return (
+                    <div
+                      key={index}
+                      className={`border rounded-lg transition-all ${
+                        hasIssues
+                          ? 'border-amber-300 bg-amber-50/30'
+                          : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      {/* Compact row */}
+                      <div className="flex items-start gap-3 p-3">
+                        {/* Item number */}
+                        <span className="text-xs font-medium text-slate-400 mt-1 w-6 text-right shrink-0">
+                          {index + 1}
+                        </span>
+
+                        {/* Item info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {item.name || <span className="text-red-400 italic">Unnamed item</span>}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                            <span className="text-xs font-medium text-slate-600">
+                              IQD {(item.price || 0).toLocaleString()}
+                            </span>
+                            {categoryName ? (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                                {categoryName}
+                              </Badge>
+                            ) : (
+                              <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
+                                <AlertCircle className="h-2.5 w-2.5" />
+                                No category
+                              </span>
+                            )}
+                            {item.tags?.length > 0 && (
+                              <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
+                                {item.tags.slice(0, 3).join(', ')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Inline category select (quick fix) */}
+                        <Select
+                          value={item.categoryId || ''}
+                          onValueChange={(v) => updateItem(index, { categoryId: v })}
+                        >
+                          <SelectTrigger className="h-8 w-[130px] text-xs shrink-0 bg-white hidden sm:flex">
+                            <SelectValue placeholder="Category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => toggleExpand(index)}
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 text-slate-500" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-slate-500" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 hover:bg-red-50"
+                            onClick={() => deleteItem(index)}
+                          >
+                            <X className="h-4 w-4 text-slate-400 hover:text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Expanded edit form */}
+                      {isExpanded && editingItem && (
+                        <div className="border-t border-slate-200 p-4 space-y-4 bg-slate-50/50">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label className="text-xs">Item Name</Label>
+                              <Input
+                                value={editingItem.name}
+                                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                                className="bg-white"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">Price (IQD)</Label>
+                              <Input
+                                type="number"
+                                value={editingItem.price}
+                                onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) })}
+                                className="bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">Description</Label>
+                            <Textarea
+                              value={editingItem.description}
+                              onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+                              rows={2}
+                              className="bg-white"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label className="text-xs">Category</Label>
+                              <Select
+                                value={editingItem.categoryId}
+                                onValueChange={(value) => setEditingItem({ ...editingItem, categoryId: value })}
+                              >
+                                <SelectTrigger className="bg-white">
+                                  <SelectValue placeholder="Select category" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {categories.map((category) => (
+                                    <SelectItem key={category.id} value={category.id}>
+                                      {category.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">Calories (optional)</Label>
+                              <Input
+                                type="number"
+                                value={editingItem.calories ?? ''}
+                                onChange={(e) => setEditingItem({ ...editingItem, calories: parseInt(e.target.value) || undefined })}
+                                className="bg-white"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">Tags (comma-separated)</Label>
+                              <Input
+                                value={(editingItem.tags || []).join(', ')}
+                                onChange={(e) => setEditingItem({ ...editingItem, tags: e.target.value.split(',').map((t) => t.trim()) })}
+                                placeholder="halal, spicy"
+                                className="bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Image section */}
+                          <div className="space-y-2">
+                            <Label className="text-xs">Image (optional)</Label>
+                            <div className="flex gap-2 flex-wrap">
+                              <Input
+                                value={editingItem.imageUrl?.startsWith('http') ? editingItem.imageUrl : ''}
+                                onChange={(e) => {
+                                  const v = e.target.value.trim()
+                                  setEditingItem({ ...editingItem, imageUrl: v || undefined })
+                                }}
+                                placeholder="https://example.com/image.jpg"
+                                className="flex-1 min-w-[180px] bg-white"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => formUploadRef.current?.click()}
+                              >
+                                <ImagePlus className="h-4 w-4 mr-1" />
+                                Upload
+                              </Button>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                ref={formUploadRef}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  const reader = new FileReader()
+                                  reader.onloadend = () => {
+                                    setEditingItem({ ...editingItem, imageUrl: reader.result as string })
+                                  }
+                                  reader.readAsDataURL(file)
+                                  e.target.value = ''
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={openImageDialog}
+                                disabled={isGeneratingImage}
+                              >
+                                <Sparkles className="h-4 w-4 mr-1" />
+                                AI Generate
+                              </Button>
+                            </div>
+                            {editingItem.imageUrl && (
+                              <div className="border rounded-lg overflow-auto bg-white flex items-start justify-center min-h-[80px] max-h-[200px]">
+                                <img
+                                  src={editingItem.imageUrl}
+                                  alt={editingItem.name}
+                                  className="max-w-full w-auto max-h-[190px] object-contain"
+                                  onError={(e) => {
+                                    e.currentTarget.src = ''
+                                    setEditingItem({ ...editingItem, imageUrl: undefined })
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex justify-end pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleExpand(index)}
+                            >
+                              <Check className="h-4 w-4 mr-1" />
+                              Done Editing
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Sticky footer */}
+              <div className="shrink-0 border-t border-slate-200 pt-4 mt-4 flex flex-col sm:flex-row gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    if (currentItemIndex > 0) {
-                      setCurrentItemIndex(currentItemIndex - 1)
-                      setEditingItem({ ...extractedItems[currentItemIndex - 1] })
-                    }
-                  }}
-                  disabled={currentItemIndex === 0}
+                  onClick={() => { setStep('url'); setExpandedIndex(null); setEditingItem(null); }}
+                  className="sm:w-auto"
                 >
-                  Previous
+                  Back
                 </Button>
-                <Button onClick={verifyAndNext} className="flex-1" disabled={isProcessing}>
+                <Button
+                  onClick={handleCreateAll}
+                  className="flex-1"
+                  disabled={isProcessing || extractedItems.length === 0}
+                >
                   {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating...
+                      Creating {extractedItems.length} items...
                     </>
-                  ) : currentItemIndex < extractedItems.length - 1 ? (
-                    'Verify & Next'
                   ) : (
-                    'Verify & Create All'
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Create All {extractedItems.length} Item{extractedItems.length !== 1 ? 's' : ''}
+                      {itemsWithIssues > 0 && (
+                        <span className="ml-2 text-xs bg-white/20 rounded-full px-2 py-0.5">
+                          {itemsWithIssues} need attention
+                        </span>
+                      )}
+                    </>
                   )}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {step === 'verifying' && extractedItems.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+              <p className="text-sm text-slate-500">No items were extracted from this URL.</p>
+              <Button variant="outline" onClick={() => setStep('url')}>Try Another URL</Button>
             </div>
           )}
 
@@ -521,7 +748,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
         </DialogContent>
       </Dialog>
 
-      {/* AI Image dialog: upload for enhancement or generate from scratch (same as Add Menu Item) */}
+      {/* AI Image dialog */}
       <Dialog
         open={showImageDialog}
         onOpenChange={(open) => {
@@ -564,7 +791,12 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                     variant="default"
                     className="flex-1"
                     onClick={() => {
-                      if (editingItem) setEditingItem({ ...editingItem, imageUrl: previewImageUrl })
+                      if (editingItem && expandedIndex !== null) {
+                        setEditingItem({ ...editingItem, imageUrl: previewImageUrl })
+                        setExtractedItems(prev =>
+                          prev.map((item, i) => i === expandedIndex ? { ...item, imageUrl: previewImageUrl } : item)
+                        )
+                      }
                       setShowImageDialog(false)
                       setPreviewImageUrl(null)
                       setUploadedPhoto(null)
@@ -581,7 +813,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Upload Photo Section - same as Add Menu Item */}
+                {/* Upload Photo Section */}
                 <div className="space-y-2">
                   <Label>Upload Your Photo (Recommended)</Label>
                   <p className="text-xs text-slate-500">
@@ -629,7 +861,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                   </div>
                 )}
 
-                {/* Custom Prompt - same as Add Menu Item */}
+                {/* Custom Prompt */}
                 <div className="space-y-2">
                   <Label htmlFor="import-custom-prompt">Custom Prompt (optional)</Label>
                   <Textarea
@@ -664,7 +896,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                   </p>
                 </div>
 
-                {/* Orientation & Target size - same as Add Menu Item */}
+                {/* Orientation & Target size */}
                 <div className="space-y-3 border-t border-dashed border-slate-200 pt-3">
                   <div className="space-y-2">
                     <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
