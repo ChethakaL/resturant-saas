@@ -12,6 +12,10 @@ interface BundleCarouselProps {
   onAddBundle: (bundle: BundleHint) => void
   title: string
   addBundleLabel: string
+  /** Separator for joining item names in bundle title (e.g. " + " or " و "). */
+  bundleNameSeparator?: string
+  /** Localize savings text (e.g. "Save 500" → "وفر 500"). */
+  getLocalizedSavingsText?: (savingsText: string) => string
   /** When false (light theme), use dark text so heading and controls are visible. */
   isDarkTheme?: boolean
 }
@@ -23,6 +27,8 @@ export function BundleCarousel({
   onAddBundle,
   title,
   addBundleLabel,
+  bundleNameSeparator = ' + ',
+  getLocalizedSavingsText,
   isDarkTheme = true,
 }: BundleCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -76,6 +82,8 @@ export function BundleCarousel({
             itemImageUrls={itemImageUrls}
             onAddBundle={() => onAddBundle(bundle)}
             addBundleLabel={addBundleLabel}
+            bundleNameSeparator={bundleNameSeparator}
+            getLocalizedSavingsText={getLocalizedSavingsText}
           />
         ))}
       </div>

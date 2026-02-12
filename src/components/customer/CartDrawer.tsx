@@ -54,19 +54,17 @@ export function CartDrawer({
     <>
       <div className="fixed bottom-0 left-0 right-0 z-40 p-3 pointer-events-none">
         <div className="pointer-events-auto max-w-lg mx-auto">
-          {itemCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="w-full flex items-center justify-between gap-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 px-4 rounded-xl shadow-lg transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <ShoppingBag className="h-5 w-5" />
-                {viewOrderLabel} ({itemCount})
-              </span>
-              <span>{formatMenuPrice(total)}</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="w-full flex items-center justify-between gap-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 px-4 rounded-xl shadow-lg transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <ShoppingBag className="h-5 w-5" />
+              {viewOrderLabel} ({itemCount})
+            </span>
+            <span>{formatMenuPrice(total)}</span>
+          </button>
         </div>
       </div>
 

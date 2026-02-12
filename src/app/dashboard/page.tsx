@@ -12,14 +12,12 @@ import {
   Utensils,
   Clock,
   TrendingDown,
-  Award,
   Package
 } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import PnLReminder from '@/components/dashboard/PnLReminder'
 import DailyRevenueMarginChart from '@/components/dashboard/DailyRevenueMarginChart'
 import MenuItemAnalytics from '@/components/dashboard/MenuItemAnalytics'
-import TopWaitersChart from '@/components/dashboard/TopWaitersChart'
 
 function daysBetweenInclusive(start: Date, end: Date) {
   const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
@@ -448,6 +446,8 @@ async function getDashboardData(restaurantId: string) {
           lte: now,
         },
       },
+      include: { ingredient: true },
+      orderBy: { date: 'desc' },
     }),
     prisma.payroll.findMany({
       where: {
@@ -563,44 +563,7 @@ async function getDashboardData(restaurantId: string) {
     revenue: item._sum.price || 0,
   }))
 
-  // Top waiters (this month)
-  const topWaiters = await prisma.sale.groupBy({
-    by: ['waiterId'],
-    where: {
-      restaurantId,
-      timestamp: { gte: monthStart },
-      status: 'COMPLETED',
-      waiterId: { not: null },
-    },
-    _sum: {
-      total: true,
-    },
-    _count: true,
-    orderBy: {
-      _sum: {
-        total: 'desc',
-      },
-    },
-    take: 5,
-  })
-
-  // Batch fetch employees instead of N+1 queries
-  const waiterIds = topWaiters.map((w) => w.waiterId).filter((id): id is string => id !== null)
-  const employeesMap = waiterIds.length > 0
-    ? new Map(
-        (await prisma.employee.findMany({
-          where: { id: { in: waiterIds } },
-          select: { id: true, name: true },
-        })).map((emp) => [emp.id, emp.name])
-      )
-    : new Map<string, string>()
-
-  const topWaitersData = topWaiters.map((waiter) => ({
-    name: waiter.waiterId ? employeesMap.get(waiter.waiterId) || 'Unknown' : 'Unknown',
-    sales: waiter._sum.total || 0,
-    orders: waiter._count,
-    avgOrder: waiter._count > 0 ? (waiter._sum.total || 0) / waiter._count : 0,
-  }))
+  const wastageTotalCost = monthlyWasteRecords.reduce((sum, w) => sum + w.cost, 0)
 
   // Low stock alerts
   const allIngredients = await prisma.ingredient.findMany({
@@ -683,7 +646,11 @@ async function getDashboardData(restaurantId: string) {
     },
     projectedLossForecast,
     topItems: topItemsData,
-    topWaiters: topWaitersData,
+    wastage: {
+      totalCost: wastageTotalCost,
+      recordCount: monthlyWasteRecords.length,
+      records: monthlyWasteRecords.slice(0, 10),
+    },
     inventory: {
       lowStock: lowStockItems.length,
       critical: criticalStockItems.length,
@@ -906,20 +873,62 @@ export default async function DashboardPage() {
         topCombos={analyticsData.topCombos}
       />
 
-      {/* TOP PERFORMERS */}
+      {/* WASTAGE (this month — same as P&L) */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-blue-500" />
-            Top Waiters (This Month)
+            <Package className="h-5 w-5 text-amber-500" />
+            Wastage (This Month)
           </CardTitle>
+          <a
+            href="/profit-loss"
+            className="text-sm text-slate-500 hover:text-slate-700"
+          >
+            View in P&L →
+          </a>
         </CardHeader>
         <CardContent>
-          {data.topWaiters.length > 0 ? (
-            <TopWaitersChart waiters={data.topWaiters} />
-          ) : (
-            <p className="text-center text-slate-500 py-4">No waiter data yet</p>
-          )}
+          <div className="space-y-4">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-slate-600">Total wastage cost</span>
+              <span className="text-2xl font-bold text-amber-700">
+                {formatCurrency(data.wastage.totalCost)}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              {data.wastage.recordCount} waste record{data.wastage.recordCount !== 1 ? 's' : ''} this month
+            </p>
+            {data.wastage.records.length > 0 ? (
+              <div className="rounded-md border border-slate-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="text-left py-2 px-3 font-medium text-slate-600">Ingredient</th>
+                      <th className="text-right py-2 px-3 font-medium text-slate-600">Qty</th>
+                      <th className="text-right py-2 px-3 font-medium text-slate-600">Cost</th>
+                      <th className="text-left py-2 px-3 font-medium text-slate-600">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.wastage.records.map((w) => (
+                      <tr key={w.id} className="border-b border-slate-100 last:border-0">
+                        <td className="py-2 px-3">{w.ingredient.name}</td>
+                        <td className="py-2 px-3 text-right">
+                          {w.quantity} {w.ingredient.unit}
+                        </td>
+                        <td className="py-2 px-3 text-right font-medium text-amber-700">
+                          {formatCurrency(w.cost)}
+                        </td>
+                        <td className="py-2 px-3 text-slate-500">{w.reason || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-center text-slate-500 py-4">No wastage recorded this month</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

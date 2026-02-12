@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { generateMenuDescription } from '@/lib/menu-description-ai'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,14 +10,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!process.env.GOOGLE_AI_KEY) {
-      return NextResponse.json(
-        { error: 'Google AI API key not configured' },
-        { status: 500 }
-      )
-    }
-
-    const { itemName, category, tags } = await request.json()
+    const body = await request.json()
+    const itemName = body.itemName ?? body.name
+    const category = body.category ?? body.categoryName
+    const tags = body.tags
+    const price = body.price
+    const existingDraft = body.existingDraft ?? body.description
 
     if (!itemName) {
       return NextResponse.json(
@@ -26,55 +24,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
+    const description = await generateMenuDescription({
+      itemName,
+      categoryName: category ?? null,
+      tags: Array.isArray(tags) ? tags : null,
+      price: typeof price === 'number' ? price : null,
+      existingDraft: typeof existingDraft === 'string' ? existingDraft : null,
     })
 
-    const prompt = `You are a menu description writer for a Middle Eastern restaurant. Write an appetizing, concise menu description for:
-
-Dish name: "${itemName}"
-${category ? `Category: ${category}` : ''}
-${tags ? `Dietary tags: ${tags}` : ''}
-
-Guidelines:
-- Keep it to 1-2 sentences (maximum 150 characters)
-- Highlight key ingredients or cooking methods
-- Use appetizing, evocative language
-- Don't use generic phrases like "delicious" or "amazing"
-- Be specific about what makes this dish special
-- Suitable for a restaurant menu
-
-IMPORTANT: Return your response in this exact JSON format only:
-{
-  "description": "Your menu description here"
-}
-
-Return ONLY valid JSON, no markdown or additional text.`
-
-    const result = await model.generateContent(prompt)
-    const responseText = result.response.text()
-
-    // Clean and parse JSON
-    let jsonText = responseText.trim()
-    jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
-
-    const jsonMatch = jsonText.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      jsonText = jsonMatch[0]
-    }
-
-    let data
-    try {
-      data = JSON.parse(jsonText)
-    } catch (parseError) {
-      console.error('Failed to parse description JSON:', jsonText)
-      throw new Error('Failed to parse description from AI response')
+    if (description === null) {
+      return NextResponse.json(
+        { error: 'Google AI API key not configured or generation failed' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({
       success: true,
-      description: data.description || '',
+      description,
     })
   } catch (error) {
     console.error('Error generating description:', error)

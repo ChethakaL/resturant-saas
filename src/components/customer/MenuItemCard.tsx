@@ -16,6 +16,12 @@ export interface MenuItemCardItem {
   addOns?: Array<{ id: string; name: string; price: number }>
 }
 
+export interface BadgeLabels {
+  signature: string
+  mostLoved: string
+  chefSelection: string
+}
+
 interface MenuItemCardProps {
   item: MenuItemCardItem
   hints?: ItemDisplayHints | null
@@ -28,6 +34,10 @@ interface MenuItemCardProps {
   onDetail: () => void
   onPairings: () => void
   onAddToOrder: () => void
+  /** Localized "Add to order" button text. */
+  addToOrderLabel?: string
+  /** Localized badge text for signature / most loved / chef selection. */
+  badgeLabels?: BadgeLabels
   loadingPairings?: boolean
   isSelectedForPairing?: boolean
   /** When true, use dark card and light text (theme-aware). */
@@ -37,8 +47,19 @@ interface MenuItemCardProps {
 const defaultPlaceholderImage =
   'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
 
-function getBadgeLabel(tier: ItemDisplayHints['displayTier'], badgeText?: string, isAnchor?: boolean): string | null {
+function getBadgeLabel(
+  tier: ItemDisplayHints['displayTier'],
+  badgeText?: string,
+  isAnchor?: boolean,
+  badgeLabels?: BadgeLabels
+): string | null {
   if (badgeText) return badgeText
+  if (badgeLabels) {
+    if (tier === 'hero' || isAnchor) return badgeLabels.signature
+    if (tier === 'featured') return badgeLabels.mostLoved
+    if (tier === 'standard') return badgeLabels.chefSelection
+    return null
+  }
   if (tier === 'hero' || isAnchor) return '★ SIGNATURE'
   if (tier === 'featured') return '★ MOST LOVED'
   if (tier === 'standard') return '💎 CHEF\'S SELECTION'
@@ -57,6 +78,8 @@ export function MenuItemCard({
   onDetail,
   onPairings,
   onAddToOrder,
+  addToOrderLabel = 'Add to order',
+  badgeLabels,
   loadingPairings = false,
   isSelectedForPairing = false,
   isDarkTheme = false,
@@ -69,7 +92,7 @@ export function MenuItemCard({
   const isHero = tier === 'hero'
   const isFeatured = tier === 'featured'
   const isMinimal = tier === 'minimal'
-  const badgeLabel = getBadgeLabel(tier, badgeText, hints?.isAnchor)
+  const badgeLabel = getBadgeLabel(tier, badgeText, hints?.isAnchor, badgeLabels)
 
   const cardBg = isDarkTheme ? 'bg-white/10 border-white/20' : 'bg-white border-slate-200'
   const textMain = isDarkTheme ? 'text-white' : 'text-slate-900'
@@ -166,7 +189,7 @@ export function MenuItemCard({
               onClick={(e) => { e.stopPropagation(); onAddToOrder() }}
               className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold ${isDarkTheme ? 'bg-[var(--menu-accent,#f59e0b)] text-white hover:opacity-90' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
             >
-              Add to order
+              {addToOrderLabel}
             </button>
           </div>
         </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import {
@@ -16,6 +16,8 @@ import {
   Users,
   Clock,
   Wallet,
+  Zap,
+  Square,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -23,15 +25,17 @@ import { Separator } from '@/components/ui/separator'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
+  { name: 'Add Menu Items', href: '/menu', icon: UtensilsCrossed },
+  { name: 'Optimize your menu sales', href: '/menu?tab=optimization', icon: Zap },
+  { name: 'Restaurant Theme and Design', href: '/settings', icon: Settings },
   { name: 'P&L', href: '/profit-loss', icon: TrendingUp },
   { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart },
   { name: 'Orders', href: '/orders', icon: Receipt },
+  { name: 'Tables', href: '/tables', icon: Square },
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'HR', href: '/hr/employees', icon: Users },
   { name: 'Shifts', href: '/hr/shifts', icon: Clock },
   { name: 'Payroll', href: '/hr/payroll', icon: Wallet },
-  { name: 'Restaurant theme and design', href: '/settings', icon: Settings },
 ]
 
 interface SidebarProps {
@@ -41,10 +45,11 @@ interface SidebarProps {
 
 export function Sidebar({ userName, userRole }: SidebarProps) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const visibleNavigation =
     userRole === 'STAFF'
       ? navigation.filter((item) =>
-          ['Sales POS', 'Orders', 'Menu', 'Meal Prep'].includes(item.name)
+          ['Sales POS', 'Orders', 'Add Menu Items', 'Meal Prep'].includes(item.name)
         )
       : navigation
 
@@ -68,7 +73,14 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
         {visibleNavigation.map((item) => {
-          const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
+          const hrefPath = item.href.split('?')[0]
+          const hrefTab = item.href.includes('?tab=') ? item.href.split('?tab=')[1] : null
+          const isActive =
+            pathname === hrefPath || pathname?.startsWith(hrefPath + '/')
+              ? hrefTab
+                ? searchParams.get('tab') === hrefTab
+                : !searchParams.get('tab')
+              : false
           return (
             <Link
               key={item.name}

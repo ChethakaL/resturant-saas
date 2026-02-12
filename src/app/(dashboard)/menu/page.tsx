@@ -6,10 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatPercentage } from '@/lib/utils'
-import { Plus, Layers, PlusCircle } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import BulkMenuImport from '@/components/menu/BulkMenuImport'
 import ImportByDigitalMenu from '@/components/menu/ImportByDigitalMenu'
+import CategoriesButtonWithHelp from '@/components/menu/CategoriesButtonWithHelp'
 import MenuItemsTable from '@/components/menu/MenuItemsTable'
 import MenuPageTabs from '@/components/menu/MenuPageTabs'
 
@@ -200,18 +201,7 @@ export default async function MenuPage({
       <div className="flex items-center justify-between">
         <div />
         <div className="flex flex-wrap gap-2">
-          <Link href="/categories">
-            <Button variant="outline">
-              <Layers className="h-4 w-4 mr-2" />
-              Categories
-            </Button>
-          </Link>
-          <Link href="/addons">
-            <Button variant="outline">
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Add-ons
-            </Button>
-          </Link>
+          <CategoriesButtonWithHelp />
           <BulkMenuImport categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
           <ImportByDigitalMenu categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
           <Link href="/menu/new">

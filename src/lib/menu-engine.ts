@@ -58,6 +58,8 @@ export interface RunMenuEngineParams {
   coPurchasePairs: CoPurchasePair[]
   preppedStocks: Record<string, number>
   todaySalesByItem: Record<string, number>
+  /** For adaptive mode: units sold in current time slot (e.g. breakfast/lunch/dinner) over recent days so menu changes by time. */
+  unitsSoldInCurrentTimeSlot?: Record<string, number>
 }
 
 /** Exported for admin quadrant API only. */
@@ -75,7 +77,7 @@ export function classifyQuadrant(
   return 'DOG'
 }
 
-/** Rule 10: 1 hero per category; WORKHORSE = text only (no image). */
+/** Rule 10: 1 hero per category; WORKHORSE = text only (no image). Profit: only first N visible slots get images. */
 function computeDisplayHints(
   item: EngineMenuItem,
   quadrant: MenuQuadrant,
@@ -86,7 +88,8 @@ function computeDisplayHints(
   badgeText: string | undefined,
   scrollDepthHide: boolean | undefined,
   isFirstHeroInCategory: boolean,
-  priceModifierPercent: number
+  priceModifierPercent: number,
+  profitModeVisibleSlot?: boolean
 ): ItemDisplayHints {
   if (mode === 'classic') {
     return {
@@ -116,6 +119,9 @@ function computeDisplayHints(
     displayTier = 'minimal'
     showImage = false
     hide = scrollDepthHide ?? false
+  }
+  if ((mode === 'profit' || mode === 'adaptive') && profitModeVisibleSlot === false) {
+    showImage = false
   }
   const finalPrice =
     priceModifierPercent > 0 && priceModifierPercent < 100
@@ -165,12 +171,30 @@ function applyItemCap(
 /** Order: high margin first, then high cost → mid cost → lower cost (margin DESC, then price DESC). */
 function computePriceAnchoring(
   items: EngineMenuItem[],
-  mode: EngineMode
+  mode: EngineMode,
+  unitsSoldInCurrentTimeSlot?: Record<string, number>
 ): { ordered: EngineMenuItem[]; anchors: Set<string> } {
   if (mode === 'classic' || items.length === 0) {
     return { ordered: [...items], anchors: new Set() }
   }
-  // First = high margin + high cost, second = high margin + mid cost, third = high margin + lower cost
+  if (mode === 'profit') {
+    const ordered = orderItemsForProfitMode(items)
+    const anchors = new Set<string>()
+    if (ordered[0]) anchors.add(ordered[0].id)
+    return { ordered, anchors }
+  }
+  if (mode === 'adaptive') {
+    const hasPosData =
+      unitsSoldInCurrentTimeSlot &&
+      Object.keys(unitsSoldInCurrentTimeSlot).length > 0 &&
+      Object.values(unitsSoldInCurrentTimeSlot).some((q) => q > 0)
+    const ordered = hasPosData
+      ? orderItemsForAdaptiveMode(items, unitsSoldInCurrentTimeSlot)
+      : orderItemsForProfitMode(items)
+    const anchors = new Set<string>()
+    if (ordered[0]) anchors.add(ordered[0].id)
+    return { ordered, anchors }
+  }
   const ordered = [...items].sort(
     (a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price)
   )
@@ -179,18 +203,107 @@ function computePriceAnchoring(
   return { ordered, anchors }
 }
 
-function generateBundles(
-  pairs: CoPurchasePair[],
+/** Profit mode: Slot 1 = high margin + high price; Slot 2 = high margin + price ≈ avg+1std; Slot 3 = high margin + price ≈ avg; rest by margin then price. */
+function orderItemsForProfitMode(items: EngineMenuItem[]): EngineMenuItem[] {
+  if (items.length === 0) return []
+  const sortedByMargin = [...items].sort((a, b) => b._marginPercent - a._marginPercent)
+  if (items.length === 1) return [items[0]!]
+  if (items.length === 2) return sortedByMargin
+
+  const n = items.length
+  const avgPrice = items.reduce((s, i) => s + i.price, 0) / n
+  const variance = items.reduce((s, i) => s + (i.price - avgPrice) ** 2, 0) / n
+  const stdPrice = Math.sqrt(variance) || 1
+  const targetSlot2 = avgPrice + stdPrice
+  const marginThreshold = sortedByMargin[Math.min(2, Math.floor(n / 2))]?._marginPercent ?? 0
+  const highMargin = items.filter((i) => i._marginPercent >= marginThreshold)
+
+  const pickSlot1 = (): EngineMenuItem => {
+    if (highMargin.length === 0) return sortedByMargin[0]!
+    const byPrice = [...highMargin].sort((a, b) => b.price - a.price)
+    return byPrice[0]!
+  }
+  const pickClosestTo = (target: number, pool: EngineMenuItem[]): EngineMenuItem | null => {
+    if (pool.length === 0) return null
+    return pool.reduce((best, cur) =>
+      Math.abs(cur.price - target) < Math.abs(best.price - target) ? cur : best
+    )
+  }
+
+  const slot1 = pickSlot1()
+  const remaining1 = items.filter((i) => i.id !== slot1.id)
+  const slot2 = pickClosestTo(targetSlot2, remaining1)
+  const remaining2 = slot2 ? remaining1.filter((i) => i.id !== slot2.id) : remaining1
+  const slot3 = slot2 ? pickClosestTo(avgPrice, remaining2) : null
+  const rest = slot3
+    ? remaining2.filter((i) => i.id !== slot3.id).sort(
+        (a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price)
+      )
+    : remaining2.sort((a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price))
+  const firstThree = [slot1, ...(slot2 ? [slot2] : []), ...(slot3 ? [slot3] : [])]
+  return [...firstThree, ...rest]
+}
+
+/** Adaptive mode: same 3-slot structure as profit but rank by high margin + popularity (units in current time slot). */
+function orderItemsForAdaptiveMode(
   items: EngineMenuItem[],
-  threshold: number
-): BundleHint[] {
+  unitsSoldInCurrentTimeSlot?: Record<string, number>
+): EngineMenuItem[] {
+  if (items.length === 0) return []
+  const units = unitsSoldInCurrentTimeSlot ?? {}
+  const score = (i: EngineMenuItem) => {
+    const pop = units[i.id] ?? 0
+    return i._marginPercent * 0.6 + Math.min(100, pop) * 0.4
+  }
+  const sortedByScore = [...items].sort((a, b) => score(b) - score(a))
+  if (items.length === 1) return [items[0]!]
+  if (items.length === 2) return sortedByScore
+
+  const n = items.length
+  const avgPrice = items.reduce((s, i) => s + i.price, 0) / n
+  const variance = items.reduce((s, i) => s + (i.price - avgPrice) ** 2, 0) / n
+  const stdPrice = Math.sqrt(variance) || 1
+  const targetSlot2 = avgPrice + stdPrice
+  const midIdx = Math.min(2, Math.floor(n / 2))
+  const midItem = sortedByScore[midIdx]
+  const scoreThreshold = midItem ? score(midItem) : 0
+  const highScore = items.filter((i) => score(i) >= scoreThreshold)
+
+  const pickSlot1 = (): EngineMenuItem => {
+    if (highScore.length === 0) return sortedByScore[0]!
+    const byPrice = [...highScore].sort((a, b) => b.price - a.price)
+    return byPrice[0]!
+  }
+  const pickClosestTo = (target: number, pool: EngineMenuItem[]): EngineMenuItem | null => {
+    if (pool.length === 0) return null
+    return pool.reduce((best, cur) =>
+      Math.abs(cur.price - target) < Math.abs(best.price - target) ? cur : best
+    )
+  }
+
+  const slot1 = pickSlot1()
+  const remaining1 = items.filter((i) => i.id !== slot1.id)
+  const slot2 = pickClosestTo(targetSlot2, remaining1)
+  const remaining2 = slot2 ? remaining1.filter((i) => i.id !== slot2.id) : remaining1
+  const slot3 = slot2 ? pickClosestTo(avgPrice, remaining2) : null
+  const rest = slot3
+    ? remaining2.filter((i) => i.id !== slot3.id).sort((a, b) => score(b) - score(a))
+    : remaining2.sort((a, b) => score(b) - score(a))
+  const firstThree = [slot1, ...(slot2 ? [slot2] : []), ...(slot3 ? [slot3] : [])]
+  return [...firstThree, ...rest]
+}
+
+/** Top N "often bought together" pairs by purchase count (no AI, just sort by count). Re-run daily via fresh co-purchase data. */
+const TOP_BUNDLES_BY_COUNT = 5
+
+function generateBundles(pairs: CoPurchasePair[], items: EngineMenuItem[]): BundleHint[] {
   const itemMap = new Map(items.map((i) => [i.id, i]))
+  const sorted = [...pairs].sort((a, b) => b.pairCount - a.pairCount)
   const bundles: BundleHint[] = []
   const used = new Set<string>()
-  for (const p of pairs) {
+  for (let i = 0; i < Math.min(TOP_BUNDLES_BY_COUNT, sorted.length); i++) {
+    const p = sorted[i]
     if (used.has(p.itemIdA + p.itemIdB) || used.has(p.itemIdB + p.itemIdA)) continue
-    const rate = p.totalOrdersWithEither > 0 ? p.pairCount / p.totalOrdersWithEither : 0
-    if (rate < threshold) continue
     const a = itemMap.get(p.itemIdA)
     const b = itemMap.get(p.itemIdB)
     if (!a || !b) continue
@@ -323,11 +436,17 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
     })
 
     const maxPerCat = opts.maxItemsPerCategory
-    const { ordered: orderedItems, anchors } = computePriceAnchoring(catItems, mode)
+    const maxInitial = opts.maxInitialItemsPerCategory ?? 3
+    const { ordered: orderedItems, anchors } = computePriceAnchoring(
+      catItems,
+      mode,
+      params.unitsSoldInCurrentTimeSlot
+    )
     const groups = applyItemCap(orderedItems.map((i) => i.id), maxPerCat)
 
     let heroAssignedInCategory = false
     let pos = 0
+    let indexInCategory = 0
     for (const group of groups) {
       for (const id of group.itemIds) {
         const item = items.find((i) => i.id === id)
@@ -341,6 +460,8 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
         const isFirstHeroInCategory =
           !heroAssignedInCategory && (quadrant === 'STAR')
         if (isFirstHeroInCategory && quadrant === 'STAR') heroAssignedInCategory = true
+        const profitModeVisibleSlot =
+          mode === 'profit' || mode === 'adaptive' ? indexInCategory < maxInitial : undefined
         itemHints[id] = computeDisplayHints(
           item,
           quadrant,
@@ -351,8 +472,10 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
           scarcity.badge,
           quadrant === 'DOG',
           isFirstHeroInCategory,
-          scarcity.priceModifierPercent
+          scarcity.priceModifierPercent,
+          profitModeVisibleSlot
         )
+        indexInCategory++
         if (itemHints[id].moodTags) {
           const moodIds = Object.keys(MOOD_LABELS).filter((moodId) => {
             const keywords = MOOD_CATEGORY_MAPPING[moodId]
@@ -366,12 +489,10 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
     }
   }
 
-  const bundles = opts.bundles && mode !== 'classic'
-    ? generateBundles(coPurchasePairs, items, opts.bundleCorrelationThreshold)
-    : []
-  const moods = opts.moodFlow && mode !== 'classic' ? mapMoods(items, quadrants) : []
+  const bundles = opts.bundles ? generateBundles(coPurchasePairs, items) : []
+  const moods = opts.moodFlow ? mapMoods(items, quadrants) : []
   const upsellMap: Record<string, UpsellSuggestion[]> = {}
-  if (opts.upsells && mode !== 'classic') {
+  if (opts.upsells) {
     for (const item of items) {
       upsellMap[item.id] = buildUpsellSequence(item.id, items, quadrants)
     }

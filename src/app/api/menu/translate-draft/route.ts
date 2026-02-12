@@ -9,7 +9,7 @@ type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
 const LANGUAGE_LABELS: Record<LanguageCode, string> = {
   en: 'English',
   ar: 'Iraqi Arabic',
-  ar_fusha: 'Fusha Arabic (Modern Standard Arabic)',
+  ar_fusha: 'Arabic',
   ku: 'Sorani Kurdish',
 }
 
@@ -77,7 +77,30 @@ export async function POST(request: NextRequest) {
       `Calories: ${calories ?? 'unknown'}`,
     ].join(' | ')
 
-    const prompt = `You are an imaginative Iraqi chef rewriting menu content for local diners in ${LANGUAGE_LABELS[languageValue]}. Translate the text below, keep digits as ASCII, and return ONLY the JSON structure below with no extra text:\n{\n  "language": "${LANGUAGE_LABELS[languageValue]}",\n  "items": [\n    {\n      "id": "preview",\n      "name": "localized name",\n      "description": "Concise ${LANGUAGE_LABELS[languageValue]} description",\n      "aiDescription": "Two-sentence expressive story in ${LANGUAGE_LABELS[languageValue]}",\n      "protein": 25,\n      "carbs": 40\n    }\n  ]\n}\nHere is the menu item to translate:\n${snippetLines}`
+    const languageInstruction =
+      languageValue === 'ar_fusha'
+        ? 'Translate into Fusha Arabic (Modern Standard Arabic). Do not translate word for word: translate the feeling and intent so the Arabic sounds natural and appetizing to a local diner. Use idiomatic, warm language suitable for a restaurant menu.'
+        : languageValue === 'ar'
+          ? 'Translate into Iraqi Arabic. Do not translate word for word: translate the feeling and intent so the Arabic sounds natural and appetizing. Use idiomatic Iraqi Arabic suitable for a restaurant menu.'
+          : `Translate into ${LANGUAGE_LABELS[languageValue]}. Keep the tone and intent of the original; natural, appetizing menu language.`
+
+    const prompt = `You are an imaginative chef rewriting menu content for local diners. ${languageInstruction}
+Keep digits as ASCII. Return ONLY the JSON structure below with no extra text:
+{
+  "language": "${LANGUAGE_LABELS[languageValue]}",
+  "items": [
+    {
+      "id": "preview",
+      "name": "localized name",
+      "description": "Concise ${LANGUAGE_LABELS[languageValue]} description",
+      "aiDescription": "Two-sentence expressive story in ${LANGUAGE_LABELS[languageValue]}",
+      "protein": 25,
+      "carbs": 40
+    }
+  ]
+}
+Here is the menu item to translate:
+${snippetLines}`
 
     const aiResult = await callGemini(prompt)
     const rawText = await aiResult.response.text()

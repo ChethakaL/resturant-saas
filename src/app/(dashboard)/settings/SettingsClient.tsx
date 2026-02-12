@@ -219,7 +219,7 @@ export default function SettingsClient({
                 >
                   <option value="en">English</option>
                   <option value="ku">Kurdish (Kurdî)</option>
-                  <option value="ar-fusha">Fusha Arabic (العربية الفصحى)</option>
+                  <option value="ar-fusha">Arabic</option>
                 </select>
                 <p className="text-xs text-slate-500">
                   Applies to this management system. Customer menu languages are set per menu.

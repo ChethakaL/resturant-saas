@@ -13,7 +13,7 @@ type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
 const LANGUAGE_LABELS: Record<LanguageCode, string> = {
   en: 'English',
   ar: 'Iraqi Arabic',
-  ar_fusha: 'Fusha Arabic (Modern Standard Arabic)',
+  ar_fusha: 'Arabic',
   ku: 'Sorani Kurdish',
 }
 
@@ -141,7 +141,9 @@ export async function POST(request: NextRequest) {
     }
 
     const languageLabel = LANGUAGE_LABELS[languageValue]
-    const languageEnum = languageValue as MenuItemTranslationLanguage
+    // DB enum may not include ar_fusha (legacy); map to ar so queries succeed. Schema has ar_fusha; run migration or ALTER TYPE to add it for distinct storage.
+    const languageEnum: MenuItemTranslationLanguage =
+      languageValue === 'ar_fusha' ? 'ar' : (languageValue as MenuItemTranslationLanguage)
 
     const existingTranslations = await prisma.menuItemTranslation.findMany({
       where: {

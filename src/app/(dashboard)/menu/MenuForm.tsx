@@ -434,6 +434,16 @@ export default function MenuForm({
     menuItem?.addOns?.map((a) => a.addOnId) || []
   )
 
+  // Add-ons list (can grow when creating new add-on inline)
+  const [addOnsList, setAddOnsList] = useState<AddOn[]>(addOns)
+
+  // Create add-on inline dialog
+  const [createAddOnOpen, setCreateAddOnOpen] = useState(false)
+  const [createAddOnName, setCreateAddOnName] = useState('')
+  const [createAddOnPrice, setCreateAddOnPrice] = useState('')
+  const [createAddOnDescription, setCreateAddOnDescription] = useState('')
+  const [createAddOnLoading, setCreateAddOnLoading] = useState(false)
+
   // Add-ons search and pagination
   const [addOnSearchQuery, setAddOnSearchQuery] = useState('')
   const [addOnPage, setAddOnPage] = useState(1)
@@ -1554,7 +1564,7 @@ export default function MenuForm({
                           <div className="pt-2 border-t border-slate-200">
                             <p className="text-xs font-medium text-slate-500 mb-1">Add-ons</p>
                             <div className="flex flex-wrap gap-1">
-                              {addOns.filter((a) => selectedAddOnIds.includes(a.id)).map((addOn) => (
+                              {addOnsList.filter((a) => selectedAddOnIds.includes(a.id)).map((addOn) => (
                                 <span key={addOn.id} className="text-xs text-slate-600">
                                   +{addOn.name} ({formatCurrency(addOn.price)})
                                 </span>
@@ -1765,7 +1775,7 @@ export default function MenuForm({
                       size="sm"
                       onClick={generateDescription}
                       disabled={generatingDescription || !formData.name}
-                      title={!formData.name ? 'Enter item name first' : 'Generate description with AI'}
+                      title={!formData.name ? 'Enter item name first' : 'Generate description with AI (max 18 words)'}
                       className="h-7 px-2 text-xs"
                     >
                       {generatingDescription ? (
@@ -1776,6 +1786,7 @@ export default function MenuForm({
                       AI Write
                     </Button>
                   </div>
+                  <p className="text-xs text-slate-500">Max 18 words. Leave blank to auto-generate when you save (sensory, texture, heat, origin, scarcity).</p>
                   <Textarea
                     id="description"
                     value={formData.description}
@@ -2400,7 +2411,24 @@ export default function MenuForm({
             {/* Add-ons Section */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                <CardTitle>Available Add-ons</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle>Available Add-ons</CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={() => {
+                      setCreateAddOnName('')
+                      setCreateAddOnPrice('')
+                      setCreateAddOnDescription('')
+                      setCreateAddOnOpen(true)
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create new add-on
+                  </Button>
+                </div>
                 {selectedAddOnIds.length > 0 && (
                   <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
                     {selectedAddOnIds.length} selected
@@ -2408,15 +2436,25 @@ export default function MenuForm({
                 )}
               </CardHeader>
               <CardContent>
-                {addOns.length === 0 ? (
+                {addOnsList.length === 0 ? (
                   <div className="text-center py-6 text-slate-500">
                     <p className="text-sm">No add-ons available.</p>
-                    <p className="text-xs mt-1">
-                      <Link href="/addons" className="text-emerald-600 hover:underline">
-                        Create add-ons
-                      </Link>{' '}
-                      to offer extras with your menu items.
-                    </p>
+                    <p className="text-xs mt-2 mb-3">Create an add-on to offer extras with this menu item.</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      onClick={() => {
+                        setCreateAddOnName('')
+                        setCreateAddOnPrice('')
+                        setCreateAddOnDescription('')
+                        setCreateAddOnOpen(true)
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Create new add-on
+                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -2435,7 +2473,7 @@ export default function MenuForm({
                     </div>
 
                     {(() => {
-                      const filteredAddOns = addOns.filter(
+                      const filteredAddOns = addOnsList.filter(
                         (addOn) =>
                           addOn.name.toLowerCase().includes(addOnSearchQuery.toLowerCase()) ||
                           addOn.description?.toLowerCase().includes(addOnSearchQuery.toLowerCase())
@@ -2538,6 +2576,97 @@ export default function MenuForm({
                 )}
               </CardContent>
             </Card>
+
+            {/* Create add-on dialog (inline from menu form) */}
+            <Dialog open={createAddOnOpen} onOpenChange={setCreateAddOnOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Create new add-on</DialogTitle>
+                  <DialogDescription>Add an extra that guests can choose with this menu item.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="create-addon-name">Name</Label>
+                    <Input
+                      id="create-addon-name"
+                      value={createAddOnName}
+                      onChange={(e) => setCreateAddOnName(e.target.value)}
+                      placeholder="e.g. Extra cheese"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="create-addon-price">Price</Label>
+                    <Input
+                      id="create-addon-price"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={createAddOnPrice}
+                      onChange={(e) => setCreateAddOnPrice(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="create-addon-desc">Description (optional)</Label>
+                    <Textarea
+                      id="create-addon-desc"
+                      rows={2}
+                      value={createAddOnDescription}
+                      onChange={(e) => setCreateAddOnDescription(e.target.value)}
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCreateAddOnOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={createAddOnLoading || !createAddOnName.trim() || !createAddOnPrice.trim()}
+                    onClick={async () => {
+                      const price = parseFloat(createAddOnPrice)
+                      if (Number.isNaN(price) || price < 0) {
+                        toast({ title: 'Enter a valid price', variant: 'destructive' })
+                        return
+                      }
+                      setCreateAddOnLoading(true)
+                      try {
+                        const res = await fetch('/api/addons', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            name: createAddOnName.trim(),
+                            price,
+                            description: createAddOnDescription.trim() || null,
+                          }),
+                        })
+                        if (!res.ok) throw new Error('Failed to create')
+                        const newAddOn = await res.json()
+                        setAddOnsList((prev) => [...prev, newAddOn].sort((a, b) => a.name.localeCompare(b.name)))
+                        setSelectedAddOnIds((prev) => [...prev, newAddOn.id])
+                        setCreateAddOnOpen(false)
+                        setCreateAddOnName('')
+                        setCreateAddOnPrice('')
+                        setCreateAddOnDescription('')
+                        toast({ title: 'Add-on created', description: `${newAddOn.name} added and selected for this item.` })
+                      } catch {
+                        toast({ title: 'Could not create add-on', variant: 'destructive' })
+                      } finally {
+                        setCreateAddOnLoading(false)
+                      }
+                    }}
+                  >
+                    {createAddOnLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Create add-on
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
               </TabsContent>
             </Tabs>
           </div>

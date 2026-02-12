@@ -6,6 +6,8 @@ export async function POST(request: Request) {
     const data = await request.json()
     const restaurantId = data.restaurantId as string | undefined
     const items = data.items as { menuItemId: string; quantity: number }[]
+    const tableIdFromClient = data.tableId as string | undefined
+    const tableNumber = data.tableNumber != null ? String(data.tableNumber) : undefined
 
     if (!restaurantId) {
       return NextResponse.json({ error: 'Restaurant not specified' }, { status: 400 })
@@ -13,6 +15,19 @@ export async function POST(request: Request) {
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: 'No items provided' }, { status: 400 })
+    }
+
+    let tableId: string | null = null
+    if (tableIdFromClient) {
+      const table = await prisma.table.findFirst({
+        where: { id: tableIdFromClient, restaurantId },
+      })
+      if (table) tableId = table.id
+    } else if (tableNumber) {
+      const table = await prisma.table.findUnique({
+        where: { restaurantId_number: { restaurantId, number: tableNumber } },
+      })
+      if (table) tableId = table.id
     }
 
     const menuItemsData = await prisma.menuItem.findMany({
@@ -59,6 +74,13 @@ export async function POST(request: Request) {
     })
     const orderNumber = `ORD-${(orderCount + 1).toString().padStart(5, '0')}`
 
+    if (tableId) {
+      await prisma.table.update({
+        where: { id: tableId },
+        data: { status: 'OCCUPIED' },
+      })
+    }
+
     const sale = await prisma.sale.create({
       data: {
         orderNumber,
@@ -68,6 +90,7 @@ export async function POST(request: Request) {
         customerName: data.customerName || 'Guest',
         notes: data.notes || 'Customer self-order',
         restaurantId,
+        tableId,
         items: {
           createMany: {
             data: saleItems,

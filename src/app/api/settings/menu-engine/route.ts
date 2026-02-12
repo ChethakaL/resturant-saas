@@ -4,18 +4,18 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { DEFAULT_MENU_ENGINE_SETTINGS } from '@/lib/menu-engine-defaults'
+import { getSettingsForMode } from '@/lib/menu-engine-defaults'
+import type { EngineMode } from '@/types/menu-engine'
 
 export const dynamic = 'force-dynamic'
 
 const menuEngineSchema = z.object({
-  mode: z.enum(['classic', 'profit', 'adaptive']).optional(),
+  mode: z.enum(['classic', 'profit', 'adaptive']),
   moodFlow: z.boolean().optional(),
   bundles: z.boolean().optional(),
   upsells: z.boolean().optional(),
   scarcityBadges: z.boolean().optional(),
   priceAnchoring: z.boolean().optional(),
-  bundleCorrelationThreshold: z.number().min(0.1).max(1).optional(),
   maxItemsPerCategory: z.number().int().min(3).max(15).optional(),
   maxInitialItemsPerCategory: z.number().int().min(1).max(10).optional(),
   idleUpsellDelaySeconds: z.number().int().min(2).max(30).optional(),
@@ -35,7 +35,17 @@ export async function GET() {
 
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
     const menuEngine = (settings.menuEngine as Record<string, unknown>) || {}
-    const merged = { ...DEFAULT_MENU_ENGINE_SETTINGS, ...menuEngine }
+    const mode = (menuEngine.mode as EngineMode) || 'classic'
+    const resolved = getSettingsForMode(mode)
+    // Classic: full overrides. Profit/adaptive: merge preset with stored suggestion overrides only.
+    const suggestionKeys = ['moodFlow', 'bundles', 'upsells', 'scarcityBadges', 'priceAnchoring'] as const
+    const overrides =
+      mode === 'classic'
+        ? menuEngine
+        : Object.fromEntries(
+            suggestionKeys.filter((k) => menuEngine[k] !== undefined).map((k) => [k, menuEngine[k]])
+          )
+    const merged = { ...resolved, ...overrides } as typeof resolved
     return NextResponse.json(merged)
   } catch (error) {
     console.error('Error fetching menu engine settings:', error)
@@ -69,7 +79,31 @@ export async function PUT(request: Request) {
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
     const currentEngine = (currentSettings.menuEngine as Record<string, unknown>) || {}
-    const menuEngine = { ...currentEngine, ...parsed.data }
+    const mode = parsed.data.mode
+
+    const menuEngine: Record<string, unknown> =
+      mode === 'classic'
+        ? {
+            mode,
+            ...currentEngine,
+            ...(parsed.data.moodFlow !== undefined && { moodFlow: parsed.data.moodFlow }),
+            ...(parsed.data.bundles !== undefined && { bundles: parsed.data.bundles }),
+            ...(parsed.data.upsells !== undefined && { upsells: parsed.data.upsells }),
+            ...(parsed.data.scarcityBadges !== undefined && { scarcityBadges: parsed.data.scarcityBadges }),
+            ...(parsed.data.priceAnchoring !== undefined && { priceAnchoring: parsed.data.priceAnchoring }),
+            ...(parsed.data.maxItemsPerCategory !== undefined && { maxItemsPerCategory: parsed.data.maxItemsPerCategory }),
+            ...(parsed.data.maxInitialItemsPerCategory !== undefined && { maxInitialItemsPerCategory: parsed.data.maxInitialItemsPerCategory }),
+            ...(parsed.data.idleUpsellDelaySeconds !== undefined && { idleUpsellDelaySeconds: parsed.data.idleUpsellDelaySeconds }),
+          }
+        : {
+            mode,
+            ...currentEngine,
+            ...(parsed.data.moodFlow !== undefined && { moodFlow: parsed.data.moodFlow }),
+            ...(parsed.data.bundles !== undefined && { bundles: parsed.data.bundles }),
+            ...(parsed.data.upsells !== undefined && { upsells: parsed.data.upsells }),
+            ...(parsed.data.scarcityBadges !== undefined && { scarcityBadges: parsed.data.scarcityBadges }),
+            ...(parsed.data.priceAnchoring !== undefined && { priceAnchoring: parsed.data.priceAnchoring }),
+          }
 
     await prisma.restaurant.update({
       where: { id: session.user.restaurantId },
@@ -77,7 +111,15 @@ export async function PUT(request: Request) {
     })
 
     revalidatePath('/')
-    return NextResponse.json(menuEngine)
+    const suggestionKeys = ['moodFlow', 'bundles', 'upsells', 'scarcityBadges', 'priceAnchoring'] as const
+    const overrides =
+      mode === 'classic'
+        ? menuEngine
+        : Object.fromEntries(
+            suggestionKeys.filter((k) => menuEngine[k] !== undefined).map((k) => [k, menuEngine[k]])
+          )
+    const resolved = { ...getSettingsForMode(mode), ...overrides } as ReturnType<typeof getSettingsForMode>
+    return NextResponse.json(resolved)
   } catch (error) {
     console.error('Error updating menu engine settings:', error)
     return NextResponse.json(

@@ -92,6 +92,8 @@ interface SmartMenuProps {
   upsellMap?: Record<string, UpsellSuggestion[]>
   categoryOrder?: string[]
   tableSize?: number
+  /** When menu is opened from a table (e.g. QR code), pass table number so the order is assigned to that table. */
+  tableNumber?: string
   categoryAnchorBundle?: Record<string, BundleHint>
   maxInitialItemsPerCategory?: number
 }
@@ -152,6 +154,21 @@ const categoryTranslations: Record<string, Partial<Record<LanguageCode, string>>
   'main dishes': { ar: 'الأطباق الرئيسية', ku: 'سەربەخۆیەکان' },
   grills: { ar: 'مشاوي', ku: 'گریلەکان' },
   appetizers: { ar: 'مقبلات', ku: 'پێوەچوون' },
+  'signature dishes': { ar: 'أطباقنا المميزة', ku: 'خواردنە تایبەتەکان' },
+  'signature dish': { ar: 'أطباقنا المميزة', ku: 'خواردنە تایبەتەکان' },
+  shareables: { ar: 'أطباق للمشاركة', ku: 'خواردنی هاوبەش' },
+  shareable: { ar: 'أطباق للمشاركة', ku: 'خواردنی هاوبەش' },
+  'popular combos': { ar: 'تركيبات شائعة', ku: 'کۆمەڵە باوەکان' },
+  drinks: { ar: 'المشروبات', ku: 'خواردنەوەکان' },
+  beverages: { ar: 'المشروبات', ku: 'خواردنەوەکان' },
+  desserts: { ar: 'الحلويات', ku: 'شیرینەکان' },
+  sides: { ar: 'الأطباق الجانبية', ku: 'لایەنەکان' },
+  soups: { ar: 'الشوربات', ku: 'شۆربەکان' },
+  salads: { ar: 'السلطات', ku: 'سەلاطەکان' },
+  'light meal': { ar: 'وجبة خفيفة', ku: 'نانی سووک' },
+  filling: { ar: 'مشبع', ku: 'پڕ' },
+  'for sharing': { ar: 'للمشاركة', ku: 'بۆ هاوبەشکردن' },
+  featured: { ar: 'مميز', ku: 'تایبەت' },
 }
 
 const addOnTranslations: Record<string, Partial<Record<LanguageCode, string>>> = {
@@ -330,12 +347,16 @@ const engineCopyMap: Record<
     skipLabel: string
     addBundleLabel: string
     bundlesTitle: string
+    saveLabel: string
     checkoutNudgeBeverage: string
     checkoutNudgeDessert: string
     addToOrder: string
     dismissLabel: string
     idleMessage: string
     jumpToSection: string
+    signatureBadge: string
+    mostLovedBadge: string
+    chefSelectionBadge: string
   }
 > = {
   en: {
@@ -347,12 +368,16 @@ const engineCopyMap: Record<
     skipLabel: 'Skip',
     addBundleLabel: 'Add bundle',
     bundlesTitle: 'Popular combos',
+    saveLabel: 'Save',
     checkoutNudgeBeverage: 'Most guests complete with a refreshing drink.',
     checkoutNudgeDessert: 'End your meal on a sweet note?',
     addToOrder: 'Add to order',
     dismissLabel: 'No thanks',
     idleMessage: 'Looking for something? Try our',
     jumpToSection: 'Jump to',
+    signatureBadge: '★ SIGNATURE',
+    mostLovedBadge: '★ MOST LOVED',
+    chefSelectionBadge: "💎 CHEF'S SELECTION",
   },
   ar: {
     showAll: 'عرض الكل',
@@ -363,12 +388,16 @@ const engineCopyMap: Record<
     skipLabel: 'تخطي',
     addBundleLabel: 'إضافة المجموعة',
     bundlesTitle: 'تركيبات شائعة',
+    saveLabel: 'وفر',
     checkoutNudgeBeverage: 'معظم الضيوف يكمّلون مع مشروب منعش.',
     checkoutNudgeDessert: 'اختم وجبتك بحلوى؟',
     addToOrder: 'إضافة للطلب',
     dismissLabel: 'لا شكراً',
     idleMessage: 'تبحث عن شيء؟ جرّب',
     jumpToSection: 'انتقل إلى',
+    signatureBadge: '★ مميز',
+    mostLovedBadge: '★ الأكثر حباً',
+    chefSelectionBadge: '💎 اختيار الشيف',
   },
   ar_fusha: {
     showAll: 'عرض الكل',
@@ -379,12 +408,16 @@ const engineCopyMap: Record<
     skipLabel: 'تخطي',
     addBundleLabel: 'إضافة المجموعة',
     bundlesTitle: 'تركيبات شائعة',
+    saveLabel: 'وفر',
     checkoutNudgeBeverage: 'معظم الضيوف يكملون مع مشروب منعش.',
     checkoutNudgeDessert: 'اختم وجبتك بحلوى؟',
     addToOrder: 'إضافة إلى الطلب',
     dismissLabel: 'لا شكراً',
     idleMessage: 'تبحث عن شيء؟ جرّب',
     jumpToSection: 'انتقل إلى',
+    signatureBadge: '★ مميز',
+    mostLovedBadge: '★ الأكثر حباً',
+    chefSelectionBadge: '💎 اختيار الشيف',
   },
   ku: {
     showAll: 'هەموویان',
@@ -395,12 +428,16 @@ const engineCopyMap: Record<
     skipLabel: 'تێپەڕە',
     addBundleLabel: 'کۆمەڵە زیاد بکە',
     bundlesTitle: 'کۆمەڵە باوەکان',
+    saveLabel: 'پاشەکەوت',
     checkoutNudgeBeverage: 'زۆربەی میوانەکان لەگەڵ خواردنەوەیەک تەواو دەکەن.',
     checkoutNudgeDessert: 'نانی خواردنت بە شیرینێک تەواو بکە؟',
     addToOrder: 'زیاد بکە بۆ داواکاری',
     dismissLabel: 'نەخێر',
     idleMessage: 'شتیک دەگەڕیت؟ تاقی',
     jumpToSection: 'بڕو بۆ',
+    signatureBadge: '★ تایبەت',
+    mostLovedBadge: '★ خۆشەویستترین',
+    chefSelectionBadge: '💎 هەڵبژاردنی چێشتلێنەر',
   },
 }
 
@@ -476,6 +513,7 @@ export default function SmartMenu({
   upsellMap = {},
   categoryOrder,
   tableSize,
+  tableNumber,
   categoryAnchorBundle = {},
   maxInitialItemsPerCategory = 3,
 }: SmartMenuProps) {
@@ -983,6 +1021,14 @@ const getLocalizedCategoryName = (category?: string | null) => {
   return categoryTranslations[normalized]?.[lang] || category
 }
 
+const getLocalizedSavingsText = (savingsText: string) => {
+  if (language === 'en') return savingsText
+  const match = savingsText.match(/^Save\s+(.+)$/i)
+  if (!match) return savingsText
+  const saveLabel = engineCopyMap[language]?.saveLabel ?? 'Save'
+  return `${saveLabel} ${match[1]}`
+}
+
 const getLocalizedAddOnName = (name: string) => {
   if (language === 'en') return name
   const normalized = name.toLowerCase()
@@ -1315,10 +1361,10 @@ const getLocalizedAddOnName = (name: string) => {
               <section className="w-full space-y-3" aria-label="What do you feel like eating today?">
                 <h2 className={`text-base sm:text-lg font-semibold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
                   {language === 'ar' || language === 'ar_fusha'
-                    ? 'ماذا تشتهي أن تأكل اليوم؟'
+                    ? 'ماذا تشتهي أن تأكل؟'
                     : language === 'ku'
-                      ? 'ئەمڕۆ حەزت لە چی خواردنە؟'
-                      : 'What do you feel like eating today?'}
+                      ? 'حەزت لە چی خواردنە؟'
+                      : 'What do you feel like eating?'}
                 </h2>
                 <MoodSelector
                   moods={moods}
@@ -1566,22 +1612,30 @@ const getLocalizedAddOnName = (name: string) => {
               </div>
             )}
 
-            {engineMode !== 'classic' && bundles.length > 0 && (
-              <div className="px-3 sm:px-4">
-                <BundleCarousel
-                  bundles={bundles}
-                  itemNames={Object.fromEntries(menuItems.map((i) => [i.id, i.name]))}
-                  itemImageUrls={Object.fromEntries(menuItems.map((i) => [i.id, i.imageUrl]))}
-                  onAddBundle={(bundle) => {
-                    const items = bundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
-                    if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: bundle.itemIds, items, bundlePrice: bundle.bundlePrice })
-                  }}
-                  title={currentEngineCopy.bundlesTitle}
-                  addBundleLabel={currentEngineCopy.addBundleLabel}
-                  isDarkTheme={isDarkBg}
-                />
-              </div>
-            )}
+            {engineMode !== 'classic' && bundles.length > 0 && (() => {
+              const bundleItemNames = Object.fromEntries(
+                menuItems.map((i) => [i.id, translationCache[language]?.[i.id]?.name ?? i.name])
+              )
+              const bundleNameSeparator = (language === 'ar' || language === 'ar_fusha') ? ' و ' : (language === 'ku' ? ' و ' : ' + ')
+              return (
+                <div className="px-3 sm:px-4">
+                  <BundleCarousel
+                    bundles={bundles}
+                    itemNames={bundleItemNames}
+                    itemImageUrls={Object.fromEntries(menuItems.map((i) => [i.id, i.imageUrl]))}
+                    onAddBundle={(bundle) => {
+                      const items = bundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
+                      if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: bundle.itemIds, items, bundlePrice: bundle.bundlePrice })
+                    }}
+                    title={currentEngineCopy.bundlesTitle}
+                    addBundleLabel={currentEngineCopy.addBundleLabel}
+                    bundleNameSeparator={bundleNameSeparator}
+                    getLocalizedSavingsText={getLocalizedSavingsText}
+                    isDarkTheme={isDarkBg}
+                  />
+                </div>
+              )
+            })()}
 
             {/* Menu Items — grouped by category with carousels between */}
             <div className="space-y-8 sm:space-y-6 relative px-3 sm:px-4">
@@ -1607,14 +1661,19 @@ const getLocalizedAddOnName = (name: string) => {
                     {section.category && categoryAnchorBundle[section.category.id] && (() => {
                       const anchorBundle = categoryAnchorBundle[section.category!.id]
                       if (!anchorBundle) return null
+                      const anchorItemNames = Object.fromEntries(
+                        menuItems.map((i) => [i.id, translationCache[language]?.[i.id]?.name ?? i.name])
+                      )
+                      const anchorSeparator = (language === 'ar' || language === 'ar_fusha') ? ' و ' : (language === 'ku' ? ' و ' : ' + ')
+                      const anchorDisplayName = anchorBundle.itemIds.map((id) => anchorItemNames[id]).filter(Boolean).join(anchorSeparator) || anchorBundle.name
                       return (
                         <div className="mb-3">
                           <div
                             className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}
                           >
                             <div>
-                              <p className={`font-semibold ${isDarkBg ? 'text-white/90' : 'text-slate-900'}`}>{anchorBundle.name}</p>
-                              <p className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-600'}`}>{anchorBundle.savingsText}</p>
+                              <p className={`font-semibold ${isDarkBg ? 'text-white/90' : 'text-slate-900'}`}>{anchorDisplayName}</p>
+                              <p className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-600'}`}>{getLocalizedSavingsText(anchorBundle.savingsText)}</p>
                             </div>
                             <Button
                               size="sm"
@@ -1624,7 +1683,7 @@ const getLocalizedAddOnName = (name: string) => {
                                 if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: anchorBundle.itemIds, items, bundlePrice: anchorBundle.bundlePrice })
                               }}
                             >
-                              Add
+                              {currentEngineCopy.addLabel}
                             </Button>
                           </div>
                         </div>
@@ -1662,6 +1721,12 @@ const getLocalizedAddOnName = (name: string) => {
                             onDetail={() => setSelectedItemForDetail(item)}
                             onPairings={() => fetchPairingSuggestions(item)}
                             onAddToOrder={handleAddToOrder}
+                            addToOrderLabel={currentEngineCopy.addToOrder}
+                            badgeLabels={{
+                              signature: currentEngineCopy.signatureBadge,
+                              mostLoved: currentEngineCopy.mostLovedBadge,
+                              chefSelection: currentEngineCopy.chefSelectionBadge,
+                            }}
                             loadingPairings={loadingSuggestions}
                             isSelectedForPairing={selectedItemForPairing?.id === item.id}
                             isDarkTheme={isDarkBg}
@@ -2065,6 +2130,7 @@ const getLocalizedAddOnName = (name: string) => {
               body: JSON.stringify({
                 restaurantId,
                 items: cart.map((l) => ({ menuItemId: l.menuItemId, quantity: l.quantity })),
+                ...(tableNumber && { tableNumber }),
               }),
             })
             const data = await res.json()

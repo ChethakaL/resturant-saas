@@ -1,17 +1,57 @@
 import type { MenuEngineSettings } from '@/types/menu-engine'
+import type { EngineMode } from '@/types/menu-engine'
 
-export const DEFAULT_MENU_ENGINE_SETTINGS: MenuEngineSettings = {
+/** Consultant-backed numbers used for optimization modes (profit + adaptive). */
+const OPTIMIZED_NUMBERS = {
+  maxItemsPerCategory: 7,
+  maxInitialItemsPerCategory: 3,
+  idleUpsellDelaySeconds: 6,
+  bundleCorrelationThreshold: 0.35,
+} as const
+
+/** Keep My Menu Order: no reordering, no extra suggestions, show more items upfront. */
+const PRESET_CLASSIC: MenuEngineSettings = {
   mode: 'classic',
+  moodFlow: false,
+  bundles: false,
+  upsells: false,
+  scarcityBadges: false,
+  priceAnchoring: false,
+  bundleCorrelationThreshold: 0.35,
+  maxItemsPerCategory: 15,
+  maxInitialItemsPerCategory: 10,
+  idleUpsellDelaySeconds: 30,
+}
+
+/** Highlight My Most Profitable / Order by popularity and profitability: full suggestions, consultant numbers. */
+const PRESET_OPTIMIZED_BASE: Omit<MenuEngineSettings, 'mode'> = {
   moodFlow: true,
   bundles: true,
   upsells: true,
   scarcityBadges: true,
   priceAnchoring: true,
-  bundleCorrelationThreshold: 0.35,
-  maxItemsPerCategory: 7,
-  maxInitialItemsPerCategory: 3,
-  idleUpsellDelaySeconds: 6,
+  ...OPTIMIZED_NUMBERS,
 }
+
+const PRESET_PROFIT: MenuEngineSettings = { ...PRESET_OPTIMIZED_BASE, mode: 'profit' }
+const PRESET_ADAPTIVE: MenuEngineSettings = { ...PRESET_OPTIMIZED_BASE, mode: 'adaptive' }
+
+const PRESETS: Record<EngineMode, MenuEngineSettings> = {
+  classic: PRESET_CLASSIC,
+  profit: PRESET_PROFIT,
+  adaptive: PRESET_ADAPTIVE,
+}
+
+/**
+ * Resolve full menu engine settings from the stored mode.
+ * Automation: the chosen card (mode) drives all suggestion and numeric settings via presets.
+ */
+export function getSettingsForMode(mode: EngineMode): MenuEngineSettings {
+  return PRESETS[mode]
+}
+
+/** Default for backwards compatibility; equals classic preset. */
+export const DEFAULT_MENU_ENGINE_SETTINGS: MenuEngineSettings = PRESET_CLASSIC
 
 /** Mood option id → labels (en, ar, ku) for Rule 4 */
 export const MOOD_LABELS: Record<string, { en: string; ar: string; ku: string }> = {

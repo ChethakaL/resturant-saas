@@ -4,10 +4,12 @@ import { prisma } from '@/lib/prisma'
 import { MenuPersonalizationWrapper } from '@/components/customer/MenuPersonalizationWrapper'
 import { runMenuEngine } from '@/lib/menu-engine'
 import type { EngineMenuItem, EngineCategory, CoPurchasePair } from '@/lib/menu-engine'
-import { DEFAULT_MENU_ENGINE_SETTINGS } from '@/lib/menu-engine-defaults'
+import { getSettingsForMode } from '@/lib/menu-engine-defaults'
 import type { MenuEngineSettings } from '@/types/menu-engine'
+import type { EngineMode } from '@/types/menu-engine'
 import { suggestCarouselItems, getTimeSlotLabel } from '@/lib/carousel-ai'
 import type { CarouselMenuItem } from '@/lib/carousel-ai'
+import { generateMenuDescription } from '@/lib/menu-description-ai'
 
 // Revalidate on every request for DB data; AI carousel suggestions cached 5 min to avoid slow Gemini on every load
 export const revalidate = 0
@@ -28,10 +30,21 @@ async function getCachedCarouselSuggestions(
   )()
 }
 
-/** Day 6–12, Evening 12–18, Night 18–6 (local time in tz) */
+/** Day 6–12, Evening 12–18, Night 18–6 (local time in tz). Used for menu ordering and time-based popularity. */
 function getCurrentTimeSlot(tz: string): 'day' | 'evening' | 'night' {
   const hour = parseInt(
     new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date()),
+    10
+  )
+  if (hour >= 6 && hour < 12) return 'day'
+  if (hour >= 12 && hour < 18) return 'evening'
+  return 'night'
+}
+
+/** Get time slot for a given date in tz (for aggregating sales by breakfast/lunch/dinner). */
+function getTimeSlotForDate(date: Date, tz: string): 'day' | 'evening' | 'night' {
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(date),
     10
   )
   if (hour >= 6 && hour < 12) return 'day'
@@ -141,6 +154,30 @@ async function getMenuData() {
     }
   })
 
+  // If any item has no description (e.g. legacy), generate once and persist so next time it's already there
+  const itemsNeedingDescription = enrichedMenuItems.filter(
+    (i: any) => !(i.description && String(i.description).trim())
+  )
+  if (itemsNeedingDescription.length > 0) {
+    await Promise.all(
+      itemsNeedingDescription.map(async (item: any) => {
+        const desc = await generateMenuDescription({
+          itemName: item.name,
+          categoryName: item.category?.name ?? null,
+          tags: item.tags ?? null,
+          price: item.price ?? null,
+        })
+        if (desc) {
+          await prisma.menuItem.update({
+            where: { id: item.id },
+            data: { description: desc },
+          })
+          item.description = desc
+        }
+      })
+    )
+  }
+
   const settings = (restaurant.settings as Record<string, unknown>) || {}
   const timezone = (settings.menuTimezone as string) || restaurant.timezone || 'Asia/Baghdad'
   const currentSlot = getCurrentTimeSlot(timezone)
@@ -178,11 +215,10 @@ async function getMenuData() {
       const slotItemIds = useTimeSlots ? schedule?.[currentSlot]?.itemIds : undefined
 
       if (slotItemIds && slotItemIds.length > 0) {
-        const idToOrder = new Map(slotItemIds.map((id: string, i: number) => [id, i]))
+        const idToIndex = new Map(slotItemIds.map((id: string, i: number) => [id, i]))
         showcaseMenuItems = enrichedMenuItems
-          .filter((item: any) => idToOrder.has(item.id))
-          .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
-        showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
+          .filter((item: any) => idToIndex.has(item.id))
+          .sort((a: any, b: any) => (idToIndex.get(a.id) ?? 0) - (idToIndex.get(b.id) ?? 0))
       } else if (useTimeSlots && showcase.items.length > 0) {
         // Time slots on but this slot empty; manual items chosen → AI picks best for this time from chosen items (cached)
         const chosenPool = fullCarouselPool.filter((item) =>
@@ -283,6 +319,16 @@ async function getMenuData() {
       todaySalesByItem[si.menuItemId] = (todaySalesByItem[si.menuItemId] ?? 0) + si.quantity
     }
   }
+
+  const unitsSoldInCurrentTimeSlot: Record<string, number> = {}
+  for (const sale of salesLast30d) {
+    const saleSlot = getTimeSlotForDate(sale.timestamp, timezone)
+    if (saleSlot !== currentSlot) continue
+    for (const si of sale.items) {
+      unitsSoldInCurrentTimeSlot[si.menuItemId] = (unitsSoldInCurrentTimeSlot[si.menuItemId] ?? 0) + si.quantity
+    }
+  }
+
   const preppedStocks: Record<string, number> = {}
   for (const row of preppedStocksRows) {
     preppedStocks[row.menuItemId] = row.availableQuantity
@@ -316,10 +362,18 @@ async function getMenuData() {
     })
   }
 
-  const menuEngineSettings: MenuEngineSettings = {
-    ...DEFAULT_MENU_ENGINE_SETTINGS,
-    ...((settings.menuEngine as Partial<MenuEngineSettings>) ?? {}),
-  }
+  const stored = (settings.menuEngine as Record<string, unknown>) || {}
+  const storedMode = stored.mode as EngineMode | undefined
+  const mode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'classic'
+  const base = getSettingsForMode(mode)
+  const suggestionKeys = ['moodFlow', 'bundles', 'upsells', 'scarcityBadges', 'priceAnchoring'] as const
+  const overrides =
+    mode === 'classic'
+      ? stored
+      : Object.fromEntries(
+          suggestionKeys.filter((k) => stored[k] !== undefined).map((k) => [k, stored[k]])
+        )
+  const menuEngineSettings: MenuEngineSettings = { ...base, ...overrides } as MenuEngineSettings
 
   const engineItems: EngineMenuItem[] = enrichedMenuItems.map((item: any) => {
     const agg = salesByItem.get(item.id)
@@ -368,6 +422,7 @@ async function getMenuData() {
     coPurchasePairs,
     preppedStocks,
     todaySalesByItem,
+    unitsSoldInCurrentTimeSlot,
   })
 
   // Attach display-safe hints and popularity so "Sort by: Most Popular" works

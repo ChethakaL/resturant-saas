@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -27,8 +27,8 @@ import {
   LayoutGrid,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
-import { DEFAULT_MENU_ENGINE_SETTINGS } from '@/lib/menu-engine-defaults'
 import type { MenuEngineSettings } from '@/types/menu-engine'
+import type { EngineMode } from '@/types/menu-engine'
 
 interface SimpleMenuItem {
   id: string
@@ -84,18 +84,31 @@ export default function MenuOptimizationContent({
   menuEngineSettings: initialMenuEngineSettings,
 }: MenuOptimizationContentProps) {
   const { toast } = useToast()
-  const defaultEngine = { ...DEFAULT_MENU_ENGINE_SETTINGS, ...(initialMenuEngineSettings || {}) } as MenuEngineSettings
-  const [engineMode, setEngineMode] = useState<MenuEngineSettings['mode']>(defaultEngine.mode)
-  const [moodFlow, setMoodFlow] = useState(defaultEngine.moodFlow)
-  const [bundles, setBundles] = useState(defaultEngine.bundles)
-  const [upsells, setUpsells] = useState(defaultEngine.upsells)
-  const [scarcityBadges, setScarcityBadges] = useState(defaultEngine.scarcityBadges)
-  const [priceAnchoring, setPriceAnchoring] = useState(defaultEngine.priceAnchoring)
-  const [bundleCorrelationThreshold, setBundleCorrelationThreshold] = useState(defaultEngine.bundleCorrelationThreshold)
-  const [maxItemsPerCategory, setMaxItemsPerCategory] = useState(defaultEngine.maxItemsPerCategory)
-  const [maxInitialItemsPerCategory, setMaxInitialItemsPerCategory] = useState((defaultEngine as { maxInitialItemsPerCategory?: number }).maxInitialItemsPerCategory ?? 3)
-  const [idleUpsellDelaySeconds, setIdleUpsellDelaySeconds] = useState(defaultEngine.idleUpsellDelaySeconds)
+  const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'classic'
+  const resolvedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'classic'
+  const [engineMode, setEngineMode] = useState<MenuEngineSettings['mode']>(resolvedMode)
   const [savingEngine, setSavingEngine] = useState(false)
+
+  // Manual mode only: suggestions and numeric overrides (from API when classic)
+  const stored = initialMenuEngineSettings || {}
+  const defaults = {
+    moodFlow: stored.moodFlow === true,
+    bundles: stored.bundles === true,
+    upsells: stored.upsells === true,
+    scarcityBadges: stored.scarcityBadges === true,
+    priceAnchoring: stored.priceAnchoring === true,
+    maxItemsPerCategory: typeof stored.maxItemsPerCategory === 'number' ? stored.maxItemsPerCategory : 15,
+    maxInitialItemsPerCategory: typeof stored.maxInitialItemsPerCategory === 'number' ? stored.maxInitialItemsPerCategory : 10,
+    idleUpsellDelaySeconds: typeof stored.idleUpsellDelaySeconds === 'number' ? stored.idleUpsellDelaySeconds : 30,
+  }
+  const [moodFlow, setMoodFlow] = useState(defaults.moodFlow)
+  const [bundles, setBundles] = useState(defaults.bundles)
+  const [upsells, setUpsells] = useState(defaults.upsells)
+  const [scarcityBadges, setScarcityBadges] = useState(defaults.scarcityBadges)
+  const [priceAnchoring, setPriceAnchoring] = useState(defaults.priceAnchoring)
+  const [maxItemsPerCategory, setMaxItemsPerCategory] = useState(defaults.maxItemsPerCategory)
+  const [maxInitialItemsPerCategory, setMaxInitialItemsPerCategory] = useState(defaults.maxInitialItemsPerCategory)
+  const [idleUpsellDelaySeconds, setIdleUpsellDelaySeconds] = useState(defaults.idleUpsellDelaySeconds)
   const [quadrantData, setQuadrantData] = useState<{ counts: Record<string, number>; items: Array<{ menuItemId: string; name: string; categoryName?: string; quadrant: string; marginPercent: number; unitsSold: number }> } | null>(null)
   const [loadingQuadrants, setLoadingQuadrants] = useState(false)
   const [redFlags, setRedFlags] = useState<{ identicalDescriptionLength: Array<{ length: number; names: string[] }>; equalVisualWeight: Array<{ categoryName: string; names: string[] }> } | null>(null)
@@ -113,6 +126,25 @@ export default function MenuOptimizationContent({
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [scheduleSlotTab, setScheduleSlotTab] = useState<'day' | 'evening' | 'night'>('day')
   const [scheduleSearch, setScheduleSearch] = useState('')
+  const [suggestionsExpanded, setSuggestionsExpanded] = useState(false)
+  const prevEngineModeRef = useRef<EngineMode>(resolvedMode)
+  const maxCarouselItems = (engineMode === 'profit' || engineMode === 'adaptive') ? 3 : 999
+
+  // When switching to Profit or Smart Profit, default the five suggestion toggles to on (preset).
+  useEffect(() => {
+    if (engineMode === 'profit' || engineMode === 'adaptive') {
+      if (prevEngineModeRef.current === 'classic') {
+        setMoodFlow(true)
+        setBundles(true)
+        setUpsells(true)
+        setScarcityBadges(true)
+        setPriceAnchoring(true)
+      }
+      prevEngineModeRef.current = engineMode
+    } else {
+      prevEngineModeRef.current = engineMode
+    }
+  }, [engineMode])
 
   const createShowcase = async () => {
     try {
@@ -196,7 +228,8 @@ export default function MenuOptimizationContent({
     if (!editingShowcaseId) return
     setSavingShowcase(editingShowcaseId)
     try {
-      const itemsArray = Array.from(selectedItemIds).map((menuItemId, index) => ({ menuItemId, displayOrder: index }))
+      const capped = Array.from(selectedItemIds).slice(0, maxCarouselItems)
+      const itemsArray = capped.map((menuItemId, index) => ({ menuItemId, displayOrder: index }))
       const response = await fetch(`/api/menu-showcases/${editingShowcaseId}/items`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: itemsArray }) })
       if (!response.ok) throw new Error('Failed to save items')
       setShowcases((prev) =>
@@ -219,7 +252,7 @@ export default function MenuOptimizationContent({
     setSelectedItemIds((prev) => {
       const next = new Set(prev)
       if (next.has(menuItemId)) next.delete(menuItemId)
-      else next.add(menuItemId)
+      else if (next.size < maxCarouselItems) next.add(menuItemId)
       return next
     })
   }
@@ -240,7 +273,11 @@ export default function MenuOptimizationContent({
   const toggleScheduleSlotItem = (slot: 'day' | 'evening' | 'night', menuItemId: string) => {
     setScheduleDraft((prev) => {
       const ids = prev[slot]?.itemIds ?? []
-      const next = ids.includes(menuItemId) ? ids.filter((id) => id !== menuItemId) : [...ids, menuItemId]
+      const next = ids.includes(menuItemId)
+        ? ids.filter((id) => id !== menuItemId)
+        : ids.length < maxCarouselItems
+          ? [...ids, menuItemId]
+          : ids
       return { ...prev, [slot]: { itemIds: next } }
     })
   }
@@ -280,21 +317,31 @@ export default function MenuOptimizationContent({
   const saveMenuEngine = async () => {
     setSavingEngine(true)
     try {
+      const body =
+        engineMode === 'classic'
+          ? {
+              mode: 'classic' as const,
+              moodFlow,
+              bundles,
+              upsells,
+              scarcityBadges,
+              priceAnchoring,
+              maxItemsPerCategory,
+              maxInitialItemsPerCategory,
+              idleUpsellDelaySeconds,
+            }
+          : {
+              mode: engineMode,
+              moodFlow,
+              bundles,
+              upsells,
+              scarcityBadges,
+              priceAnchoring,
+            }
       const res = await fetch('/api/settings/menu-engine', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: engineMode,
-          moodFlow,
-          bundles,
-          upsells,
-          scarcityBadges,
-          priceAnchoring,
-          bundleCorrelationThreshold,
-          maxItemsPerCategory,
-          maxInitialItemsPerCategory,
-          idleUpsellDelaySeconds,
-        }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error('Failed to save')
       toast({ title: 'Optimization settings saved' })
@@ -305,28 +352,359 @@ export default function MenuOptimizationContent({
     }
   }
 
+  const [autoFillingCarousels, setAutoFillingCarousels] = useState(false)
+
+  const autoFillCarousels = async () => {
+    if (engineMode !== 'profit' && engineMode !== 'adaptive') return
+    setAutoFillingCarousels(true)
+    try {
+      const res = await fetch(`/api/menu-showcases/suggested-items?mode=${engineMode}`)
+      if (!res.ok) throw new Error('Failed to load suggestions')
+      const suggested: { day: string[]; evening: string[]; night: string[] } = await res.json()
+      const firstCategory = categories[0]
+      const titles: { title: string; slot: 'day' | 'evening' | 'night' }[] = [
+        { title: 'Breakfast', slot: 'day' },
+        { title: 'Lunch', slot: 'evening' },
+        { title: 'Dinner', slot: 'night' },
+      ]
+      let list = [...showcases]
+      for (let i = 0; i < 3; i++) {
+        const { title, slot } = titles[i]
+        let showcase = list.find((s) => s.title === title)
+        if (!showcase) {
+          const createRes = await fetch('/api/menu-showcases', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title,
+              type: 'CHEFS_HIGHLIGHTS',
+              position: firstCategory ? 'between-categories' : 'top',
+              insertAfterCategoryId: firstCategory?.id ?? null,
+            }),
+          })
+          if (!createRes.ok) throw new Error('Failed to create showcase')
+          const created = await createRes.json()
+          showcase = { ...created, items: [], schedule: null }
+          list = [...list, showcase]
+        }
+        const itemIds = (suggested[slot] ?? []).slice(0, 3)
+        const schedule: TimeSlotSchedule = {
+          useTimeSlots: true,
+          day: slot === 'day' ? { itemIds } : { itemIds: [] },
+          evening: slot === 'evening' ? { itemIds } : { itemIds: [] },
+          night: slot === 'night' ? { itemIds } : { itemIds: [] },
+        }
+        await fetch(`/api/menu-showcases/${showcase.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ schedule }),
+        })
+        list = list.map((s) => (s.id === showcase!.id ? { ...s, schedule } : s))
+      }
+      setShowcases(list)
+      toast({ title: 'Carousels auto-filled', description: 'Breakfast, Lunch, and Dinner carousels are set. You can still edit them.' })
+    } catch {
+      toast({ title: 'Failed to auto-fill carousels', variant: 'destructive' })
+    } finally {
+      setAutoFillingCarousels(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Featured item sections (carousels)</CardTitle>
-            <Button size="sm" onClick={createShowcase}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add section
-            </Button>
-          </div>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Optimize your menu to increase profit and sales
+          </CardTitle>
           <p className="text-sm text-slate-500">
-            Swipeable rows of items on the menu (e.g. &quot;Chef&apos;s picks&quot;, &quot;Try something new&quot;). You can choose specific items or let the system suggest them.
+            We offer three options to optimize your menu: <strong>1. Manual Mode</strong> — do it yourself. <strong>2. Profit Mode</strong> — highlight high-margin items. <strong>3. Smart Profit Mode</strong> — use sales and profit data to order and suggest. Only you see this data; guests never do.
           </p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {(['classic', 'profit', 'adaptive'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setEngineMode(mode)}
+                  className={`rounded-xl border-2 p-4 text-left transition ${engineMode === mode ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
+                >
+                  <span className="font-semibold">
+                    {mode === 'classic' && '1. Manual Mode: do it yourself'}
+                    {mode === 'profit' && '2. Profit Mode'}
+                    {mode === 'adaptive' && '3. Smart Profit Mode'}
+                  </span>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {mode === 'classic' && 'Guests see your categories and items in the order you set. No reordering and no extra suggestions (e.g. add-ons or combos).'}
+                    {mode === 'profit' && 'Items with higher profit margin appear first. We also suggest combos and add-ons. Uses your margin data only; guests never see it.'}
+                    {mode === 'adaptive' && 'We use your restaurant’s sales numbers and profit (margin) per item to decide the order guests see and which add-ons to suggest. This data stays in your dashboard; it is never shown to guests.'}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {engineMode === 'classic' && (
+            <>
+              <div className="space-y-2">
+                <Label>Suggestions and highlights</Label>
+                <p className="text-xs text-slate-500 mb-2">Turn on or off different ways the menu suggests items to guests.</p>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={moodFlow} onChange={(e) => setMoodFlow(e.target.checked)} className="rounded" />
+                    <span className="text-sm">Mood-based suggestions (e.g. &quot;something light&quot;, &quot;something filling&quot;)</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={bundles} onChange={(e) => setBundles(e.target.checked)} className="rounded" />
+                    <span className="text-sm">&quot;Often bought together&quot; combos (top 5 by purchase count)</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={upsells} onChange={(e) => setUpsells(e.target.checked)} className="rounded" />
+                    <span className="text-sm">Add-on suggestions while browsing</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={scarcityBadges} onChange={(e) => setScarcityBadges(e.target.checked)} className="rounded" />
+                    <span className="text-sm">&quot;Popular&quot; or &quot;Limited&quot; badges on items</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={priceAnchoring} onChange={(e) => setPriceAnchoring(e.target.checked)} className="rounded" />
+                    <span className="text-sm">Show a higher-priced item first to make others feel reasonably priced</span>
+                  </label>
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <div className="h-14 flex items-center">
+                    <Label className="leading-tight">Max items to show per category (3–15)</Label>
+                  </div>
+                  <Input
+                    type="number"
+                    min={3}
+                    max={15}
+                    value={maxItemsPerCategory}
+                    onChange={(e) => setMaxItemsPerCategory(parseInt(e.target.value, 10) || 7)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-14 flex items-center">
+                    <Label className="leading-tight">Items shown before &quot;See more&quot; per category (1–10)</Label>
+                  </div>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={maxInitialItemsPerCategory}
+                    onChange={(e) => setMaxInitialItemsPerCategory(parseInt(e.target.value, 10) || 3)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-14 flex items-start">
+                    <Label className="leading-tight">When to show add-on suggestions (seconds after guest stops scrolling, 2–30)</Label>
+                  </div>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={30}
+                    value={idleUpsellDelaySeconds}
+                    onChange={(e) => setIdleUpsellDelaySeconds(parseInt(e.target.value, 10) || 6)}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {(engineMode === 'profit' || engineMode === 'adaptive') && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSuggestionsExpanded((e) => !e)}
+                className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
+              >
+                {suggestionsExpanded ? '▼' : '▶'} Customize which suggestions appear
+              </button>
+              {suggestionsExpanded && (
+                <div className="mt-2 pl-4 space-y-1.5 text-sm text-slate-600">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={moodFlow} onChange={(e) => setMoodFlow(e.target.checked)} className="rounded border-slate-300" />
+                    <span>Mood-based suggestions (e.g. &quot;something light&quot;, &quot;something filling&quot;)</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={bundles} onChange={(e) => setBundles(e.target.checked)} className="rounded border-slate-300" />
+                    <span>&quot;Often bought together&quot; combos</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={upsells} onChange={(e) => setUpsells(e.target.checked)} className="rounded border-slate-300" />
+                    <span>Add-on suggestions while browsing</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={scarcityBadges} onChange={(e) => setScarcityBadges(e.target.checked)} className="rounded border-slate-300" />
+                    <span>&quot;Popular&quot; or &quot;Limited&quot; badges on items</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={priceAnchoring} onChange={(e) => setPriceAnchoring(e.target.checked)} className="rounded border-slate-300" />
+                    <span>Show a higher-priced item first to make others feel reasonably priced</span>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
+          <Button onClick={saveMenuEngine} disabled={savingEngine} className="gap-2">{savingEngine && <Loader2 className="h-4 w-4 animate-spin" />}Save optimization settings</Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Menu Engineering Quadrant</CardTitle>
+          <p className="text-sm text-slate-500">See how items compare by profit margin and popularity. Load the view to see the matrix and which items sit in each quadrant. Only you see this; guests do not.</p>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={fetchQuadrants} disabled={loadingQuadrants} className="mb-4 gap-2">{loadingQuadrants && <Loader2 className="h-4 w-4 animate-spin" />}Load performance view</Button>
+          {quadrantData && (
+            <div className="space-y-4">
+              {/* 2x2 matrix: rows = Margin (High top, Low bottom), cols = Popularity (Low left, High right) */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50">
+                <div className="p-2 border-b border-slate-200 bg-slate-100/80">
+                  <p className="text-center text-xs font-medium text-slate-600">Popularity →</p>
+                  <div className="flex mt-1">
+                    <span className="flex-1 text-center text-[10px] font-medium text-slate-500">Low</span>
+                    <span className="flex-1 text-center text-[10px] font-medium text-slate-500">High</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-0">
+                  {/* Row 1: High margin */}
+                  <div className="min-h-[100px] p-3 border-b border-r border-slate-200 bg-amber-50/80">
+                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-1">Puzzle</p>
+                    <p className="text-2xl font-bold text-amber-900">{quadrantData.counts.PUZZLE ?? 0}</p>
+                    <p className="text-[10px] text-amber-700 mt-0.5">High margin, fewer sales</p>
+                    <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
+                      {quadrantData.items.filter((i) => i.quadrant === 'PUZZLE').slice(0, 4).map((i) => (
+                        <li key={i.menuItemId} className="truncate">{i.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="min-h-[100px] p-3 border-b border-slate-200 bg-emerald-50">
+                    <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1">Star</p>
+                    <p className="text-2xl font-bold text-emerald-900">{quadrantData.counts.STAR ?? 0}</p>
+                    <p className="text-[10px] text-emerald-700 mt-0.5">High margin, high sales</p>
+                    <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
+                      {quadrantData.items.filter((i) => i.quadrant === 'STAR').slice(0, 4).map((i) => (
+                        <li key={i.menuItemId} className="truncate">{i.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  {/* Row 2: Low margin */}
+                  <div className="min-h-[100px] p-3 border-r border-slate-200 bg-slate-100">
+                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Dog</p>
+                    <p className="text-2xl font-bold text-slate-700">{quadrantData.counts.DOG ?? 0}</p>
+                    <p className="text-[10px] text-slate-600 mt-0.5">Lower margin, fewer sales</p>
+                    <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
+                      {quadrantData.items.filter((i) => i.quadrant === 'DOG').slice(0, 4).map((i) => (
+                        <li key={i.menuItemId} className="truncate">{i.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="min-h-[100px] p-3 border-slate-200 bg-blue-50/80">
+                    <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-1">Workhorse</p>
+                    <p className="text-2xl font-bold text-blue-900">{quadrantData.counts.WORKHORSE ?? 0}</p>
+                    <p className="text-[10px] text-blue-700 mt-0.5">High sales, lower margin</p>
+                    <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
+                      {quadrantData.items.filter((i) => i.quadrant === 'WORKHORSE').slice(0, 4).map((i) => (
+                        <li key={i.menuItemId} className="truncate">{i.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                <div className="px-2 py-1.5 border-t border-slate-200 bg-slate-100/80 flex justify-center gap-6 text-[10px] text-slate-500">
+                  <span>↑ High margin</span>
+                  <span>↓ Low margin</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">Matrix: rows = margin (high at top, low at bottom), columns = popularity (low left, high right).</p>
+              <div className="max-h-64 overflow-y-auto rounded border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 sticky top-0">
+                    <tr><th className="text-left p-2">Item</th><th className="text-left p-2">Category</th><th className="text-left p-2">Quadrant</th><th className="text-right p-2">Margin %</th><th className="text-right p-2">Units sold</th></tr>
+                  </thead>
+                  <tbody>
+                    {quadrantData.items.map((row) => (
+                      <tr key={row.menuItemId} className="border-t border-slate-100">
+                        <td className="p-2">{row.name}</td><td className="p-2 text-slate-500">{row.categoryName ?? '—'}</td><td className="p-2">{row.quadrant}</td><td className="p-2 text-right">{row.marginPercent}</td><td className="p-2 text-right">{row.unitsSold}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Menu health tips</CardTitle>
+          <p className="text-sm text-slate-500">The system can spot things that might make the menu feel repetitive (e.g. many items with similar description length or visual weight). You can adjust those in the Menu section.</p>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={async () => { setLoadingRedFlags(true); try { const res = await fetch('/api/menu-engine/red-flags'); if (!res.ok) throw new Error('Failed to load'); const data = await res.json(); setRedFlags({ identicalDescriptionLength: data.identicalDescriptionLength ?? [], equalVisualWeight: (data.equalVisualWeight ?? []).map((r: { categoryName: string; names: string[] }) => ({ categoryName: r.categoryName, names: r.names })) }); } catch { toast({ title: 'Could not load tips', variant: 'destructive' }); } finally { setLoadingRedFlags(false); } }} disabled={loadingRedFlags} className="mb-4 gap-2">{loadingRedFlags && <Loader2 className="h-4 w-4 animate-spin" />}Check for tips</Button>
+          {redFlags && (
+            <div className="space-y-4 text-sm">
+              {redFlags.identicalDescriptionLength.length > 0 && (<div><p className="font-medium text-amber-800 mb-1">Similar description length</p><ul className="list-disc list-inside text-slate-600">{redFlags.identicalDescriptionLength.map((r, i) => (<li key={i}>{r.length} chars: {r.names.join(', ')}</li>))}</ul></div>)}
+              {redFlags.equalVisualWeight.length > 0 && (<div><p className="font-medium text-amber-800 mb-1">Similar visual weight in same category</p><ul className="list-disc list-inside text-slate-600">{redFlags.equalVisualWeight.map((r, i) => (<li key={i}>{r.categoryName}: {r.names.join(', ')}</li>))}</ul></div>)}
+              {redFlags.identicalDescriptionLength.length === 0 && redFlags.equalVisualWeight.length === 0 && <p className="text-slate-500">No tips right now — your menu looks good.</p>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <CardTitle>Featured item sections (carousels)</CardTitle>
+              <p className="text-sm text-slate-500 mt-1">
+                Swipeable rows of items on the menu. {engineMode === 'classic' && 'You choose items or use defaults.'}
+                {(engineMode === 'profit' || engineMode === 'adaptive') && 'Profit and Smart Profit modes can auto-fill three carousels (Breakfast, Lunch, Dinner) with high-margin or popular items. Max 3 items per carousel, ordered high to low price.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {(engineMode === 'profit' || engineMode === 'adaptive') && (
+                <Button size="sm" variant="outline" onClick={autoFillCarousels} disabled={autoFillingCarousels} className="gap-2">
+                  {autoFillingCarousels && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Auto-fill carousels
+                </Button>
+              )}
+              <Button size="sm" onClick={createShowcase}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add section
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {showcases.length === 0 ? (
             <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl">
               <LayoutGrid className="h-10 w-10 mx-auto text-slate-300 mb-3" />
               <p className="text-sm font-medium text-slate-700 mb-1">No featured sections yet</p>
-              <p className="text-xs text-slate-500 mb-4">Featured sections are swipeable rows of items. You can pick items yourself or let the system suggest them.</p>
-              <Button variant="outline" onClick={createDefaultShowcases}>Create default sections</Button>
+              <p className="text-xs text-slate-500 mb-4">
+                {(engineMode === 'profit' || engineMode === 'adaptive')
+                  ? 'Click &quot;Auto-fill carousels&quot; to create Breakfast, Lunch, and Dinner carousels with suggested items. You can still edit them.'
+                  : 'Featured sections are swipeable rows of items. You can pick items yourself or create default sections.'}
+              </p>
+              {(engineMode === 'profit' || engineMode === 'adaptive') ? (
+                <Button variant="outline" onClick={autoFillCarousels} disabled={autoFillingCarousels} className="gap-2">
+                  {autoFillingCarousels && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Auto-fill carousels
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={createDefaultShowcases}>Create default sections</Button>
+              )}
             </div>
           ) : (
             showcases.map((showcase) => (
@@ -390,6 +768,7 @@ export default function MenuOptimizationContent({
                     <div className="space-y-2">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <p className="text-xs text-slate-500">
+                          {(engineMode === 'profit' || engineMode === 'adaptive') ? `Up to ${maxCarouselItems} items. ` : ''}
                           {showcase.items.length > 0 ? `${showcase.items.length} items selected` : 'Auto-populated (AI or high-margin when no slots)'}
                         </p>
                         <div className="flex gap-2">
@@ -423,134 +802,21 @@ export default function MenuOptimizationContent({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            How the digital menu suggests and orders items
-          </CardTitle>
-          <p className="text-sm text-slate-500">
-            Choose how the guest menu is ordered and what suggestions they see (e.g. add-ons, &quot;often bought together&quot;). You can show your menu exactly as you built it, or let the system use your sales and profit numbers to reorder and suggest—only you see that data; guests never do.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label>How should we order items and show suggestions?</Label>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {(['classic', 'profit', 'adaptive'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setEngineMode(mode)}
-                  className={`rounded-xl border-2 p-4 text-left transition ${engineMode === mode ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
-                >
-                  <span className="font-semibold">
-                    {mode === 'classic' && 'Keep My Menu Order'}
-                    {mode === 'profit' && 'Highlight My Most Profitable Items'}
-                    {mode === 'adaptive' && 'Order By Popularity And Profitability'}
-                  </span>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {mode === 'classic' && 'Guests see your categories and items in the order you set. No reordering and no extra suggestions (e.g. add-ons or combos).'}
-                    {mode === 'profit' && 'Items with higher profit margin appear first. We also suggest combos and add-ons. Uses your margin data only; guests never see it.'}
-                    {mode === 'adaptive' && 'We use your restaurant’s sales numbers and profit (margin) per item to decide the order guests see and which add-ons to suggest. This data stays in your dashboard; it is never shown to guests.'}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Suggestions and highlights</Label>
-            <p className="text-xs text-slate-500 mb-2">Turn on or off different ways the menu suggests items to guests.</p>
-            <div className="flex flex-wrap gap-4">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={moodFlow} onChange={(e) => setMoodFlow(e.target.checked)} className="rounded" /><span className="text-sm">Mood-based suggestions (e.g. &quot;something light&quot;, &quot;something filling&quot;)</span></label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={bundles} onChange={(e) => setBundles(e.target.checked)} className="rounded" /><span className="text-sm">&quot;Often bought together&quot; combos</span></label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={upsells} onChange={(e) => setUpsells(e.target.checked)} className="rounded" /><span className="text-sm">Add-on suggestions while browsing</span></label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={scarcityBadges} onChange={(e) => setScarcityBadges(e.target.checked)} className="rounded" /><span className="text-sm">&quot;Popular&quot; or &quot;Limited&quot; badges on items</span></label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={priceAnchoring} onChange={(e) => setPriceAnchoring(e.target.checked)} className="rounded" /><span className="text-sm">Show a higher-priced item first to make others feel reasonably priced</span></label>
-            </div>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>&quot;Often bought together&quot; suggestions</Label>
-              <p className="text-xs text-slate-500 mb-2">How strictly to show items as a combo: only when they&apos;re often ordered together (Low), a bit more often (Medium), or more loosely (High).</p>
-              <div className="flex flex-wrap gap-2">
-                {[{ value: 0.2, label: 'Low' }, { value: 0.35, label: 'Medium' }, { value: 0.6, label: 'High' }].map((opt) => {
-                  const isSelected = Math.abs(bundleCorrelationThreshold - opt.value) < 0.02
-                  return (
-                    <button key={opt.value} type="button" onClick={() => setBundleCorrelationThreshold(opt.value)} className={`rounded-lg border-2 px-4 py-2 text-sm font-medium transition ${isSelected ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 hover:border-slate-300 text-slate-700'}`}>{opt.label}</button>
-                  )
-                })}
-              </div>
-            </div>
-            <div className="space-y-2"><Label>Max items to show per category (3–15)</Label><input type="number" min={3} max={15} value={maxItemsPerCategory} onChange={(e) => setMaxItemsPerCategory(parseInt(e.target.value, 10) || 7)} className="w-full rounded border border-slate-200 px-3 py-2" /></div>
-            <div className="space-y-2"><Label>Items shown before &quot;See more&quot; per category (1–10)</Label><input type="number" min={1} max={10} value={maxInitialItemsPerCategory} onChange={(e) => setMaxInitialItemsPerCategory(parseInt(e.target.value, 10) || 3)} className="w-full rounded border border-slate-200 px-3 py-2" /></div>
-            <div className="space-y-2"><Label>When to show add-on suggestions (seconds after guest stops scrolling, 2–30)</Label><input type="number" min={2} max={30} value={idleUpsellDelaySeconds} onChange={(e) => setIdleUpsellDelaySeconds(parseInt(e.target.value, 10) || 6)} className="w-full rounded border border-slate-200 px-3 py-2" /></div>
-          </div>
-          <Button onClick={saveMenuEngine} disabled={savingEngine} className="gap-2">{savingEngine && <Loader2 className="h-4 w-4 animate-spin" />}Save optimization settings</Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Item performance (margin vs. sales)</CardTitle>
-          <p className="text-sm text-slate-500">See how items compare: high or low profit margin, and how often they sell. STAR = high margin, high sales. WORKHORSE = high sales, lower margin. PUZZLE = high margin, fewer sales. DOG = lower margin, fewer sales. Only you see this; guests do not.</p>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={fetchQuadrants} disabled={loadingQuadrants} className="mb-4 gap-2">{loadingQuadrants && <Loader2 className="h-4 w-4 animate-spin" />}Load performance view</Button>
-          {quadrantData && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-4">
-                {['STAR', 'WORKHORSE', 'PUZZLE', 'DOG'].map((q) => (
-                  <div key={q} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2"><span className="font-semibold text-slate-700">{q}</span><span className="ml-2 text-slate-500">{quadrantData.counts[q] ?? 0}</span></div>
-                ))}
-              </div>
-              <div className="max-h-64 overflow-y-auto rounded border border-slate-200">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 sticky top-0">
-                    <tr><th className="text-left p-2">Item</th><th className="text-left p-2">Category</th><th className="text-left p-2">Quadrant</th><th className="text-right p-2">Margin %</th><th className="text-right p-2">Units sold</th></tr>
-                  </thead>
-                  <tbody>
-                    {quadrantData.items.map((row) => (
-                      <tr key={row.menuItemId} className="border-t border-slate-100">
-                        <td className="p-2">{row.name}</td><td className="p-2 text-slate-500">{row.categoryName ?? '—'}</td><td className="p-2">{row.quadrant}</td><td className="p-2 text-right">{row.marginPercent}</td><td className="p-2 text-right">{row.unitsSold}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Menu health tips</CardTitle>
-          <p className="text-sm text-slate-500">The system can spot things that might make the menu feel repetitive (e.g. many items with similar description length or visual weight). You can adjust those in the Menu section.</p>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={async () => { setLoadingRedFlags(true); try { const res = await fetch('/api/menu-engine/red-flags'); if (!res.ok) throw new Error('Failed to load'); const data = await res.json(); setRedFlags({ identicalDescriptionLength: data.identicalDescriptionLength ?? [], equalVisualWeight: (data.equalVisualWeight ?? []).map((r: { categoryName: string; names: string[] }) => ({ categoryName: r.categoryName, names: r.names })) }); } catch { toast({ title: 'Could not load tips', variant: 'destructive' }); } finally { setLoadingRedFlags(false); } }} disabled={loadingRedFlags} className="mb-4 gap-2">{loadingRedFlags && <Loader2 className="h-4 w-4 animate-spin" />}Check for tips</Button>
-          {redFlags && (
-            <div className="space-y-4 text-sm">
-              {redFlags.identicalDescriptionLength.length > 0 && (<div><p className="font-medium text-amber-800 mb-1">Similar description length</p><ul className="list-disc list-inside text-slate-600">{redFlags.identicalDescriptionLength.map((r, i) => (<li key={i}>{r.length} chars: {r.names.join(', ')}</li>))}</ul></div>)}
-              {redFlags.equalVisualWeight.length > 0 && (<div><p className="font-medium text-amber-800 mb-1">Similar visual weight in same category</p><ul className="list-disc list-inside text-slate-600">{redFlags.equalVisualWeight.map((r, i) => (<li key={i}>{r.categoryName}: {r.names.join(', ')}</li>))}</ul></div>)}
-              {redFlags.identicalDescriptionLength.length === 0 && redFlags.equalVisualWeight.length === 0 && <p className="text-slate-500">No tips right now — your menu looks good.</p>}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       <Dialog open={itemPickerOpen} onOpenChange={setItemPickerOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Select Carousel Items</DialogTitle>
-            <DialogDescription>Choose which menu items to display in this carousel. Leave empty for automatic selection.</DialogDescription>
+            <DialogDescription>
+              Choose which menu items to display in this carousel. {(engineMode === 'profit' || engineMode === 'adaptive') && 'Maximum 3 items. '}
+              Leave empty for automatic selection.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-1 py-2">
             {menuItems.map((item) => {
               const isSelected = selectedItemIds.has(item.id)
+              const atLimit = !isSelected && selectedItemIds.size >= maxCarouselItems
               return (
-                <button key={item.id} onClick={() => toggleItemSelection(item.id)} className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${isSelected ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                <button key={item.id} onClick={() => !atLimit && toggleItemSelection(item.id)} disabled={atLimit} className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${isSelected ? 'border-emerald-400 bg-emerald-50' : atLimit ? 'opacity-60 cursor-not-allowed border-slate-200' : 'border-slate-200 hover:bg-slate-50'}`}>
                   <div className={`flex h-5 w-5 items-center justify-center rounded border ${isSelected ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>{isSelected && <Check className="h-3 w-3" />}</div>
                   {item.imageUrl && <img src={item.imageUrl} alt="" className="h-8 w-8 rounded object-cover" />}
                   <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{item.name}</p></div>
@@ -570,7 +836,10 @@ export default function MenuOptimizationContent({
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Time-based carousel items</DialogTitle>
-            <DialogDescription>Choose which items appear for each time of day (menu timezone). Day = morning (6am–12pm), Evening = lunch (12–6pm), Night = evening (6pm–6am). Leave a slot empty to use AI suggestions or manual picks.</DialogDescription>
+            <DialogDescription>
+              Choose which items appear for each time of day (menu timezone). Day = morning (6am–12pm), Evening = lunch (12–6pm), Night = evening (6pm–6am). {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 3 items per slot. '}
+              Leave a slot empty to use AI suggestions or manual picks.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col flex-1 min-h-0 gap-3 py-2">
             <div className="flex rounded-lg border border-slate-200 p-1 bg-slate-100">
@@ -608,12 +877,14 @@ export default function MenuOptimizationContent({
                       return (
                         <ul className="divide-y divide-slate-100">
                           {filtered.map((item) => {
-                            const checked = (scheduleDraft[scheduleSlotTab]?.itemIds ?? []).includes(item.id)
+                            const ids = scheduleDraft[scheduleSlotTab]?.itemIds ?? []
+                            const checked = ids.includes(item.id)
+                            const atSlotLimit = !checked && ids.length >= maxCarouselItems
                             return (
                               <li key={item.id}>
-                                <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50">
+                                <label className={`flex items-center gap-3 px-3 py-2.5 ${atSlotLimit ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-slate-50'}`}>
                                   <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>{checked && <Check className="h-3 w-3" />}</div>
-                                  <input type="checkbox" checked={checked} onChange={() => toggleScheduleSlotItem(scheduleSlotTab, item.id)} className="sr-only" />
+                                  <input type="checkbox" checked={checked} onChange={() => !atSlotLimit && toggleScheduleSlotItem(scheduleSlotTab, item.id)} className="sr-only" disabled={atSlotLimit} />
                                   {item.imageUrl && <img src={item.imageUrl} alt="" className="h-8 w-8 rounded object-cover shrink-0" />}
                                   <span className="flex-1 truncate text-sm font-medium text-slate-900">{item.name}</span>
                                   <span className="text-xs text-slate-500">{formatCurrency(item.price)}</span>

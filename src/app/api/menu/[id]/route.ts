@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { buildTranslationSeed } from '@/lib/menu-translation-seed'
 import { buildSourceFingerprint } from '@/lib/menu-translations'
 import { normalizeTranslationInputs } from '@/lib/menu-translation-input'
+import { generateMenuDescription } from '@/lib/menu-description-ai'
 
 export async function PATCH(
   request: Request,
@@ -25,10 +26,25 @@ export async function PATCH(
         id: params.id,
         restaurantId: session.user.restaurantId,
       },
+      include: { category: { select: { name: true } } },
     })
 
     if (!existing) {
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 })
+    }
+
+    // Generate description once when saving with no description and item has none (max 18 words)
+    const hasDescriptionInPayload = data.description !== undefined
+    const payloadDescription = hasDescriptionInPayload ? String(data.description ?? '').trim() : null
+    if (hasDescriptionInPayload && !payloadDescription && !(existing.description && existing.description.trim())) {
+      const categoryName = existing.category?.name ?? (data.categoryId ? (await prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } }))?.name : null) ?? null
+      const generated = await generateMenuDescription({
+        itemName: data.name ?? existing.name,
+        categoryName,
+        tags: data.tags ?? existing.tags ?? null,
+        price: data.price ?? existing.price ?? null,
+      })
+      if (generated) data.description = generated
     }
 
     const validIngredients = (data.ingredients || []).filter(

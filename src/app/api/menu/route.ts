@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { buildTranslationSeed } from '@/lib/menu-translation-seed'
 import { buildSourceFingerprint } from '@/lib/menu-translations'
 import { normalizeTranslationInputs } from '@/lib/menu-translation-input'
+import { generateMenuDescription } from '@/lib/menu-description-ai'
 
 export async function POST(request: Request) {
   try {
@@ -15,6 +16,20 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json()
+
+    // Generate description once when missing (max 18 words; sensory, texture, heat, origin, scarcity)
+    if (data.name && !(data.description && String(data.description).trim())) {
+      const category = data.categoryId
+        ? await prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } })
+        : null
+      const generated = await generateMenuDescription({
+        itemName: data.name,
+        categoryName: category?.name ?? null,
+        tags: data.tags ?? null,
+        price: data.price ?? null,
+      })
+      if (generated) data.description = generated
+    }
 
     // Create menu item with ingredients in a transaction
     const menuItem = await prisma.$transaction(async (tx) => {

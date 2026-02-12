@@ -28,11 +28,14 @@ export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProp
   const guestsParam = searchParams.get('guests')
   const tableSize = guestsParam ? parseInt(guestsParam, 10) : undefined
   const validTableSize = tableSize != null && !Number.isNaN(tableSize) && tableSize > 0 ? tableSize : undefined
+  const tableParam = searchParams.get('table') ?? searchParams.get('tableNumber')
+  const tableNumber = tableParam?.trim() || undefined
 
   return (
     <SmartMenu
       {...props}
       tableSize={validTableSize}
+      tableNumber={tableNumber}
     />
   )
 }
