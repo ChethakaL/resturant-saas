@@ -211,6 +211,11 @@ const uiCopyMap: Record<
     resultsSummaryPlural: string
     noMatchesTitle: string
     noMatchesDescription: string
+    lastTimeYouOrdered: string
+    orderAgain: string
+    tryItemLabel: string
+    suggestingLabel: string
+    chefRecommendationLabel: string
   }
 > = {
   en: {
@@ -243,6 +248,11 @@ const uiCopyMap: Record<
     resultsSummaryPlural: 'We found {count} menu items inspired by "{query}".',
     noMatchesTitle: 'No matches yet.',
     noMatchesDescription: 'Try a different prompt or broaden the search.',
+    lastTimeYouOrdered: 'Last time you ordered',
+    orderAgain: 'Order again',
+    tryItemLabel: 'Try',
+    suggestingLabel: 'Suggesting…',
+    chefRecommendationLabel: "Chef's recommendation",
   },
   ar: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -274,6 +284,11 @@ const uiCopyMap: Record<
     resultsSummaryPlural: 'وجدنا {count} أطباقًا مستوحاة من "{query}".',
     noMatchesTitle: 'لا توجد نتائج حتى الآن.',
     noMatchesDescription: 'حاول عبارة مختلفة أو وسّع نطاق البحث.',
+    lastTimeYouOrdered: 'آخر ما طلبته',
+    orderAgain: 'اطلب مرة أخرى',
+    tryItemLabel: 'جرّب',
+    suggestingLabel: 'جاري الاقتراح…',
+    chefRecommendationLabel: 'توصية الشيف',
   },
   ar_fusha: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -305,6 +320,11 @@ const uiCopyMap: Record<
     resultsSummaryPlural: 'وجدنا {count} أطباقًا مستوحاة من "{query}".',
     noMatchesTitle: 'لا توجد نتائج حتى الآن.',
     noMatchesDescription: 'حاول عبارة مختلفة أو وسّع نطاق البحث.',
+    lastTimeYouOrdered: 'آخر ما طلبته',
+    orderAgain: 'اطلب مرة أخرى',
+    tryItemLabel: 'جرّب',
+    suggestingLabel: 'جاري الاقتراح…',
+    chefRecommendationLabel: 'توصية الشيف',
   },
   ku: {
     searchPlaceholder: 'ئێستا خواردنەکان بگەڕە…',
@@ -336,6 +356,11 @@ const uiCopyMap: Record<
     resultsSummaryPlural: 'دۆزرا {count} خواردنە گونجاوەکان بە "{query}".',
     noMatchesTitle: 'هێشتا هیچ ئەنجامێک نییە.',
     noMatchesDescription: 'وشەیەکی دیاری بکە یان گەڕانەکە زۆرتر بکە.',
+    lastTimeYouOrdered: 'دوایین جار کە داواکاریت کرد',
+    orderAgain: 'دووبارە داوا بکە',
+    tryItemLabel: 'تاقی بکەرەوە',
+    suggestingLabel: 'پێشنیار دەکرێت…',
+    chefRecommendationLabel: 'پێشنیاری چێشتلێنەر',
   },
 }
 
@@ -1331,6 +1356,7 @@ const getLocalizedAddOnName = (name: string) => {
               primaryColor={theme?.primaryColor}
               displayFontClassName="font-display"
               displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
+              chefRecommendationLabel={currentCopy.chefRecommendationLabel}
             />
           </div>
         )}
@@ -1359,6 +1385,7 @@ const getLocalizedAddOnName = (name: string) => {
               isDarkTheme={isDarkBg}
               displayFontClassName="font-display"
               displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
+              chefRecommendationLabel={currentCopy.chefRecommendationLabel}
             />
           ))}
             {/* "What do you feel like eating today?" section (mood options) */}
@@ -1409,10 +1436,10 @@ const getLocalizedAddOnName = (name: string) => {
                       : 'border border-slate-200 bg-slate-100 text-slate-800 hover:bg-slate-200'
                   }`}
                   onClick={() => setIsFilterDialogOpen(true)}
-                  aria-label="Discover filters"
+                  aria-label={currentCopy.smartSearchFilters}
                 >
                   <SlidersHorizontal className="h-4 w-4" />
-                  <span className="ml-1.5 sm:ml-2 text-xs font-semibold uppercase tracking-wider hidden sm:inline">Discover</span>
+                  <span className="ml-1.5 sm:ml-2 text-xs font-semibold uppercase tracking-wider hidden sm:inline">{currentCopy.smartSearchFilters}</span>
                 </Button>
               </div>
             </div>
@@ -1552,58 +1579,68 @@ const getLocalizedAddOnName = (name: string) => {
               </div>
             )}
 
-            {lastOrder && lastOrder.itemIds.length > 0 && (
-              <div className="px-4 py-2">
-                <div className={`rounded-xl border p-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-1">Last time you ordered</p>
-                  <p className="text-sm text-white/90 mb-3">
-                    {Array.from(new Set(lastOrder.names)).slice(0, 3).join(', ')}
-                    {lastOrder.names.length > 3 ? '…' : ''}
-                  </p>
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const byId = new Map(menuItems.map((m) => [m.id, m]))
-                          for (const id of lastOrder.itemIds) {
-                            const item = byId.get(id)
-                            if (item) dispatchCart({ type: 'ADD_ITEM', item })
-                          }
-                        }}
-                        className={
-                          isDarkBg
-                            ? 'rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/25'
-                            : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-100'
-                        }
-                      >
-                        Order again
-                      </button>
-                      {nextOrderSuggestionLoading && (
-                        <span className="text-xs text-white/60 py-1.5">Suggesting…</span>
-                      )}
-                      {!nextOrderSuggestionLoading && nextOrderSuggestion && (
+            {lastOrder && lastOrder.itemIds.length > 0 && (() => {
+              const seen = new Set<string>()
+              const lastOrderDisplayNames: string[] = []
+              for (let i = 0; i < lastOrder.itemIds.length && lastOrderDisplayNames.length < 3; i++) {
+                const id = lastOrder.itemIds[i]
+                if (seen.has(id)) continue
+                seen.add(id)
+                lastOrderDisplayNames.push(translationCache[language]?.[id]?.name ?? lastOrder.names[i] ?? '')
+              }
+              return (
+                <div className="px-4 py-2">
+                  <div className={`rounded-xl border p-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}>
+                    <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDarkBg ? 'text-white/70' : 'text-slate-600'}`}>{currentCopy.lastTimeYouOrdered}</p>
+                    <p className={`text-sm mb-3 ${isDarkBg ? 'text-white/90' : 'text-slate-800'}`}>
+                      {lastOrderDisplayNames.join(', ')}
+                      {lastOrder.itemIds.length > 3 ? '…' : ''}
+                    </p>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => {
-                            const item = menuItems.find((m) => m.id === nextOrderSuggestion.itemId)
-                            if (item) dispatchCart({ type: 'ADD_ITEM', item })
+                            const byId = new Map(menuItems.map((m) => [m.id, m]))
+                            for (const id of lastOrder.itemIds) {
+                              const item = byId.get(id)
+                              if (item) dispatchCart({ type: 'ADD_ITEM', item })
+                            }
                           }}
-                          className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
+                          className={
+                            isDarkBg
+                              ? 'rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/25'
+                              : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-100'
+                          }
                         >
-                          Try {nextOrderSuggestion.name}
+                          {currentCopy.orderAgain}
                         </button>
+                        {nextOrderSuggestionLoading && (
+                          <span className={`text-xs py-1.5 ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>{currentCopy.suggestingLabel}</span>
+                        )}
+                        {!nextOrderSuggestionLoading && nextOrderSuggestion && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const item = menuItems.find((m) => m.id === nextOrderSuggestion.itemId)
+                              if (item) dispatchCart({ type: 'ADD_ITEM', item })
+                            }}
+                            className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
+                          >
+                            {currentCopy.tryItemLabel} {translationCache[language]?.[nextOrderSuggestion.itemId]?.name ?? nextOrderSuggestion.name}
+                          </button>
+                        )}
+                      </div>
+                      {!nextOrderSuggestionLoading && nextOrderSuggestion && (
+                        <p className={`text-xs leading-snug ${isDarkBg ? 'text-white/70' : 'text-slate-600'}`}>
+                          {nextOrderSuggestion.message}
+                        </p>
                       )}
                     </div>
-                    {!nextOrderSuggestionLoading && nextOrderSuggestion && (
-                      <p className="text-xs text-white/70 leading-snug">
-                        {nextOrderSuggestion.message}
-                      </p>
-                    )}
                   </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {tableSize != null && tableSize > 3 && moods.some((m) => m.id === 'sharing') && (
               <div className="px-4 py-1">
@@ -1778,6 +1815,7 @@ const getLocalizedAddOnName = (name: string) => {
                             isDarkTheme={isDarkBg}
                             displayFontClassName="font-display"
                             displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
+                            chefRecommendationLabel={currentCopy.chefRecommendationLabel}
                           />
                         </div>
                       ))}

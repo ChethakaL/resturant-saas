@@ -32,6 +32,8 @@ interface MenuCarouselProps {
   isDarkTheme?: boolean
   /** 'sliding' = Embla carousel with arrows; 'static' = horizontal row, no sliding (old style) */
   displayMode?: 'sliding' | 'static'
+  /** Localized label for hero badge (e.g. "Chef's recommendation" / "توصية الشيف") */
+  chefRecommendationLabel?: string
 }
 
 const defaultImage =
@@ -51,6 +53,7 @@ export function MenuCarousel({
   displayFontClassName,
   isDarkTheme = true,
   displayMode = 'sliding',
+  chefRecommendationLabel,
 }: MenuCarouselProps) {
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
@@ -173,7 +176,7 @@ export function MenuCarousel({
                     className="inline-block px-2.5 py-1 rounded text-[10px] uppercase tracking-wider font-semibold mb-2"
                     style={{ backgroundColor: highlightColor }}
                   >
-                    Chef&apos;s recommendation
+                    {chefRecommendationLabel ?? "Chef's recommendation"}
                   </span>
                   <p className={`text-2xl sm:text-3xl md:text-4xl font-bold leading-tight tracking-tight ${displayFontClassName ?? ''}`}>{getDisplayName?.(item.id) || item.name}</p>
                   {(getDescription?.(item.id) || item.description) && (
