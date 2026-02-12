@@ -58,6 +58,8 @@ interface ShowcaseSection {
   id: string
   title: string
   type?: 'CHEFS_HIGHLIGHTS' | 'RECOMMENDATIONS'
+  /** 'hero' = full-width image carousel; 'cards' = sliding cards row */
+  displayVariant?: 'hero' | 'cards'
   position: string
   insertAfterCategoryId: string | null
   items: MenuItem[]
@@ -76,6 +78,7 @@ interface MenuTheme {
   fontFamily?: 'sans' | 'serif' | 'display'
   logoUrl?: string | null
   backgroundImageUrl?: string | null
+  menuCarouselStyle?: string
 }
 
 interface SmartMenuProps {
@@ -1305,14 +1308,14 @@ const getLocalizedAddOnName = (name: string) => {
           </header>
         </div>
 
-        {/* Full-width hero carousel (edge to edge, premium look) */}
+        {/* First top showcase: hero or cards per section setting */}
         {topShowcases.length > 0 && (
           <div className="w-full mt-4">
             <MenuCarousel
               key={topShowcases[0].id}
               title={topShowcases[0].title}
               type={topShowcases[0].type}
-              variant="hero"
+              variant={topShowcases[0].displayVariant === 'hero' ? 'hero' : 'default'}
               items={topShowcases[0].items}
               onItemClick={(item) =>
                 setSelectedItemForDetail(item as MenuItem)
@@ -1327,6 +1330,7 @@ const getLocalizedAddOnName = (name: string) => {
               accentColor={theme?.accentColor}
               primaryColor={theme?.primaryColor}
               displayFontClassName="font-display"
+              displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
             />
           </div>
         )}
@@ -1338,7 +1342,7 @@ const getLocalizedAddOnName = (name: string) => {
               key={showcase.id}
               title={showcase.title}
               type={showcase.type}
-              variant="default"
+              variant={showcase.displayVariant === 'hero' ? 'hero' : 'default'}
               items={showcase.items}
               onItemClick={(item) =>
                 setSelectedItemForDetail(item as MenuItem)
@@ -1354,6 +1358,7 @@ const getLocalizedAddOnName = (name: string) => {
               primaryColor={theme?.primaryColor}
               isDarkTheme={isDarkBg}
               displayFontClassName="font-display"
+              displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
             />
           ))}
             {/* "What do you feel like eating today?" section (mood options) */}
@@ -1756,6 +1761,7 @@ const getLocalizedAddOnName = (name: string) => {
                           <MenuCarousel
                             title={showcase.title}
                             type={showcase.type}
+                            variant={showcase.displayVariant === 'hero' ? 'hero' : 'default'}
                             items={showcase.items}
                             onItemClick={(item) =>
                               setSelectedItemForDetail(item as MenuItem)
@@ -1771,6 +1777,7 @@ const getLocalizedAddOnName = (name: string) => {
                             primaryColor={theme?.primaryColor}
                             isDarkTheme={isDarkBg}
                             displayFontClassName="font-display"
+                            displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
                           />
                         </div>
                       ))}

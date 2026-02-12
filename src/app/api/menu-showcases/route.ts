@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { title, position, insertAfterCategoryId, type } = body
+    const { title, position, insertAfterCategoryId, type, displayVariant } = body
 
     if (!title) {
       return NextResponse.json(
@@ -61,12 +61,14 @@ export async function POST(request: Request) {
     const nextOrder = (lastShowcase?.displayOrder ?? 0) + 1
 
     const validType = type === 'CHEFS_HIGHLIGHTS' ? 'CHEFS_HIGHLIGHTS' : 'RECOMMENDATIONS'
+    const validDisplayVariant = displayVariant === 'hero' ? 'hero' : 'cards'
 
     const showcase = await prisma.menuShowcase.create({
       data: {
         restaurantId: session.user.restaurantId,
         title,
         type: validType,
+        displayVariant: validDisplayVariant,
         position: position || 'top',
         insertAfterCategoryId: insertAfterCategoryId || null,
         displayOrder: nextOrder,

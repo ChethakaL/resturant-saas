@@ -49,6 +49,8 @@ interface Showcase {
   id: string
   title: string
   type?: 'CHEFS_HIGHLIGHTS' | 'RECOMMENDATIONS'
+  /** 'hero' = full-width image carousel; 'cards' = sliding cards row */
+  displayVariant?: 'hero' | 'cards'
   position: string
   insertAfterCategoryId: string | null
   displayOrder: number
@@ -189,7 +191,7 @@ export default function MenuOptimizationContent({
     }
   }
 
-  const updateShowcase = async (id: string, updates: Partial<Pick<Showcase, 'title' | 'position' | 'insertAfterCategoryId' | 'isActive' | 'type' | 'schedule'>>) => {
+  const updateShowcase = async (id: string, updates: Partial<Pick<Showcase, 'title' | 'position' | 'insertAfterCategoryId' | 'isActive' | 'type' | 'schedule' | 'displayVariant'>>) => {
     setSavingShowcase(id)
     try {
       const response = await fetch(`/api/menu-showcases/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
@@ -732,6 +734,22 @@ export default function MenuOptimizationContent({
                         <option value="RECOMMENDATIONS">Recommendations</option>
                       </select>
                       <span className="text-xs text-slate-400">(Style: Chef highlights = green; Recommendations = amber.)</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Label className="text-xs text-slate-500">Display:</Label>
+                      <select
+                        value={showcase.displayVariant ?? 'cards'}
+                        onChange={(e) => {
+                          const val = e.target.value as 'hero' | 'cards'
+                          setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, displayVariant: val } : s)))
+                          updateShowcase(showcase.id, { displayVariant: val })
+                        }}
+                        className="rounded border border-slate-200 px-2 py-1.5 text-xs"
+                      >
+                        <option value="cards">Cards carousel (sliding row of cards)</option>
+                        <option value="hero">Full-width image carousel</option>
+                      </select>
+                      <span className="text-xs text-slate-400">Both are sliding; cards show multiple items, full-width shows one large image at a time.</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Label className="text-xs text-slate-500">Position:</Label>

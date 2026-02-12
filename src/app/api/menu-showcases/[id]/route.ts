@@ -26,7 +26,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { title, position, insertAfterCategoryId, displayOrder, isActive, type, schedule } = body
+    const { title, position, insertAfterCategoryId, displayOrder, isActive, type, schedule, displayVariant } = body
 
     const showcase = await prisma.menuShowcase.update({
       where: { id: params.id },
@@ -38,6 +38,7 @@ export async function PUT(
         ...(isActive !== undefined && { isActive }),
         ...(type !== undefined && (type === 'CHEFS_HIGHLIGHTS' || type === 'RECOMMENDATIONS') && { type }),
         ...(schedule !== undefined && { schedule }),
+        ...(displayVariant !== undefined && (displayVariant === 'hero' || displayVariant === 'cards') && { displayVariant }),
       },
     })
 

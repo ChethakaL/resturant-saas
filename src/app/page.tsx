@@ -267,6 +267,7 @@ async function getMenuData() {
         id: showcase.id,
         title: showcase.title,
         type: showcase.type ?? 'RECOMMENDATIONS',
+        displayVariant: (showcase as any).displayVariant === 'hero' ? 'hero' : 'cards',
         position: showcase.position,
         insertAfterCategoryId: showcase.insertAfterCategoryId,
         items: showcaseMenuItems.map(
@@ -295,6 +296,7 @@ async function getMenuData() {
       id: 'default-top',
       title: "Chef's Selection",
       type: 'CHEFS_HIGHLIGHTS',
+      displayVariant: 'cards',
       position: 'top',
       insertAfterCategoryId: null,
       items: recommendedItems.map(

@@ -610,6 +610,7 @@ model MenuShowcase {
   restaurantId          String
   title                 String             @default("Featured")
   type                  ShowcaseType       @default(RECOMMENDATIONS)
+  displayVariant        String             @default("cards")
   position              String             @default("top")
   insertAfterCategoryId String?
   displayOrder          Int                @default(0)

@@ -17,6 +17,8 @@ const themeSchema = z.object({
   themePreset: z.enum(['classy', 'fast_food', 'cozy', 'minimal', 'luxe']).nullable().optional(),
   backgroundImageUrl: z.string().url().nullable().optional(),
   managementLanguage: z.enum(['en', 'ku', 'ar-fusha']).optional(),
+  /** Guest menu: 'sliding' = embla carousel with arrows; 'static' = horizontal row, no sliding */
+  menuCarouselStyle: z.enum(['sliding', 'static']).optional(),
 })
 
 export async function GET() {

@@ -55,6 +55,7 @@ export default function SettingsClient({
   const [menuTimezone, setMenuTimezone] = useState(currentTheme.menuTimezone || 'Asia/Baghdad')
   const [themePreset, setThemePreset] = useState<string | null>(currentTheme.themePreset ?? null)
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
+  const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
   const [savingTheme, setSavingTheme] = useState(false)
 
   // Consistent background prompt for dish photos (upload image → describe, or type)
@@ -111,6 +112,7 @@ export default function SettingsClient({
           menuTimezone: menuTimezone || 'Asia/Baghdad',
           themePreset: themePreset || null,
           managementLanguage: managementLanguage || 'en',
+          menuCarouselStyle: menuCarouselStyle || 'sliding',
         }),
       })
 
@@ -424,6 +426,42 @@ export default function SettingsClient({
                 <p className="text-xs text-slate-500">
                   Used for time-based carousel slots (Day 6am–12pm, Evening 12–6pm, Night 6pm–6am).
                 </p>
+              </div>
+
+              {/* Menu carousel display */}
+              <div className="space-y-2">
+                <Label>Menu carousel style</Label>
+                <p className="text-xs text-slate-500">
+                  How featured items appear on the guest menu: sliding carousel with arrows, or a static horizontal row.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setMenuCarouselStyle('sliding')}
+                    className={`rounded-lg border-2 px-4 py-3 transition text-left ${
+                      menuCarouselStyle === 'sliding'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-slate-800">Sliding carousel</p>
+                    <p className="text-xs text-slate-500">One/few items at a time, arrows to scroll</p>
+                    {menuCarouselStyle === 'sliding' && <Check className="h-4 w-4 text-emerald-600 mt-1" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMenuCarouselStyle('static')}
+                    className={`rounded-lg border-2 px-4 py-3 transition text-left ${
+                      menuCarouselStyle === 'static'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-slate-800">Static row</p>
+                    <p className="text-xs text-slate-500">All items visible in a horizontal row, scroll if needed</p>
+                    {menuCarouselStyle === 'static' && <Check className="h-4 w-4 text-emerald-600 mt-1" />}
+                  </button>
+                </div>
               </div>
 
               {/* Consistent background for dish photos: type the prompt or upload image to generate it */}
