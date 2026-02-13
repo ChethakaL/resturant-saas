@@ -49,6 +49,9 @@ export interface CoPurchasePair {
   itemIdB: string
   pairCount: number
   totalOrdersWithEither: number
+  /** Orders containing item A (for correlation: pairCount / min(A,B) >= threshold). */
+  totalOrdersWithA?: number
+  totalOrdersWithB?: number
 }
 
 export interface RunMenuEngineParams {
@@ -293,16 +296,29 @@ function orderItemsForAdaptiveMode(
   return [...firstThree, ...rest]
 }
 
-/** Top N "often bought together" pairs by purchase count (no AI, just sort by count). Re-run daily via fresh co-purchase data. */
+/** Top N "often bought together" pairs by purchase count. Filter by co-purchase correlation (e.g. 35%). */
 const TOP_BUNDLES_BY_COUNT = 5
 
-function generateBundles(pairs: CoPurchasePair[], items: EngineMenuItem[]): BundleHint[] {
+function generateBundles(
+  pairs: CoPurchasePair[],
+  items: EngineMenuItem[],
+  correlationThreshold: number
+): BundleHint[] {
   const itemMap = new Map(items.map((i) => [i.id, i]))
-  const sorted = [...pairs].sort((a, b) => b.pairCount - a.pairCount)
+  const withCorrelation = pairs
+    .map((p) => {
+      const totalA = p.totalOrdersWithA ?? 0
+      const totalB = p.totalOrdersWithB ?? 0
+      const minOrders = Math.min(totalA, totalB)
+      const correlation = minOrders > 0 ? p.pairCount / minOrders : 0
+      return { p, correlation }
+    })
+    .filter(({ correlation }) => correlation >= correlationThreshold)
+  const sorted = [...withCorrelation].sort((a, b) => b.pairCount - a.pairCount)
   const bundles: BundleHint[] = []
   const used = new Set<string>()
   for (let i = 0; i < Math.min(TOP_BUNDLES_BY_COUNT, sorted.length); i++) {
-    const p = sorted[i]
+    const { p } = sorted[i]
     if (used.has(p.itemIdA + p.itemIdB) || used.has(p.itemIdB + p.itemIdA)) continue
     const a = itemMap.get(p.itemIdA)
     const b = itemMap.get(p.itemIdB)
@@ -489,7 +505,9 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
     }
   }
 
-  const bundles = opts.bundles ? generateBundles(coPurchasePairs, items) : []
+  const bundles = opts.bundles
+    ? generateBundles(coPurchasePairs, items, opts.bundleCorrelationThreshold ?? 0.35)
+    : []
   const moods = opts.moodFlow ? mapMoods(items, quadrants) : []
   const upsellMap: Record<string, UpsellSuggestion[]> = {}
   if (opts.upsells) {

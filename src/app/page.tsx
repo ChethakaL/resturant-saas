@@ -66,7 +66,7 @@ async function getMenuData() {
   const todayStart = new Date()
   todayStart.setUTCHours(0, 0, 0, 0)
 
-  const [menuItems, chefPicks, showcases, categories, salesLast30d, preppedStocksRows, salesToday] =
+  const [menuItems, chefPicks, showcases, categories, salesLast30d, preppedStocksRows, salesToday, tables] =
     await Promise.all([
       prisma.menuItem.findMany({
         where: { available: true, status: 'ACTIVE', restaurantId: restaurant.id },
@@ -112,6 +112,12 @@ async function getMenuData() {
       prisma.sale.findMany({
         where: { restaurantId: restaurant.id, timestamp: { gte: todayStart } },
         include: { items: true },
+      }),
+
+      prisma.table.findMany({
+        where: { restaurantId: restaurant.id },
+        select: { id: true, number: true },
+        orderBy: { number: 'asc' },
       }),
     ])
 
@@ -354,13 +360,14 @@ async function getMenuData() {
     const [itemIdA, itemIdB] = key.split('-')
     const totalA = ordersWithItem.get(itemIdA) ?? 0
     const totalB = ordersWithItem.get(itemIdB) ?? 0
-    let totalOrdersWithEither = totalA + totalB
-    const both = pairCount
+    const totalOrdersWithEither = totalA + totalB
     coPurchasePairs.push({
       itemIdA,
       itemIdB,
-      pairCount: both,
-      totalOrdersWithEither: Math.max(totalOrdersWithEither, both),
+      pairCount,
+      totalOrdersWithEither: Math.max(totalOrdersWithEither, pairCount),
+      totalOrdersWithA: totalA,
+      totalOrdersWithB: totalB,
     })
   }
 
@@ -464,6 +471,7 @@ async function getMenuData() {
     categoryOrder: engineOutput.categoryOrder,
     categoryAnchorBundle: engineOutput.categoryAnchorBundle,
     maxInitialItemsPerCategory: menuEngineSettings.maxInitialItemsPerCategory ?? 3,
+    tables: tables.map((t: { id: string; number: string }) => ({ id: t.id, number: t.number })),
   }
 }
 
@@ -495,6 +503,7 @@ export default async function Home() {
       categoryOrder={data.categoryOrder}
       categoryAnchorBundle={data.categoryAnchorBundle}
       maxInitialItemsPerCategory={data.maxInitialItemsPerCategory}
+      tables={data.tables}
     />
     </Suspense>
   )

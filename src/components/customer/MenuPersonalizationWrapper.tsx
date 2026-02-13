@@ -21,6 +21,7 @@ export interface MenuPersonalizationWrapperProps {
   categoryOrder?: string[]
   categoryAnchorBundle?: Record<string, BundleHint>
   maxInitialItemsPerCategory?: number
+  tables?: { id: string; number: string }[]
 }
 
 export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProps) {
@@ -36,6 +37,7 @@ export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProp
       {...props}
       tableSize={validTableSize}
       tableNumber={tableNumber}
+      tables={props.tables}
     />
   )
 }

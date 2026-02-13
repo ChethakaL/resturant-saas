@@ -2,6 +2,12 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Minus, Plus, ShoppingBag, X } from 'lucide-react'
 import { formatMenuPrice } from '@/lib/utils'
 
@@ -27,6 +33,14 @@ interface CartDrawerProps {
   /** When provided, drawer is controlled by parent (e.g. header cart icon). */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** Tables for guest to select; when empty, no table selector is shown. */
+  tables?: { id: string; number: string }[]
+  /** Currently selected table number (string) or null for "No table". */
+  selectedTableNumber?: string | null
+  /** Called when guest changes table selection. */
+  onTableChange?: (tableNumber: string | null) => void
+  /** Optional formatter for prices (e.g. A/B test variant). */
+  formatPrice?: (amount: number) => string
 }
 
 export function CartDrawer({
@@ -43,12 +57,30 @@ export function CartDrawer({
   children,
   open: controlledOpen,
   onOpenChange,
+  tables,
+  selectedTableNumber = null,
+  onTableChange,
+  formatPrice,
 }: CartDrawerProps) {
   const [internalOpen, setInternalOpen] = useState(false)
+  const [tablePickerOpen, setTablePickerOpen] = useState(false)
   const isControlled = controlledOpen !== undefined && onOpenChange != null
   const open = isControlled ? controlledOpen : internalOpen
   const setOpen = isControlled ? onOpenChange : setInternalOpen
   const itemCount = lines.reduce((s, l) => s + l.quantity, 0)
+  const format = formatPrice ?? formatMenuPrice
+
+  const displayTables = tables && tables.length > 0 ? tables : [
+    { id: 'dummy-1', number: '1' },
+    { id: 'dummy-2', number: '2' },
+    { id: 'dummy-3', number: '3' },
+    { id: 'dummy-4', number: '4' },
+    { id: 'dummy-5', number: '5' },
+    { id: 'dummy-6', number: '6' },
+    { id: 'dummy-7', number: '7' },
+    { id: 'dummy-8', number: '8' },
+  ]
+  const showTableSelector = !!onTableChange
 
   return (
     <>
@@ -63,7 +95,7 @@ export function CartDrawer({
               <ShoppingBag className="h-5 w-5" />
               {viewOrderLabel} ({itemCount})
             </span>
-            <span>{formatMenuPrice(total)}</span>
+            <span>{format(total)}</span>
           </button>
         </div>
       </div>
@@ -97,8 +129,10 @@ export function CartDrawer({
                     className="flex items-center justify-between gap-3 py-2 border-b border-white/10 last:border-0"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{line.name}</p>
-                      <p className="text-sm text-white/70">{formatMenuPrice(line.price)} each</p>
+                      <p className="font-medium flex items-baseline gap-2 flex-wrap">
+                        <span className="truncate">{line.name}</span>
+                        <span className="text-white/90 flex-shrink-0">{format(line.price)}</span>
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -133,9 +167,67 @@ export function CartDrawer({
               {children}
             </div>
             <div className="p-4 border-t border-white/10 flex flex-col gap-2">
+              {showTableSelector && onTableChange && (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-sm text-white/80">Table</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setTablePickerOpen(true)}
+                    className="w-full justify-between border-white/20 bg-white/5 text-white hover:bg-white/10"
+                  >
+                    <span>
+                      {selectedTableNumber ? `Table ${selectedTableNumber}` : 'Select table'}
+                    </span>
+                    <span className="text-white/60 text-sm">
+                      {selectedTableNumber ? 'Change' : 'Optional'}
+                    </span>
+                  </Button>
+                  <Dialog open={tablePickerOpen} onOpenChange={setTablePickerOpen}>
+                    <DialogContent className="max-w-sm bg-slate-900 border-white/20 text-white">
+                      <DialogHeader>
+                        <DialogTitle>Select your table</DialogTitle>
+                      </DialogHeader>
+                      <p className="text-sm text-white/70">Tap your table on the layout, or choose not to select.</p>
+                      <div className="rounded-xl border border-white/20 bg-white/5 p-4">
+                        <div className="grid grid-cols-4 gap-3">
+                          {displayTables.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => {
+                                onTableChange(t.number)
+                                setTablePickerOpen(false)
+                              }}
+                              className={`aspect-square rounded-xl flex items-center justify-center text-lg font-semibold transition-colors ${
+                                selectedTableNumber === t.number
+                                  ? 'bg-amber-500 text-white ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900'
+                                  : 'bg-white/10 text-white hover:bg-white/20'
+                              }`}
+                            >
+                              {t.number}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          onTableChange(null)
+                          setTablePickerOpen(false)
+                        }}
+                        className="w-full text-white/90 hover:bg-white/10 hover:text-white"
+                      >
+                        I&apos;m not at a table
+                      </Button>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-semibold">
                 <span>Total</span>
-                <span>{formatMenuPrice(total)}</span>
+                <span>{format(total)}</span>
               </div>
               <Button
                 onClick={() => {

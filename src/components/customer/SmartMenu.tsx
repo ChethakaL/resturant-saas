@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { formatCurrency, formatMenuPrice } from '@/lib/utils'
+import { formatCurrency, formatMenuPrice, formatMenuPriceWithVariant } from '@/lib/utils'
 import Image from 'next/image'
 import {
   Dialog,
@@ -23,11 +23,12 @@ import { MenuItemCard } from './MenuItemCard'
 import { MoodSelector } from './MoodSelector'
 import { CartDrawer } from './CartDrawer'
 import { SequentialUpsell } from './SequentialUpsell'
+import { BundledUpsell } from './BundledUpsell'
 import { BundleCarousel } from './BundleCarousel'
 import { CheckoutNudge } from './CheckoutNudge'
 import { IdleUpsellPopup } from './IdleUpsellPopup'
 import { getStoredLastOrder, setStoredLastOrder, getOrCreateGuestId } from './MenuPersonalizationWrapper'
-import { getAllVariants } from '@/lib/experiments'
+import { getAllVariants, getVariant } from '@/lib/experiments'
 import { logMenuEvent } from '@/lib/menu-events'
 import type { ItemDisplayHints, BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
 
@@ -97,6 +98,8 @@ interface SmartMenuProps {
   tableSize?: number
   /** When menu is opened from a table (e.g. QR code), pass table number so the order is assigned to that table. */
   tableNumber?: string
+  /** Tables available for guest to select (e.g. for order assignment). */
+  tables?: { id: string; number: string }[]
   categoryAnchorBundle?: Record<string, BundleHint>
   maxInitialItemsPerCategory?: number
 }
@@ -542,6 +545,7 @@ export default function SmartMenu({
   categoryOrder,
   tableSize,
   tableNumber,
+  tables = [],
   categoryAnchorBundle = {},
   maxInitialItemsPerCategory = 3,
 }: SmartMenuProps) {
@@ -554,6 +558,7 @@ export default function SmartMenu({
     )
   }
 
+  const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(tableNumber ?? null)
   const [search, setSearch] = useState('')
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const searchOverlayInputRef = useRef<HTMLInputElement | null>(null)
@@ -601,6 +606,7 @@ export default function SmartMenu({
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set())
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
+  const [scrollDepth, setScrollDepth] = useState(0)
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)
     else sectionRefs.current.delete(id)
@@ -640,6 +646,19 @@ export default function SmartMenu({
   useEffect(() => {
     logMenuEvent(restaurantId, 'menu_view', {}, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
   }, [restaurantId])
+
+  useEffect(() => {
+    const onScroll = () => {
+      const doc = document.documentElement
+      const scrollTop = doc.scrollTop || window.scrollY
+      const scrollHeight = doc.scrollHeight - doc.clientHeight
+      const depth = scrollHeight > 0 ? Math.min(1, scrollTop / scrollHeight) : 1
+      setScrollDepth(depth)
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   const scrollToSection = useCallback((categoryId: string) => {
     sectionRefs.current.get(categoryId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -1733,59 +1752,81 @@ const getLocalizedAddOnName = (name: string) => {
                     })()}
 
                     <div className="grid gap-3">
-                      {(expandedCategoryIds.has(section.category?.id ?? '') ? section.items : section.items.slice(0, maxInitialItemsPerCategory)).map((item) => {
-                        const translation =
-                          translationCache[language]?.[item.id]
-                        const displayName = translation?.name || item.name
-                        const displayDescription =
-                          translation?.description || item.description || ''
-                        const macroSegments = buildMacroSegments(item, translation)
-                        const handleAddToOrder = () => {
-                          dispatchCart({ type: 'ADD_ITEM', item })
-                          logMenuEvent(restaurantId, 'add_to_cart', { menuItemId: item.id }, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
-                          const suggestions = upsellMap[item.id]
-                          if (suggestions?.length) {
-                            setUpsellAfterAdd({ itemId: item.id })
-                            setUpsellIndex(0)
+                      {(() => {
+                        const visibleItems =
+                          engineMode === 'classic'
+                            ? section.items
+                            : section.items.filter(
+                                (item) => !item._hints?.scrollDepthHide || scrollDepth >= 0.6
+                              )
+                        const itemsToShow = expandedCategoryIds.has(section.category?.id ?? '')
+                          ? visibleItems
+                          : visibleItems.slice(0, maxInitialItemsPerCategory)
+                        const priceVariant = getVariant('price_format')
+                        return itemsToShow.map((item) => {
+                          const translation =
+                            translationCache[language]?.[item.id]
+                          const displayName = translation?.name || item.name
+                          const displayDescription =
+                            translation?.description || item.description || ''
+                          const macroSegments = buildMacroSegments(item, translation)
+                          const handleAddToOrder = () => {
+                            dispatchCart({ type: 'ADD_ITEM', item })
+                            logMenuEvent(restaurantId, 'add_to_cart', { menuItemId: item.id }, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
+                            const suggestions = upsellMap[item.id]
+                            if (suggestions?.length) {
+                              setUpsellAfterAdd({ itemId: item.id })
+                              setUpsellIndex(0)
+                            }
                           }
-                        }
-                        return (
-                          <MenuItemCard
-                            key={item.id}
-                            item={item}
-                            hints={item._hints}
-                            displayName={displayName}
-                            displayDescription={displayDescription}
-                            macroSegments={macroSegments}
-                            getLocalizedCategoryName={getLocalizedCategoryName}
-                            getLocalizedTagLabel={getLocalizedTagLabel}
-                            getTagIcon={getTagIcon}
-                            onDetail={() => setSelectedItemForDetail(item)}
-                            onPairings={() => fetchPairingSuggestions(item)}
-                            onAddToOrder={handleAddToOrder}
-                            addToOrderLabel={currentEngineCopy.addToOrder}
-                            badgeLabels={{
-                              signature: currentEngineCopy.signatureBadge,
-                              mostLoved: currentEngineCopy.mostLovedBadge,
-                              chefSelection: currentEngineCopy.chefSelectionBadge,
-                            }}
-                            loadingPairings={loadingSuggestions}
-                            isSelectedForPairing={selectedItemForPairing?.id === item.id}
-                            isDarkTheme={isDarkBg}
-                          />
-                        )
-                      })}
+                          return (
+                            <MenuItemCard
+                              key={item.id}
+                              item={item}
+                              hints={item._hints}
+                              displayName={displayName}
+                              displayDescription={displayDescription}
+                              macroSegments={macroSegments}
+                              getLocalizedCategoryName={getLocalizedCategoryName}
+                              getLocalizedTagLabel={getLocalizedTagLabel}
+                              getTagIcon={getTagIcon}
+                              onDetail={() => setSelectedItemForDetail(item)}
+                              onPairings={() => fetchPairingSuggestions(item)}
+                              onAddToOrder={handleAddToOrder}
+                              addToOrderLabel={currentEngineCopy.addToOrder}
+                              badgeLabels={{
+                                signature: currentEngineCopy.signatureBadge,
+                                mostLoved: currentEngineCopy.mostLovedBadge,
+                                chefSelection: currentEngineCopy.chefSelectionBadge,
+                              }}
+                              loadingPairings={loadingSuggestions}
+                              isSelectedForPairing={selectedItemForPairing?.id === item.id}
+                              isDarkTheme={isDarkBg}
+                              displayPriceOverride={formatMenuPriceWithVariant(item.price, priceVariant)}
+                              forceHideImage={getVariant('photo_visibility') === 'hide'}
+                            />
+                          )
+                        })
+                      })()}
                     </div>
 
-                    {section.category && section.items.length > maxInitialItemsPerCategory && !expandedCategoryIds.has(section.category.id) && (
-                      <button
-                        type="button"
-                        onClick={() => setExpandedCategoryIds((prev) => new Set(prev).add(section.category!.id))}
-                        className={`mt-2 text-sm font-medium py-2 rounded-lg border ${isDarkBg ? 'border-white/20 text-white/80 hover:bg-white/10' : 'border-slate-200 text-slate-600 hover:bg-slate-100'}`}
-                      >
-                        See more ({section.items.length - maxInitialItemsPerCategory} more)
-                      </button>
-                    )}
+                    {section.category && (() => {
+                      const visibleItems =
+                        engineMode === 'classic'
+                          ? section.items
+                          : section.items.filter(
+                              (item) => !item._hints?.scrollDepthHide || scrollDepth >= 0.6
+                            )
+                      return visibleItems.length > maxInitialItemsPerCategory && !expandedCategoryIds.has(section.category.id) ? (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCategoryIds((prev) => new Set(prev).add(section.category!.id))}
+                          className={`mt-2 text-sm font-medium py-2 rounded-lg border ${isDarkBg ? 'border-white/20 text-white/80 hover:bg-white/10' : 'border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                        >
+                          See more ({visibleItems.length - maxInitialItemsPerCategory} more)
+                        </button>
+                      ) : null
+                    })()}
 
                     {/* Insert carousels configured for after this category */}
                     {betweenShowcases
@@ -2160,10 +2201,14 @@ const getLocalizedAddOnName = (name: string) => {
         viewOrderLabel={currentEngineCopy.viewOrder}
         placeOrderLabel={currentEngineCopy.placeOrder}
         cartTitle={currentEngineCopy.cartTitle}
+        tables={tables}
+        selectedTableNumber={selectedTableNumber}
+        onTableChange={setSelectedTableNumber}
         onUpdateQuantity={(menuItemId, delta) =>
           dispatchCart({ type: 'UPDATE_QUANTITY', menuItemId, delta })
         }
         onRemove={(menuItemId) => dispatchCart({ type: 'REMOVE_ITEM', menuItemId })}
+        formatPrice={(amount) => formatMenuPriceWithVariant(amount, getVariant('price_format'))}
         onPlaceOrder={async () => {
           if (cart.length === 0) return
           setStoredLastOrder(restaurantId, cart.map((l) => ({ menuItemId: l.menuItemId, name: l.name, quantity: l.quantity })))
@@ -2175,7 +2220,7 @@ const getLocalizedAddOnName = (name: string) => {
               body: JSON.stringify({
                 restaurantId,
                 items: cart.map((l) => ({ menuItemId: l.menuItemId, quantity: l.quantity })),
-                ...(tableNumber && { tableNumber }),
+                ...(selectedTableNumber && { tableNumber: selectedTableNumber }),
               }),
             })
             const data = await res.json()
@@ -2211,7 +2256,7 @@ const getLocalizedAddOnName = (name: string) => {
               <CheckoutNudge
                 message={currentEngineCopy.checkoutNudgeBeverage}
                 itemName={topBeverage.name}
-                itemPrice={formatMenuPrice(topBeverage.price)}
+                itemPrice={formatMenuPriceWithVariant(topBeverage.price, getVariant('price_format'))}
                 onAdd={() => dispatchCart({ type: 'ADD_ITEM', item: topBeverage })}
                 addLabel={currentEngineCopy.addLabel}
                 dismissLabel={currentEngineCopy.dismissLabel}
@@ -2223,7 +2268,7 @@ const getLocalizedAddOnName = (name: string) => {
               <CheckoutNudge
                 message={currentEngineCopy.checkoutNudgeDessert}
                 itemName={topDessert.name}
-                itemPrice={formatMenuPrice(topDessert.price)}
+                itemPrice={formatMenuPriceWithVariant(topDessert.price, getVariant('price_format'))}
                 onAdd={() => dispatchCart({ type: 'ADD_ITEM', item: topDessert })}
                 addLabel={currentEngineCopy.addLabel}
                 dismissLabel={currentEngineCopy.dismissLabel}
@@ -2236,6 +2281,33 @@ const getLocalizedAddOnName = (name: string) => {
 
       {upsellAfterAdd && (() => {
         const suggestions = upsellMap[upsellAfterAdd.itemId] ?? []
+        const priceVariant = getVariant('price_format')
+        const upsellStrategy = getVariant('upsell_strategy')
+        if (upsellStrategy === 'bundled' && suggestions.length > 0) {
+          const bundledItems = suggestions.map((s) => {
+            const item = menuItems.find((m) => m.id === s.itemId)
+            return {
+              itemId: s.itemId,
+              itemName: item?.name ?? '',
+              itemPrice: item ? formatMenuPriceWithVariant(item.price, priceVariant) : '',
+              itemImageUrl: item?.imageUrl,
+              nudgeText: s.nudgeText,
+            }
+          }).filter((i) => i.itemName)
+          if (bundledItems.length === 0) return null
+          return (
+            <BundledUpsell
+              items={bundledItems}
+              addLabel={currentEngineCopy.addLabel}
+              skipLabel={currentEngineCopy.skipLabel}
+              onAddItem={(id) => {
+                const item = menuItems.find((m) => m.id === id)
+                if (item) dispatchCart({ type: 'ADD_ITEM', item })
+              }}
+              onClose={() => setUpsellAfterAdd(null)}
+            />
+          )
+        }
         const current = suggestions[upsellIndex]
         const upsellItem = current ? menuItems.find((m) => m.id === current.itemId) : null
         if (!current || !upsellItem) return null
@@ -2244,7 +2316,7 @@ const getLocalizedAddOnName = (name: string) => {
             suggestions={suggestions}
             currentIndex={upsellIndex}
             itemName={upsellItem.name}
-            itemPrice={formatMenuPrice(upsellItem.price)}
+            itemPrice={formatMenuPriceWithVariant(upsellItem.price, priceVariant)}
             itemImageUrl={upsellItem.imageUrl}
             onAccept={() => {
               dispatchCart({ type: 'ADD_ITEM', item: upsellItem })

@@ -42,6 +42,10 @@ interface MenuItemCardProps {
   isSelectedForPairing?: boolean
   /** When true, use dark card and light text (theme-aware). */
   isDarkTheme?: boolean
+  /** Override price string (e.g. from price_format A/B test). */
+  displayPriceOverride?: string
+  /** When true, hide image (e.g. from photo_visibility experiment). */
+  forceHideImage?: boolean
 }
 
 const defaultPlaceholderImage =
@@ -83,10 +87,12 @@ export function MenuItemCard({
   loadingPairings = false,
   isSelectedForPairing = false,
   isDarkTheme = false,
+  displayPriceOverride,
+  forceHideImage = false,
 }: MenuItemCardProps) {
   const tier = hints?.displayTier ?? 'standard'
-  const showImage = hints?.showImage ?? true
-  const priceDisplay = hints?.priceDisplay ?? String(Math.round(item.price))
+  const showImage = !forceHideImage && (hints?.showImage ?? true)
+  const priceDisplay = displayPriceOverride ?? hints?.priceDisplay ?? String(Math.round(item.price))
   const badgeText = hints?.badgeText
   const isLimitedToday = hints?.isLimitedToday
   const isHero = tier === 'hero'
@@ -128,20 +134,18 @@ export function MenuItemCard({
         )}
         <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-semibold leading-tight line-clamp-2 mb-0.5">{displayName}</h3>
+            <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
+              <h3 className="text-sm font-semibold leading-tight line-clamp-2 min-w-0">{displayName}</h3>
+              <span className={`text-sm font-semibold flex-shrink-0 ${textPrice}`}>{priceDisplay}</span>
+            </div>
             <p className={`text-[9px] uppercase tracking-wider ${textMuted} mb-1`}>
               {getLocalizedCategoryName(item.category?.name)}
             </p>
-            <p className={`text-[11px] ${textMuted} line-clamp-2 mb-1`}>
-              {displayDescription ? (
-                <>
-                  {displayDescription}
-                  <span className={`font-semibold ${textPrice} ml-1.5`}>{priceDisplay}</span>
-                </>
-              ) : (
-                <span className={`font-semibold ${textPrice}`}>{priceDisplay}</span>
-              )}
-            </p>
+            {displayDescription && (
+              <p className={`text-[11px] ${textMuted} line-clamp-2 mb-1`}>
+                {displayDescription}
+              </p>
+            )}
             {isLimitedToday && (
               <p className="text-[10px] text-white/60 flex items-center gap-1 mb-1">
                 <span>ⓘ</span> Limited Today
