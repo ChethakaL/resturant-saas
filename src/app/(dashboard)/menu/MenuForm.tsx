@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
@@ -401,6 +402,8 @@ export default function MenuForm({
       lastPricedAt: (ing as any).lastPricedAt ? new Date((ing as any).lastPricedAt).toISOString() : null,
     })) || []
   )
+  const [activeIngredientPickerIndex, setActiveIngredientPickerIndex] = useState<number | null>(null)
+  const [ingredientSearchQuery, setIngredientSearchQuery] = useState('')
 
   // Data loss prevention: warn before navigating away with unsaved changes (must run after formData and recipe are declared)
   const formDirtyRef = useRef(false)
@@ -563,6 +566,24 @@ export default function MenuForm({
     setRecipe((prev) => {
       const next = [...prev]
       next[index] = { ...next[index], [field]: value }
+      return next
+    })
+  }
+
+  const applyIngredientSelection = (index: number, ingredientId: string) => {
+    setRecipe((prev) => {
+      const current = prev[index]
+      if (!current) return prev
+      const selectedIngredient = allIngredients.find((i) => i.id === ingredientId)
+      const nextLine = autoFillSupplierCost(
+        {
+          ...current,
+          ingredientId,
+        },
+        selectedIngredient
+      )
+      const next = [...prev]
+      next[index] = nextLine
       return next
     })
   }
@@ -2306,6 +2327,14 @@ export default function MenuForm({
                       {recipe.map((item, index) => {
                         const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
                         const itemCost = getItemCost(item)
+                        const filteredIngredientOptions = allIngredients.filter((ing) => {
+                          const query = ingredientSearchQuery.trim().toLowerCase()
+                          if (!query) return true
+                          return (
+                            ing.name.toLowerCase().includes(query) ||
+                            ing.unit.toLowerCase().includes(query)
+                          )
+                        })
                         const countLabel = formatCountLabel(
                           getCountLabelForIngredient(ingredient, item.pieceCount, item.quantity),
                           item.pieceCount || undefined
@@ -2343,35 +2372,78 @@ export default function MenuForm({
                           <div className="flex items-end gap-3">
                             <div className="flex-1 space-y-2">
                               <Label>Ingredient</Label>
-                              <Select
-                                value={item.ingredientId}
-                                onValueChange={(value) => {
-                                  const selectedIngredient = allIngredients.find((i) => i.id === value)
-                                  const nextLine = autoFillSupplierCost(
-                                    {
-                                      ...item,
-                                      ingredientId: value,
-                                    },
-                                    selectedIngredient
-                                  )
-                                  updateIngredient(index, 'ingredientId', value)
-                                  updateIngredient(index, 'supplierProductId', nextLine.supplierProductId)
-                                  updateIngredient(index, 'unitCostCached', nextLine.unitCostCached)
-                                  updateIngredient(index, 'currency', nextLine.currency)
-                                  updateIngredient(index, 'lastPricedAt', nextLine.lastPricedAt)
+                              <Popover
+                                open={activeIngredientPickerIndex === index}
+                                onOpenChange={(open) => {
+                                  if (open) {
+                                    setActiveIngredientPickerIndex(index)
+                                    setIngredientSearchQuery('')
+                                  } else if (activeIngredientPickerIndex === index) {
+                                    setActiveIngredientPickerIndex(null)
+                                    setIngredientSearchQuery('')
+                                  }
                                 }}
                               >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select ingredient" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {allIngredients.map((ing) => (
-                                    <SelectItem key={ing.id} value={ing.id}>
-                                      {ing.name} ({ing.unit})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="w-full h-10 justify-between border-slate-300 bg-white hover:bg-slate-50 px-3"
+                                  >
+                                    <span className="flex items-center gap-2 min-w-0">
+                                      <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                      <span className={cn(
+                                        'truncate text-sm',
+                                        ingredient ? 'text-slate-900' : 'text-slate-500'
+                                      )}>
+                                        {ingredient ? `${ingredient.name} (${ingredient.unit})` : 'Search ingredient...'}
+                                      </span>
+                                    </span>
+                                    <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+                                  <div className="p-2 border-b border-slate-100">
+                                    <div className="relative">
+                                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                                      <Input
+                                        autoFocus
+                                        value={ingredientSearchQuery}
+                                        onChange={(e) => setIngredientSearchQuery(e.target.value)}
+                                        placeholder="Type to filter ingredients..."
+                                        className="h-9 pl-8 border-slate-200 focus-visible:ring-emerald-500"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="max-h-64 overflow-y-auto py-1">
+                                    {filteredIngredientOptions.map((ing) => (
+                                        <button
+                                          key={ing.id}
+                                          type="button"
+                                          onClick={() => {
+                                            applyIngredientSelection(index, ing.id)
+                                            setActiveIngredientPickerIndex(null)
+                                            setIngredientSearchQuery('')
+                                          }}
+                                          className="w-full px-3 py-2 text-left hover:bg-emerald-50 flex items-center justify-between gap-3"
+                                        >
+                                          <span className="truncate text-sm text-slate-800">{ing.name}</span>
+                                          <span className="flex items-center gap-2 shrink-0">
+                                            <span className="text-xs text-slate-500">({ing.unit})</span>
+                                            {item.ingredientId === ing.id && (
+                                              <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                            )}
+                                          </span>
+                                        </button>
+                                      ))}
+                                    {filteredIngredientOptions.length === 0 && (
+                                      <p className="px-3 py-3 text-xs text-slate-500">
+                                        No ingredient matches your search.
+                                      </p>
+                                    )}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
                             </div>
 
                             <Button
