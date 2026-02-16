@@ -40,15 +40,17 @@ export async function POST(request: NextRequest) {
 For each menu item, provide:
 1. **name**: The exact name of the dish
 2. **description**: A brief description (if visible on menu, otherwise create a compelling one based on the name)
-3. **price**: The price in numbers only (if visible, otherwise estimate a reasonable price between 1000-5000 IQD based on the type of dish)
-4. **calories**: Estimate calories if not shown
-5. **tags**: Array of dietary tags like ["vegetarian", "spicy", "halal", "seafood", "vegan", "gluten-free", etc.]
+3. **categoryName**: Best-fit category name (e.g., "Drinks", "Main Dishes", "Desserts", "Sides", "Appetizers")
+4. **price**: The price in numbers only (if visible, otherwise estimate a reasonable price between 1000-5000 IQD based on the type of dish)
+5. **calories**: Estimate calories if not shown
+6. **tags**: Array of dietary tags like ["vegetarian", "spicy", "halal", "seafood", "vegan", "gluten-free", etc.]
 
 Return ONLY a valid JSON array in this exact format, no additional text:
 [
   {
     "name": "Grilled Chicken",
     "description": "Tender grilled chicken breast with herbs",
+    "categoryName": "Main Dishes",
     "price": 2500,
     "calories": 350,
     "tags": ["protein-rich", "halal"]
@@ -102,6 +104,7 @@ IMPORTANT:
     const processedItems = items.map((item: any) => ({
       name: item.name || 'Unnamed Item',
       description: item.description || '',
+      categoryName: typeof item.categoryName === 'string' ? item.categoryName : '',
       price: parseFloat(item.price) || 2000,
       calories: parseInt(item.calories) || null,
       tags: Array.isArray(item.tags) ? item.tags : [],

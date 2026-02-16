@@ -113,8 +113,6 @@ export default function MenuOptimizationContent({
   const [idleUpsellDelaySeconds, setIdleUpsellDelaySeconds] = useState(defaults.idleUpsellDelaySeconds)
   const [quadrantData, setQuadrantData] = useState<{ counts: Record<string, number>; items: Array<{ menuItemId: string; name: string; categoryName?: string; quadrant: string; marginPercent: number; unitsSold: number }> } | null>(null)
   const [loadingQuadrants, setLoadingQuadrants] = useState(false)
-  const [redFlags, setRedFlags] = useState<{ identicalDescriptionLength: Array<{ length: number; names: string[] }>; equalVisualWeight: Array<{ categoryName: string; names: string[] }> } | null>(null)
-  const [loadingRedFlags, setLoadingRedFlags] = useState(false)
 
   const [showcases, setShowcases] = useState<Showcase[]>(initialShowcases)
   const [savingShowcase, setSavingShowcase] = useState<string | null>(null)
@@ -651,23 +649,6 @@ export default function MenuOptimizationContent({
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Menu health tips</CardTitle>
-          <p className="text-sm text-slate-500">The system can spot things that might make the menu feel repetitive (e.g. many items with similar description length or visual weight). You can adjust those in the Menu section.</p>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={async () => { setLoadingRedFlags(true); try { const res = await fetch('/api/menu-engine/red-flags'); if (!res.ok) throw new Error('Failed to load'); const data = await res.json(); setRedFlags({ identicalDescriptionLength: data.identicalDescriptionLength ?? [], equalVisualWeight: (data.equalVisualWeight ?? []).map((r: { categoryName: string; names: string[] }) => ({ categoryName: r.categoryName, names: r.names })) }); } catch { toast({ title: 'Could not load tips', variant: 'destructive' }); } finally { setLoadingRedFlags(false); } }} disabled={loadingRedFlags} className="mb-4 gap-2">{loadingRedFlags && <Loader2 className="h-4 w-4 animate-spin" />}Check for tips</Button>
-          {redFlags && (
-            <div className="space-y-4 text-sm">
-              {redFlags.identicalDescriptionLength.length > 0 && (<div><p className="font-medium text-amber-800 mb-1">Similar description length</p><ul className="list-disc list-inside text-slate-600">{redFlags.identicalDescriptionLength.map((r, i) => (<li key={i}>{r.length} chars: {r.names.join(', ')}</li>))}</ul></div>)}
-              {redFlags.equalVisualWeight.length > 0 && (<div><p className="font-medium text-amber-800 mb-1">Similar visual weight in same category</p><ul className="list-disc list-inside text-slate-600">{redFlags.equalVisualWeight.map((r, i) => (<li key={i}>{r.categoryName}: {r.names.join(', ')}</li>))}</ul></div>)}
-              {redFlags.identicalDescriptionLength.length === 0 && redFlags.equalVisualWeight.length === 0 && <p className="text-slate-500">No tips right now — your menu looks good.</p>}
             </div>
           )}
         </CardContent>

@@ -10,7 +10,19 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { ImagePlus, Upload, Loader2, CheckCircle, XCircle, Sparkles, Check, Trash2 } from 'lucide-react'
+import {
+  ImagePlus,
+  Upload,
+  Loader2,
+  CheckCircle,
+  Sparkles,
+  Check,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  X,
+  AlertCircle,
+} from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -29,16 +41,19 @@ import {
 } from '@/components/ui/select'
 import { Category, Ingredient } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
+import { Badge } from '@/components/ui/badge'
+import { classifyItemType, type DefaultCategoryKey } from '@/lib/category-suggest'
 
 interface ExtractedMenuItem {
   name: string
   description: string
   price: number
-  calories?: number
+  calories?: number | null
   tags: string[]
   verified: boolean
   imageUrl?: string
   categoryId?: string
+  categoryName?: string
 }
 
 interface BulkMenuImportProps {
@@ -47,17 +62,128 @@ interface BulkMenuImportProps {
   defaultBackgroundPrompt?: string | null
 }
 
+const TYPE_CATEGORY_NAME_CANDIDATES: Record<DefaultCategoryKey, string[]> = {
+  'Signature Dishes': ['signature dishes', 'signature dish', 'signature'],
+  'Main Dishes': ['main dishes', 'main dish', 'mains', 'main', 'entree', 'entrees'],
+  Shareables: ['shareables', 'shareable', 'appetizer', 'appetizers', 'starter', 'starters', 'mezze'],
+  'Add-ons': ['add-ons', 'add on', 'addon', 'addons', 'extras', 'extra', 'toppings', 'topping'],
+  Drinks: ['drinks', 'drink', 'beverages', 'beverage', 'coffee', 'tea', 'juice', 'mocktail', 'cocktail'],
+  Desserts: ['desserts', 'dessert', 'sweet', 'sweets', 'cake', 'pastry', 'pastries'],
+  Kids: ['kids', 'kids menu', 'children', 'child'],
+  Sides: ['sides', 'side', 'salads', 'salad', 'fries', 'bread'],
+}
+
+const ITEM_TEXT_CATEGORY_RULES: Array<{ keywords: string[]; categoryHints: string[] }> = [
+  {
+    keywords: ['soup', 'soups', 'broth', 'shorba', 'ramen'],
+    categoryHints: ['soup', 'soups', 'shorba'],
+  },
+  {
+    keywords: ['grill', 'grilled', 'bbq', 'kebab', 'kebap'],
+    categoryHints: ['grill', 'grills', 'bbq', 'kebab'],
+  },
+  {
+    keywords: ['coffee', 'tea', 'latte', 'cappuccino', 'americano', 'mocha', 'juice', 'soda'],
+    categoryHints: ['drink', 'drinks', 'beverage', 'beverages', 'coffee', 'tea'],
+  },
+  {
+    keywords: ['dessert', 'cake', 'ice cream', 'sweet', 'pudding', 'kunafa', 'baklava'],
+    categoryHints: ['dessert', 'desserts', 'sweet', 'sweets'],
+  },
+  {
+    keywords: ['salad'],
+    categoryHints: ['salad', 'salads', 'sides', 'side'],
+  },
+]
+
+function normalizeText(value?: string | null): string {
+  return (value ?? '').trim().toLowerCase()
+}
+
+function matchCategoryId(categories: Category[], categoryName?: string): string | undefined {
+  const normalized = normalizeText(categoryName)
+  if (!normalized) return undefined
+
+  const exact = categories.find((c) => normalizeText(c.name) === normalized)
+  if (exact) return exact.id
+
+  const partial = categories.find((c) => {
+    const cat = normalizeText(c.name)
+    return cat.includes(normalized) || normalized.includes(cat)
+  })
+  if (partial) return partial.id
+
+  return undefined
+}
+
+function findCategoryIdByCandidates(categories: Category[], candidates: string[]): string | undefined {
+  if (candidates.length === 0) return undefined
+  const normalizedCandidates = candidates.map((c) => normalizeText(c)).filter(Boolean)
+  if (normalizedCandidates.length === 0) return undefined
+
+  const exact = categories.find((category) => {
+    const name = normalizeText(category.name)
+    return normalizedCandidates.includes(name)
+  })
+  if (exact) return exact.id
+
+  const partial = categories.find((category) => {
+    const name = normalizeText(category.name)
+    return normalizedCandidates.some((candidate) => name.includes(candidate) || candidate.includes(name))
+  })
+  if (partial) return partial.id
+
+  return undefined
+}
+
+function inferCategoryByItemText(item: ExtractedMenuItem, categories: Category[]): string | undefined {
+  const itemText = normalizeText(
+    `${item.name} ${item.description} ${item.categoryName ?? ''} ${(item.tags ?? []).join(' ')}`
+  )
+  if (!itemText) return undefined
+
+  for (const rule of ITEM_TEXT_CATEGORY_RULES) {
+    const matchesRule = rule.keywords.some((keyword) => itemText.includes(keyword))
+    if (!matchesRule) continue
+
+    const matchedCategoryId = findCategoryIdByCandidates(categories, rule.categoryHints)
+    if (matchedCategoryId) return matchedCategoryId
+  }
+
+  return undefined
+}
+
+function autoAssignCategoryId(item: ExtractedMenuItem, categories: Category[]): string | undefined {
+  const fromName = matchCategoryId(categories, item.categoryName)
+  if (fromName) return fromName
+
+  const fromItemText = inferCategoryByItemText(item, categories)
+  if (fromItemText) return fromItemText
+
+  const type = classifyItemType({
+    id: item.name,
+    name: item.name,
+    categoryName: item.categoryName ?? null,
+    marginPercent: 0,
+    unitsSold: 0,
+  })
+
+  const fromType = findCategoryIdByCandidates(categories, TYPE_CATEGORY_NAME_CANDIDATES[type] ?? [])
+  if (fromType) return fromType
+
+  return undefined
+}
+
 export default function BulkMenuImport({ categories, ingredients, defaultBackgroundPrompt }: BulkMenuImportProps) {
   const { toast } = useToast()
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<'upload' | 'extracting' | 'verifying' | 'complete'>('upload')
   const [menuImage, setMenuImage] = useState<string | null>(null)
   const [extractedItems, setExtractedItems] = useState<ExtractedMenuItem[]>([])
-  const [currentItemIndex, setCurrentItemIndex] = useState(0)
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [editingItem, setEditingItem] = useState<ExtractedMenuItem | null>(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
-  const [selectedIngredients, setSelectedIngredients] = useState<{ ingredientId: string; quantity: number }[]>([])
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
   const [customPrompt, setCustomPrompt] = useState('')
@@ -66,6 +192,64 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
   const [imageSizePreset, setImageSizePreset] = useState<ImageSizePreset>('medium')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const formUploadRef = useRef<HTMLInputElement | null>(null)
+
+  void ingredients
+
+  const updateItem = (index: number, updates: Partial<ExtractedMenuItem>) => {
+    setExtractedItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...updates } : item)))
+  }
+
+  const deleteItem = (index: number) => {
+    setExtractedItems((prev) => prev.filter((_, i) => i !== index))
+    if (expandedIndex === index) {
+      setExpandedIndex(null)
+      setEditingItem(null)
+    } else if (expandedIndex !== null && expandedIndex > index) {
+      setExpandedIndex(expandedIndex - 1)
+    }
+  }
+
+  const toggleExpand = (index: number) => {
+    if (expandedIndex === index) {
+      if (editingItem) {
+        setExtractedItems((prev) => prev.map((item, i) => (i === expandedIndex ? { ...editingItem } : item)))
+      }
+      setExpandedIndex(null)
+      setEditingItem(null)
+      return
+    }
+
+    if (expandedIndex !== null && editingItem) {
+      setExtractedItems((prev) => prev.map((item, i) => (i === expandedIndex ? { ...editingItem } : item)))
+    }
+
+    setExpandedIndex(index)
+    setEditingItem({ ...extractedItems[index] })
+  }
+
+  const assignCategoryToUncategorized = (categoryId: string) => {
+    let count = 0
+    setExtractedItems((prev) =>
+      prev.map((item) => {
+        if (!item.categoryId) {
+          count += 1
+          return { ...item, categoryId }
+        }
+        return item
+      })
+    )
+
+    if (count > 0) {
+      const categoryName = categories.find((c) => c.id === categoryId)?.name
+      toast({
+        title: 'Category assigned',
+        description: `Applied "${categoryName}" to ${count} uncategorized item${count > 1 ? 's' : ''}.`,
+      })
+    }
+  }
+
+  const itemsWithoutCategory = extractedItems.filter((i) => !i.categoryId).length
+  const itemsWithIssues = extractedItems.filter((i) => !i.categoryId || !i.name.trim() || !i.price || i.price <= 0).length
 
   const openImageDialog = () => {
     setPreviewImageUrl(null)
@@ -88,15 +272,14 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     e.target.value = ''
   }
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setMenuImage(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setMenuImage(reader.result as string)
     }
+    reader.readAsDataURL(file)
   }
 
   const extractMenuItems = async () => {
@@ -118,14 +301,34 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
         throw new Error(data.error || 'Failed to extract menu items')
       }
 
-      setExtractedItems(data.items || [])
-      if (data.items && data.items.length > 0) {
-        setStep('verifying')
-        setEditingItem({ ...data.items[0] })
+      const items: ExtractedMenuItem[] = (data.items || []).map((item: ExtractedMenuItem) => {
+        const categoryId = autoAssignCategoryId(item, categories)
+        return {
+          ...item,
+          categoryId,
+          verified: true,
+        }
+      })
+
+      setExtractedItems(items)
+      setExpandedIndex(null)
+      setEditingItem(null)
+      setStep('verifying')
+
+      if (items.length > 0) {
+        const autoAssigned = items.filter((item) => !!item.categoryId).length
+        toast({
+          title: 'Menu extracted',
+          description: `Extracted ${items.length} items. Auto-categorized ${autoAssigned}.`,
+        })
       }
     } catch (error) {
       console.error('Error extracting menu items:', error)
-      toast({ title: 'Extraction Failed', description: error instanceof Error ? error.message : 'Failed to extract menu items', variant: 'destructive' })
+      toast({
+        title: 'Extraction Failed',
+        description: error instanceof Error ? error.message : 'Failed to extract menu items',
+        variant: 'destructive',
+      })
       setStep('upload')
     } finally {
       setIsProcessing(false)
@@ -187,41 +390,6 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
   const currentSizeOption =
     imageSizeOptions.find((o) => o.value === imageSizePreset) ?? imageSizeOptions[1]
 
-  const verifyAndNext = async () => {
-    if (!editingItem) return
-
-    // Validate required fields
-    if (!editingItem.categoryId) {
-      toast({ title: 'Missing Category', description: 'Please select a category for this item', variant: 'destructive' })
-      return
-    }
-
-    if (!editingItem.name.trim()) {
-      toast({ title: 'Missing Name', description: 'Please enter a name for this item', variant: 'destructive' })
-      return
-    }
-
-    if (!editingItem.price || editingItem.price <= 0) {
-      toast({ title: 'Invalid Price', description: 'Please enter a valid price for this item', variant: 'destructive' })
-      return
-    }
-
-    // Update the item in the array
-    const updatedItems = [...extractedItems]
-    updatedItems[currentItemIndex] = { ...editingItem, verified: true }
-    setExtractedItems(updatedItems)
-
-    // Move to next item
-    if (currentItemIndex < extractedItems.length - 1) {
-      setCurrentItemIndex(currentItemIndex + 1)
-      setEditingItem({ ...updatedItems[currentItemIndex + 1] })
-      setSelectedIngredients([])
-    } else {
-      // All items verified, create them
-      await createAllItems(updatedItems)
-    }
-  }
-
   const createAllItems = async (items: ExtractedMenuItem[]) => {
     setIsProcessing(true)
 
@@ -229,7 +397,6 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
       const errors: string[] = []
 
       for (const item of items) {
-        // Validate required fields
         if (!item.categoryId) {
           errors.push(`${item.name}: Missing category`)
           continue
@@ -284,33 +451,60 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     }
   }
 
-  const addIngredient = () => {
-    setSelectedIngredients([...selectedIngredients, { ingredientId: '', quantity: 0 }])
+  const handleCreateAll = async () => {
+    let itemsToValidate = extractedItems
+
+    if (expandedIndex !== null && editingItem) {
+      itemsToValidate = extractedItems.map((item, i) => (i === expandedIndex ? { ...editingItem } : item))
+      setExtractedItems(itemsToValidate)
+      setExpandedIndex(null)
+      setEditingItem(null)
+    }
+
+    const issues: string[] = []
+    itemsToValidate.forEach((item, i) => {
+      if (!item.name.trim()) issues.push(`Item ${i + 1}: Missing name`)
+      if (!item.price || item.price <= 0) issues.push(`${item.name || `Item ${i + 1}`}: Invalid price`)
+      if (!item.categoryId) issues.push(`${item.name || `Item ${i + 1}`}: No category`)
+    })
+
+    if (issues.length > 0) {
+      toast({
+        title: `${issues.length} issue${issues.length > 1 ? 's' : ''} found`,
+        description: issues.length <= 3 ? issues.join('. ') : `${issues.slice(0, 3).join('. ')} and ${issues.length - 3} more.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    await createAllItems(itemsToValidate)
   }
 
-  const removeIngredient = (index: number) => {
-    setSelectedIngredients(selectedIngredients.filter((_, i) => i !== index))
-  }
-
-  const updateIngredient = (index: number, field: 'ingredientId' | 'quantity', value: any) => {
-    const updated = [...selectedIngredients]
-    updated[index] = { ...updated[index], [field]: value }
-    setSelectedIngredients(updated)
+  const resetModal = () => {
+    setStep('upload')
+    setMenuImage(null)
+    setExtractedItems([])
+    setExpandedIndex(null)
+    setEditingItem(null)
+    setIsProcessing(false)
+    setUploadedPhoto(null)
+    setPreviewImageUrl(null)
+    setCustomPrompt('')
   }
 
   return (
     <>
-      <Button variant="outline" onClick={() => setIsOpen(true)}>
+      <Button variant="outline" onClick={() => { setIsOpen(true); resetModal() }}>
         <ImagePlus className="h-4 w-4 mr-2" />
         Add Menu Items by Image
       </Button>
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetModal(); setIsOpen(open) }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Import Menu Items from Image</DialogTitle>
             <DialogDescription>
-              Upload a photo of your menu and we'll extract all items automatically
+              Upload a photo of your menu and we&apos;ll extract all items automatically.
             </DialogDescription>
           </DialogHeader>
 
@@ -335,10 +529,10 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
               {menuImage && (
                 <div className="space-y-4">
-                  <div className="border rounded-lg overflow-hidden">
-                    <img src={menuImage} alt="Menu" className="w-full h-auto" />
+                  <div className="border rounded-lg overflow-hidden max-h-[360px] flex items-center justify-center bg-slate-50">
+                    <img src={menuImage} alt="Menu" className="max-w-full w-auto max-h-[360px] object-contain" />
                   </div>
-                  <Button onClick={extractMenuItems} className="w-full">
+                  <Button onClick={extractMenuItems} className="w-full" disabled={isProcessing}>
                     Extract Menu Items
                   </Button>
                 </div>
@@ -354,173 +548,313 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
             </div>
           )}
 
-          {step === 'verifying' && editingItem && (
-            <div className="flex flex-col max-h-[85vh] py-4">
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 shrink-0">
-                <p className="text-sm text-emerald-800">
-                  Verifying item {currentItemIndex + 1} of {extractedItems.length}
-                </p>
-              </div>
-
-              <div className="grid gap-4 overflow-y-auto flex-1 min-h-0 pr-2 mt-4">
-                <div className="space-y-2">
-                  <Label>Item Name</Label>
-                  <Input
-                    value={editingItem.name}
-                    onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    value={editingItem.description}
-                    onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-                    rows={3}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Price (IQD)</Label>
-                    <Input
-                      type="number"
-                      value={editingItem.price}
-                      onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) })}
-                    />
+          {step === 'verifying' && extractedItems.length > 0 && (
+            <div className="flex flex-col flex-1 min-h-0">
+              <div className="shrink-0 space-y-3 pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800">
+                      {extractedItems.length} item{extractedItems.length !== 1 ? 's' : ''} extracted
+                    </p>
+                    {itemsWithoutCategory > 0 && (
+                      <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {itemsWithoutCategory} item{itemsWithoutCategory !== 1 ? 's' : ''} missing a category
+                      </p>
+                    )}
                   </div>
-
-                  <div className="space-y-2">
-                    <Label>Category</Label>
-                    <Select
-                      value={editingItem.categoryId}
-                      onValueChange={(value) => setEditingItem({ ...editingItem, categoryId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
+                  {itemsWithoutCategory > 0 && (
+                    <Select onValueChange={assignCategoryToUncategorized}>
+                      <SelectTrigger className="w-full sm:w-[220px] text-xs h-9 bg-white">
+                        <SelectValue placeholder={`Set category for ${itemsWithoutCategory} uncategorized`} />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Calories (optional)</Label>
-                  <Input
-                    type="number"
-                    value={editingItem.calories || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, calories: parseInt(e.target.value) || undefined })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Dietary Tags (comma-separated)</Label>
-                  <Input
-                    value={editingItem.tags.join(', ')}
-                    onChange={(e) => setEditingItem({ ...editingItem, tags: e.target.value.split(',').map(t => t.trim()) })}
-                    placeholder="e.g., vegan, spicy, gluten-free"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Image (optional)</Label>
-                  <p className="text-xs text-slate-500">
-                    Paste a URL, upload a photo, or generate with AI (upload + AI = enhance / regenerate background).
-                  </p>
-                  <div className="flex gap-2 flex-wrap">
-                    <Input
-                      value={editingItem.imageUrl?.startsWith('http') ? editingItem.imageUrl : ''}
-                      onChange={(e) => {
-                        const v = e.target.value.trim()
-                        setEditingItem({ ...editingItem, imageUrl: v || undefined })
-                      }}
-                      placeholder="https://example.com/image.jpg"
-                      className="flex-1 min-w-[180px]"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => formUploadRef.current?.click()}
-                    >
-                      <ImagePlus className="h-4 w-4 mr-2" />
-                      Upload
-                    </Button>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      ref={formUploadRef}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (!file) return
-                        const reader = new FileReader()
-                        reader.onloadend = () => {
-                          setEditingItem({ ...editingItem, imageUrl: reader.result as string })
-                        }
-                        reader.readAsDataURL(file)
-                        e.target.value = ''
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={openImageDialog}
-                      disabled={isGeneratingImage}
-                    >
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Generate with AI
-                    </Button>
-                  </div>
-                  {editingItem.imageUrl && (
-                    <div className="border rounded-lg overflow-auto bg-slate-50 flex items-start justify-center min-h-[120px] max-h-[320px]">
-                      <img
-                        src={editingItem.imageUrl}
-                        alt={editingItem.name}
-                        className="max-w-full w-auto max-h-[300px] object-contain"
-                        onError={(e) => {
-                          e.currentTarget.src = ''
-                          setEditingItem({ ...editingItem, imageUrl: undefined })
-                        }}
-                      />
-                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-4 shrink-0 border-t pt-4 mt-4">
+              <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
+                {extractedItems.map((item, index) => {
+                  const isExpanded = expandedIndex === index
+                  const hasIssues = !item.categoryId || !item.name.trim() || !item.price || item.price <= 0
+                  const categoryName = categories.find((c) => c.id === item.categoryId)?.name
+
+                  return (
+                    <div
+                      key={index}
+                      className={`border rounded-lg transition-all ${
+                        hasIssues
+                          ? 'border-amber-300 bg-amber-50/30'
+                          : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3 p-3">
+                        <span className="text-xs font-medium text-slate-400 mt-1 w-6 text-right shrink-0">
+                          {index + 1}
+                        </span>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {item.name || <span className="text-red-400 italic">Unnamed item</span>}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                            <span className="text-xs font-medium text-slate-600">
+                              IQD {(item.price || 0).toLocaleString()}
+                            </span>
+                            {categoryName ? (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                                {categoryName}
+                              </Badge>
+                            ) : (
+                              <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
+                                <AlertCircle className="h-2.5 w-2.5" />
+                                No category
+                              </span>
+                            )}
+                            {item.tags?.length > 0 && (
+                              <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
+                                {item.tags.slice(0, 3).join(', ')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <Select
+                          value={item.categoryId || ''}
+                          onValueChange={(value) => updateItem(index, { categoryId: value })}
+                        >
+                          <SelectTrigger className="h-8 w-[130px] text-xs shrink-0 bg-white hidden sm:flex">
+                            <SelectValue placeholder="Category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => toggleExpand(index)}
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 text-slate-500" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-slate-500" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 hover:bg-red-50"
+                            onClick={() => deleteItem(index)}
+                          >
+                            <X className="h-4 w-4 text-slate-400 hover:text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {isExpanded && editingItem && (
+                        <div className="border-t border-slate-200 p-4 space-y-4 bg-slate-50/50">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label className="text-xs">Item Name</Label>
+                              <Input
+                                value={editingItem.name}
+                                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                                className="bg-white"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">Price (IQD)</Label>
+                              <Input
+                                type="number"
+                                value={editingItem.price}
+                                onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) })}
+                                className="bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">Description</Label>
+                            <Textarea
+                              value={editingItem.description}
+                              onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+                              rows={2}
+                              className="bg-white"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label className="text-xs">Category</Label>
+                              <Select
+                                value={editingItem.categoryId || ''}
+                                onValueChange={(value) => setEditingItem({ ...editingItem, categoryId: value })}
+                              >
+                                <SelectTrigger className="bg-white">
+                                  <SelectValue placeholder="Select category" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {categories.map((category) => (
+                                    <SelectItem key={category.id} value={category.id}>
+                                      {category.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">Calories (optional)</Label>
+                              <Input
+                                type="number"
+                                value={editingItem.calories ?? ''}
+                                onChange={(e) => setEditingItem({ ...editingItem, calories: parseInt(e.target.value) || undefined })}
+                                className="bg-white"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">Tags (comma-separated)</Label>
+                              <Input
+                                value={(editingItem.tags || []).join(', ')}
+                                onChange={(e) => setEditingItem({ ...editingItem, tags: e.target.value.split(',').map((t) => t.trim()) })}
+                                placeholder="halal, spicy"
+                                className="bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">Image (optional)</Label>
+                            <div className="flex gap-2 flex-wrap">
+                              <Input
+                                value={editingItem.imageUrl?.startsWith('http') ? editingItem.imageUrl : ''}
+                                onChange={(e) => {
+                                  const value = e.target.value.trim()
+                                  setEditingItem({ ...editingItem, imageUrl: value || undefined })
+                                }}
+                                placeholder="https://example.com/image.jpg"
+                                className="flex-1 min-w-[180px] bg-white"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => formUploadRef.current?.click()}
+                              >
+                                <ImagePlus className="h-4 w-4 mr-1" />
+                                Upload
+                              </Button>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                ref={formUploadRef}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  const reader = new FileReader()
+                                  reader.onloadend = () => {
+                                    setEditingItem({ ...editingItem, imageUrl: reader.result as string })
+                                  }
+                                  reader.readAsDataURL(file)
+                                  e.target.value = ''
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={openImageDialog}
+                                disabled={isGeneratingImage}
+                              >
+                                <Sparkles className="h-4 w-4 mr-1" />
+                                AI Generate
+                              </Button>
+                            </div>
+                            {editingItem.imageUrl && (
+                              <div className="border rounded-lg overflow-auto bg-white flex items-start justify-center min-h-[80px] max-h-[200px]">
+                                <img
+                                  src={editingItem.imageUrl}
+                                  alt={editingItem.name}
+                                  className="max-w-full w-auto max-h-[190px] object-contain"
+                                  onError={(e) => {
+                                    e.currentTarget.src = ''
+                                    setEditingItem({ ...editingItem, imageUrl: undefined })
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex justify-end pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleExpand(index)}
+                            >
+                              <Check className="h-4 w-4 mr-1" />
+                              Done Editing
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="shrink-0 border-t border-slate-200 pt-4 mt-4 flex flex-col sm:flex-row gap-2">
                 <Button
                   variant="outline"
                   onClick={() => {
-                    if (currentItemIndex > 0) {
-                      setCurrentItemIndex(currentItemIndex - 1)
-                      setEditingItem({ ...extractedItems[currentItemIndex - 1] })
-                    }
+                    setStep('upload')
+                    setExpandedIndex(null)
+                    setEditingItem(null)
                   }}
-                  disabled={currentItemIndex === 0}
+                  className="sm:w-auto"
                 >
-                  Previous
+                  Back
                 </Button>
-                <Button onClick={verifyAndNext} className="flex-1" disabled={isProcessing}>
+                <Button
+                  onClick={handleCreateAll}
+                  className="flex-1"
+                  disabled={isProcessing || extractedItems.length === 0}
+                >
                   {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating...
+                      Creating {extractedItems.length} items...
                     </>
-                  ) : currentItemIndex < extractedItems.length - 1 ? (
-                    'Verify & Next'
                   ) : (
-                    'Verify & Create All'
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Create All {extractedItems.length} Item{extractedItems.length !== 1 ? 's' : ''}
+                      {itemsWithIssues > 0 && (
+                        <span className="ml-2 text-xs bg-white/20 rounded-full px-2 py-0.5">
+                          {itemsWithIssues} need attention
+                        </span>
+                      )}
+                    </>
                   )}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {step === 'verifying' && extractedItems.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+              <p className="text-sm text-slate-500">No items were extracted from this image.</p>
+              <Button variant="outline" onClick={() => setStep('upload')}>Try Another Image</Button>
             </div>
           )}
 
@@ -534,7 +868,6 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
         </DialogContent>
       </Dialog>
 
-      {/* AI Image dialog: upload for enhancement or generate from scratch (same as Add Menu Item) */}
       <Dialog
         open={showImageDialog}
         onOpenChange={(open) => {
@@ -577,7 +910,13 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                     variant="default"
                     className="flex-1"
                     onClick={() => {
-                      if (editingItem) setEditingItem({ ...editingItem, imageUrl: previewImageUrl })
+                      if (editingItem && expandedIndex !== null) {
+                        const nextEditingItem = { ...editingItem, imageUrl: previewImageUrl }
+                        setEditingItem(nextEditingItem)
+                        setExtractedItems((prev) =>
+                          prev.map((item, i) => (i === expandedIndex ? { ...item, imageUrl: previewImageUrl } : item))
+                        )
+                      }
                       setShowImageDialog(false)
                       setPreviewImageUrl(null)
                       setUploadedPhoto(null)

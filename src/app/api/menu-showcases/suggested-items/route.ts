@@ -82,7 +82,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const itemsForSuggest: (ItemForSuggest & { price: number })[] = menuItems.map((item: any) => {
+    const rawItems: (ItemForSuggest & { price: number })[] = menuItems.map((item: any) => {
       const ingredientTotal = item.ingredients?.reduce(
         (sum: number, ing: any) => sum + ing.quantity * ing.ingredient.costPerUnit,
         0
@@ -100,6 +100,7 @@ export async function GET(request: Request) {
         price: item.price ?? 0,
       }
     })
+    const itemsForSuggest = rawItems.filter((item) => classifyItemType(item) !== 'Drinks')
 
     const byPriceDesc = (ids: string[]) => {
       const map = new Map(itemsForSuggest.map((i) => [i.id, i.price]))
@@ -140,19 +141,20 @@ export async function GET(request: Request) {
         'Main Dishes',
         'Shareables',
         'Add-ons',
-        'Drinks',
+        'Sides',
         'Desserts',
         'Kids',
-        'Sides',
       ]
       const result: string[] = []
       const seen = new Set<string>()
       const addItem = (item: ItemForSuggest & { price: number }) => {
         if (result.length >= MAX_CAROUSEL_ITEMS) return
         if (seen.has(item.id)) return
+        if (classifyItemType(item) === 'Drinks') return
         result.push(item.id)
         seen.add(item.id)
       }
+
       for (const type of priority) {
         for (const item of sorted) {
           if (classifyItemType(item) === type) {
@@ -162,10 +164,15 @@ export async function GET(request: Request) {
         }
         if (result.length >= MAX_CAROUSEL_ITEMS) break
       }
-      for (const item of sorted) {
-        addItem(item)
-        if (result.length >= MAX_CAROUSEL_ITEMS) break
+
+      if (result.length < MAX_CAROUSEL_ITEMS) {
+        for (const item of sorted) {
+          if (classifyItemType(item) === 'Drinks') continue
+          addItem(item)
+          if (result.length >= MAX_CAROUSEL_ITEMS) break
+        }
       }
+
       return byPriceDesc(result)
     }
     const result: Record<Slot, string[]> = { day: [], evening: [], night: [] }

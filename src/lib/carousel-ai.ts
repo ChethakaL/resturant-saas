@@ -20,8 +20,22 @@ export function getTimeSlotLabel(slot: 'day' | 'evening' | 'night'): TimeSlotLab
   return SLOT_LABELS[slot] ?? 'Lunch'
 }
 
+/** Keywords that indicate a drink/beverage (category or name). Carousel should only feature food, not drinks. */
+const DRINK_KEYWORDS = [
+  'drink', 'drinks', 'beverage', 'beverages', 'juice', 'soda', 'water', 'coffee', 'tea',
+  'mocktail', 'cocktail', 'smoothie', 'latte', 'espresso', 'cappuccino', 'soft drink', 'cola',
+]
+
+function isDrinkLike(item: CarouselMenuItem): boolean {
+  const cat = (item.category ?? '').toLowerCase()
+  const name = item.name.toLowerCase()
+  const combined = `${cat} ${name}`
+  return DRINK_KEYWORDS.some((k) => combined.includes(k))
+}
+
 /**
  * Ask AI to suggest carousel items for the given time of day.
+ * Only food items (main dishes, pizza, shareables, sides, desserts); never drinks/beverages.
  * Prefers high margin and variety; returns up to 16 item ids in order.
  * Falls back to margin-based sort if no API key or AI fails.
  */
@@ -31,35 +45,39 @@ export async function suggestCarouselItems(
   options: { maxItems?: number } = {}
 ): Promise<string[]> {
   const maxItems = options.maxItems ?? 16
-  if (items.length === 0) return []
-  if (items.length <= maxItems) {
-    return fallbackByMargin(items).map((i) => i.id)
+  const foodOnly = items.filter((i) => !isDrinkLike(i))
+  const pool = foodOnly.length > 0 ? foodOnly : items
+  if (pool.length === 0) return []
+  if (pool.length <= maxItems) {
+    return fallbackByMargin(pool).map((i) => i.id)
   }
 
   const apiKey = process.env.GOOGLE_AI_KEY
   if (!apiKey) {
-    return fallbackByMargin(items)
+    return fallbackByMargin(pool)
       .slice(0, maxItems)
       .map((i) => i.id)
   }
 
-  const list = items
+  const list = pool
     .map(
       (i) =>
         `- ${i.id}: "${i.name}" (${i.category ?? 'Uncategorized'}, ${formatPrice(i.price)}, margin ${i.marginPercent.toFixed(0)}%)`
     )
     .join('\n')
 
-  const prompt = `You are a restaurant menu advisor. Given the current time of day, pick the best dishes to feature in a carousel.
+  const prompt = `You are a restaurant menu advisor. Given the current time of day, pick the best FOOD dishes to feature in a carousel.
+
+CRITICAL: Suggest ONLY food items (main dishes, pizzas, shareables, appetizers, sides, desserts, etc.). Do NOT suggest any drinks, beverages, coffee, tea, juices, sodas, water, cocktails, or any drink-only items.
 
 Time of day: **${timeSlot}**
-- Morning (6am–12pm): Lighter options, breakfast-friendly, drinks, quick bites.
+- Morning (6am–12pm): Lighter food options, breakfast-friendly dishes, quick bites.
 - Lunch (12–6pm): Hearty mains, popular combos, good value.
 - Evening/Night (6pm–6am): Dinner highlights, higher-margin items, chef specials.
 
 Prioritize: (1) high profit margin, (2) suitability for the time slot, (3) variety (mix categories; do not suggest the same category repeatedly). Return exactly ${maxItems} item ids, one per line, in order of best to feature first. Only use ids from the list; do not repeat an id.
 
-Menu items (id: name, category, price, margin):
+Menu items (id: name, category, price, margin) — these are all food items; pick from this list only:
 ${list}
 
 Reply with only the list of ids, one per line, no other text.`
@@ -70,7 +88,7 @@ Reply with only the list of ids, one per line, no other text.`
     const ids = text
       .split(/\n/)
       .map((line) => line.trim().replace(/^[-•*]\s*/, '').split(/\s/)[0])
-      .filter((id) => id && items.some((i) => i.id === id))
+      .filter((id) => id && pool.some((i) => i.id === id))
     const seen = new Set<string>()
     const unique: string[] = []
     for (const id of ids) {
@@ -80,7 +98,7 @@ Reply with only the list of ids, one per line, no other text.`
       if (unique.length >= maxItems) break
     }
     if (unique.length >= 8) return unique
-    const fallbackIds = fallbackByMargin(items).map((i) => i.id)
+    const fallbackIds = fallbackByMargin(pool).map((i) => i.id)
     for (const id of fallbackIds) {
       if (unique.includes(id)) continue
       unique.push(id)
@@ -88,7 +106,7 @@ Reply with only the list of ids, one per line, no other text.`
     }
     return unique
   } catch {
-    return fallbackByMargin(items)
+    return fallbackByMargin(pool)
       .slice(0, maxItems)
       .map((i) => i.id)
   }

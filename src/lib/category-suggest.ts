@@ -20,13 +20,24 @@ export type DefaultCategoryKey = (typeof DEFAULT_CATEGORY_NAMES)[number]
 /** Keywords (lowercase) that map to our category keys. */
 const CATEGORY_KEYWORDS: Record<DefaultCategoryKey, string[]> = {
   'Signature Dishes': [], // Filled by logic, not by keyword
-  'Main Dishes': ['main', 'mains', 'entree', 'entrees', 'grill', 'grilled', 'burger', 'pasta', 'rice', 'dish', 'platter'],
-  Shareables: ['share', 'sharable', 'shareable', 'appetizer', 'appetizers', 'starter', 'starters', 'snack', 'mezze', 'dip'],
+  'Main Dishes': ['main', 'mains', 'entree', 'entrees', 'grill', 'grilled', 'burger', 'burgers', 'pizza', 'pastas', 'pasta', 'rice', 'dish', 'platter', 'special', 'specials', 'meal', 'steak', 'noodle'],
+  Shareables: ['share', 'sharable', 'shareable', 'appetizer', 'appetizers', 'starter', 'starters', 'snack', 'mezze', 'dip', 'combo'],
   'Add-ons': ['add-on', 'addon', 'extra', 'topping'],
-  Drinks: ['drink', 'drinks', 'beverage', 'beverages', 'juice', 'soda', 'water', 'coffee', 'tea', 'mocktail', 'cocktail'],
-  Desserts: ['dessert', 'desserts', 'sweet', 'cake', 'ice cream'],
+  Drinks: ['drink', 'drinks', 'beverage', 'beverages', 'juice', 'soda', 'water', 'coffee', 'tea', 'mocktail', 'cocktail', 'smoothie'],
+  Desserts: ['dessert', 'desserts', 'sweet', 'cake', 'ice cream', 'tart', 'pudding'],
   Kids: ['kids', 'kid', 'children', 'child'],
-  Sides: ['side', 'sides', 'salad', 'fries', 'bread'],
+  Sides: ['side', 'sides', 'salad', 'fries', 'bread', 'dip'],
+}
+
+const CATEGORY_NAME_PRIORITY: Record<DefaultCategoryKey, string[]> = {
+  'Signature Dishes': [],
+  'Main Dishes': ['main dishes', 'mains', 'main', 'pizza', 'entrees', 'entree', 'specials', 'grill', 'grills', 'pasta', 'steak', 'burgers', 'grilled'],
+  Shareables: ['shareables', 'shareable', 'appetizers', 'appetizer', 'mezze', 'snacks'],
+  'Add-ons': ['add-ons', 'addons', 'extras'],
+  Drinks: ['drinks', 'beverages', 'cocktails', 'mocktails', 'coffee', 'tea'],
+  Desserts: ['desserts', 'sweets', 'pastries'],
+  Kids: ['kids', 'children', 'kids menu'],
+  Sides: ['sides', 'salads', 'fries'],
 }
 
 export interface ItemForSuggest {
@@ -47,7 +58,11 @@ export interface CategoryForSuggest {
  * Exported for carousel suggested-items (main vs shareable).
  */
 export function classifyItemType(item: ItemForSuggest): DefaultCategoryKey {
-  const combined = `${(item.categoryName ?? '')} ${item.name}`.toLowerCase()
+  const categoryNormalized = (item.categoryName ?? '').toLowerCase()
+  for (const [key, matches] of Object.entries(CATEGORY_NAME_PRIORITY)) {
+    if (matches.some((match) => categoryNormalized.includes(match))) return key as DefaultCategoryKey
+  }
+  const combined = `${categoryNormalized} ${item.name}`.toLowerCase()
   for (const [key, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     if (key === 'Signature Dishes') continue
     if (keywords.some((k) => combined.includes(k))) return key as DefaultCategoryKey
