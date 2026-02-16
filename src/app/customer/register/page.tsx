@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-export default function CustomerRegisterPage() {
+function CustomerRegisterContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrlParam = searchParams.get('callbackUrl') || '/'
@@ -116,5 +116,13 @@ export default function CustomerRegisterPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function CustomerRegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-100"><p className="text-slate-500">Loading…</p></div>}>
+      <CustomerRegisterContent />
+    </Suspense>
   )
 }
