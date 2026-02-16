@@ -20,6 +20,14 @@ export default async function DashboardLayout({
     redirect('/supplier')
   }
 
+  if (session.user.type === 'superadmin') {
+    redirect('/admin')
+  }
+
+  if (session.user.type === 'customer') {
+    redirect('/customer/me')
+  }
+
   return (
     <ManagementLanguageProvider>
       <div className="flex h-screen overflow-hidden">

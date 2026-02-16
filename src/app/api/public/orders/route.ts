@@ -1,8 +1,16 @@
+import { getServerSession } from 'next-auth'
 import { prisma } from '@/lib/prisma'
+import { authOptions } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    const customerId =
+      session?.user?.type === 'customer' && session?.user?.id
+        ? (session.user.id as string)
+        : null
+
     const data = await request.json()
     const restaurantId = data.restaurantId as string | undefined
     const items = data.items as { menuItemId: string; quantity: number }[]
@@ -87,9 +95,10 @@ export async function POST(request: Request) {
         total,
         paymentMethod: 'CASH',
         status: 'PENDING',
-        customerName: data.customerName || 'Guest',
+        customerName: data.customerName || (session?.user?.name as string) || 'Guest',
         notes: data.notes || 'Customer self-order',
         restaurantId,
+        customerId,
         tableId,
         items: {
           createMany: {

@@ -317,6 +317,18 @@ model MenuItemAddOn {
   @@map("menu_item_add_ons")
 }
 
+model Customer {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sales     Sale[]
+
+  @@map("customers")
+}
+
 model Sale {
   id                    String        @id @default(cuid())
   orderNumber           String
@@ -326,6 +338,7 @@ model Sale {
   customerName          String?
   notes                 String?
   restaurantId          String
+  customerId            String?       @map("customer_id")
   timestamp             DateTime      @default(now())
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
@@ -336,10 +349,12 @@ model Sale {
   stripePaymentIntentId String?
   items                 SaleItem[]
   restaurant            Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customer              Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
   table                 Table?        @relation(fields: [tableId], references: [id])
   waiter                Employee?     @relation("WaiterSales", fields: [waiterId], references: [id])
 
   @@index([restaurantId])
+  @@index([customerId])
   @@index([timestamp])
   @@index([orderNumber])
   @@index([status])

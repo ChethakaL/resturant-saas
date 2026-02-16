@@ -1,12 +1,13 @@
 'use client'
 
 import { useMemo, useState, useEffect, useCallback, useRef, useReducer } from 'react'
+import Link from 'next/link'
+import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { formatCurrency, formatMenuPrice, formatMenuPriceWithVariant } from '@/lib/utils'
-import Image from 'next/image'
 import {
   Dialog,
   DialogContent,
@@ -102,6 +103,7 @@ interface SmartMenuProps {
   tables?: { id: string; number: string }[]
   categoryAnchorBundle?: Record<string, BundleHint>
   maxInitialItemsPerCategory?: number
+  forceShowImages?: boolean
 }
 
 type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
@@ -530,6 +532,54 @@ function cartReducer(state: CartLine[], action: CartAction): CartLine[] {
   }
 }
 
+/** Sign in / My visits next to cart. Renders same on server and first client to avoid hydration mismatch, then session-aware after mount. */
+function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
+  const [mounted, setMounted] = useState(false)
+  const { data: session } = useSession()
+  useEffect(() => setMounted(true), [])
+
+  const btnClass = isDarkBg
+    ? 'text-white hover:bg-white/10'
+    : 'text-slate-700 hover:bg-slate-200'
+
+  if (!mounted) {
+    return (
+      <Link href="/customer/login?callbackUrl=/">
+        <Button variant="ghost" size="sm" className={`h-9 px-2.5 sm:px-3 text-xs sm:text-sm shrink-0 ${btnClass}`}>
+          Sign in
+        </Button>
+      </Link>
+    )
+  }
+  if (session?.user?.type === 'customer') {
+    return (
+      <>
+        <Link href="/customer/me">
+          <Button variant="ghost" size="sm" className={`h-9 px-2.5 sm:px-3 text-xs sm:text-sm shrink-0 ${btnClass}`}>
+            <span className="hidden sm:inline">My visits</span>
+            <span className="sm:hidden">Visits</span>
+          </Button>
+        </Link>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`h-9 px-2 sm:px-2.5 text-xs shrink-0 ${btnClass}`}
+          onClick={() => signOut({ callbackUrl: '/' })}
+        >
+          Sign out
+        </Button>
+      </>
+    )
+  }
+  return (
+    <Link href="/customer/login?callbackUrl=/">
+      <Button variant="ghost" size="sm" className={`h-9 px-2.5 sm:px-3 text-xs sm:text-sm shrink-0 ${btnClass}`}>
+        Sign in
+      </Button>
+    </Link>
+  )
+}
+
 export default function SmartMenu({
   restaurantId,
   menuItems,
@@ -548,6 +598,7 @@ export default function SmartMenu({
   tables = [],
   categoryAnchorBundle = {},
   maxInitialItemsPerCategory = 3,
+  forceShowImages = false,
 }: SmartMenuProps) {
   // Safety check for menuItems
   if (!menuItems || !Array.isArray(menuItems)) {
@@ -607,6 +658,7 @@ export default function SmartMenu({
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   const [scrollDepth, setScrollDepth] = useState(0)
+  const hideImages = !forceShowImages && getVariant('photo_visibility') === 'hide'
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)
     else sectionRefs.current.delete(id)
@@ -1257,7 +1309,7 @@ const getLocalizedAddOnName = (name: string) => {
           <header className="flex items-center gap-2 sm:gap-4">
               <div className="flex-shrink-0 flex items-center gap-2 min-w-0">
                 {logoSrc ? (
-                  <Image
+                  <img
                     src={logoSrc}
                     width={40}
                     height={40}
@@ -1298,7 +1350,8 @@ const getLocalizedAddOnName = (name: string) => {
                   })}
                 </div>
               </nav>
-              <div className="flex-shrink-0 flex items-center gap-1">
+              <div className="flex-shrink-0 flex items-center gap-1 sm:gap-1.5">
+              <CustomerSignInControl isDarkBg={isDarkBg} />
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1803,7 +1856,7 @@ const getLocalizedAddOnName = (name: string) => {
                               isSelectedForPairing={selectedItemForPairing?.id === item.id}
                               isDarkTheme={isDarkBg}
                               displayPriceOverride={formatMenuPriceWithVariant(item.price, priceVariant)}
-                              forceHideImage={getVariant('photo_visibility') === 'hide'}
+                              forceHideImage={hideImages}
                             />
                           )
                         })

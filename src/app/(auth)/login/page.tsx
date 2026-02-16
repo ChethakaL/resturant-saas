@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -10,10 +12,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [registered, setRegistered] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('registered') === '1') setRegistered(true)
+  }, [searchParams])
 
   const handleDemoLogin = async () => {
     setError('')
@@ -102,6 +110,11 @@ export default function LoginPage() {
                 />
               </div>
 
+              {registered && (
+                <div className="text-sm text-emerald-600 bg-emerald-50 p-3 rounded-md">
+                  Restaurant registered. You can sign in now.
+                </div>
+              )}
               {error && (
                 <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
                   {error}
@@ -127,6 +140,9 @@ export default function LoginPage() {
               </Button>
 
               <p className="text-center text-sm text-slate-500 mt-4">
+                New restaurant? <Link href="/register" className="text-amber-600 hover:underline">Register your restaurant</Link>
+              </p>
+              <p className="text-center text-sm text-slate-500">
                 Supplier? <a href="/supplier/login" className="text-amber-600 hover:underline">Sign in to Supplier Portal</a>
               </p>
               <div className="text-xs text-slate-500 mt-4 p-3 bg-slate-50 rounded-md">

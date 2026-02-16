@@ -134,6 +134,65 @@ export const authOptions: NextAuthOptions = {
         }
       },
     }),
+    CredentialsProvider({
+      id: 'customer-credentials',
+      name: 'Customer',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Invalid credentials')
+        }
+
+        const customer = await prisma.customer.findUnique({
+          where: { email: credentials.email },
+        })
+
+        if (!customer) {
+          throw new Error('Invalid credentials')
+        }
+
+        const valid = await bcrypt.compare(credentials.password, customer.password)
+        if (!valid) {
+          throw new Error('Invalid credentials')
+        }
+
+        return {
+          id: customer.id,
+          email: customer.email,
+          name: customer.name,
+          role: 'customer',
+          type: 'customer' as const,
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: 'superadmin-credentials',
+      name: 'SuperAdmin',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        const email = process.env.SUPER_ADMIN_EMAIL
+        const password = process.env.SUPER_ADMIN_PASSWORD
+        if (!email || !password || !credentials?.email || !credentials?.password) {
+          return null
+        }
+        if (credentials.email !== email || credentials.password !== password) {
+          return null
+        }
+        return {
+          id: 'superadmin',
+          email: credentials.email,
+          name: 'Super Admin',
+          role: 'superadmin',
+          type: 'superadmin' as const,
+        }
+      },
+    }),
   ],
   callbacks: {
     async jwt({ token, user }) {
@@ -152,7 +211,7 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         session.user.id = token.id as string
         session.user.role = token.role as string
-        session.user.type = (token.type as 'restaurant' | 'supplier') ?? 'restaurant'
+        session.user.type = (token.type as 'restaurant' | 'supplier' | 'customer' | 'superadmin') ?? 'restaurant'
         session.user.restaurantId = token.restaurantId as string | undefined
         session.user.restaurantName = token.restaurantName as string | undefined
         session.user.supplierId = token.supplierId as string | undefined

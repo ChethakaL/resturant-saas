@@ -22,6 +22,7 @@ export interface MenuPersonalizationWrapperProps {
   categoryAnchorBundle?: Record<string, BundleHint>
   maxInitialItemsPerCategory?: number
   tables?: { id: string; number: string }[]
+  forceShowImages?: boolean
 }
 
 export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProps) {
@@ -35,6 +36,7 @@ export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProp
   return (
     <SmartMenu
       {...props}
+      forceShowImages={props.forceShowImages}
       tableSize={validTableSize}
       tableNumber={tableNumber}
       tables={props.tables}

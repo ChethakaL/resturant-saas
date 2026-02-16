@@ -504,6 +504,7 @@ export default async function Home() {
       categoryAnchorBundle={data.categoryAnchorBundle}
       maxInitialItemsPerCategory={data.maxInitialItemsPerCategory}
       tables={data.tables}
+      forceShowImages
     />
     </Suspense>
   )
