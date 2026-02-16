@@ -47,6 +47,7 @@ interface RecipeIngredient {
   quantity: number
   pieceCount?: number | null
   unit?: string | null
+  supplierName?: string | null
   supplierProductId?: string | null
   unitCostCached?: number | null
   currency?: string | null
@@ -393,6 +394,7 @@ export default function MenuForm({
       quantity: ing.quantity,
       pieceCount: (ing as any).pieceCount || null,
       unit: (ing as any).unit ?? null,
+      supplierName: null,
       supplierProductId: (ing as any).supplierProductId ?? null,
       unitCostCached: (ing as any).unitCostCached ?? null,
       currency: (ing as any).currency ?? null,
@@ -502,7 +504,7 @@ export default function MenuForm({
 
   const addIngredient = () => {
     // Add new ingredient at the TOP of the list so user can see it
-    setRecipe([{ ingredientId: '', quantity: 0, pieceCount: null }, ...recipe])
+    setRecipe([{ ingredientId: '', quantity: 0, pieceCount: null, supplierName: null }, ...recipe])
     setNextStepHighlight(null)
   }
 
@@ -558,46 +560,108 @@ export default function MenuForm({
   }
 
   const updateIngredient = (index: number, field: keyof RecipeIngredient, value: any) => {
-    const newRecipe = [...recipe]
-    newRecipe[index] = { ...newRecipe[index], [field]: value }
-    setRecipe(newRecipe)
+    setRecipe((prev) => {
+      const next = [...prev]
+      next[index] = { ...next[index], [field]: value }
+      return next
+    })
   }
 
-  const selectSupplierProduct = (index: number, supplierProductId: string) => {
-    const sp = supplierProducts.find((p) => p.id === supplierProductId)
-    const newRecipe = [...recipe]
-    if (sp) {
-      newRecipe[index] = {
-        ...newRecipe[index],
-        supplierProductId,
-        unitCostCached: sp.unitCost,
-        currency: sp.currency,
-        lastPricedAt: new Date().toISOString(),
+  const normalizeSearch = (value?: string | null) => (value || '').trim().toLowerCase()
+
+  const getMatchingSupplierProductsForIngredient = (ingredient?: Ingredient) => {
+    if (!ingredient) return [] as SupplierProductOption[]
+    return supplierProducts.filter((sp) => {
+      if (ingredient.globalIngredientId && sp.globalIngredientId) {
+        return ingredient.globalIngredientId === sp.globalIngredientId
       }
-    } else {
-      // Cleared supplier
-      newRecipe[index] = {
-        ...newRecipe[index],
+      const ingredientName = ingredient.name.toLowerCase()
+      const productName = sp.name.toLowerCase()
+      return (
+        productName.includes(ingredientName) ||
+        ingredientName.includes(productName)
+      )
+    })
+  }
+
+  const pickBestSupplierProduct = (
+    options: SupplierProductOption[],
+    supplierName?: string | null
+  ) => {
+    if (options.length === 0) return null
+    const query = normalizeSearch(supplierName)
+    const filtered = query
+      ? options.filter((sp) => {
+          const supplier = sp.supplierName.toLowerCase()
+          const product = sp.name.toLowerCase()
+          const brand = (sp.brand || '').toLowerCase()
+          return (
+            supplier.includes(query) ||
+            query.includes(supplier) ||
+            product.includes(query) ||
+            brand.includes(query)
+          )
+        })
+      : options
+    const pool = filtered.length > 0 ? filtered : options
+    return [...pool].sort((a, b) => {
+      const aCost = Number.isFinite(a.unitCost) ? a.unitCost : Number.MAX_SAFE_INTEGER
+      const bCost = Number.isFinite(b.unitCost) ? b.unitCost : Number.MAX_SAFE_INTEGER
+      if (aCost !== bCost) return aCost - bCost
+      return (a.price ?? Number.MAX_SAFE_INTEGER) - (b.price ?? Number.MAX_SAFE_INTEGER)
+    })[0]
+  }
+
+  const autoFillSupplierCost = (
+    line: RecipeIngredient,
+    ingredient?: Ingredient
+  ): RecipeIngredient => {
+    if (!ingredient) {
+      return {
+        ...line,
         supplierProductId: null,
         unitCostCached: null,
         currency: null,
         lastPricedAt: null,
       }
     }
-    setRecipe(newRecipe)
+    const options = getMatchingSupplierProductsForIngredient(ingredient)
+    const selected = pickBestSupplierProduct(options, line.supplierName)
+    if (!selected) {
+      return {
+        ...line,
+        supplierProductId: null,
+        unitCostCached: null,
+        currency: null,
+        lastPricedAt: null,
+      }
+    }
+    return {
+      ...line,
+      supplierProductId: selected.id,
+      unitCostCached: selected.unitCost,
+      currency: selected.currency,
+      lastPricedAt: new Date().toISOString(),
+    }
   }
+
+  useEffect(() => {
+    if (supplierProducts.length === 0) return
+    setRecipe((prev) =>
+      prev.map((line) => {
+        if (line.supplierName || !line.supplierProductId) return line
+        const supplierProduct = supplierProducts.find((sp) => sp.id === line.supplierProductId)
+        if (!supplierProduct) return line
+        return { ...line, supplierName: supplierProduct.supplierName }
+      })
+    )
+  }, [supplierProducts])
 
   const refreshAllCosts = () => {
     const newRecipe = recipe.map((item) => {
-      if (!item.supplierProductId) return item
-      const sp = supplierProducts.find((p) => p.id === item.supplierProductId)
-      if (!sp) return item
-      return {
-        ...item,
-        unitCostCached: sp.unitCost,
-        currency: sp.currency,
-        lastPricedAt: new Date().toISOString(),
-      }
+      const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
+      if (!ingredient) return item
+      return autoFillSupplierCost(item, ingredient)
     })
     setRecipe(newRecipe)
     toast({ title: 'Costs refreshed', description: 'All recipe costs updated to latest supplier prices' })
@@ -2095,7 +2159,7 @@ export default function MenuForm({
             )}
             <Card>
               <CardHeader className="flex items-center justify-between gap-3">
-                <CardTitle>Recipe Instructions</CardTitle>
+                <CardTitle>SOP</CardTitle>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={addRecipeStep}>
                     <Plus className="h-3 w-3 mr-2" />
@@ -2242,16 +2306,6 @@ export default function MenuForm({
                       {recipe.map((item, index) => {
                         const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
                         const itemCost = getItemCost(item)
-                        const matchingSupplierProducts = supplierProducts.filter((sp) => {
-                          if (!ingredient) return true
-                          // Match by globalIngredientId or by name similarity
-                          if (ingredient.globalIngredientId && sp.globalIngredientId) {
-                            return ingredient.globalIngredientId === sp.globalIngredientId
-                          }
-                          return sp.name.toLowerCase().includes(ingredient.name.toLowerCase()) ||
-                            ingredient.name.toLowerCase().includes(sp.name.toLowerCase())
-                        })
-                        const allSPOptions = matchingSupplierProducts.length > 0 ? matchingSupplierProducts : supplierProducts
                         const countLabel = formatCountLabel(
                           getCountLabelForIngredient(ingredient, item.pieceCount, item.quantity),
                           item.pieceCount || undefined
@@ -2291,9 +2345,21 @@ export default function MenuForm({
                               <Label>Ingredient</Label>
                               <Select
                                 value={item.ingredientId}
-                                onValueChange={(value) =>
+                                onValueChange={(value) => {
+                                  const selectedIngredient = allIngredients.find((i) => i.id === value)
+                                  const nextLine = autoFillSupplierCost(
+                                    {
+                                      ...item,
+                                      ingredientId: value,
+                                    },
+                                    selectedIngredient
+                                  )
                                   updateIngredient(index, 'ingredientId', value)
-                                }
+                                  updateIngredient(index, 'supplierProductId', nextLine.supplierProductId)
+                                  updateIngredient(index, 'unitCostCached', nextLine.unitCostCached)
+                                  updateIngredient(index, 'currency', nextLine.currency)
+                                  updateIngredient(index, 'lastPricedAt', nextLine.lastPricedAt)
+                                }}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select ingredient" />
@@ -2368,28 +2434,51 @@ export default function MenuForm({
                             </div>
                           </div>
 
-                          {/* Supplier product selection (4.1) */}
+                          {/* Supplier name input + auto-priced from supplier database */}
                           {supplierProducts.length > 0 && (
-                            <div className="space-y-1">
-                              <Label className="text-xs">Supplier product</Label>
-                              <select
-                                className="flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs"
-                                value={item.supplierProductId ?? ''}
-                                onChange={(e) => selectSupplierProduct(index, e.target.value)}
-                              >
-                                <option value="">No supplier (use base cost)</option>
-                                {allSPOptions.map((sp) => (
-                                  <option key={sp.id} value={sp.id}>
-                                    {sp.name} — {sp.supplierName} ({sp.packSize}{sp.packUnit} @ {sp.price ?? 0} {sp.currency})
-                                  </option>
-                                ))}
-                              </select>
-                              {item.supplierProductId && item.unitCostCached != null && (
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Supplier (optional)</Label>
+                                <Input
+                                  value={item.supplierName ?? ''}
+                                  onChange={(e) => {
+                                    const supplierName = e.target.value
+                                    updateIngredient(index, 'supplierName', supplierName)
+                                    const nextLine = autoFillSupplierCost(
+                                      { ...item, supplierName },
+                                      ingredient
+                                    )
+                                    updateIngredient(index, 'supplierProductId', nextLine.supplierProductId)
+                                    updateIngredient(index, 'unitCostCached', nextLine.unitCostCached)
+                                    updateIngredient(index, 'currency', nextLine.currency)
+                                    updateIngredient(index, 'lastPricedAt', nextLine.lastPricedAt)
+                                  }}
+                                  placeholder="Type supplier name"
+                                  className="h-8 text-xs"
+                                />
                                 <p className="text-[10px] text-slate-400">
-                                  Unit cost: {item.unitCostCached.toFixed(2)} {item.currency}/{ingredient?.unit || 'unit'}
-                                  {item.lastPricedAt && ` — priced ${new Date(item.lastPricedAt).toLocaleDateString()}`}
+                                  We auto-select the best matching supplier price for this ingredient.
                                 </p>
-                              )}
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Supplier price source</Label>
+                                <div className="h-8 px-2 py-1 rounded-md border border-input bg-slate-50 text-xs text-slate-600 flex items-center">
+                                  {item.supplierProductId
+                                    ? (() => {
+                                        const selected = supplierProducts.find((sp) => sp.id === item.supplierProductId)
+                                        return selected
+                                          ? `${selected.supplierName} — ${selected.name}`
+                                          : 'Matched supplier product'
+                                      })()
+                                    : 'No supplier match (using ingredient base cost)'}
+                                </div>
+                                {item.supplierProductId && item.unitCostCached != null && (
+                                  <p className="text-[10px] text-slate-400">
+                                    Unit cost: {item.unitCostCached.toFixed(2)} {item.currency}/{ingredient?.unit || 'unit'}
+                                    {item.lastPricedAt && ` — priced ${new Date(item.lastPricedAt).toLocaleDateString()}`}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           )}
 
