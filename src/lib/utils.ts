@@ -23,9 +23,8 @@ export function formatMenuPrice(amount: number): string {
 }
 
 /**
- * Client-side price formatting for A/B tests (price_format experiment).
- * variant 'whole' = integer; 'decimal_9' = charm 9 (e.g. 17,900); 'decimal_5' = charm 5 (e.g. 18,500).
- * Use in customer-facing components only (experiment is client-assigned).
+ * Client-side customer-menu price formatting.
+ * Keep this exact to persisted menu prices (no charm-price adjustments).
  */
 export function formatMenuPriceWithVariant(amount: number, variant: string): string {
   const n = Math.round(amount)
@@ -34,17 +33,7 @@ export function formatMenuPriceWithVariant(amount: number, variant: string): str
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(Math.round(value))
-
-  if (variant === 'decimal_9') {
-    const major = n / 1000
-    const charm = Math.floor(major) + 0.9
-    return format(charm * 1000)
-  }
-  if (variant === 'decimal_5') {
-    const major = n / 1000
-    const charm = Math.floor(major) + 0.5
-    return format(charm * 1000)
-  }
+  void variant
   return format(n)
 }
 
