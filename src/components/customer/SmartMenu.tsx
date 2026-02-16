@@ -539,8 +539,8 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
   useEffect(() => setMounted(true), [])
 
   const btnClass = isDarkBg
-    ? 'text-white hover:bg-white/10'
-    : 'text-slate-700 hover:bg-slate-200'
+    ? 'text-white hover:bg-white/10 hover:text-white'
+    : 'text-slate-700 hover:bg-slate-200 hover:text-slate-700'
 
   if (!mounted) {
     return (
