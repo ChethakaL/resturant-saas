@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard, Mic, MicOff } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
@@ -92,6 +92,34 @@ interface MenuFormProps {
   defaultBackgroundPrompt?: string | null
 }
 
+interface ParsedAIIngredient {
+  name: string
+  quantity: number
+  unit: string
+  pieceCount?: number | null
+}
+
+interface ParsedAIResponse {
+  name?: string
+  description?: string
+  price?: number
+  categoryName?: string
+  calories?: number | null
+  protein?: number | null
+  carbs?: number | null
+  tags?: string[]
+  recipeSteps?: string[]
+  recipeTips?: string[]
+  prepTime?: string | null
+  cookTime?: string | null
+  ingredients?: ParsedAIIngredient[]
+}
+
+interface AssistantMessage {
+  role: 'assistant' | 'user'
+  text: string
+}
+
 export default function MenuForm({
   categories,
   ingredients,
@@ -150,6 +178,14 @@ export default function MenuForm({
   // AI Assistant tab: free-text → auto-fill form
   const [aiAssistantText, setAiAssistantText] = useState('')
   const [aiParseLoading, setAiParseLoading] = useState(false)
+  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
+    {
+      role: 'assistant',
+      text: 'Tell me about the dish. I will ask follow-up questions, then fill the form, SOP, and ingredients for you. I will not generate the image; I will guide you to add it.',
+    },
+  ])
+  const [isListening, setIsListening] = useState(false)
+  const speechRecognitionRef = useRef<any>(null)
 
   // Guided next-step: which tab to show and which field to highlight after AI fill
   const [activeTab, setActiveTab] = useState<string>(mode === 'edit' ? 'overview' : 'ai')
@@ -1010,6 +1046,296 @@ export default function MenuForm({
     }
   }
 
+  const parseMenuWithAI = async (text: string): Promise<ParsedAIResponse> => {
+    const res = await fetch('/api/menu/parse-with-ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        categoryNames: categories.map((c) => c.name),
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data?.error || 'Failed to parse')
+    return data as ParsedAIResponse
+  }
+
+  const findCategoryIdByName = (name?: string) => {
+    if (!name) return ''
+    const normalized = name.toLowerCase().trim()
+    const exact = categories.find((c) => c.name.toLowerCase().trim() === normalized)
+    if (exact) return exact.id
+    const partial = categories.find((c) => {
+      const cat = c.name.toLowerCase().trim()
+      return cat.includes(normalized) || normalized.includes(cat)
+    })
+    return partial?.id ?? ''
+  }
+
+  const applyParsedDataToForm = async (
+    data: ParsedAIResponse,
+    options?: { autoCreateIngredients?: boolean; quietToast?: boolean }
+  ) => {
+    const autoCreateIngredients = options?.autoCreateIngredients === true
+    const categoryId = findCategoryIdByName(data.categoryName)
+    setFormData((prev) => ({
+      ...prev,
+      name: data.name || prev.name,
+      description: data.description || prev.description,
+      price: data.price != null ? String(data.price) : prev.price,
+      categoryId: categoryId || prev.categoryId,
+      calories: data.calories != null ? String(data.calories) : prev.calories,
+      protein: data.protein != null ? String(data.protein) : prev.protein,
+      carbs: data.carbs != null ? String(data.carbs) : prev.carbs,
+      tags: Array.isArray(data.tags) ? data.tags.join(', ') : prev.tags,
+    }))
+    if (Array.isArray(data.recipeSteps) && data.recipeSteps.length > 0) {
+      setRecipeSteps(data.recipeSteps)
+    }
+    if (Array.isArray(data.recipeTips) && data.recipeTips.length > 0) {
+      setRecipeTips(data.recipeTips)
+    }
+    if (data.prepTime) setPrepTime(data.prepTime)
+    if (data.cookTime) setCookTime(data.cookTime)
+
+    let filledRecipeCount = 0
+    if (Array.isArray(data.ingredients) && data.ingredients.length > 0) {
+      const newRecipe: RecipeIngredient[] = []
+      const unmatched: string[] = []
+      const createdIngredients: Ingredient[] = []
+      for (const ing of data.ingredients) {
+        const nameLower = (ing.name || '').toLowerCase().trim()
+        const match = allIngredients.find((i) => {
+          const n = i.name.toLowerCase().trim()
+          return n === nameLower || n.includes(nameLower) || nameLower.includes(n)
+        })
+        if (match) {
+          const converted = convertRecipeUnitToBaseUnit(
+            ing.quantity,
+            ing.unit,
+            match.unit,
+            match.name
+          )
+          newRecipe.push({
+            ingredientId: match.id,
+            quantity: converted.quantity,
+            pieceCount: converted.pieceCount,
+          })
+          filledRecipeCount++
+          continue
+        }
+
+        if (!autoCreateIngredients) {
+          unmatched.push(ing.name.trim() || ing.name)
+          continue
+        }
+
+        try {
+          const createResponse = await fetch('/api/ingredients', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: ing.name,
+              unit: ing.unit || 'kg',
+              costPerUnit: 0,
+            }),
+          })
+          if (!createResponse.ok) {
+            unmatched.push(ing.name.trim() || ing.name)
+            continue
+          }
+          const newIngredient = await createResponse.json()
+          createdIngredients.push(newIngredient)
+          newRecipe.push({
+            ingredientId: newIngredient.id,
+            quantity: Number(ing.quantity) || 0,
+            pieceCount: ing.pieceCount ?? null,
+          })
+          filledRecipeCount++
+        } catch {
+          unmatched.push(ing.name.trim() || ing.name)
+        }
+      }
+      if (createdIngredients.length > 0) {
+        setNewlyCreatedIngredients((prev) => [...prev, ...createdIngredients])
+      }
+      setRecipe(newRecipe)
+      setUnmatchedIngredientsFromPrompt(unmatched)
+    } else {
+      setUnmatchedIngredientsFromPrompt([])
+    }
+
+    const missingNutrition =
+      data.calories == null || data.protein == null || data.carbs == null
+    const missingTags = !Array.isArray(data.tags) || data.tags.length === 0
+    const categoryName = categories.find((c) => c.id === categoryId)?.name
+
+    if ((missingNutrition || missingTags) && (data.name || data.description)) {
+      try {
+        if (missingNutrition) {
+          const nutRes = await fetch('/api/menu/estimate-nutrition', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              itemName: data.name || '',
+              description: data.description || '',
+              category: categoryName,
+            }),
+          })
+          const nutData = await nutRes.json()
+          if (nutRes.ok && (nutData.calories != null || nutData.protein != null || nutData.carbs != null)) {
+            setFormData((prev) => ({
+              ...prev,
+              ...(nutData.calories != null && { calories: String(nutData.calories) }),
+              ...(nutData.protein != null && { protein: String(nutData.protein) }),
+              ...(nutData.carbs != null && { carbs: String(nutData.carbs) }),
+            }))
+          }
+        }
+      } catch (_) {
+        // Non-blocking
+      }
+    }
+
+    const needsCategory = !categoryId && categories.length > 0
+    const needsImage = !formData.imageUrl?.trim()
+    const hasUnmatchedIngredients = (data.ingredients?.length ?? 0) > 0 && filledRecipeCount < (data.ingredients?.length ?? 0)
+    const needsIngredients = filledRecipeCount === 0
+
+    if (needsCategory) {
+      setActiveTab('details')
+      setNextStepHighlight('category')
+      if (!options?.quietToast) {
+        toast({
+          title: 'Form filled',
+          description: 'Select a category in the Details tab to continue.',
+        })
+      }
+    } else if (needsImage) {
+      setActiveTab('details')
+      setNextStepHighlight('image')
+      if (!options?.quietToast) {
+        toast({
+          title: 'Form filled',
+          description: 'Form and SOP are ready. Add image manually in Details tab (AI Assistant does not auto-generate images).',
+        })
+      }
+    } else if (hasUnmatchedIngredients || needsIngredients) {
+      setActiveTab('recipe')
+      setNextStepHighlight('recipe')
+      if (!options?.quietToast) {
+        toast({
+          title: 'Form filled',
+          description: hasUnmatchedIngredients
+            ? 'Some ingredients were not created automatically. Review Recipe tab.'
+            : 'Add at least one ingredient in the Recipe tab, then save.',
+        })
+      }
+    } else {
+      setActiveTab('details')
+      if (!options?.quietToast) {
+        toast({ title: 'Form filled', description: 'Review and save when ready.' })
+      }
+    }
+  }
+
+  const buildFollowUpQuestion = (data: ParsedAIResponse): { question: string; ready: boolean } => {
+    const missingName = !data.name || !data.name.trim()
+    const missingCategory = !findCategoryIdByName(data.categoryName)
+    const missingPrice = !(typeof data.price === 'number' && data.price > 0)
+    const missingIngredients = !Array.isArray(data.ingredients) || data.ingredients.length === 0
+    const missingSteps = !Array.isArray(data.recipeSteps) || data.recipeSteps.length === 0
+    const missingTips = !Array.isArray(data.recipeTips) || data.recipeTips.length === 0
+
+    if (missingName) return { ready: false, question: 'What is the exact menu item name?' }
+    if (missingCategory) return { ready: false, question: 'Which category should this item be in?' }
+    if (missingPrice) return { ready: false, question: 'What is the selling price in IQD?' }
+    if (missingIngredients) return { ready: false, question: 'Please list ingredients with quantity and unit (for example: chicken 0.2 kg, rice 0.15 kg).' }
+    if (missingSteps) return { ready: false, question: 'Please provide SOP steps for preparation and cooking.' }
+    if (missingTips) return { ready: false, question: 'Any SOP tips for consistency or plating? If none, say \"no tips\".' }
+    return { ready: true, question: '' }
+  }
+
+  const submitAssistantMessage = async () => {
+    const text = aiAssistantText.trim()
+    if (!text) return
+    setAiParseLoading(true)
+    try {
+      const nextMessages = [...assistantMessages, { role: 'user' as const, text }]
+      setAssistantMessages(nextMessages)
+      setAiAssistantText('')
+      const transcript = nextMessages
+        .filter((m) => m.role === 'user')
+        .map((m) => m.text)
+        .join('\n')
+      const data = await parseMenuWithAI(transcript)
+      const followUp = buildFollowUpQuestion(data)
+      if (followUp.ready) {
+        await applyParsedDataToForm(data, { autoCreateIngredients: true, quietToast: true })
+        setAssistantMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            text: 'Great, I have enough data. I filled details, SOP, and ingredients (creating missing ingredients where possible). Next step: go to Details tab and add/generate image manually.',
+          },
+        ])
+        setActiveTab('details')
+        setNextStepHighlight('image')
+      } else {
+        setAssistantMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            text: followUp.question,
+          },
+        ])
+      }
+    } catch (err) {
+      toast({
+        title: 'Assistant error',
+        description: err instanceof Error ? err.message : 'Something went wrong.',
+        variant: 'destructive',
+      })
+    } finally {
+      setAiParseLoading(false)
+    }
+  }
+
+  const startSpeechToText = () => {
+    if (typeof window === 'undefined') return
+    const RecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!RecognitionClass) {
+      toast({
+        title: 'Voice input unavailable',
+        description: 'Browser speech-to-text is not supported here. Please type your message.',
+        variant: 'destructive',
+      })
+      return
+    }
+    const recognition = new RecognitionClass()
+    recognition.lang = 'en-US'
+    recognition.interimResults = true
+    recognition.continuous = false
+    recognition.onstart = () => setIsListening(true)
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+    recognition.onresult = (event: any) => {
+      let transcript = ''
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript
+      }
+      setAiAssistantText((prev) => `${prev}${prev ? ' ' : ''}${transcript}`.trim())
+    }
+    speechRecognitionRef.current = recognition
+    recognition.start()
+  }
+
+  const stopSpeechToText = () => {
+    if (speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop()
+    }
+  }
+
   const fillFormFromAI = async () => {
     const text = aiAssistantText.trim()
     if (!text) {
@@ -1018,141 +1344,8 @@ export default function MenuForm({
     }
     setAiParseLoading(true)
     try {
-      const res = await fetch('/api/menu/parse-with-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          categoryNames: categories.map((c) => c.name),
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || 'Failed to parse')
-      const categoryId = data.categoryName
-        ? categories.find(
-            (c) => c.name.toLowerCase() === (data.categoryName as string).toLowerCase()
-          )?.id ?? ''
-        : ''
-      setFormData((prev) => ({
-        ...prev,
-        name: data.name || prev.name,
-        description: data.description || prev.description,
-        price: data.price != null ? String(data.price) : prev.price,
-        categoryId: categoryId || prev.categoryId,
-        calories: data.calories != null ? String(data.calories) : prev.calories,
-        protein: data.protein != null ? String(data.protein) : prev.protein,
-        carbs: data.carbs != null ? String(data.carbs) : prev.carbs,
-        tags: Array.isArray(data.tags) ? data.tags.join(', ') : prev.tags,
-      }))
-      if (Array.isArray(data.recipeSteps) && data.recipeSteps.length > 0) {
-        setRecipeSteps(data.recipeSteps)
-      }
-      if (Array.isArray(data.recipeTips) && data.recipeTips.length > 0) {
-        setRecipeTips(data.recipeTips)
-      }
-      if (data.prepTime) setPrepTime(data.prepTime)
-      if (data.cookTime) setCookTime(data.cookTime)
-
-      // Match parsed ingredients to inventory and fill recipe; track unmatched for UI
-      let filledRecipeCount = 0
-      if (Array.isArray(data.ingredients) && data.ingredients.length > 0) {
-        const newRecipe: RecipeIngredient[] = []
-        const unmatched: string[] = []
-        for (const ing of data.ingredients) {
-          const nameLower = (ing.name || '').toLowerCase().trim()
-          const match = allIngredients.find((i) => {
-            const n = i.name.toLowerCase().trim()
-            return n === nameLower || n.includes(nameLower) || nameLower.includes(n)
-          })
-          if (match) {
-            const converted = convertRecipeUnitToBaseUnit(
-              ing.quantity,
-              ing.unit,
-              match.unit,
-              match.name
-            )
-            newRecipe.push({
-              ingredientId: match.id,
-              quantity: converted.quantity,
-              pieceCount: converted.pieceCount,
-            })
-            filledRecipeCount++
-          } else {
-            unmatched.push(ing.name.trim() || ing.name)
-          }
-        }
-        setRecipe(newRecipe)
-        setUnmatchedIngredientsFromPrompt(unmatched)
-      } else {
-        setUnmatchedIngredientsFromPrompt([])
-      }
-
-      // If nutrition or tags were not in the prompt, estimate nutrition and suggest tags
-      const missingNutrition =
-        data.calories == null || data.protein == null || data.carbs == null
-      const missingTags = !Array.isArray(data.tags) || data.tags.length === 0
-      const categoryName = categories.find((c) => c.id === categoryId)?.name
-
-      if ((missingNutrition || missingTags) && (data.name || data.description)) {
-        try {
-          if (missingNutrition) {
-            const nutRes = await fetch('/api/menu/estimate-nutrition', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                itemName: data.name || '',
-                description: data.description || '',
-                category: categoryName,
-              }),
-            })
-            const nutData = await nutRes.json()
-            if (nutRes.ok && (nutData.calories != null || nutData.protein != null || nutData.carbs != null)) {
-              setFormData((prev) => ({
-                ...prev,
-                ...(nutData.calories != null && { calories: String(nutData.calories) }),
-                ...(nutData.protein != null && { protein: String(nutData.protein) }),
-                ...(nutData.carbs != null && { carbs: String(nutData.carbs) }),
-              }))
-            }
-          }
-          // Tags: parse API now always suggests when missing; no extra call needed
-        } catch (_) {
-          // Non-blocking; form still has parsed data
-        }
-      }
-
-      // Guide user to the next required step (category → image → recipe)
-      const needsCategory = !categoryId && categories.length > 0
-      const needsImage = !formData.imageUrl?.trim()
-      const hasUnmatchedIngredients = (data.ingredients?.length ?? 0) > 0 && filledRecipeCount < (data.ingredients?.length ?? 0)
-      const needsIngredients = filledRecipeCount === 0
-      if (needsCategory) {
-        setActiveTab('details')
-        setNextStepHighlight('category')
-        toast({
-          title: 'Form filled',
-          description: 'Select a category in the Details tab to continue.',
-        })
-      } else if (needsImage) {
-        setActiveTab('details')
-        setNextStepHighlight('image')
-        toast({
-          title: 'Form filled',
-          description: 'Add an image in the Details tab, then continue to Recipe.',
-        })
-      } else if (hasUnmatchedIngredients || needsIngredients) {
-        setActiveTab('recipe')
-        setNextStepHighlight('recipe')
-        toast({
-          title: 'Form filled',
-          description: hasUnmatchedIngredients
-            ? 'Some ingredients weren\'t found in your inventory. See the Recipe tab to add them or use AI Recipe.'
-            : 'Add at least one ingredient in the Recipe tab, then save.',
-        })
-      } else {
-        setActiveTab('details')
-        toast({ title: 'Form filled', description: 'Review and save when ready.' })
-      }
+      const data = await parseMenuWithAI(text)
+      await applyParsedDataToForm(data, { autoCreateIngredients: true })
     } catch (err) {
       toast({
         title: 'Could not parse',
@@ -1708,12 +1901,31 @@ export default function MenuForm({
                       AI Assistant
                     </CardTitle>
                     <CardDescription>
-                      Paste or type any info you have about the dish (name, price, description, ingredients, steps). We&apos;ll fill the form for you. You can then review and edit in the other tabs.
+                      Chat with AI. It will ask follow-up questions and fill details, SOP, and ingredients. Image is not auto-generated here.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+                      {assistantMessages.map((message, index) => (
+                        <div
+                          key={`${message.role}-${index}`}
+                          className={cn(
+                            'rounded-lg px-3 py-2 text-sm',
+                            message.role === 'assistant'
+                              ? 'bg-white border border-slate-200 text-slate-700'
+                              : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                          )}
+                        >
+                          <p className="text-[11px] uppercase tracking-wide mb-1 opacity-70">
+                            {message.role === 'assistant' ? 'Assistant' : 'You'}
+                          </p>
+                          <p>{message.text}</p>
+                        </div>
+                      ))}
+                    </div>
+
                     <div className="flex items-center justify-between gap-2">
-                      <Label className="text-sm text-slate-600">Your description</Label>
+                      <Label className="text-sm text-slate-600">Your message</Label>
                       <Button
                         type="button"
                         variant="outline"
@@ -1723,30 +1935,57 @@ export default function MenuForm({
                         Try sample prompt
                       </Button>
                     </div>
+
                     <Textarea
-                      placeholder="e.g.: Chicken Biryani, 12,000 IQD. Main course. Spiced rice with chicken, served with raita. Calories ~450. Prep 15 min, cook 35 min. Steps: marinate chicken, fry onions..."
+                      placeholder="Type your answer. Example: Lentil soup, 8000 IQD, category soups. Ingredients: lentils 0.2 kg..."
                       value={aiAssistantText}
                       onChange={(e) => setAiAssistantText(e.target.value)}
-                      rows={8}
+                      rows={4}
                       className="resize-y"
                     />
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
-                        onClick={fillFormFromAI}
+                        onClick={submitAssistantMessage}
                         disabled={aiParseLoading || !aiAssistantText.trim()}
                       >
                         {aiParseLoading ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Submitting...
+                            Processing...
                           </>
                         ) : (
                           <>
                             <Sparkles className="h-4 w-4 mr-2" />
-                            Submit
+                            Send
                           </>
                         )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={isListening ? stopSpeechToText : startSpeechToText}
+                        disabled={aiParseLoading}
+                      >
+                        {isListening ? (
+                          <>
+                            <MicOff className="h-4 w-4 mr-2" />
+                            Stop Mic
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="h-4 w-4 mr-2" />
+                            Speak (English)
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={fillFormFromAI}
+                        disabled={aiParseLoading || !aiAssistantText.trim()}
+                      >
+                        Fill now
                       </Button>
                       <Button
                         type="button"
@@ -1756,6 +1995,9 @@ export default function MenuForm({
                         Next
                       </Button>
                     </div>
+                    <p className="text-xs text-slate-500">
+                      For Arabic speech-to-text, backend Whisper integration is recommended for better accuracy.
+                    </p>
                   </CardContent>
                 </Card>
               </TabsContent>

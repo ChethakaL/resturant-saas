@@ -24,25 +24,28 @@ export function formatMenuPrice(amount: number): string {
 
 /**
  * Client-side price formatting for A/B tests (price_format experiment).
- * variant 'whole' = integer; 'decimal_9' = charm 9 (e.g. 17.9); 'decimal_5' = charm 5 (e.g. 18.5).
+ * variant 'whole' = integer; 'decimal_9' = charm 9 (e.g. 17,900); 'decimal_5' = charm 5 (e.g. 18,500).
  * Use in customer-facing components only (experiment is client-assigned).
  */
 export function formatMenuPriceWithVariant(amount: number, variant: string): string {
   const n = Math.round(amount)
+  const format = (value: number) =>
+    new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Math.round(value))
+
   if (variant === 'decimal_9') {
     const major = n / 1000
     const charm = Math.floor(major) + 0.9
-    return charm.toFixed(1)
+    return format(charm * 1000)
   }
   if (variant === 'decimal_5') {
     const major = n / 1000
     const charm = Math.floor(major) + 0.5
-    return charm.toFixed(1)
+    return format(charm * 1000)
   }
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(n)
+  return format(n)
 }
 
 export function formatPercentage(value: number, decimals: number = 1): string {

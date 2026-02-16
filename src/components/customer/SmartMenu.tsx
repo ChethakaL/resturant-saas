@@ -1429,6 +1429,7 @@ const getLocalizedAddOnName = (name: string) => {
               getCategoryName={getLocalizedCategoryName}
               accentColor={theme?.accentColor}
               primaryColor={theme?.primaryColor}
+              isDarkTheme={isDarkBg}
               displayFontClassName="font-display"
               displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
               chefRecommendationLabel={currentCopy.chefRecommendationLabel}
@@ -1625,7 +1626,7 @@ const getLocalizedAddOnName = (name: string) => {
             {/* Active Filters Display */}
             {(selectedCategory !== 'all' || selectedTags.length > 0) && (
               <div className="flex flex-wrap gap-2 justify-center items-center">
-                <span className="text-xs text-white/60">{currentCopy.filtersLabel}</span>
+                <span className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>{currentCopy.filtersLabel}</span>
                 {selectedCategory !== 'all' && (
                   <Badge
                     variant="secondary"

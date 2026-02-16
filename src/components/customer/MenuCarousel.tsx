@@ -132,7 +132,7 @@ export function MenuCarousel({
                       {displayName}
                     </p>
                     {categoryName && (
-                      <p className="mt-0.5 text-[10px] uppercase tracking-wider text-white/60">
+                      <p className={`mt-0.5 text-[10px] uppercase tracking-wider ${isDarkTheme ? 'text-white/60' : 'text-slate-500'}`}>
                         {categoryName}
                       </p>
                     )}

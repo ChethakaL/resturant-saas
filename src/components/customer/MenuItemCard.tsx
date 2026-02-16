@@ -147,7 +147,7 @@ export function MenuItemCard({
               </p>
             )}
             {isLimitedToday && (
-              <p className="text-[10px] text-white/60 flex items-center gap-1 mb-1">
+              <p className={`text-[10px] flex items-center gap-1 mb-1 ${isDarkTheme ? 'text-white/60' : 'text-slate-500'}`}>
                 <span>ⓘ</span> Limited Today
               </p>
             )}
