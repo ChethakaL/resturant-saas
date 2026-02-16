@@ -23,8 +23,9 @@ RUN mkdir -p ./public
 # Generate Prisma Client
 RUN npx prisma generate
 
-# Build the application
+# Build the application (standalone output required for Docker runner)
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_OUTPUT_MODE=standalone
 RUN npm run build
 
 # Verify build output exists
