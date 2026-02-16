@@ -380,8 +380,8 @@ export default function MenuOptimizationContent({
             body: JSON.stringify({
               title,
               type: 'CHEFS_HIGHLIGHTS',
-              position: firstCategory ? 'between-categories' : 'top',
-              insertAfterCategoryId: firstCategory?.id ?? null,
+              position: 'top',
+              insertAfterCategoryId: null,
             }),
           })
           if (!createRes.ok) throw new Error('Failed to create showcase')
@@ -399,9 +399,17 @@ export default function MenuOptimizationContent({
         await fetch(`/api/menu-showcases/${showcase.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ schedule }),
+          body: JSON.stringify({
+            schedule,
+            position: 'top',
+            insertAfterCategoryId: null,
+          }),
         })
-        list = list.map((s) => (s.id === showcase!.id ? { ...s, schedule } : s))
+        list = list.map((s) =>
+          s.id === showcase!.id
+            ? { ...s, schedule, position: 'top', insertAfterCategoryId: null }
+            : s
+        )
       }
       setShowcases(list)
       toast({ title: 'Carousels auto-filled', description: 'Breakfast, Lunch, and Dinner carousels are set. You can still edit them.' })

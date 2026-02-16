@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { classifyItemType } from '@/lib/category-suggest'
+import { classifyItemType, type DefaultCategoryKey } from '@/lib/category-suggest'
 import type { ItemForSuggest } from '@/lib/category-suggest'
 
 export const dynamic = 'force-dynamic'
@@ -111,26 +111,67 @@ export async function GET(request: Request) {
       const shareables = itemsForSuggest.filter((i) => classifyItemType(i) === 'Shareables')
       mains.sort((a, b) => b.marginPercent - a.marginPercent || b.price - a.price)
       shareables.sort((a, b) => b.marginPercent - a.marginPercent || b.price - a.price)
-      const twoMains = mains.slice(0, 2).map((i) => i.id)
-      const oneShareable = shareables.slice(0, 1).map((i) => i.id)
-      const combined = byPriceDesc([...twoMains, ...oneShareable].filter(Boolean)).slice(0, MAX_CAROUSEL_ITEMS)
+      const selected: string[] = []
+      for (const item of mains) {
+        if (selected.length >= MAX_CAROUSEL_ITEMS) break
+        selected.push(item.id)
+      }
+      for (const item of shareables) {
+        if (selected.length >= MAX_CAROUSEL_ITEMS) break
+        if (!selected.includes(item.id)) selected.push(item.id)
+      }
       return NextResponse.json({
-        day: combined,
-        evening: combined,
-        night: combined,
+        day: byPriceDesc(selected),
+        evening: byPriceDesc(selected),
+        night: byPriceDesc(selected),
       })
     }
 
-    // adaptive: per-slot top 3 by margin + popularity in that slot, then price desc
+    const SCORE_WEIGHT_MARGIN = 0.6
+    const SCORE_WEIGHT_POPULARITY = 0.4
     const score = (item: ItemForSuggest & { price: number }, slot: Slot) => {
       const pop = unitsBySlot.get(item.id)?.[slot] ?? 0
-      return item.marginPercent * 0.6 + Math.min(100, pop) * 0.4
+      return item.marginPercent * SCORE_WEIGHT_MARGIN + Math.min(100, pop) * SCORE_WEIGHT_POPULARITY
+    }
+    const prioritizeForSlot = (
+      sorted: (ItemForSuggest & { price: number })[]
+    ): string[] => {
+      const priority: DefaultCategoryKey[] = [
+        'Main Dishes',
+        'Shareables',
+        'Add-ons',
+        'Drinks',
+        'Desserts',
+        'Kids',
+        'Sides',
+      ]
+      const result: string[] = []
+      const seen = new Set<string>()
+      const addItem = (item: ItemForSuggest & { price: number }) => {
+        if (result.length >= MAX_CAROUSEL_ITEMS) return
+        if (seen.has(item.id)) return
+        result.push(item.id)
+        seen.add(item.id)
+      }
+      for (const type of priority) {
+        for (const item of sorted) {
+          if (classifyItemType(item) === type) {
+            addItem(item)
+            if (result.length >= MAX_CAROUSEL_ITEMS) break
+          }
+        }
+        if (result.length >= MAX_CAROUSEL_ITEMS) break
+      }
+      for (const item of sorted) {
+        addItem(item)
+        if (result.length >= MAX_CAROUSEL_ITEMS) break
+      }
+      return byPriceDesc(result)
     }
     const result: Record<Slot, string[]> = { day: [], evening: [], night: [] }
     for (const slot of ['day', 'evening', 'night'] as const) {
       const sorted = [...itemsForSuggest].sort((a, b) => score(b, slot) - score(a, slot))
-      const ids = sorted.slice(0, MAX_CAROUSEL_ITEMS).map((i) => i.id)
-      result[slot] = byPriceDesc(ids)
+      result[slot] = prioritizeForSlot(sorted)
     }
     return NextResponse.json(result)
   } catch (error) {

@@ -107,7 +107,10 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
     setDeletingIds((prev) => [...prev, categoryId])
     try {
       const response = await fetch(`/api/categories/${categoryId}`, { method: 'DELETE' })
-      if (!response.ok) throw new Error('Failed to delete category')
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null)
+        throw new Error(errorBody?.error ?? 'Failed to delete category')
+      }
       setCategories((prev) => prev.filter((c) => c.id !== categoryId))
       toast({ title: 'Category removed', variant: 'destructive' })
     } catch (error) {
@@ -188,8 +191,10 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
     setAiSuggestLoading(true)
     try {
       const response = await fetch('/api/categories/ai-suggest', { method: 'POST' })
-      if (!response.ok) throw new Error('Failed to run')
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error ?? 'Failed to run AI categorization')
+      }
       toast({ title: `AI categorization applied`, description: `${data.updated} items updated across ${data.categories} categories.` })
       router.refresh()
     } catch {

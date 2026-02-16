@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 
 export async function PATCH(
   request: Request,
@@ -56,10 +57,19 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const restaurantId = session.user.restaurantId
+    await prisma.menuShowcase.updateMany({
+      where: { insertAfterCategoryId: params.id, restaurantId },
+      data: { insertAfterCategoryId: null },
+    })
+    await prisma.menuItem.deleteMany({
+      where: { categoryId: params.id, restaurantId },
+    })
+
     const deleted = await prisma.category.deleteMany({
       where: {
         id: params.id,
-        restaurantId: session.user.restaurantId,
+        restaurantId,
       },
     })
 
@@ -74,5 +84,13 @@ export async function DELETE(
       { error: 'Failed to delete category' },
       { status: 500 }
     )
+  } finally {
+    try {
+      revalidatePath('/categories')
+      revalidatePath('/menu')
+      revalidatePath('/')
+    } catch (err) {
+      console.error('Revalidate failed after deleting category:', err)
+    }
   }
 }

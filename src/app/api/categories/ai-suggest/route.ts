@@ -100,6 +100,7 @@ export async function POST() {
     revalidatePath('/categories')
     revalidatePath('/menu')
     revalidatePath('/')
+    revalidatePath('/dashboard/categories')
 
     return NextResponse.json({
       updated: assignments.size,
