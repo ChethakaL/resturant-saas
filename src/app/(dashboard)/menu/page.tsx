@@ -155,7 +155,7 @@ export default async function MenuPage({
     }),
     prisma.restaurant.findUnique({
       where: { id: restaurantId },
-      select: { settings: true },
+      select: { settings: true, slug: true },
     }),
     prisma.menuShowcase.findMany({
       where: { restaurantId },
@@ -182,6 +182,9 @@ export default async function MenuPage({
     + (statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : '')
   const settings = (restaurant?.settings as Record<string, unknown>) || {}
   const menuEngineSettings = (settings.menuEngine as Record<string, unknown>) || null
+  const normalizedBaseUrl = (process.env.NEXTAUTH_URL || '').trim().replace(/\/+$/, '')
+  const publicMenuPath = restaurant?.slug ? `/${restaurant.slug}` : '/'
+  const clientFacingMenuUrl = normalizedBaseUrl ? `${normalizedBaseUrl}${publicMenuPath}` : publicMenuPath
   const categoryOptions = data.categories.map((c) => ({ id: c.id, name: c.name, displayOrder: c.displayOrder }))
   const showcasesSerialized = JSON.parse(JSON.stringify(showcases))
 
@@ -190,6 +193,17 @@ export default async function MenuPage({
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Menu</h1>
         <p className="text-slate-500 mt-1">Menu items, categories, add-ons, and how the digital menu suggests items to guests.</p>
+        <div className="mt-3 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+          <span className="font-medium text-slate-700">Client menu URL:</span>
+          <a
+            href={clientFacingMenuUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-emerald-700 hover:underline break-all"
+          >
+            {clientFacingMenuUrl}
+          </a>
+        </div>
       </div>
       <MenuPageTabs
         categories={categoryOptions}

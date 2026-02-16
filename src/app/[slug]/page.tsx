@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { unstable_cache } from 'next/cache'
+import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { MenuPersonalizationWrapper } from '@/components/customer/MenuPersonalizationWrapper'
 import { runMenuEngine } from '@/lib/menu-engine'
@@ -52,9 +53,9 @@ function getTimeSlotForDate(date: Date, tz: string): 'day' | 'evening' | 'night'
   return 'night'
 }
 
-async function getMenuData() {
-  const restaurant = await prisma.restaurant.findFirst({
-    orderBy: { createdAt: 'asc' },
+async function getMenuData(slug: string) {
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { slug: slug.toLowerCase() },
   })
 
   if (!restaurant) {
@@ -472,15 +473,15 @@ async function getMenuData() {
   }
 }
 
-export default async function Home() {
-  const data = await getMenuData()
+export default async function SlugMenuPage({
+  params,
+}: {
+  params: { slug: string }
+}) {
+  const data = await getMenuData(params.slug)
 
   if (!data) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <p className="text-white/70">Menu is being prepared. Please check back soon.</p>
-      </div>
-    )
+    notFound()
   }
 
   return (

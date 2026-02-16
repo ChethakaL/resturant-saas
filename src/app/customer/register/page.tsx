@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,6 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function CustomerRegisterPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const callbackUrlParam = searchParams.get('callbackUrl') || '/'
+  const callbackUrl = callbackUrlParam.startsWith('/') ? callbackUrlParam : '/'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -31,7 +34,7 @@ export default function CustomerRegisterPage() {
         setError(data.error || 'Registration failed')
         return
       }
-      router.push('/customer/login')
+      router.push(`/customer/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
       router.refresh()
     } catch {
       setError('Something went wrong. Please try again.')
@@ -100,12 +103,12 @@ export default function CustomerRegisterPage() {
             </Button>
             <p className="text-center text-sm text-slate-500">
               Already have an account?{' '}
-              <Link href="/customer/login" className="text-amber-600 hover:underline">
+              <Link href={`/customer/login?callbackUrl=${encodeURIComponent(callbackUrl)}`} className="text-amber-600 hover:underline">
                 Sign in
               </Link>
             </p>
             <p className="text-center text-sm text-slate-500">
-              <Link href="/" className="text-slate-600 hover:underline">
+              <Link href={callbackUrl} className="text-slate-600 hover:underline">
                 ← Back to menu
               </Link>
             </p>

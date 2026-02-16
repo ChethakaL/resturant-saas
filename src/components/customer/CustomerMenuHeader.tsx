@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { signOut } from 'next-auth/react'
+import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -11,6 +12,8 @@ import { Button } from '@/components/ui/button'
  */
 export function CustomerMenuHeader() {
   const { data: session, status } = useSession()
+  const pathname = usePathname()
+  const callbackUrl = pathname || '/'
 
   if (status === 'loading') {
     return (
@@ -31,13 +34,13 @@ export function CustomerMenuHeader() {
             variant="ghost"
             size="sm"
             className="text-white/80 hover:text-white hover:bg-white/10"
-            onClick={() => signOut({ callbackUrl: '/' })}
+            onClick={() => signOut({ callbackUrl })}
           >
             Sign out
           </Button>
         </>
       ) : (
-        <Link href="/customer/login?callbackUrl=/">
+        <Link href={`/customer/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
           <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
             Sign in
           </Button>

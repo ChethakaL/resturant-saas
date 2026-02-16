@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect, useCallback, useRef, useReducer } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -536,6 +537,8 @@ function cartReducer(state: CartLine[], action: CartAction): CartLine[] {
 function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
   const [mounted, setMounted] = useState(false)
   const { data: session } = useSession()
+  const pathname = usePathname()
+  const callbackUrl = pathname || '/'
   useEffect(() => setMounted(true), [])
 
   const btnClass = isDarkBg
@@ -544,7 +547,7 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
 
   if (!mounted) {
     return (
-      <Link href="/customer/login?callbackUrl=/">
+      <Link href={`/customer/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
         <Button variant="ghost" size="sm" className={`h-9 px-2.5 sm:px-3 text-xs sm:text-sm shrink-0 ${btnClass}`}>
           Sign in
         </Button>
@@ -564,7 +567,7 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
           variant="ghost"
           size="sm"
           className={`h-9 px-2 sm:px-2.5 text-xs shrink-0 ${btnClass}`}
-          onClick={() => signOut({ callbackUrl: '/' })}
+          onClick={() => signOut({ callbackUrl })}
         >
           Sign out
         </Button>
@@ -572,7 +575,7 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
     )
   }
   return (
-    <Link href="/customer/login?callbackUrl=/">
+    <Link href={`/customer/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
       <Button variant="ghost" size="sm" className={`h-9 px-2.5 sm:px-3 text-xs sm:text-sm shrink-0 ${btnClass}`}>
         Sign in
       </Button>

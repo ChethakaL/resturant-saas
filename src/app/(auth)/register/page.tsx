@@ -81,7 +81,7 @@ export default function RegisterRestaurantPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="slug">URL slug (optional)</Label>
+                <Label htmlFor="slug">Restaurant page link (optional)</Label>
                 <Input
                   id="slug"
                   type="text"
@@ -91,7 +91,9 @@ export default function RegisterRestaurantPage() {
                   disabled={isLoading}
                   className="lowercase"
                 />
-                <p className="text-xs text-slate-500">Leave blank to auto-generate from name.</p>
+                <p className="text-xs text-slate-500">
+                  This becomes your page address (for example: `/al-rafidain`). Leave blank and we&apos;ll create it from your restaurant name.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="restaurantEmail">Restaurant email (optional)</Label>

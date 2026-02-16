@@ -12,7 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 function CustomerLoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') || '/'
+  const callbackUrlParam = searchParams.get('callbackUrl') || '/'
+  const callbackUrl = callbackUrlParam.startsWith('/') ? callbackUrlParam : '/'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -88,12 +89,12 @@ function CustomerLoginContent() {
             </Button>
             <p className="text-center text-sm text-slate-500">
               Don&apos;t have an account?{' '}
-              <Link href="/customer/register" className="text-amber-600 hover:underline">
+              <Link href={`/customer/register?callbackUrl=${encodeURIComponent(callbackUrl)}`} className="text-amber-600 hover:underline">
                 Create one
               </Link>
             </p>
             <p className="text-center text-sm text-slate-500">
-              <Link href="/" className="text-slate-600 hover:underline">
+              <Link href={callbackUrl} className="text-slate-600 hover:underline">
                 ← Back to menu
               </Link>
             </p>
