@@ -44,6 +44,13 @@ import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
 import { classifyItemType, type DefaultCategoryKey } from '@/lib/category-suggest'
 
+interface ParsedIngredient {
+  name: string
+  quantity: number
+  unit: string
+  pieceCount?: number | null
+}
+
 interface ExtractedMenuItem {
   name: string
   description: string
@@ -54,6 +61,13 @@ interface ExtractedMenuItem {
   imageUrl?: string
   categoryId?: string
   categoryName?: string
+  recipeSteps?: string[]
+  recipeTips?: string[]
+  prepTime?: string | null
+  cookTime?: string | null
+  recipeYield?: number | null
+  ingredients?: ParsedIngredient[]
+  missingIngredients?: string[]
 }
 
 interface BulkMenuImportProps {
@@ -181,6 +195,7 @@ function autoAssignCategoryId(item: ExtractedMenuItem, categories: Category[]): 
 export default function BulkMenuImport({ categories, ingredients, defaultBackgroundPrompt }: BulkMenuImportProps) {
   const { toast } = useToast()
   const [availableCategories, setAvailableCategories] = useState<Category[]>(categories)
+  const [availableIngredients, setAvailableIngredients] = useState<Ingredient[]>(ingredients)
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<'upload' | 'extracting' | 'verifying' | 'complete'>('upload')
   const [menuImage, setMenuImage] = useState<string | null>(null)
@@ -197,12 +212,17 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
   const [imageSizePreset, setImageSizePreset] = useState<ImageSizePreset>('medium')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const formUploadRef = useRef<HTMLInputElement | null>(null)
-
-  void ingredients
+  const [showMissingIngredientsDialog, setShowMissingIngredientsDialog] = useState(false)
+  const [missingIngredients, setMissingIngredients] = useState<string[]>([])
+  const [pendingExtractionData, setPendingExtractionData] = useState<any>(null)
 
   useEffect(() => {
     setAvailableCategories(categories)
   }, [categories])
+
+  useEffect(() => {
+    setAvailableIngredients(ingredients)
+  }, [ingredients])
 
   const ensureCategoriesAndAssign = async (items: ExtractedMenuItem[]): Promise<ExtractedMenuItem[]> => {
     let nextCategories = [...availableCategories]
@@ -357,7 +377,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     reader.readAsDataURL(file)
   }
 
-  const extractMenuItems = async () => {
+  const extractMenuItems = async (confirmMissing = false) => {
     if (!menuImage) return
 
     setIsProcessing(true)
@@ -367,13 +387,26 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
       const response = await fetch('/api/menu/extract-from-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData: menuImage }),
+        body: JSON.stringify({
+          imageData: menuImage,
+          confirmMissingIngredients: confirmMissing
+        }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to extract menu items')
+      }
+
+      // Check if we need to confirm missing ingredients
+      if (data.requiresConfirmation && !confirmMissing) {
+        setMissingIngredients(data.missingIngredients || [])
+        setPendingExtractionData(data)
+        setShowMissingIngredientsDialog(true)
+        setIsProcessing(false)
+        setStep('upload')
+        return
       }
 
       const extracted: ExtractedMenuItem[] = (data.items || []).map((item: ExtractedMenuItem) => ({
@@ -389,9 +422,10 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
       if (items.length > 0) {
         const autoAssigned = items.filter((item) => !!item.categoryId).length
+        const ingredientsCreated = data.ingredientsCreated || 0
         toast({
           title: 'Menu extracted',
-          description: `Extracted ${items.length} items. Auto-categorized ${autoAssigned}.`,
+          description: `Extracted ${items.length} items. Auto-categorized ${autoAssigned}.${ingredientsCreated > 0 ? ` Created ${ingredientsCreated} new ingredients.` : ''}`,
         })
       }
     } catch (error) {
@@ -405,6 +439,11 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  const handleConfirmMissingIngredients = async () => {
+    setShowMissingIngredientsDialog(false)
+    await extractMenuItems(true)
   }
 
   const generateOrEnhanceImage = async () => {
@@ -468,11 +507,38 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     try {
       const errors: string[] = []
 
+      // Refresh ingredients list to get newly created ones
+      const ingredientsResponse = await fetch('/api/ingredients')
+      let currentIngredients = availableIngredients
+      if (ingredientsResponse.ok) {
+        currentIngredients = await ingredientsResponse.json()
+        setAvailableIngredients(currentIngredients)
+      }
+
+      const ingredientMap = new Map(
+        currentIngredients.map(ing => [ing.name.toLowerCase().trim(), ing])
+      )
+
       for (const item of items) {
         if (!item.categoryId) {
           errors.push(`${item.name}: Missing category`)
           continue
         }
+
+        // Map ingredients to their IDs and prepare the ingredient data
+        const ingredientData = (item.ingredients || []).map(ing => {
+          const existingIng = ingredientMap.get(ing.name.toLowerCase().trim())
+          if (!existingIng) {
+            console.warn(`Ingredient not found: ${ing.name}`)
+            return null
+          }
+          return {
+            ingredientId: existingIng.id,
+            quantity: ing.quantity,
+            unit: ing.unit,
+            pieceCount: ing.pieceCount
+          }
+        }).filter(Boolean)
 
         const response = await fetch('/api/menu', {
           method: 'POST',
@@ -486,7 +552,11 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
             calories: item.calories ? Number(item.calories) : null,
             tags: item.tags || [],
             available: true,
-            ingredients: [],
+            ingredients: ingredientData,
+            recipeSteps: item.recipeSteps || [],
+            recipeTips: item.recipeTips || [],
+            prepTime: item.prepTime || null,
+            cookTime: item.cookTime || null,
           }),
         })
 
@@ -506,7 +576,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
       } else {
         toast({
           title: 'Success',
-          description: `Created ${items.length} menu items successfully!`,
+          description: `Created ${items.length} menu items successfully with recipes!`,
         })
       }
 
@@ -607,7 +677,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                   <div className="border rounded-lg overflow-hidden max-h-[360px] flex items-center justify-center bg-slate-50">
                     <img src={menuImage} alt="Menu" className="max-w-full w-auto max-h-[360px] object-contain" />
                   </div>
-                  <Button onClick={extractMenuItems} className="w-full" disabled={isProcessing}>
+                  <Button onClick={() => extractMenuItems()} className="w-full" disabled={isProcessing}>
                     Extract Menu Items
                   </Button>
                 </div>
@@ -663,8 +733,8 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                     <div
                       key={index}
                       className={`border rounded-lg transition-all ${hasIssues
-                          ? 'border-amber-300 bg-amber-50/30'
-                          : 'border-slate-200 bg-white'
+                        ? 'border-amber-300 bg-amber-50/30'
+                        : 'border-slate-200 bg-white'
                         }`}
                     >
                       <div className="flex items-start gap-3 p-3">
@@ -1102,8 +1172,8 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                             type="button"
                             onClick={() => setImageOrientation(option.value)}
                             className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
-                                ? 'border-emerald-500 bg-emerald-100 text-slate-900'
-                                : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
+                              ? 'border-emerald-500 bg-emerald-100 text-slate-900'
+                              : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
                               }`}
                           >
                             <span className="block text-sm">{option.label}</span>
@@ -1129,8 +1199,8 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                             type="button"
                             onClick={() => setImageSizePreset(option.value)}
                             className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
-                                ? 'border-emerald-500 bg-emerald-100 text-slate-900'
-                                : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
+                              ? 'border-emerald-500 bg-emerald-100 text-slate-900'
+                              : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
                               }`}
                           >
                             <span className="block text-sm">{option.label}</span>
@@ -1166,6 +1236,50 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
               </Button>
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showMissingIngredientsDialog} onOpenChange={setShowMissingIngredientsDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Missing Ingredients Detected
+            </DialogTitle>
+            <DialogDescription>
+              The following ingredients are not in your inventory. Would you like to add them automatically?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 max-h-[300px] overflow-y-auto">
+              <ul className="space-y-2">
+                {missingIngredients.map((ingredient, index) => (
+                  <li key={index} className="flex items-center gap-2 text-sm">
+                    <div className="h-2 w-2 rounded-full bg-amber-500" />
+                    <span className="font-medium">{ingredient}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-xs text-slate-500 mt-3">
+              These ingredients will be added to your inventory with zero stock. You can update quantities later.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowMissingIngredientsDialog(false)
+                setMissingIngredients([])
+                setPendingExtractionData(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmMissingIngredients}>
+              Add Ingredients & Continue
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
