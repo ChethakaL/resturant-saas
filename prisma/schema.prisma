@@ -560,6 +560,7 @@ model Employee {
   position     EmployeePosition
   phone        String?
   email        String?
+  password     String?
   hireDate     DateTime         @default(now())
   salary       Float
   salaryType   SalaryType       @default(MONTHLY)

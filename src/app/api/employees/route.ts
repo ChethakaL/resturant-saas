@@ -52,6 +52,8 @@ export async function GET(request: Request) {
   }
 }
 
+import bcrypt from 'bcryptjs'
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -61,12 +63,18 @@ export async function POST(request: Request) {
 
     const data = await request.json()
 
+    let hashedPassword = undefined
+    if (data.password) {
+      hashedPassword = await bcrypt.hash(data.password, 10)
+    }
+
     const employee = await prisma.employee.create({
       data: {
         name: data.name,
         position: data.position,
         phone: data.phone,
         email: data.email,
+        password: hashedPassword,
         salary: data.salary,
         salaryType: data.salaryType,
         hireDate: data.hireDate ? new Date(data.hireDate) : new Date(),

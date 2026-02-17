@@ -20,6 +20,7 @@ export default function NewEmployeePage() {
     position: 'WAITER',
     phone: '',
     email: '',
+    password: '',
     salary: '',
     salaryType: 'MONTHLY',
     hireDate: new Date().toISOString().split('T')[0],
@@ -132,6 +133,18 @@ export default function NewEmployeePage() {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="ahmed@example.com"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Login Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Set password for portal access"
+                />
+                <p className="text-[10px] text-slate-500 italic">Optional. Set this to allow the employee to log in to the Waiter Portal.</p>
               </div>
 
               <div className="space-y-2">

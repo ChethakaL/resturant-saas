@@ -61,6 +61,8 @@ export async function GET(
   }
 }
 
+import bcrypt from 'bcryptjs'
+
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
@@ -73,20 +75,26 @@ export async function PATCH(
 
     const data = await request.json()
 
+    const updateData: any = {
+      name: data.name,
+      position: data.position,
+      phone: data.phone,
+      email: data.email,
+      salary: data.salary,
+      salaryType: data.salaryType,
+      isActive: data.isActive,
+    }
+
+    if (data.password) {
+      updateData.password = await bcrypt.hash(data.password, 10)
+    }
+
     const employee = await prisma.employee.update({
       where: {
         id: params.id,
         restaurantId: session.user.restaurantId,
       },
-      data: {
-        name: data.name,
-        position: data.position,
-        phone: data.phone,
-        email: data.email,
-        salary: data.salary,
-        salaryType: data.salaryType,
-        isActive: data.isActive,
-      },
+      data: updateData,
     })
 
     return NextResponse.json(employee)

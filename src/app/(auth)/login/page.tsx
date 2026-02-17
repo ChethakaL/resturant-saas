@@ -144,6 +144,9 @@ function LoginPageContent() {
               <p className="text-center text-sm text-slate-500">
                 Supplier? <a href="/supplier/login" className="text-amber-600 hover:underline">Sign in to Supplier Portal</a>
               </p>
+              <p className="text-center text-sm text-slate-500">
+                Waiter? <a href="/waiter/login" className="text-amber-600 hover:underline">Sign in to Waiter Portal</a>
+              </p>
               <div className="text-xs text-slate-500 mt-4 p-3 bg-slate-50 rounded-md">
                 <p className="font-semibold mb-1">Demo Accounts:</p>
                 <p>owner@alrafidain.iq / password123</p>

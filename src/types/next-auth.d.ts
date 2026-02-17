@@ -1,6 +1,6 @@
 import 'next-auth'
 
-export type AuthUserType = 'restaurant' | 'supplier' | 'customer' | 'superadmin'
+export type AuthUserType = 'restaurant' | 'supplier' | 'customer' | 'superadmin' | 'waiter'
 
 declare module 'next-auth' {
   interface Session {
@@ -14,6 +14,7 @@ declare module 'next-auth' {
       restaurantName?: string
       supplierId?: string
       supplierName?: string
+      employeeId?: string
     }
   }
 
@@ -27,6 +28,7 @@ declare module 'next-auth' {
     restaurantName?: string
     supplierId?: string
     supplierName?: string
+    employeeId?: string
   }
 }
 
@@ -39,5 +41,6 @@ declare module 'next-auth/jwt' {
     restaurantName?: string
     supplierId?: string
     supplierName?: string
+    employeeId?: string
   }
 }

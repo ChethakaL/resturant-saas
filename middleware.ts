@@ -13,9 +13,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
+  if (!isLoggedIn && pathname.startsWith('/waiter/dashboard')) {
+    const loginUrl = new URL('/waiter/login', request.url)
+    return NextResponse.redirect(loginUrl)
+  }
+
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: ['/dashboard/:path*', '/waiter/dashboard/:path*'],
 }
