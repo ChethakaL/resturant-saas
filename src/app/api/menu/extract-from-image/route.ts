@@ -199,42 +199,33 @@ IMPORTANT:
       })
     }
 
-    // If user confirmed, create missing ingredients with estimated prices
+    // If user confirmed, create missing ingredients with 0 cost (to be filled manually)
     if (confirmMissingIngredients && allMissingIngredients.size > 0) {
-      const { estimateIngredientPrice } = await import('@/lib/ingredient-price-estimator')
+      const ingredientsToCreate = Array.from(allMissingIngredients).map((name) => {
+        // Find the first occurrence to get unit info
+        const sampleIngredient = processedItems
+          .flatMap(item => item.ingredients || [])
+          .find(ing => ing.name.toLowerCase().trim() === name.toLowerCase().trim())
 
-      const ingredientsToCreate = await Promise.all(
-        Array.from(allMissingIngredients).map(async (name) => {
-          // Find the first occurrence to get unit info
-          const sampleIngredient = processedItems
-            .flatMap(item => item.ingredients || [])
-            .find(ing => ing.name.toLowerCase().trim() === name.toLowerCase().trim())
+        const unit = sampleIngredient?.unit || 'kg'
 
-          const unit = sampleIngredient?.unit || 'kg'
-
-          // Estimate price using Tavily/AI
-          const priceEstimate = await estimateIngredientPrice(name, unit)
-
-          const notes = `Auto-created from menu image import. Price estimated at ${priceEstimate.costPerUnit} IQD/${unit} using ${priceEstimate.source} (confidence: ${priceEstimate.confidence}). ⚠️ PLEASE REVIEW AND UPDATE WITH ACTUAL SUPPLIER PRICES.`
-
-          return {
-            name,
-            unit,
-            stockQuantity: 0,
-            costPerUnit: priceEstimate.costPerUnit,
-            minStockLevel: 0,
-            restaurantId: session.user.restaurantId!,
-            notes
-          }
-        })
-      )
+        return {
+          name,
+          unit,
+          stockQuantity: 0,
+          costPerUnit: 0,
+          minStockLevel: 0,
+          restaurantId: session.user.restaurantId!,
+          notes: 'Auto-created from menu image import. ⚠️ COSTING INCOMPLETE - Please update cost per unit with actual supplier prices.'
+        }
+      })
 
       await prisma.ingredient.createMany({
         data: ingredientsToCreate,
         skipDuplicates: true
       })
 
-      console.log(`Created ${ingredientsToCreate.length} new ingredients with estimated prices`)
+      console.log(`Created ${ingredientsToCreate.length} new ingredients - costing incomplete`)
     }
 
     console.log(`Extracted ${processedItems.length} menu items with recipes`)

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,10 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
-import { Edit, Loader2, Trash, Check, X } from 'lucide-react'
+import { Edit, Loader2, Trash, Check, X, DollarSign } from 'lucide-react'
 
 export interface MenuItemWithMetrics {
   id: string
@@ -55,6 +58,7 @@ export default function MenuItemsTable({
 }: {
   menuItems: MenuItemWithMetrics[]
 }) {
+  const router = useRouter()
   const [items, setItems] = useState(menuItems)
   const [updatingIds, setUpdatingIds] = useState<string[]>([])
   const [deletingIds, setDeletingIds] = useState<string[]>([])
@@ -69,6 +73,18 @@ export default function MenuItemsTable({
   const [editingPriceValue, setEditingPriceValue] = useState('')
   const [savingPriceId, setSavingPriceId] = useState<string | null>(null)
   const priceInputRef = useRef<HTMLInputElement>(null)
+
+  // Complete costing modal state
+  const [costingModalOpen, setCostingModalOpen] = useState(false)
+  const [costingMenuItem, setCostingMenuItem] = useState<MenuItemWithMetrics | null>(null)
+  const [costingIngredients, setCostingIngredients] = useState<Array<{
+    id: string
+    name: string
+    unit: string
+    costPerUnit: number
+  }>>([])
+  const [loadingIngredients, setLoadingIngredients] = useState(false)
+  const [savingCosting, setSavingCosting] = useState(false)
 
   useEffect(() => {
     setItems(menuItems)
@@ -172,12 +188,12 @@ export default function MenuItemsTable({
             prev.map((item) =>
               item.id === id
                 ? {
-                    ...item,
-                    chefPickOrder:
-                      typeof data.displayOrder === 'number'
-                        ? data.displayOrder
-                        : null,
-                  }
+                  ...item,
+                  chefPickOrder:
+                    typeof data.displayOrder === 'number'
+                      ? data.displayOrder
+                      : null,
+                }
                 : item
             )
           )
@@ -312,6 +328,80 @@ export default function MenuItemsTable({
     }
   }
 
+  const openCostingModal = async (item: MenuItemWithMetrics) => {
+    setCostingMenuItem(item)
+    setCostingModalOpen(true)
+    setLoadingIngredients(true)
+
+    try {
+      // Fetch ingredients for this menu item
+      const response = await fetch(`/api/menu/${item.id}/ingredients`)
+      if (!response.ok) throw new Error('Failed to fetch ingredients')
+
+      const data = await response.json()
+      setCostingIngredients(data.ingredients || [])
+    } catch (error) {
+      console.error('Failed to load ingredients:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to load ingredients. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoadingIngredients(false)
+    }
+  }
+
+  const updateIngredientCost = (ingredientId: string, newCost: string) => {
+    setCostingIngredients(prev =>
+      prev.map(ing =>
+        ing.id === ingredientId
+          ? { ...ing, costPerUnit: parseFloat(newCost) || 0 }
+          : ing
+      )
+    )
+  }
+
+  const saveCosting = async () => {
+    if (!costingMenuItem) return
+
+    setSavingCosting(true)
+
+    try {
+      // Update all ingredient prices
+      await Promise.all(
+        costingIngredients.map(ing =>
+          fetch(`/api/inventory/${ing.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ costPerUnit: ing.costPerUnit }),
+          })
+        )
+      )
+
+      toast({
+        title: 'Costing completed',
+        description: `All ingredient prices for ${costingMenuItem.name} have been updated.`,
+      })
+
+      setCostingModalOpen(false)
+      setCostingMenuItem(null)
+      setCostingIngredients([])
+
+      // Refresh the page to show updated costing status
+      router.refresh()
+    } catch (error) {
+      console.error('Failed to save costing:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to save ingredient prices. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingCosting(false)
+    }
+  }
+
   return (
     <div className="overflow-x-auto">
       {items.length === 0 ? (
@@ -411,17 +501,16 @@ export default function MenuItemsTable({
                         type="button"
                         disabled={isUpdating}
                         onClick={() => toggleAvailability(item.id)}
-                        className={`inline-flex items-center justify-center min-w-[100px] rounded-full px-3 py-1 text-xs font-semibold transition ${
-                          item.available
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                            : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                        } ${isUpdating ? 'opacity-70 cursor-wait' : ''}`}
+                        className={`inline-flex items-center justify-center min-w-[100px] rounded-full px-3 py-1 text-xs font-semibold transition ${item.available
+                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                          : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                          } ${isUpdating ? 'opacity-70 cursor-wait' : ''}`}
                       >
                         {isUpdating
                           ? 'Saving...'
                           : item.available
-                          ? 'Available'
-                          : 'Sold Out'}
+                            ? 'Available'
+                            : 'Sold Out'}
                       </button>
                     </td>
 
@@ -458,11 +547,10 @@ export default function MenuItemsTable({
                           </div>
                           {priceDiff !== 0 && (
                             <div
-                              className={`text-xs ${
-                                priceDiff > 0
-                                  ? 'text-green-600'
-                                  : 'text-red-600'
-                              }`}
+                              className={`text-xs ${priceDiff > 0
+                                ? 'text-green-600'
+                                : 'text-red-600'
+                                }`}
                             >
                               {priceDiff > 0 ? '+' : ''}
                               {formatCurrency(priceDiff)}
@@ -529,7 +617,18 @@ export default function MenuItemsTable({
                     {/* Actions */}
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Link href={`/dashboard/menu/${item.id}`}>
+                        {item.costingStatus === 'INCOMPLETE' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                            onClick={() => openCostingModal(item)}
+                          >
+                            <DollarSign className="h-4 w-4 mr-1" />
+                            Complete Costing
+                          </Button>
+                        )}
+                        <Link href={`/menu/${item.id}`}>
                           <Button variant="ghost" size="sm">
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -588,6 +687,116 @@ export default function MenuItemsTable({
                   {menuItemToDelete && deletingIds.includes(menuItemToDelete.id)
                     ? 'Deleting...'
                     : 'Delete'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Complete Costing Modal */}
+          <Dialog open={costingModalOpen} onOpenChange={setCostingModalOpen}>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-amber-500" />
+                  Complete Costing: {costingMenuItem?.name}
+                </DialogTitle>
+                <DialogDescription>
+                  Enter the cost per unit for each ingredient to complete the costing for this menu item.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4">
+                {loadingIngredients ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                  </div>
+                ) : costingIngredients.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-500">No ingredients found for this menu item.</p>
+                    <p className="text-sm text-slate-400 mt-2">Add ingredients to this item first.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 mb-4">
+                      <p className="text-sm text-amber-900">
+                        💡 <strong>Tip:</strong> Enter actual supplier prices for accurate costing and profit calculations.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {costingIngredients.map((ingredient) => (
+                        <div
+                          key={ingredient.id}
+                          className="flex items-center gap-4 p-3 rounded-lg border border-slate-200 bg-white"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium text-slate-900">{ingredient.name}</div>
+                            <div className="text-sm text-slate-500">Unit: {ingredient.unit}</div>
+                          </div>
+                          <div className="w-48">
+                            <Label htmlFor={`cost-${ingredient.id}`} className="text-xs text-slate-600">
+                              Cost per {ingredient.unit}
+                            </Label>
+                            <div className="relative mt-1">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">
+                                IQD
+                              </span>
+                              <Input
+                                id={`cost-${ingredient.id}`}
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={ingredient.costPerUnit || ''}
+                                onChange={(e) => updateIngredientCost(ingredient.id, e.target.value)}
+                                className="pl-12"
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 p-3 rounded-lg bg-slate-50 border border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-700">Ingredients with prices:</span>
+                        <span className="text-sm font-bold text-slate-900">
+                          {costingIngredients.filter(ing => ing.costPerUnit > 0).length} / {costingIngredients.length}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCostingModalOpen(false)
+                    setCostingMenuItem(null)
+                    setCostingIngredients([])
+                  }}
+                  disabled={savingCosting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={saveCosting}
+                  disabled={savingCosting || loadingIngredients || costingIngredients.length === 0}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  {savingCosting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Save & Complete
+                    </>
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
