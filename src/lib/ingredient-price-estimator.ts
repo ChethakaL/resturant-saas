@@ -159,37 +159,114 @@ Now estimate for: ${ingredientName} per ${unit}`
  */
 function getDefaultPriceEstimate(ingredientName: string, unit: string): number {
     const name = ingredientName.toLowerCase()
+    const unitLower = unit.toLowerCase()
+
+    // Small units (tbsp, tsp, slice, piece, serving, cup, ml) - very low prices
+    if (['tbsp', 'tsp', 'teaspoon', 'tablespoon', 'slice', 'piece', 'serving', 'ml', 'clove'].includes(unitLower)) {
+        // Herbs and spices in small quantities
+        if (name.includes('herb') || name.includes('spice') || name.includes('parsley') ||
+            name.includes('basil') || name.includes('oregano') || name.includes('thyme') ||
+            name.includes('rosemary') || name.includes('mint') || name.includes('cilantro') ||
+            name.includes('dill') || name.includes('chive')) return 200
+
+        // Liquids in ml
+        if (unitLower === 'ml') {
+            if (name.includes('water')) return 0
+            if (name.includes('oil')) return 10
+            return 5
+        }
+
+        // Other small quantities
+        if (name.includes('lemon') || name.includes('lime')) return 500
+        if (name.includes('garlic')) return 100
+        return 300
+    }
+
+    // Grams - small quantities
+    if (unitLower === 'g' || unitLower === 'gram' || unitLower === 'grams') {
+        if (name.includes('herb') || name.includes('spice')) return 50
+        if (name.includes('cheese') || name.includes('mozzarella') || name.includes('parmesan')) return 150
+        if (name.includes('chocolate')) return 100
+        if (name.includes('yeast') || name.includes('baking')) return 30
+        if (name.includes('honey')) return 50
+        return 80
+    }
+
+    // Cup measurements
+    if (unitLower === 'cup' || unitLower === 'cups') {
+        if (name.includes('water') || name.includes('ice')) return 0
+        if (name.includes('rice') || name.includes('flour')) return 1000
+        if (name.includes('sugar')) return 800
+        return 500
+    }
 
     // Meats (per kg)
     if (name.includes('chicken') || name.includes('poultry')) return 12000
     if (name.includes('beef') || name.includes('meat')) return 25000
     if (name.includes('lamb') || name.includes('mutton')) return 30000
-    if (name.includes('fish') || name.includes('seafood')) return 20000
+    if (name.includes('fish') || name.includes('seafood') || name.includes('shrimp')) return 20000
+    if (name.includes('bacon') || name.includes('sausage')) return 18000
 
     // Vegetables (per kg)
     if (name.includes('tomato') || name.includes('onion') || name.includes('potato')) return 2000
-    if (name.includes('lettuce') || name.includes('cabbage')) return 3000
-    if (name.includes('pepper') || name.includes('cucumber')) return 2500
+    if (name.includes('lettuce') || name.includes('cabbage') || name.includes('spinach')) return 3000
+    if (name.includes('pepper') || name.includes('cucumber') || name.includes('carrot')) return 2500
+    if (name.includes('mushroom')) return 8000
+    if (name.includes('avocado')) return 10000
 
     // Dairy (per L or kg)
     if (name.includes('milk')) return 3000
-    if (name.includes('cheese')) return 15000
+    if (name.includes('cheese') && unitLower === 'kg') return 15000
+    if (name.includes('mozzarella') && unitLower === 'kg') return 15000
     if (name.includes('butter')) return 12000
     if (name.includes('yogurt')) return 4000
+    if (name.includes('cream')) return 5000
+
+    // Beverages
+    if (name.includes('tea') && (unitLower === 'piece' || unitLower === 'bag')) return 100
+    if (name.includes('tea') && unitLower === 'serving') return 500
+    if (name.includes('hibiscus') && unitLower === 'serving') return 300
+    if (name.includes('coffee')) return 8000
+    if (name.includes('juice')) return 4000
 
     // Spices and seasonings (per kg or smaller units)
-    if (name.includes('salt') || name.includes('pepper') || name.includes('spice')) {
-        return unit === 'kg' ? 5000 : 500
+    if (name.includes('salt') || name.includes('pepper') || name.includes('spice') ||
+        name.includes('cumin') || name.includes('paprika') || name.includes('cinnamon')) {
+        return unitLower === 'kg' ? 8000 : 500
     }
 
-    // Oils (per L)
-    if (name.includes('oil') || name.includes('olive')) return 8000
+    // Oils and fats (per L or kg)
+    if (name.includes('oil') || name.includes('olive')) {
+        return unitLower === 'l' || unitLower === 'liter' ? 8000 : 10
+    }
 
     // Grains and pasta (per kg)
     if (name.includes('rice') || name.includes('pasta') || name.includes('flour')) return 3000
+    if (name.includes('bread') || name.includes('bun')) return 2000
 
-    // Default fallback
-    return 5000
+    // Condiments and sauces
+    if (name.includes('sauce') || name.includes('ketchup') || name.includes('mayo')) return 6000
+    if (name.includes('vinegar')) return 3000
+    if (name.includes('honey') && unitLower === 'kg') return 10000
+    if (name.includes('sugar')) return 2500
+
+    // Nuts and seeds
+    if (name.includes('nut') || name.includes('almond') || name.includes('walnut')) return 15000
+    if (name.includes('seed') || name.includes('sesame')) return 8000
+
+    // Water and ice - free
+    if (name.includes('water') || name.includes('ice')) return 0
+
+    // Default fallback based on unit
+    if (unitLower === 'kg') return 5000
+    if (unitLower === 'l' || unitLower === 'liter') return 4000
+    if (unitLower === 'g' || unitLower === 'gram') return 50
+    if (unitLower === 'ml') return 5
+    if (unitLower === 'tbsp' || unitLower === 'tsp') return 200
+    if (unitLower === 'piece' || unitLower === 'slice') return 300
+
+    // Final fallback
+    return 1000
 }
 
 /**
