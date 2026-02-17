@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, type ChangeEvent } from 'react'
+import { useEffect, useState, useRef, type ChangeEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -100,6 +100,10 @@ function normalizeText(value?: string | null): string {
   return (value ?? '').trim().toLowerCase()
 }
 
+function normalizeCategoryName(value?: string | null): string {
+  return (value ?? '').replace(/\s+/g, ' ').trim()
+}
+
 function matchCategoryId(categories: Category[], categoryName?: string): string | undefined {
   const normalized = normalizeText(categoryName)
   if (!normalized) return undefined
@@ -176,6 +180,7 @@ function autoAssignCategoryId(item: ExtractedMenuItem, categories: Category[]): 
 
 export default function BulkMenuImport({ categories, ingredients, defaultBackgroundPrompt }: BulkMenuImportProps) {
   const { toast } = useToast()
+  const [availableCategories, setAvailableCategories] = useState<Category[]>(categories)
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<'upload' | 'extracting' | 'verifying' | 'complete'>('upload')
   const [menuImage, setMenuImage] = useState<string | null>(null)
@@ -194,6 +199,76 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
   const formUploadRef = useRef<HTMLInputElement | null>(null)
 
   void ingredients
+
+  useEffect(() => {
+    setAvailableCategories(categories)
+  }, [categories])
+
+  const ensureCategoriesAndAssign = async (items: ExtractedMenuItem[]): Promise<ExtractedMenuItem[]> => {
+    let nextCategories = [...availableCategories]
+    const names: string[] = []
+    const seen = new Set<string>()
+
+    for (const item of items) {
+      const cleaned = normalizeCategoryName(item.categoryName)
+      const normalized = normalizeText(cleaned)
+      if (!normalized || seen.has(normalized)) continue
+      seen.add(normalized)
+      names.push(cleaned)
+    }
+
+    if (names.length > 0) {
+      let existing = new Set(nextCategories.map((c) => normalizeText(c.name)))
+      let missing = names.filter((name) => !existing.has(normalizeText(name)))
+
+      if (missing.length > 0) {
+        const refresh = await fetch('/api/categories')
+        if (refresh.ok) {
+          const refreshed = await refresh.json()
+          if (Array.isArray(refreshed)) {
+            nextCategories = refreshed as Category[]
+            setAvailableCategories(nextCategories)
+          }
+        }
+      }
+
+      existing = new Set(nextCategories.map((c) => normalizeText(c.name)))
+      missing = names.filter((name) => !existing.has(normalizeText(name)))
+
+      if (missing.length > 0) {
+        let nextOrder =
+          nextCategories.reduce((max, c) => (c.displayOrder > max ? c.displayOrder : max), -1) + 1
+        for (const name of missing) {
+          const res = await fetch('/api/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name,
+              description: 'Auto-created from menu import',
+              displayOrder: nextOrder,
+            }),
+          })
+          if (res.ok) {
+            const created = (await res.json()) as Category
+            nextCategories = [...nextCategories, created]
+            nextOrder += 1
+          }
+        }
+
+        const finalRefresh = await fetch('/api/categories')
+        if (finalRefresh.ok) {
+          const refreshed = await finalRefresh.json()
+          if (Array.isArray(refreshed)) nextCategories = refreshed as Category[]
+        }
+        setAvailableCategories(nextCategories)
+      }
+    }
+
+    return items.map((item) => ({
+      ...item,
+      categoryId: item.categoryId || autoAssignCategoryId(item, nextCategories),
+    }))
+  }
 
   const updateItem = (index: number, updates: Partial<ExtractedMenuItem>) => {
     setExtractedItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...updates } : item)))
@@ -240,7 +315,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     )
 
     if (count > 0) {
-      const categoryName = categories.find((c) => c.id === categoryId)?.name
+      const categoryName = availableCategories.find((c) => c.id === categoryId)?.name
       toast({
         title: 'Category assigned',
         description: `Applied "${categoryName}" to ${count} uncategorized item${count > 1 ? 's' : ''}.`,
@@ -301,14 +376,11 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
         throw new Error(data.error || 'Failed to extract menu items')
       }
 
-      const items: ExtractedMenuItem[] = (data.items || []).map((item: ExtractedMenuItem) => {
-        const categoryId = autoAssignCategoryId(item, categories)
-        return {
-          ...item,
-          categoryId,
-          verified: true,
-        }
-      })
+      const extracted: ExtractedMenuItem[] = (data.items || []).map((item: ExtractedMenuItem) => ({
+        ...item,
+        verified: true,
+      }))
+      const items = await ensureCategoriesAndAssign(extracted)
 
       setExtractedItems(items)
       setExpandedIndex(null)
@@ -363,7 +435,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
           body: JSON.stringify({
             itemName: editingItem.name,
             description: editingItem.description,
-            category: categories.find((c) => c.id === editingItem.categoryId)?.name,
+            category: availableCategories.find((c) => c.id === editingItem.categoryId)?.name,
             orientation: imageOrientation,
             sizePreset: imageSizePreset,
             prompt: customPrompt.trim() || defaultBackgroundPrompt?.trim() || null,
@@ -460,6 +532,9 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
       setExpandedIndex(null)
       setEditingItem(null)
     }
+
+    itemsToValidate = await ensureCategoriesAndAssign(itemsToValidate)
+    setExtractedItems(itemsToValidate)
 
     const issues: string[] = []
     itemsToValidate.forEach((item, i) => {
@@ -569,7 +644,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                         <SelectValue placeholder={`Set category for ${itemsWithoutCategory} uncategorized`} />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
+                        {availableCategories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -582,7 +657,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                 {extractedItems.map((item, index) => {
                   const isExpanded = expandedIndex === index
                   const hasIssues = !item.categoryId || !item.name.trim() || !item.price || item.price <= 0
-                  const categoryName = categories.find((c) => c.id === item.categoryId)?.name
+                  const categoryName = availableCategories.find((c) => c.id === item.categoryId)?.name
 
                   return (
                     <div
@@ -631,7 +706,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                             <SelectValue placeholder="Category" />
                           </SelectTrigger>
                           <SelectContent>
-                            {categories.map((cat) => (
+                            {availableCategories.map((cat) => (
                               <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                             ))}
                           </SelectContent>
@@ -704,7 +779,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                                   <SelectValue placeholder="Select category" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {categories.map((category) => (
+                                  {availableCategories.map((category) => (
                                     <SelectItem key={category.id} value={category.id}>
                                       {category.name}
                                     </SelectItem>

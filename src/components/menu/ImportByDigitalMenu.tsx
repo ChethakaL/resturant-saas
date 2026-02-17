@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, type ChangeEvent } from 'react'
+import { useEffect, useState, useRef, type ChangeEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -53,13 +53,25 @@ function matchCategoryId(categories: Category[], categoryName?: string): string 
   if (!categoryName) return undefined
   const normalized = categoryName.trim().toLowerCase()
   const match = categories.find(
-    (c) => c.name.trim().toLowerCase() === normalized
+    (c) => {
+      const name = c.name.trim().toLowerCase()
+      return name === normalized || name.includes(normalized) || normalized.includes(name)
+    }
   )
   return match?.id
 }
 
+function normalizeText(value?: string | null): string {
+  return (value ?? '').trim().toLowerCase()
+}
+
+function normalizeCategoryName(value?: string | null): string {
+  return (value ?? '').replace(/\s+/g, ' ').trim()
+}
+
 export default function ImportByDigitalMenu({ categories, ingredients, defaultBackgroundPrompt }: ImportByDigitalMenuProps) {
   const { toast } = useToast()
+  const [availableCategories, setAvailableCategories] = useState<Category[]>(categories)
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<'url' | 'extracting' | 'verifying' | 'complete'>('url')
   const [menuUrl, setMenuUrl] = useState('')
@@ -76,6 +88,73 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   const [imageSizePreset, setImageSizePreset] = useState<ImageSizePreset>('medium')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const formUploadRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    setAvailableCategories(categories)
+  }, [categories])
+
+  const ensureCategoriesAndAssign = async (items: ExtractedMenuItem[]): Promise<ExtractedMenuItem[]> => {
+    let nextCategories = [...availableCategories]
+    const names: string[] = []
+    const seen = new Set<string>()
+    for (const item of items) {
+      const cleaned = normalizeCategoryName(item.categoryName)
+      const normalized = normalizeText(cleaned)
+      if (!normalized || seen.has(normalized)) continue
+      seen.add(normalized)
+      names.push(cleaned)
+    }
+
+    if (names.length > 0) {
+      let existing = new Set(nextCategories.map((c) => normalizeText(c.name)))
+      let missing = names.filter((name) => !existing.has(normalizeText(name)))
+      if (missing.length > 0) {
+        const refresh = await fetch('/api/categories')
+        if (refresh.ok) {
+          const refreshed = await refresh.json()
+          if (Array.isArray(refreshed)) {
+            nextCategories = refreshed as Category[]
+            setAvailableCategories(nextCategories)
+          }
+        }
+      }
+
+      existing = new Set(nextCategories.map((c) => normalizeText(c.name)))
+      missing = names.filter((name) => !existing.has(normalizeText(name)))
+      if (missing.length > 0) {
+        let nextOrder =
+          nextCategories.reduce((max, c) => (c.displayOrder > max ? c.displayOrder : max), -1) + 1
+        for (const name of missing) {
+          const res = await fetch('/api/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name,
+              description: 'Auto-created from menu import',
+              displayOrder: nextOrder,
+            }),
+          })
+          if (res.ok) {
+            const created = (await res.json()) as Category
+            nextCategories = [...nextCategories, created]
+            nextOrder += 1
+          }
+        }
+
+        const finalRefresh = await fetch('/api/categories')
+        if (finalRefresh.ok) {
+          const refreshed = await finalRefresh.json()
+          if (Array.isArray(refreshed)) nextCategories = refreshed as Category[]
+        }
+        setAvailableCategories(nextCategories)
+      }
+    }
+
+    return items.map((item) => ({
+      ...item,
+      categoryId: item.categoryId || matchCategoryId(nextCategories, item.categoryName),
+    }))
+  }
 
   // --- Bulk verification helpers ---
 
@@ -121,7 +200,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       return item
     }))
     if (count > 0) {
-      const catName = categories.find(c => c.id === categoryId)?.name
+      const catName = availableCategories.find(c => c.id === categoryId)?.name
       toast({ title: 'Category assigned', description: `Applied "${catName}" to ${count} uncategorized item${count > 1 ? 's' : ''}.` })
     }
   }
@@ -179,7 +258,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url,
-          categoryNames: categories.map((c) => c.name),
+          categoryNames: availableCategories.map((c) => c.name),
         }),
       })
 
@@ -189,10 +268,11 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
         throw new Error(data.error || data.details || 'Failed to import from URL')
       }
 
-      const items: ExtractedMenuItem[] = (data.items || []).map((item: any) => ({
+      const extracted: ExtractedMenuItem[] = (data.items || []).map((item: any) => ({
         ...item,
-        categoryId: item.categoryId || matchCategoryId(categories, item.categoryName),
+        categoryId: item.categoryId || matchCategoryId(availableCategories, item.categoryName),
       }))
+      const items = await ensureCategoriesAndAssign(extracted)
 
       setExtractedItems(items)
       if (items.length > 0) {
@@ -241,7 +321,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
           body: JSON.stringify({
             itemName: editingItem.name,
             description: editingItem.description,
-            category: categories.find((c) => c.id === editingItem.categoryId)?.name,
+            category: availableCategories.find((c) => c.id === editingItem.categoryId)?.name,
             orientation: imageOrientation,
             sizePreset: imageSizePreset,
             prompt: customPrompt.trim() || defaultBackgroundPrompt?.trim() || null,
@@ -271,33 +351,21 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   // --- Create all items ---
 
   const handleCreateAll = async () => {
+    let itemsToValidate = extractedItems
+
     // Sync expanded item back first
     if (expandedIndex !== null && editingItem) {
-      const synced = extractedItems.map((item, i) => i === expandedIndex ? { ...editingItem } : item)
-      setExtractedItems(synced)
+      itemsToValidate = extractedItems.map((item, i) => i === expandedIndex ? { ...editingItem } : item)
+      setExtractedItems(itemsToValidate)
       setExpandedIndex(null)
       setEditingItem(null)
-      // Validate synced items
-      const issues: string[] = []
-      synced.forEach((item, i) => {
-        if (!item.name.trim()) issues.push(`Item ${i + 1}: Missing name`)
-        if (!item.price || item.price <= 0) issues.push(`${item.name || `Item ${i + 1}`}: Invalid price`)
-        if (!item.categoryId) issues.push(`${item.name || `Item ${i + 1}`}: No category`)
-      })
-      if (issues.length > 0) {
-        toast({
-          title: `${issues.length} issue${issues.length > 1 ? 's' : ''} found`,
-          description: issues.length <= 3 ? issues.join('. ') : `${issues.slice(0, 3).join('. ')} and ${issues.length - 3} more.`,
-          variant: 'destructive',
-        })
-        return
-      }
-      await createAllItems(synced)
-      return
     }
 
+    itemsToValidate = await ensureCategoriesAndAssign(itemsToValidate)
+    setExtractedItems(itemsToValidate)
+
     const issues: string[] = []
-    extractedItems.forEach((item, i) => {
+    itemsToValidate.forEach((item, i) => {
       if (!item.name.trim()) issues.push(`Item ${i + 1}: Missing name`)
       if (!item.price || item.price <= 0) issues.push(`${item.name || `Item ${i + 1}`}: Invalid price`)
       if (!item.categoryId) issues.push(`${item.name || `Item ${i + 1}`}: No category`)
@@ -310,7 +378,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       })
       return
     }
-    await createAllItems(extractedItems)
+    await createAllItems(itemsToValidate)
   }
 
   const createAllItems = async (items: ExtractedMenuItem[]) => {
@@ -444,7 +512,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                         <SelectValue placeholder={`Set category for ${itemsWithoutCategory} uncategorized`} />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
+                        {availableCategories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -458,7 +526,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                 {extractedItems.map((item, index) => {
                   const isExpanded = expandedIndex === index
                   const hasIssues = !item.categoryId || !item.name.trim() || !item.price || item.price <= 0
-                  const categoryName = categories.find(c => c.id === item.categoryId)?.name
+                  const categoryName = availableCategories.find(c => c.id === item.categoryId)?.name
 
                   return (
                     <div
@@ -512,7 +580,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                             <SelectValue placeholder="Category" />
                           </SelectTrigger>
                           <SelectContent>
-                            {categories.map((cat) => (
+                            {availableCategories.map((cat) => (
                               <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                             ))}
                           </SelectContent>
@@ -587,7 +655,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                                   <SelectValue placeholder="Select category" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {categories.map((category) => (
+                                  {availableCategories.map((category) => (
                                     <SelectItem key={category.id} value={category.id}>
                                       {category.name}
                                     </SelectItem>
