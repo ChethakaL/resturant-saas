@@ -7,7 +7,7 @@ import type { ItemForSuggest } from '@/lib/category-suggest'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_CAROUSEL_ITEMS = 3
+const MAX_CAROUSEL_ITEMS = 6
 type Slot = 'day' | 'evening' | 'night'
 
 /** Get time slot for a date in tz (day 6–12, evening 12–18, night 18–6). */
@@ -23,10 +23,10 @@ function getTimeSlotForDate(date: Date, tz: string): Slot {
 
 /**
  * GET ?mode=profit|adaptive
- * Returns suggested carousel item IDs per time slot: { day: string[], evening: string[], night: string[] }
- * Each array max 3 items, ordered high price to lowest.
- * Profit: 2 high-margin mains + 1 high-margin shareable (same for all slots).
- * Adaptive: top 3 by margin + popularity in that slot, then sort by price desc.
+ * Returns suggested carousel item IDs: { recommended: string[], day: string[], evening: string[], night: string[] }
+ * Each array max 6 items, ordered high price to lowest.
+ * Profit: high-margin mains + shareables first, then fill from other high-margin non-drink items.
+ * Adaptive: top 6 by margin + popularity in that slot (or high-margin fallback when no sales), then sort by price desc.
  */
 export async function GET(request: Request) {
   try {
@@ -121,7 +121,19 @@ export async function GET(request: Request) {
         if (selected.length >= MAX_CAROUSEL_ITEMS) break
         if (!selected.includes(item.id)) selected.push(item.id)
       }
+      if (selected.length < MAX_CAROUSEL_ITEMS) {
+        const remaining = [...itemsForSuggest]
+          .filter((i) => !selected.includes(i.id))
+          .sort((a, b) => b.marginPercent - a.marginPercent || b.price - a.price)
+        for (const item of remaining) {
+          if (selected.length >= MAX_CAROUSEL_ITEMS) break
+          selected.push(item.id)
+        }
+      }
       return NextResponse.json({
+        mode,
+        usedSalesData: false,
+        recommended: byPriceDesc(selected),
         day: byPriceDesc(selected),
         evening: byPriceDesc(selected),
         night: byPriceDesc(selected),
@@ -176,11 +188,35 @@ export async function GET(request: Request) {
       return byPriceDesc(result)
     }
     const result: Record<Slot, string[]> = { day: [], evening: [], night: [] }
+    const hasAnySalesData = Array.from(unitsBySlot.values()).some(
+      (slotMap) => slotMap.day > 0 || slotMap.evening > 0 || slotMap.night > 0
+    )
+    const byHighMargin = [...itemsForSuggest].sort(
+      (a, b) => b.marginPercent - a.marginPercent || b.price - a.price
+    )
+
+    if (!hasAnySalesData) {
+      const selected = prioritizeForSlot(byHighMargin)
+      return NextResponse.json({
+        mode,
+        usedSalesData: false,
+        recommended: selected,
+        day: selected,
+        evening: selected,
+        night: selected,
+      })
+    }
+
     for (const slot of ['day', 'evening', 'night'] as const) {
       const sorted = [...itemsForSuggest].sort((a, b) => score(b, slot) - score(a, slot))
       result[slot] = prioritizeForSlot(sorted)
     }
-    return NextResponse.json(result)
+    return NextResponse.json({
+      mode,
+      usedSalesData: true,
+      recommended: result.day,
+      ...result,
+    })
   } catch (error) {
     console.error('Error fetching suggested carousel items:', error)
     return NextResponse.json(

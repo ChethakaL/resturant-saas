@@ -15,8 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
-import { Trash, Eye, EyeOff, Loader2, Sparkles, GripVertical } from 'lucide-react'
+import { Trash, Eye, EyeOff, Loader2, Sparkles, GripVertical, AlertTriangle } from 'lucide-react'
 import { Category } from '@prisma/client'
 
 export interface CategoryWithItems extends Category {
@@ -39,6 +47,22 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
   const [editingNameId, setEditingNameId] = useState<string | null>(null)
   const [editingNameValue, setEditingNameValue] = useState('')
   const [movingItemId, setMovingItemId] = useState<string | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [categoryToDelete, setCategoryToDelete] = useState<CategoryWithItems | null>(null)
+  const [aiResultsOpen, setAiResultsOpen] = useState(false)
+  const [aiResults, setAiResults] = useState<{
+    updated: number
+    categories: number
+    createdCategories: string[]
+    changes: Array<{
+      itemId: string
+      itemName: string
+      fromCategory: string | null
+      toCategory: string
+      reason: string
+    }>
+  } | null>(null)
+  const [highlightedItems, setHighlightedItems] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   const toggleShowOnMenu = async (categoryId: string) => {
@@ -102,17 +126,41 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
     }
   }
 
-  const handleDelete = async (categoryId: string) => {
-    if (!confirm('Remove this category?')) return
+  const openDeleteDialog = (category: CategoryWithItems) => {
+    setCategoryToDelete(category)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!categoryToDelete) return
+
+    const categoryId = categoryToDelete.id
+    const itemCount = categoryToDelete.menuItems.length
+
     setDeletingIds((prev) => [...prev, categoryId])
+    setDeleteDialogOpen(false)
+
     try {
       const response = await fetch(`/api/categories/${categoryId}`, { method: 'DELETE' })
       if (!response.ok) {
         const errorBody = await response.json().catch(() => null)
         throw new Error(errorBody?.error ?? 'Failed to delete category')
       }
+
+      const result = await response.json()
       setCategories((prev) => prev.filter((c) => c.id !== categoryId))
-      toast({ title: 'Category removed', variant: 'destructive' })
+
+      if (result.itemsMoved > 0) {
+        toast({
+          title: 'Category removed',
+          description: `${result.itemsMoved} item${result.itemsMoved > 1 ? 's' : ''} moved to Uncategorized`,
+        })
+      } else {
+        toast({ title: 'Category removed' })
+      }
+
+      // Refresh to show updated categories including Uncategorized if created
+      router.refresh()
     } catch (error) {
       toast({
         title: 'Could not remove category',
@@ -121,6 +169,7 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
       })
     } finally {
       setDeletingIds((prev) => prev.filter((id) => id !== categoryId))
+      setCategoryToDelete(null)
     }
   }
 
@@ -195,13 +244,30 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
       if (!response.ok) {
         throw new Error(data?.error ?? 'Failed to run AI categorization')
       }
-      toast({ title: `AI categorization applied`, description: `${data.updated} items updated across ${data.categories} categories.` })
-      router.refresh()
+
+      // Show detailed results
+      setAiResults(data)
+      setAiResultsOpen(true)
+
+      // Highlight changed items
+      const changedItemIds = new Set<string>(data.changes.map((c: any) => c.itemId as string))
+      setHighlightedItems(changedItemIds)
+
+      // Clear highlights after 10 seconds
+      setTimeout(() => setHighlightedItems(new Set()), 10000)
+
+      // DON'T refresh here - let user see the dialog first
     } catch {
       toast({ title: 'Could not run AI categorization', variant: 'destructive' })
     } finally {
       setAiSuggestLoading(false)
     }
+  }
+
+  const closeAiResultsDialog = () => {
+    setAiResultsOpen(false)
+    // Refresh after closing dialog to show updated categories
+    router.refresh()
   }
 
   return (
@@ -212,7 +278,7 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
             <div>
               <CardTitle>AI categorization</CardTitle>
               <CardDescription>
-                Auto-assign menu items into: Signature Dishes (2 top mains + 1 shareable), Main Dishes, Shareables, Add-ons, Drinks, Desserts, Kids, Sides.
+                Automatically structures menu items into standardized categories to improve organization, reporting, and customer navigation.
               </CardDescription>
             </div>
             <Button onClick={runAiSuggest} disabled={aiSuggestLoading} className="gap-2">
@@ -324,7 +390,7 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDelete(category.id)}
+                      onClick={() => openDeleteDialog(category)}
                       disabled={deletingIds.includes(category.id)}
                     >
                       <Trash className="h-4 w-4" />
@@ -338,7 +404,13 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
                   ) : (
                     <ul className="space-y-1.5">
                       {category.menuItems.map((item) => (
-                        <li key={item.id} className="flex items-center justify-between gap-2 text-sm">
+                        <li
+                          key={item.id}
+                          className={`flex items-center justify-between gap-2 text-sm transition-all duration-500 ${highlightedItems.has(item.id)
+                            ? 'bg-emerald-50 border-l-4 border-emerald-500 pl-2 -ml-2 rounded animate-pulse'
+                            : ''
+                            }`}
+                        >
                           <span className="text-slate-700">{item.name}</span>
                           <Select
                             value=""
@@ -375,6 +447,160 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Delete Category?
+            </DialogTitle>
+            <DialogDescription>
+              {categoryToDelete && (
+                <div className="space-y-2 pt-2">
+                  <p>
+                    You are about to delete <strong>{categoryToDelete.name}</strong>.
+                  </p>
+                  {categoryToDelete.menuItems.length > 0 ? (
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                      <p className="text-sm text-amber-900 font-medium">
+                        This category contains {categoryToDelete.menuItems.length} menu item{categoryToDelete.menuItems.length > 1 ? 's' : ''}:
+                      </p>
+                      <ul className="mt-2 space-y-1 text-sm text-amber-800">
+                        {categoryToDelete.menuItems.slice(0, 5).map((item) => (
+                          <li key={item.id} className="ml-4 list-disc">{item.name}</li>
+                        ))}
+                        {categoryToDelete.menuItems.length > 5 && (
+                          <li className="ml-4 text-amber-700 italic">
+                            ...and {categoryToDelete.menuItems.length - 5} more
+                          </li>
+                        )}
+                      </ul>
+                      <p className="mt-2 text-sm text-amber-900">
+                        These items will be moved to an <strong>"Uncategorized"</strong> category.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      This category is empty and can be safely deleted.
+                    </p>
+                  )}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deletingIds.includes(categoryToDelete?.id ?? '')}
+            >
+              {deletingIds.includes(categoryToDelete?.id ?? '') ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Deleting...</>
+              ) : (
+                'Delete Category'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Categorization Results Dialog */}
+      <Dialog open={aiResultsOpen} onOpenChange={(open) => !open && closeAiResultsDialog()}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-emerald-500" />
+              AI Categorization Complete
+            </DialogTitle>
+            <DialogDescription>
+              {aiResults && (
+                <div className="space-y-4 pt-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+                      <p className="text-sm font-medium text-emerald-900">
+                        {aiResults.updated} items categorized
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
+                      <p className="text-sm font-medium text-blue-900">
+                        {aiResults.categories} total categories
+                      </p>
+                    </div>
+                  </div>
+
+                  {aiResults.createdCategories.length > 0 && (
+                    <div className="rounded-lg bg-purple-50 border border-purple-200 p-3">
+                      <p className="text-sm font-medium text-purple-900 mb-2">
+                        ✨ Created {aiResults.createdCategories.length} new {aiResults.createdCategories.length === 1 ? 'category' : 'categories'}:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {aiResults.createdCategories.map((cat) => (
+                          <Badge key={cat} variant="secondary" className="bg-purple-100 text-purple-800">
+                            {cat}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiResults.changes.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-slate-900 mb-3">
+                        📋 Item Movements ({aiResults.changes.length}):
+                      </p>
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {aiResults.changes.map((change, idx) => (
+                          <div
+                            key={idx}
+                            className="rounded-lg border border-slate-200 bg-white p-3 text-sm"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <p className="font-medium text-slate-900">{change.itemName}</p>
+                                <div className="flex items-center gap-2 mt-1 text-xs text-slate-600">
+                                  <span className="px-2 py-0.5 rounded bg-slate-100">
+                                    {change.fromCategory || 'Uncategorized'}
+                                  </span>
+                                  <span>→</span>
+                                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
+                                    {change.toCategory}
+                                  </span>
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="text-xs shrink-0">
+                                {change.reason}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiResults.changes.length === 0 && (
+                    <p className="text-sm text-slate-600 text-center py-4">
+                      No items were moved. All items are already in the correct categories.
+                    </p>
+                  )}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={closeAiResultsDialog}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

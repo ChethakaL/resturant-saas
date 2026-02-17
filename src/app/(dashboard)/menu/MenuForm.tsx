@@ -63,7 +63,9 @@ const translationLanguages = [
 const SAMPLE_AI_PROMPT = `Chicken Biryani. Main course. Price 12,000 IQD. Fragrant basmati rice with tender chicken, layered with saffron, fried onions, and mint. Served with raita. Calories about 450 per serving, 28g protein, 42g carbs. Tags: halal, spicy.
 Prep time: 15 minutes. Cook time: 35 minutes.
 Steps: Marinate chicken in yogurt and spices. Soak rice 20 min. Fry onions until golden. Layer rice and chicken in pot, add saffron and ghee. Cook on low 25 min. Fluff and serve with raita.
-Tips: Use aged basmati for best fragrance. Let rest 5 min before opening lid.`
+Steps: Marinate chicken in yogurt and spices. Soak rice 20 min. Fry onions until golden. Layer rice and chicken in pot, add saffron and ghee. Cook on low 25 min. Fluff and serve with raita.
+Tips: Use aged basmati for best fragrance. Let rest 5 min before opening lid.
+Yield: 4 servings`
 
 type LanguageCode = (typeof translationLanguages)[number]['code']
 
@@ -112,6 +114,7 @@ interface ParsedAIResponse {
   recipeTips?: string[]
   prepTime?: string | null
   cookTime?: string | null
+  recipeYield?: number | null
   ingredients?: ParsedAIIngredient[]
 }
 
@@ -472,8 +475,15 @@ export default function MenuForm({
 
   // Selected add-ons for this menu item
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>(
-    menuItem?.addOns?.map((a) => a.addOnId) || []
+    menuItem?.addOns?.map((ma) => ma.addOn.id) || []
   )
+
+  const toggleAddOn = (addOnId: string) => {
+    setSelectedAddOnIds((prev) =>
+      prev.includes(addOnId) ? prev.filter((id) => id !== addOnId) : [...prev, addOnId]
+    )
+  }
+
 
   // Add-ons list (can grow when creating new add-on inline)
   const [addOnsList, setAddOnsList] = useState<AddOn[]>(addOns)
@@ -508,7 +518,7 @@ export default function MenuForm({
     fetch('/api/recipe-supplier-products')
       .then((r) => r.ok ? r.json() : [])
       .then(setSupplierProducts)
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   // Valid recipe lines (ingredient + quantity > 0) for submit and badges
@@ -649,16 +659,16 @@ export default function MenuForm({
     const query = normalizeSearch(supplierName)
     const filtered = query
       ? options.filter((sp) => {
-          const supplier = sp.supplierName.toLowerCase()
-          const product = sp.name.toLowerCase()
-          const brand = (sp.brand || '').toLowerCase()
-          return (
-            supplier.includes(query) ||
-            query.includes(supplier) ||
-            product.includes(query) ||
-            brand.includes(query)
-          )
-        })
+        const supplier = sp.supplierName.toLowerCase()
+        const product = sp.name.toLowerCase()
+        const brand = (sp.brand || '').toLowerCase()
+        return (
+          supplier.includes(query) ||
+          query.includes(supplier) ||
+          product.includes(query) ||
+          brand.includes(query)
+        )
+      })
       : options
     const pool = filtered.length > 0 ? filtered : options
     return [...pool].sort((a, b) => {
@@ -1103,6 +1113,8 @@ export default function MenuForm({
       const newRecipe: RecipeIngredient[] = []
       const unmatched: string[] = []
       const createdIngredients: Ingredient[] = []
+      const yieldFactor = (data.recipeYield && data.recipeYield > 0) ? data.recipeYield : 1
+
       for (const ing of data.ingredients) {
         const nameLower = (ing.name || '').toLowerCase().trim()
         const match = allIngredients.find((i) => {
@@ -1118,8 +1130,8 @@ export default function MenuForm({
           )
           newRecipe.push({
             ingredientId: match.id,
-            quantity: converted.quantity,
-            pieceCount: converted.pieceCount,
+            quantity: converted.quantity / yieldFactor,
+            pieceCount: converted.pieceCount ? converted.pieceCount / yieldFactor : converted.pieceCount,
           })
           filledRecipeCount++
           continue
@@ -1148,8 +1160,8 @@ export default function MenuForm({
           createdIngredients.push(newIngredient)
           newRecipe.push({
             ingredientId: newIngredient.id,
-            quantity: Number(ing.quantity) || 0,
-            pieceCount: ing.pieceCount ?? null,
+            quantity: (Number(ing.quantity) || 0) / yieldFactor,
+            pieceCount: ing.pieceCount ? ing.pieceCount / yieldFactor : ing.pieceCount,
           })
           filledRecipeCount++
         } catch {
@@ -1163,6 +1175,13 @@ export default function MenuForm({
       setUnmatchedIngredientsFromPrompt(unmatched)
     } else {
       setUnmatchedIngredientsFromPrompt([])
+    }
+
+    if (data.recipeYield && data.recipeYield > 1 && !options?.quietToast) {
+      toast({
+        title: 'Yield Adjusted',
+        description: `Quantities divided by ${data.recipeYield} to get per-serving cost.`,
+      })
     }
 
     const missingNutrition =
@@ -1242,6 +1261,7 @@ export default function MenuForm({
   const buildFollowUpQuestion = (data: ParsedAIResponse): { question: string; ready: boolean } => {
     const missingName = !data.name || !data.name.trim()
     const missingCategory = !findCategoryIdByName(data.categoryName)
+    const missingYield = data.recipeYield == null
     const missingPrice = !(typeof data.price === 'number' && data.price > 0)
     const missingIngredients = !Array.isArray(data.ingredients) || data.ingredients.length === 0
     const missingSteps = !Array.isArray(data.recipeSteps) || data.recipeSteps.length === 0
@@ -1249,6 +1269,7 @@ export default function MenuForm({
 
     if (missingName) return { ready: false, question: 'What is the exact menu item name?' }
     if (missingCategory) return { ready: false, question: 'Which category should this item be in?' }
+    if (missingYield) return { ready: false, question: 'How many servings does this recipe make? (e.g. 1, 4, 10)' }
     if (missingPrice) return { ready: false, question: 'What is the selling price in IQD?' }
     if (missingIngredients) return { ready: false, question: 'Please list ingredients with quantity and unit (for example: chicken 0.2 kg, rice 0.15 kg).' }
     if (missingSteps) return { ready: false, question: 'Please provide SOP steps for preparation and cooking.' }
@@ -1380,8 +1401,8 @@ export default function MenuForm({
     // Dry goods: 1 cup rice/lentils ≈ 0.2 kg
 
     // Spices stored in kg, recipe in tsp/tbsp
-    if ((ingredientUnitLower === 'kg' || ingredientUnitLower === 'kilogram') && 
-        (recipeUnitLower === 'tsp' || recipeUnitLower === 'teaspoon' || recipeUnitLower === 'teaspoons')) {
+    if ((ingredientUnitLower === 'kg' || ingredientUnitLower === 'kilogram') &&
+      (recipeUnitLower === 'tsp' || recipeUnitLower === 'teaspoon' || recipeUnitLower === 'teaspoons')) {
       const isSalt = nameLower.includes('salt')
       const tspToKg = isSalt ? 0.006 : 0.005 // Salt is slightly denser
       return {
@@ -1391,8 +1412,8 @@ export default function MenuForm({
       }
     }
 
-    if ((ingredientUnitLower === 'kg' || ingredientUnitLower === 'kilogram') && 
-        (recipeUnitLower === 'tbsp' || recipeUnitLower === 'tablespoon' || recipeUnitLower === 'tablespoons')) {
+    if ((ingredientUnitLower === 'kg' || ingredientUnitLower === 'kilogram') &&
+      (recipeUnitLower === 'tbsp' || recipeUnitLower === 'tablespoon' || recipeUnitLower === 'tablespoons')) {
       const tbspToKg = 0.015
       return {
         quantity: recipeQuantity * tbspToKg,
@@ -1410,8 +1431,8 @@ export default function MenuForm({
       }
     }
 
-    if ((ingredientUnitLower === 'liter' || ingredientUnitLower === 'l') && 
-        (recipeUnitLower === 'tsp' || recipeUnitLower === 'teaspoon')) {
+    if ((ingredientUnitLower === 'liter' || ingredientUnitLower === 'l') &&
+      (recipeUnitLower === 'tsp' || recipeUnitLower === 'teaspoon')) {
       return {
         quantity: recipeQuantity * 0.005,
         pieceCount: recipeQuantity,
@@ -1419,8 +1440,8 @@ export default function MenuForm({
       }
     }
 
-    if ((ingredientUnitLower === 'liter' || ingredientUnitLower === 'l') && 
-        (recipeUnitLower === 'tbsp' || recipeUnitLower === 'tablespoon')) {
+    if ((ingredientUnitLower === 'liter' || ingredientUnitLower === 'l') &&
+      (recipeUnitLower === 'tbsp' || recipeUnitLower === 'tablespoon')) {
       return {
         quantity: recipeQuantity * 0.015,
         pieceCount: recipeQuantity,
@@ -1431,8 +1452,8 @@ export default function MenuForm({
     // Dry goods stored in kg, recipe in cups
     const dryGoodsKeywords = ['rice', 'lentil', 'bean', 'bulgur', 'wheat', 'flour', 'chickpea']
     const isDryGood = dryGoodsKeywords.some(keyword => nameLower.includes(keyword))
-    if (isDryGood && (ingredientUnitLower === 'kg' || ingredientUnitLower === 'kilogram') && 
-        (recipeUnitLower === 'cup' || recipeUnitLower === 'cups')) {
+    if (isDryGood && (ingredientUnitLower === 'kg' || ingredientUnitLower === 'kilogram') &&
+      (recipeUnitLower === 'cup' || recipeUnitLower === 'cups')) {
       return {
         quantity: recipeQuantity * 0.2, // 1 cup ≈ 0.2 kg
         pieceCount: recipeQuantity,
@@ -1458,7 +1479,7 @@ export default function MenuForm({
         if (ing.existingIngredientId) {
           // Find the existing ingredient to get its unit
           const existingIngredient = ingredients.find(i => i.id === ing.existingIngredientId)
-          
+
           // Convert recipe unit to ingredient base unit
           const converted = convertRecipeUnitToBaseUnit(
             ing.quantity,
@@ -1657,14 +1678,14 @@ export default function MenuForm({
     if (!ingredient) return 'item'
     const lowerName = ingredient.name.toLowerCase()
     const ingredientUnit = ingredient.unit.toLowerCase()
-    
+
     // Check if pieceCount represents a recipe unit (tsp, tbsp, cups) based on quantity and pieceCount relationship
     // When recipe unit is tsp/tbsp/cups, we store the recipe quantity in pieceCount and converted value in quantity
     if (pieceCount !== null && pieceCount !== undefined && quantity !== undefined) {
       // Spices: if pieceCount is a small decimal (0.1-5) and quantity is very small (< 0.1 kg), likely tsp/tbsp
       const spiceKeywords = ['turmeric', 'cumin', 'cinnamon', 'cardamom', 'black pepper', 'salt', 'paprika', 'coriander', 'sumac', 'za\'atar', 'pepper']
       const isSpice = spiceKeywords.some(keyword => lowerName.includes(keyword))
-      
+
       if (isSpice && (ingredientUnit === 'kg' || ingredientUnit === 'kilogram') && quantity < 0.1) {
         // Check the ratio: if pieceCount/quantity ratio is around 200 (tsp) or 67 (tbsp)
         const ratio = pieceCount / quantity
@@ -1676,7 +1697,7 @@ export default function MenuForm({
           return 'tbsp'
         }
       }
-      
+
       // Dry goods: if pieceCount is 0.5-2 and quantity matches cup conversion (pieceCount * 0.2 ≈ quantity)
       const dryGoodsKeywords = ['rice', 'lentil', 'bean', 'bulgur', 'wheat', 'flour', 'chickpea']
       const isDryGood = dryGoodsKeywords.some(keyword => lowerName.includes(keyword))
@@ -1686,7 +1707,7 @@ export default function MenuForm({
           return 'cup'
         }
       }
-      
+
       // Liquids: if pieceCount is large (> 10) and quantity matches ml conversion
       if ((ingredientUnit === 'liter' || ingredientUnit === 'l') && pieceCount > 10) {
         const expectedQuantity = pieceCount / 1000 // ml to L
@@ -1695,7 +1716,7 @@ export default function MenuForm({
         }
       }
     }
-    
+
     // Default logic for countable items (when pieceCount is a whole number and represents actual pieces)
     if (pieceCount !== null && pieceCount !== undefined && Number.isInteger(pieceCount) && pieceCount > 0 && pieceCount <= 10) {
       const cupKeywords = ['lentil', 'rice', 'bean', 'dal', 'chickpea', 'bulgur', 'grain', 'flour']
@@ -1710,7 +1731,7 @@ export default function MenuForm({
         return 'piece'
       }
     }
-    
+
     return 'item'
   }
 
@@ -1787,111 +1808,111 @@ export default function MenuForm({
                 </TabsTrigger>
                 <TabsTrigger value="more" className="flex items-center gap-2">
                   <MoreHorizontal className="h-4 w-4" />
-                  More
+                  Translations
                 </TabsTrigger>
               </TabsList>
               {mode === 'edit' && (
-              <TabsContent value="overview" className="space-y-4 mt-0">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>How it looks</CardTitle>
-                    <CardDescription>
-                      Preview of this menu item. Use the other tabs to edit, or the Edit assistant below to update from new text.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
-                      {(formData.imageUrl || menuItem?.imageUrl) ? (
-                        <div className="aspect-[4/3] relative w-full">
-                          <img
-                            src={formData.imageUrl || menuItem?.imageUrl || ''}
-                            alt={formData.name || 'Menu item'}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400'
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="aspect-[4/3] bg-slate-200 flex items-center justify-center text-slate-500 text-sm">
-                          No image
-                        </div>
-                      )}
-                      <div className="p-4 space-y-2">
-                        <p className="text-xs uppercase tracking-wider text-slate-500">
-                          {categories.find((c) => c.id === formData.categoryId)?.name || 'Uncategorized'}
-                        </p>
-                        <h3 className="text-xl font-semibold text-slate-900">
-                          {formData.name || 'Untitled item'}
-                        </h3>
-                        <p className="text-sm text-slate-600 line-clamp-3">
-                          {formData.description || 'No description.'}
-                        </p>
-                        <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                          {formData.calories && <span>{formData.calories} cal</span>}
-                          {formData.protein && <span>{formData.protein}g protein</span>}
-                          {formData.carbs && <span>{formData.carbs}g carbs</span>}
-                          {formData.tags && formData.tags.split(',').map((t) => t.trim()).filter(Boolean).map((tag) => (
-                            <span key={tag} className="rounded-full bg-slate-200 px-2 py-0.5">{tag}</span>
-                          ))}
-                        </div>
-                        <p className="text-lg font-bold text-emerald-700">
-                          {formatCurrency(parseFloat(formData.price) || 0)}
-                        </p>
-                        {selectedAddOnIds.length > 0 && (
-                          <div className="pt-2 border-t border-slate-200">
-                            <p className="text-xs font-medium text-slate-500 mb-1">Add-ons</p>
-                            <div className="flex flex-wrap gap-1">
-                              {addOnsList.filter((a) => selectedAddOnIds.includes(a.id)).map((addOn) => (
-                                <span key={addOn.id} className="text-xs text-slate-600">
-                                  +{addOn.name} ({formatCurrency(addOn.price)})
-                                </span>
-                              ))}
-                            </div>
+                <TabsContent value="overview" className="space-y-4 mt-0">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>How it looks</CardTitle>
+                      <CardDescription>
+                        Preview of this menu item. Use the other tabs to edit, or the Edit assistant below to update from new text.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                        {(formData.imageUrl || menuItem?.imageUrl) ? (
+                          <div className="aspect-[4/3] relative w-full">
+                            <img
+                              src={formData.imageUrl || menuItem?.imageUrl || ''}
+                              alt={formData.name || 'Menu item'}
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400'
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="aspect-[4/3] bg-slate-200 flex items-center justify-center text-slate-500 text-sm">
+                            No image
                           </div>
                         )}
+                        <div className="p-4 space-y-2">
+                          <p className="text-xs uppercase tracking-wider text-slate-500">
+                            {categories.find((c) => c.id === formData.categoryId)?.name || 'Uncategorized'}
+                          </p>
+                          <h3 className="text-xl font-semibold text-slate-900">
+                            {formData.name || 'Untitled item'}
+                          </h3>
+                          <p className="text-sm text-slate-600 line-clamp-3">
+                            {formData.description || 'No description.'}
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                            {formData.calories && <span>{formData.calories} cal</span>}
+                            {formData.protein && <span>{formData.protein}g protein</span>}
+                            {formData.carbs && <span>{formData.carbs}g carbs</span>}
+                            {formData.tags && formData.tags.split(',').map((t) => t.trim()).filter(Boolean).map((tag) => (
+                              <span key={tag} className="rounded-full bg-slate-200 px-2 py-0.5">{tag}</span>
+                            ))}
+                          </div>
+                          <p className="text-lg font-bold text-emerald-700">
+                            {formatCurrency(parseFloat(formData.price) || 0)}
+                          </p>
+                          {selectedAddOnIds.length > 0 && (
+                            <div className="pt-2 border-t border-slate-200">
+                              <p className="text-xs font-medium text-slate-500 mb-1">Add-ons</p>
+                              <div className="flex flex-wrap gap-1">
+                                {addOnsList.filter((a) => selectedAddOnIds.includes(a.id)).map((addOn) => (
+                                  <span key={addOn.id} className="text-xs text-slate-600">
+                                    +{addOn.name} ({formatCurrency(addOn.price)})
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5 text-emerald-500" />
-                      Edit assistant
-                    </CardTitle>
-                    <CardDescription>
-                      Paste updated info (e.g. new description or price) and we&apos;ll update the form. Then review in Details, Recipe, or More.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <Textarea
-                      placeholder="e.g.: Update price to 14,000 IQD. New description: Slow-cooked with saffron..."
-                      value={aiAssistantText}
-                      onChange={(e) => setAiAssistantText(e.target.value)}
-                      rows={5}
-                      className="resize-y"
-                    />
-                    <Button
-                      type="button"
-                      onClick={fillFormFromAI}
-                      disabled={aiParseLoading || !aiAssistantText.trim()}
-                    >
-                      {aiParseLoading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Updating...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Update form from text
-                        </>
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-emerald-500" />
+                        Edit assistant
+                      </CardTitle>
+                      <CardDescription>
+                        Paste updated info (e.g. new description or price) and we&apos;ll update the form. Then review in Details, Recipe, or More.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <Textarea
+                        placeholder="e.g.: Update price to 14,000 IQD. Mention 'Yield: 10' if updating a batch recipe."
+                        value={aiAssistantText}
+                        onChange={(e) => setAiAssistantText(e.target.value)}
+                        rows={5}
+                        className="resize-y"
+                      />
+                      <Button
+                        type="button"
+                        onClick={fillFormFromAI}
+                        disabled={aiParseLoading || !aiAssistantText.trim()}
+                      >
+                        {aiParseLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Updating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Update form from text
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
               )}
               <TabsContent value="ai" className="space-y-4 mt-0">
                 <Card>
@@ -1937,7 +1958,7 @@ export default function MenuForm({
                     </div>
 
                     <Textarea
-                      placeholder="Type your answer. Example: Lentil soup, 8000 IQD, category soups. Ingredients: lentils 0.2 kg..."
+                      placeholder="Describe your dish. Include ingredients and yield (e.g. 'Serves 4'). Example: Lentil soup, 8000 IQD..."
                       value={aiAssistantText}
                       onChange={(e) => setAiAssistantText(e.target.value)}
                       rows={4}
@@ -1957,7 +1978,7 @@ export default function MenuForm({
                         ) : (
                           <>
                             <Sparkles className="h-4 w-4 mr-2" />
-                            Send
+                            Submit
                           </>
                         )}
                       </Button>
@@ -1975,7 +1996,7 @@ export default function MenuForm({
                         ) : (
                           <>
                             <Mic className="h-4 w-4 mr-2" />
-                            Speak (English)
+                            Speak
                           </>
                         )}
                       </Button>
@@ -1985,14 +2006,14 @@ export default function MenuForm({
                         onClick={fillFormFromAI}
                         disabled={aiParseLoading || !aiAssistantText.trim()}
                       >
-                        Fill now
+                        Fill Form Now
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
                         onClick={() => setActiveTab('details')}
                       >
-                        Next
+                        Skip
                       </Button>
                     </div>
                     <p className="text-xs text-slate-500">
@@ -2002,1074 +2023,1047 @@ export default function MenuForm({
                 </Card>
               </TabsContent>
               <TabsContent value="details" className="space-y-6 mt-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>Menu Item Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">
-                      Item Name <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="name"
-                      required
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g., Chicken Biryani"
-                    />
-                  </div>
-
-                  <div
-                    className={cn(
-                      'rounded-lg p-3 transition-all duration-300',
-                      nextStepHighlight === 'category' && 'ring-2 ring-emerald-400 ring-offset-2 bg-emerald-50/70'
-                    )}
-                  >
-                    {nextStepHighlight === 'category' && (
-                      <p className="text-sm font-medium text-emerald-700 mb-2 flex items-center gap-2">
-                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        Select a category to continue
-                      </p>
-                    )}
-                    <div className="space-y-2">
-                      <Label htmlFor="categoryId">
-                        Category <span className="text-red-500">*</span>
-                      </Label>
-                      <Select
-                        value={formData.categoryId}
-                        onValueChange={(value) => {
-                          setFormData({ ...formData, categoryId: value })
-                          setNextStepHighlight(null)
-                        }}
-                        required
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="price">
-                      Selling Price (IQD) <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      step="0.01"
-                      required
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                      placeholder="0.00"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="available">Status</Label>
-                    <Select
-                      value={formData.available.toString()}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, available: value === 'true' })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="true">Available</SelectItem>
-                        <SelectItem value="false">Unavailable</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="description">Description</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={generateDescription}
-                      disabled={generatingDescription || !formData.name}
-                      title={!formData.name ? 'Enter item name first' : 'Generate description with AI (max 18 words)'}
-                      className="h-7 px-2 text-xs"
-                    >
-                      {generatingDescription ? (
-                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                      ) : (
-                        <Sparkles className="h-3 w-3 mr-1" />
-                      )}
-                      AI Write
-                    </Button>
-                  </div>
-                  <p className="text-xs text-slate-500">Max 18 words. Leave blank to auto-generate when you save (sensory, texture, heat, origin, scarcity).</p>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Brief description of the dish..."
-                    rows={3}
-                  />
-                </div>
-
-                <div
-                  className={cn(
-                    'rounded-lg p-3 transition-all duration-300',
-                    nextStepHighlight === 'image' && 'ring-2 ring-emerald-400 ring-offset-2 bg-emerald-50/70'
-                  )}
-                >
-                  {nextStepHighlight === 'image' && (
-                    <p className="text-sm font-medium text-emerald-700 mb-2 flex items-center gap-2">
-                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Add an image for this item (paste a URL or generate with AI)
-                    </p>
-                  )}
-                  <div className="space-y-2">
-                    <Label htmlFor="imageUrl">Image URL (optional)</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="imageUrl"
-                        value={formData.imageUrl}
-                        onChange={(e) => {
-                          setFormData({ ...formData, imageUrl: e.target.value })
-                          setNextStepHighlight(null)
-                        }}
-                        placeholder="https://example.com/image.jpg"
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setShowPromptDialog(true)}
-                        disabled={generatingImage}
-                        title="Generate image with AI"
-                      >
-                        {generatingImage ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                    {formData.imageUrl && (
-                      <div className="mt-2 border rounded-md p-2">
-                        <img
-                          src={formData.imageUrl}
-                          alt="Menu item preview"
-                          className="w-full h-48 object-cover rounded"
-                          onError={(e) => {
-                            e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400'
-                          }}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Menu Item Details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">
+                          Item Name <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="name"
+                          required
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          placeholder="e.g., Chicken Biryani"
                         />
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Nutrition (optional)</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={estimateNutrition}
-                      disabled={estimatingNutrition || !formData.name}
-                      title={!formData.name ? 'Enter item name first' : 'Estimate nutrition with AI'}
-                      className="h-7 px-2 text-xs"
-                    >
-                      {estimatingNutrition ? (
-                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                      ) : (
-                        <Sparkles className="h-3 w-3 mr-1" />
-                      )}
-                      AI Estimate
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="calories" className="text-xs text-slate-500">Calories</Label>
-                      <Input
-                        id="calories"
-                        type="number"
-                        value={formData.calories}
-                        onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
-                        placeholder="e.g., 450"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="protein" className="text-xs text-slate-500">Protein (g)</Label>
-                      <Input
-                        id="protein"
-                        type="number"
-                        value={formData.protein}
-                        onChange={(e) => setFormData({ ...formData, protein: e.target.value })}
-                        placeholder="e.g., 25"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="carbs" className="text-xs text-slate-500">Carbs (g)</Label>
-                      <Input
-                        id="carbs"
-                        type="number"
-                        value={formData.carbs}
-                        onChange={(e) => setFormData({ ...formData, carbs: e.target.value })}
-                        placeholder="e.g., 40"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="tags">Dietary Tags (optional)</Label>
-                  <Input
-                    id="tags"
-                    value={formData.tags}
-                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                    placeholder="e.g., vegan, gluten-free, spicy"
-                  />
-                  <p className="text-xs text-slate-500">Comma-separated tags</p>
-                </div>
-              </CardContent>
-            </Card>
-              </TabsContent>
-              <TabsContent value="more" className="space-y-6 mt-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>Menu Translations</CardTitle>
-                <CardDescription>
-                  Auto-generate Iraqi Arabic and Sorani Kurdish names and descriptions.
-                  You can always edit them before saving.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {translationLanguages.map((language) => {
-                  const translation = translationsState[language.code]
-                  if (!translation) return null
-
-                  return (
-                    <div
-                      key={language.code}
-                      className="space-y-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-slate-800">
-                            {language.label}
+                      <div
+                        className={cn(
+                          'rounded-lg p-3 transition-all duration-300',
+                          nextStepHighlight === 'category' && 'ring-2 ring-emerald-400 ring-offset-2 bg-emerald-50/70'
+                        )}
+                      >
+                        {nextStepHighlight === 'category' && (
+                          <p className="text-sm font-medium text-emerald-700 mb-2 flex items-center gap-2">
+                            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            Select a category to continue
                           </p>
-                          {translation.dirty && (
-                            <Badge variant="destructive" className="text-[10px] uppercase">
-                              Edited
-                            </Badge>
-                          )}
+                        )}
+                        <div className="space-y-2">
+                          <Label htmlFor="categoryId">
+                            Category <span className="text-red-500">*</span>
+                          </Label>
+                          <Select
+                            value={formData.categoryId}
+                            onValueChange={(value) => {
+                              setFormData({ ...formData, categoryId: value })
+                              setNextStepHighlight(null)
+                            }}
+                            required
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {categories.map((category) => (
+                                <SelectItem key={category.id} value={category.id}>
+                                  {category.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="price">
+                          Selling Price (IQD) <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="price"
+                          type="number"
+                          step="0.01"
+                          required
+                          value={formData.price}
+                          onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="available">Status</Label>
+                        <Select
+                          value={formData.available.toString()}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, available: value === 'true' })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="true">Available</SelectItem>
+                            <SelectItem value="false">Unavailable</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="description">Description</Label>
                         <Button
                           type="button"
-                          variant="outline"
-                          size="xs"
-                          onClick={() => regenerateTranslation(language.code)}
-                          disabled={!translationPayload || translation.loading}
+                          variant="ghost"
+                          size="sm"
+                          onClick={generateDescription}
+                          disabled={generatingDescription || !formData.name}
+                          title={!formData.name ? 'Enter item name first' : 'Generate description with AI (max 18 words)'}
+                          className="h-7 px-2 text-xs"
                         >
-                          {translation.loading ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
+                          {generatingDescription ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
                           ) : (
-                            'Refresh'
+                            <Sparkles className="h-3 w-3 mr-1" />
                           )}
+                          Generate Description
                         </Button>
                       </div>
+                      <p className="text-xs text-slate-500">Max 18 words. Leave blank to auto-generate when you save (sensory, texture, heat, origin, scarcity).</p>
+                      <Textarea
+                        id="description"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        placeholder="Brief description of the dish..."
+                        rows={3}
+                      />
+                    </div>
 
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor={`translation-name-${language.code}`}>Name</Label>
-                          <Input
-                            id={`translation-name-${language.code}`}
-                            value={translation.name}
-                            onChange={(event) =>
-                              updateTranslationField(
-                                language.code,
-                                'name',
-                                event.target.value
-                              )
-                            }
-                            placeholder={`Auto translated name (${language.label})`}
-                          />
-                        </div>
-                        <div className="md:col-span-2 space-y-2">
-                          <Label htmlFor={`translation-description-${language.code}`}>
-                            Description
-                          </Label>
-                          <Textarea
-                            id={`translation-description-${language.code}`}
-                            rows={2}
-                            value={translation.description}
-                            onChange={(event) =>
-                              updateTranslationField(
-                                language.code,
-                                'description',
-                                event.target.value
-                              )
-                            }
-                            placeholder={`Auto translated description (${language.label})`}
-                          />
-                        </div>
-                      </div>
-
-                      {translation.aiDescription && (
-                        <p className="text-xs italic text-slate-500">
-                          {translation.aiDescription}
+                    <div
+                      className={cn(
+                        'rounded-lg p-3 transition-all duration-300',
+                        nextStepHighlight === 'image' && 'ring-2 ring-emerald-400 ring-offset-2 bg-emerald-50/70'
+                      )}
+                    >
+                      {nextStepHighlight === 'image' && (
+                        <p className="text-sm font-medium text-emerald-700 mb-2 flex items-center gap-2">
+                          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Add an image for this item (paste a URL or generate with AI)
                         </p>
                       )}
-
-                      <div className="flex flex-wrap gap-4 text-xs text-slate-500">
-                        <span>
-                          Protein:{' '}
-                          {translation.protein !== null
-                            ? `${translation.protein}g`
-                            : '—'}
-                        </span>
-                        <span>
-                          Carbs:{' '}
-                          {translation.carbs !== null ? `${translation.carbs}g` : '—'}
-                        </span>
-                      </div>
-
-                      {translation.error && (
-                        <p className="text-xs text-red-600">{translation.error}</p>
-                      )}
-                    </div>
-                  )
-                })}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Consistent Background Prompt</CardTitle>
-                <CardDescription>
-                  Describe a background treatment you'd like to reuse for every menu photo. Leave it blank to start from scratch each time.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Textarea
-                  rows={3}
-                  value={defaultBackgroundDraft}
-                  onChange={(event) => setDefaultBackgroundDraft(event.target.value)}
-                  placeholder="e.g., Moody restaurant lighting, a warm wooden table, and soft steam rising from the dish."
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-slate-500">
-                    {trimmedSavedBackgroundPrompt
-                      ? 'This prompt is automatically applied whenever you do not provide a custom prompt.'
-                      : 'Set a default background description to reuse across menu images.'}
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={saveBackgroundPrompt}
-                    disabled={
-                      savingBackgroundPrompt ||
-                      defaultBackgroundDraft.trim() === trimmedSavedBackgroundPrompt
-                    }
-                  >
-                    {savingBackgroundPrompt ? 'Saving…' : 'Save default background'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-              </TabsContent>
-              <TabsContent value="recipe" className="space-y-6 mt-0">
-            {unmatchedIngredientsFromPrompt.length > 0 && (
-              <div
-                className={cn(
-                  'rounded-lg p-4 transition-all duration-300',
-                  nextStepHighlight === 'recipe' && 'ring-2 ring-amber-400 ring-offset-2 bg-amber-50'
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-amber-800">
-                      These ingredients from your description weren&apos;t found in your inventory:
-                    </p>
-                    <p className="mt-1 text-sm text-amber-700">
-                      {unmatchedIngredientsFromPrompt.join(', ')}
-                    </p>
-                    <p className="mt-2 text-xs text-amber-600">
-                      Add them under Inventory first, or use &quot;AI Recipe&quot; below to create a full recipe with suggestions.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setUnmatchedIngredientsFromPrompt([])}
-                    className="text-amber-700 hover:text-amber-900 shrink-0"
-                  >
-                    Dismiss
-                  </Button>
-                </div>
-              </div>
-            )}
-            <Card>
-              <CardHeader className="flex items-center justify-between gap-3">
-                <CardTitle>SOP</CardTitle>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={addRecipeStep}>
-                    <Plus className="h-3 w-3 mr-2" />
-                    Add Step
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={addRecipeTip}>
-                    <Plus className="h-3 w-3 mr-2" />
-                    Add Tip
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-700">Steps</p>
-                    <p className="text-xs text-slate-400">Describe the cooking sequence</p>
-                  </div>
-                  {recipeSteps.length === 0 ? (
-                    <p className="text-xs text-slate-500">
-                      No steps yet. Use the &quot;Add Step&quot; button to outline the recipe.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {recipeSteps.map((step, index) => (
-                        <div
-                          key={`step-${index}`}
-                          className="border border-slate-200 rounded-md p-3 bg-white"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-medium text-slate-500">
-                              Step {index + 1}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeRecipeStep(index)}
-                              className="text-red-500 hover:text-red-700"
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                          <Textarea
-                            rows={2}
-                            placeholder="e.g., Sweat onions until translucent..."
-                            value={step}
-                            onChange={(e) => updateRecipeStep(index, e.target.value)}
+                      <div className="space-y-2">
+                        <Label htmlFor="imageUrl">Image URL (optional)</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="imageUrl"
+                            value={formData.imageUrl}
+                            onChange={(e) => {
+                              setFormData({ ...formData, imageUrl: e.target.value })
+                              setNextStepHighlight(null)
+                            }}
+                            placeholder="https://example.com/image.jpg"
+                            className="flex-1"
                           />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-700">Tips</p>
-                    <p className="text-xs text-slate-400">Chef notes for great results</p>
-                  </div>
-                  {recipeTips.length === 0 ? (
-                    <p className="text-xs text-slate-500">
-                      Add a few tips to help the team serve the dish consistently.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {recipeTips.map((tip, index) => (
-                        <div
-                          key={`tip-${index}`}
-                          className="flex items-start gap-3 border border-dashed border-slate-200 rounded-md p-3 bg-slate-50"
-                        >
-                          <Badge variant="outline" className="text-xs uppercase">
-                            Tip {index + 1}
-                          </Badge>
-                          <div className="flex-1 space-y-2">
-                            <Textarea
-                              rows={2}
-                              placeholder="e.g., Garnish with parsley..."
-                              value={tip}
-                              onChange={(e) => updateRecipeTip(index, e.target.value)}
-                            />
-                          </div>
                           <Button
                             type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeRecipeTip(index)}
-                            className="text-red-500 hover:text-red-700"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setShowPromptDialog(true)}
+                            disabled={generatingImage}
+                            title="Generate image with AI"
                           >
-                            Remove
+                            {generatingImage ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
-                      ))}
+                        {formData.imageUrl && (
+                          <div className="mt-2 border rounded-md p-2">
+                            <img
+                              src={formData.imageUrl}
+                              alt="Menu item preview"
+                              className="w-full h-48 object-cover rounded"
+                              onError={(e) => {
+                                e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400'
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
 
-            <div
-              className={cn(
-                'rounded-lg p-3 transition-all duration-300',
-                nextStepHighlight === 'recipe' && 'ring-2 ring-emerald-400 ring-offset-2 bg-emerald-50/70'
-              )}
-            >
-              {nextStepHighlight === 'recipe' && (
-                <p className="text-sm font-medium text-emerald-700 mb-3 flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Add at least one ingredient to continue (or use AI Recipe)
-                </p>
-              )}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Recipe Builder</CardTitle>
-                <div className="flex gap-2">
-                  {recipe.some((r) => r.supplierProductId) && (
-                    <Button type="button" variant="outline" size="sm" onClick={refreshAllCosts} title="Refresh all supplier costs to latest prices">
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Refresh Costs
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowRecipeDialog(true)}
-                    disabled={!formData.name}
-                    title={!formData.name ? 'Enter item name first' : 'Get AI recipe suggestion'}
-                  >
-                    <ChefHat className="h-4 w-4 mr-2" />
-                    AI Recipe
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={addIngredient}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Ingredient
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {recipe.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500">
-                    No ingredients added. Click &quot;Add Ingredient&quot; or use &quot;AI Recipe&quot; to get suggestions.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                      {recipe.map((item, index) => {
-                        const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
-                        const itemCost = getItemCost(item)
-                        const filteredIngredientOptions = allIngredients.filter((ing) => {
-                          const query = ingredientSearchQuery.trim().toLowerCase()
-                          if (!query) return true
-                          return (
-                            ing.name.toLowerCase().includes(query) ||
-                            ing.unit.toLowerCase().includes(query)
-                          )
-                        })
-                        const countLabel = formatCountLabel(
-                          getCountLabelForIngredient(ingredient, item.pieceCount, item.quantity),
-                          item.pieceCount || undefined
-                        )
-
-                        // Format display: If pieceCount exists and represents a recipe unit (tsp, tbsp, cups),
-                        // show it with the count label, otherwise show quantity with ingredient unit
-                        let displayQuantity: string
-                        
-                        if (item.pieceCount !== null && item.pieceCount !== undefined) {
-                          // pieceCount exists - check if it's a recipe unit (tsp, tbsp, cups) or a piece count
-                          const recipeUnitLabel = getCountLabelForIngredient(ingredient, item.pieceCount, item.quantity)
-                          
-                          // If the label is tsp, tbsp, or cups, it's a recipe unit - show pieceCount with that unit
-                          if (['tsp', 'tbsp', 'cups', 'cup'].includes(recipeUnitLabel)) {
-                            const unitDisplay = recipeUnitLabel === 'cup' && item.pieceCount !== 1 ? 'cups' : 
-                                               recipeUnitLabel === 'tsp' && item.pieceCount !== 1 ? 'tsp' :
-                                               recipeUnitLabel === 'tbsp' && item.pieceCount !== 1 ? 'tbsp' :
-                                               recipeUnitLabel
-                            displayQuantity = `${item.pieceCount} ${unitDisplay} (${item.quantity.toFixed(4)} ${ingredient?.unit || ''})`
-                          } else {
-                            // It's a piece count (onions, tomatoes, etc.)
-                            displayQuantity = `${item.pieceCount} ${countLabel} (${item.quantity} ${ingredient?.unit || ''})`
-                          }
-                        } else {
-                          // No pieceCount - just show quantity with ingredient unit
-                          displayQuantity = `${item.quantity} ${ingredient?.unit || ''}`
-                        }
-
-                        return (
-                        <div
-                          key={index}
-                          className="p-3 border border-slate-200 rounded-md space-y-3"
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Nutrition (optional)</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={estimateNutrition}
+                          disabled={estimatingNutrition || !formData.name}
+                          title={!formData.name ? 'Enter item name first' : 'Estimate nutrition with AI'}
+                          className="h-7 px-2 text-xs"
                         >
-                          <div className="flex items-end gap-3">
-                            <div className="flex-1 space-y-2">
-                              <Label>Ingredient</Label>
-                              <Popover
-                                open={activeIngredientPickerIndex === index}
-                                onOpenChange={(open) => {
-                                  if (open) {
-                                    setActiveIngredientPickerIndex(index)
-                                    setIngredientSearchQuery('')
-                                  } else if (activeIngredientPickerIndex === index) {
-                                    setActiveIngredientPickerIndex(null)
-                                    setIngredientSearchQuery('')
-                                  }
-                                }}
-                              >
-                                <PopoverTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="w-full h-10 justify-between border-slate-300 bg-white hover:bg-slate-50 px-3"
-                                  >
-                                    <span className="flex items-center gap-2 min-w-0">
-                                      <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                      <span className={cn(
-                                        'truncate text-sm',
-                                        ingredient ? 'text-slate-900' : 'text-slate-500'
-                                      )}>
-                                        {ingredient ? `${ingredient.name} (${ingredient.unit})` : 'Search ingredient...'}
-                                      </span>
-                                    </span>
-                                    <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
-                                  <div className="p-2 border-b border-slate-100">
-                                    <div className="relative">
-                                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                                      <Input
-                                        autoFocus
-                                        value={ingredientSearchQuery}
-                                        onChange={(e) => setIngredientSearchQuery(e.target.value)}
-                                        placeholder="Type to filter ingredients..."
-                                        className="h-9 pl-8 border-slate-200 focus-visible:ring-emerald-500"
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="max-h-64 overflow-y-auto py-1">
-                                    {filteredIngredientOptions.map((ing) => (
-                                        <button
-                                          key={ing.id}
-                                          type="button"
-                                          onClick={() => {
-                                            applyIngredientSelection(index, ing.id)
-                                            setActiveIngredientPickerIndex(null)
-                                            setIngredientSearchQuery('')
-                                          }}
-                                          className="w-full px-3 py-2 text-left hover:bg-emerald-50 flex items-center justify-between gap-3"
-                                        >
-                                          <span className="truncate text-sm text-slate-800">{ing.name}</span>
-                                          <span className="flex items-center gap-2 shrink-0">
-                                            <span className="text-xs text-slate-500">({ing.unit})</span>
-                                            {item.ingredientId === ing.id && (
-                                              <Check className="h-3.5 w-3.5 text-emerald-600" />
-                                            )}
-                                          </span>
-                                        </button>
-                                      ))}
-                                    {filteredIngredientOptions.length === 0 && (
-                                      <p className="px-3 py-3 text-xs text-slate-500">
-                                        No ingredient matches your search.
-                                      </p>
-                                    )}
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
-                            </div>
+                          {estimatingNutrition ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : (
+                            <Sparkles className="h-3 w-3 mr-1" />
+                          )}
+                          Estimate Nutrition
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="calories" className="text-xs text-slate-500">Calories</Label>
+                          <Input
+                            id="calories"
+                            type="number"
+                            value={formData.calories}
+                            onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
+                            placeholder="e.g., 450"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="protein" className="text-xs text-slate-500">Protein (g)</Label>
+                          <Input
+                            id="protein"
+                            type="number"
+                            value={formData.protein}
+                            onChange={(e) => setFormData({ ...formData, protein: e.target.value })}
+                            placeholder="e.g., 25"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="carbs" className="text-xs text-slate-500">Carbs (g)</Label>
+                          <Input
+                            id="carbs"
+                            type="number"
+                            value={formData.carbs}
+                            onChange={(e) => setFormData({ ...formData, carbs: e.target.value })}
+                            placeholder="e.g., 40"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="tags">Dietary Tags (optional)</Label>
+                      <Input
+                        id="tags"
+                        value={formData.tags}
+                        onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                        placeholder="e.g., vegan, gluten-free, spicy"
+                      />
+                      <p className="text-xs text-slate-500">Comma-separated tags</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              <TabsContent value="more" className="space-y-6 mt-0">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Menu Translations</CardTitle>
+                    <CardDescription>
+                      Auto-generate Iraqi Arabic and Sorani Kurdish names and descriptions.
+                      You can always edit them before saving.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {translationLanguages.map((language) => {
+                      const translation = translationsState[language.code]
+                      if (!translation) return null
 
+                      return (
+                        <div
+                          key={language.code}
+                          className="space-y-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-800">
+                                {language.label}
+                              </p>
+                              {translation.dirty && (
+                                <Badge variant="destructive" className="text-[10px] uppercase">
+                                  Edited
+                                </Badge>
+                              )}
+                            </div>
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              onClick={() => removeIngredient(index)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => regenerateTranslation(language.code)}
+                              disabled={!translationPayload || translation.loading}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              {translation.loading ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                'Refresh'
+                              )}
                             </Button>
                           </div>
 
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid gap-3 md:grid-cols-2">
                             <div className="space-y-2">
-                              <Label>Count (optional)</Label>
+                              <Label htmlFor={`translation-name-${language.code}`}>Name</Label>
                               <Input
-                                type="number"
-                                step="any"
-                                min="0"
-                                value={item.pieceCount ?? ''}
-                                onChange={(e) =>
-                                  updateIngredient(
-                                    index,
-                                    'pieceCount' as any,
-                                    e.target.value ? Number(e.target.value) : null
+                                id={`translation-name-${language.code}`}
+                                value={translation.name}
+                                onChange={(event) =>
+                                  updateTranslationField(
+                                    language.code,
+                                    'name',
+                                    event.target.value
                                   )
                                 }
-                                placeholder="e.g., 2"
+                                placeholder={`Auto translated name (${language.label})`}
                               />
-                              <p className="text-xs text-slate-400">
-                                Use cups for dry goods (lentils, rice) or pieces for countable veggies.
-                              </p>
                             </div>
-
-                            <div className="space-y-2">
-                              <Label>Quantity ({ingredient?.unit || 'unit'})</Label>
-                              <Input
-                                type="number"
-                                step="any"
-                                min="0"
-                                value={item.quantity || ''}
-                                onChange={(e) =>
-                                  updateIngredient(
-                                    index,
-                                    'quantity',
-                                    parseFloat(e.target.value) || 0
+                            <div className="md:col-span-2 space-y-2">
+                              <Label htmlFor={`translation-description-${language.code}`}>
+                                Description
+                              </Label>
+                              <Textarea
+                                id={`translation-description-${language.code}`}
+                                rows={2}
+                                value={translation.description}
+                                onChange={(event) =>
+                                  updateTranslationField(
+                                    language.code,
+                                    'description',
+                                    event.target.value
                                   )
                                 }
-                                placeholder="0.00"
+                                placeholder={`Auto translated description (${language.label})`}
                               />
-                              <p className="text-xs text-slate-400">Weight/Volume</p>
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label>Cost</Label>
-                              <div className="h-10 px-3 py-2 bg-slate-50 rounded-md text-sm font-mono text-slate-700">
-                                {formatCurrency(itemCost)}
-                              </div>
                             </div>
                           </div>
 
-                          {/* Supplier name input + auto-priced from supplier database */}
-                          {supplierProducts.length > 0 && (
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <div className="space-y-1">
-                                <Label className="text-xs">Supplier (optional)</Label>
-                                <Input
-                                  value={item.supplierName ?? ''}
-                                  onChange={(e) => {
-                                    const supplierName = e.target.value
-                                    updateIngredient(index, 'supplierName', supplierName)
-                                    const nextLine = autoFillSupplierCost(
-                                      { ...item, supplierName },
-                                      ingredient
-                                    )
-                                    updateIngredient(index, 'supplierProductId', nextLine.supplierProductId)
-                                    updateIngredient(index, 'unitCostCached', nextLine.unitCostCached)
-                                    updateIngredient(index, 'currency', nextLine.currency)
-                                    updateIngredient(index, 'lastPricedAt', nextLine.lastPricedAt)
-                                  }}
-                                  placeholder="Type supplier name"
-                                  className="h-8 text-xs"
-                                />
-                                <p className="text-[10px] text-slate-400">
-                                  We auto-select the best matching supplier price for this ingredient.
-                                </p>
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs">Supplier price source</Label>
-                                <div className="h-8 px-2 py-1 rounded-md border border-input bg-slate-50 text-xs text-slate-600 flex items-center">
-                                  {item.supplierProductId
-                                    ? (() => {
-                                        const selected = supplierProducts.find((sp) => sp.id === item.supplierProductId)
-                                        return selected
-                                          ? `${selected.supplierName} — ${selected.name}`
-                                          : 'Matched supplier product'
-                                      })()
-                                    : 'No supplier match (using ingredient base cost)'}
-                                </div>
-                                {item.supplierProductId && item.unitCostCached != null && (
-                                  <p className="text-[10px] text-slate-400">
-                                    Unit cost: {item.unitCostCached.toFixed(2)} {item.currency}/{ingredient?.unit || 'unit'}
-                                    {item.lastPricedAt && ` — priced ${new Date(item.lastPricedAt).toLocaleDateString()}`}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
+                          {translation.aiDescription && (
+                            <p className="text-xs italic text-slate-500">
+                              {translation.aiDescription}
+                            </p>
                           )}
 
-                          {ingredient && (
-                            <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
-                              Display: <strong>{ingredient.name}</strong> - {displayQuantity}
-                            </div>
+                          <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+                            <span>
+                              Protein:{' '}
+                              {translation.protein !== null
+                                ? `${translation.protein}g`
+                                : '—'}
+                            </span>
+                            <span>
+                              Carbs:{' '}
+                              {translation.carbs !== null ? `${translation.carbs}g` : '—'}
+                            </span>
+                          </div>
+
+                          {translation.error && (
+                            <p className="text-xs text-red-600">{translation.error}</p>
                           )}
                         </div>
                       )
                     })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
-              <TabsContent value="more" className="space-y-6 mt-0">
-            {/* Add-ons Section */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                <div className="flex items-center gap-2">
-                  <CardTitle>Available Add-ons</CardTitle>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1"
-                    onClick={() => {
-                      setCreateAddOnName('')
-                      setCreateAddOnPrice('')
-                      setCreateAddOnDescription('')
-                      setCreateAddOnOpen(true)
-                    }}
+              <TabsContent value="recipe" className="space-y-6 mt-0">
+                {unmatchedIngredientsFromPrompt.length > 0 && (
+                  <div
+                    className={cn(
+                      'rounded-lg p-4 transition-all duration-300',
+                      nextStepHighlight === 'recipe' && 'ring-2 ring-amber-400 ring-offset-2 bg-amber-50'
+                    )}
                   >
-                    <Plus className="h-4 w-4" />
-                    Create new add-on
-                  </Button>
-                </div>
-                {selectedAddOnIds.length > 0 && (
-                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-                    {selectedAddOnIds.length} selected
-                  </Badge>
-                )}
-              </CardHeader>
-              <CardContent>
-                {addOnsList.length === 0 ? (
-                  <div className="text-center py-6 text-slate-500">
-                    <p className="text-sm">No add-ons available.</p>
-                    <p className="text-xs mt-2 mb-3">Create an add-on to offer extras with this menu item.</p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                      onClick={() => {
-                        setCreateAddOnName('')
-                        setCreateAddOnPrice('')
-                        setCreateAddOnDescription('')
-                        setCreateAddOnOpen(true)
-                      }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Create new add-on
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Search Bar */}
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                      <Input
-                        placeholder="Search add-ons..."
-                        value={addOnSearchQuery}
-                        onChange={(e) => {
-                          setAddOnSearchQuery(e.target.value)
-                          setAddOnPage(1)
-                        }}
-                        className="pl-9"
-                      />
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-amber-800">
+                          These ingredients from your description weren&apos;t found in your inventory:
+                        </p>
+                        <p className="mt-1 text-sm text-amber-700">
+                          {unmatchedIngredientsFromPrompt.join(', ')}
+                        </p>
+                        <p className="mt-2 text-xs text-amber-600">
+                          Add them under Inventory first, or use &quot;AI Recipe&quot; below to create a full recipe with suggestions.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setUnmatchedIngredientsFromPrompt([])}
+                        className="text-amber-700 hover:text-amber-900 shrink-0"
+                      >
+                        Dismiss
+                      </Button>
                     </div>
-
-                    {(() => {
-                      const filteredAddOns = addOnsList.filter(
-                        (addOn) =>
-                          addOn.name.toLowerCase().includes(addOnSearchQuery.toLowerCase()) ||
-                          addOn.description?.toLowerCase().includes(addOnSearchQuery.toLowerCase())
-                      )
-                      const totalPages = Math.ceil(filteredAddOns.length / addOnsPerPage)
-                      const startIndex = (addOnPage - 1) * addOnsPerPage
-                      const paginatedAddOns = filteredAddOns.slice(startIndex, startIndex + addOnsPerPage)
-
-                      return (
-                        <>
-                          {filteredAddOns.length === 0 ? (
-                            <div className="text-center py-6 text-slate-500">
-                              <p className="text-sm">No add-ons match your search.</p>
+                  </div>
+                )}
+                <Card>
+                  <CardHeader className="flex items-center justify-between gap-3">
+                    <CardTitle>SOP</CardTitle>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={addRecipeStep}>
+                        <Plus className="h-3 w-3 mr-2" />
+                        Add Step
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={addRecipeTip}>
+                        <Plus className="h-3 w-3 mr-2" />
+                        Add Tip
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-slate-700">Steps</p>
+                        <p className="text-xs text-slate-400">Describe the cooking sequence</p>
+                      </div>
+                      {recipeSteps.length === 0 ? (
+                        <p className="text-xs text-slate-500">
+                          No steps yet. Use the &quot;Add Step&quot; button to outline the recipe.
+                        </p>
+                      ) : (
+                        <div className="space-y-3">
+                          {recipeSteps.map((step, index) => (
+                            <div
+                              key={`step-${index}`}
+                              className="border border-slate-200 rounded-md p-3 bg-white"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-medium text-slate-500">
+                                  Step {index + 1}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeRecipeStep(index)}
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                              <Textarea
+                                rows={2}
+                                placeholder="e.g., Sweat onions until translucent..."
+                                value={step}
+                                onChange={(e) => updateRecipeStep(index, e.target.value)}
+                              />
                             </div>
-                          ) : (
-                            <>
-                              <div className="grid gap-2">
-                                {paginatedAddOns.map((addOn) => {
-                                  const isSelected = selectedAddOnIds.includes(addOn.id)
-                                  return (
-                                    <div
-                                      key={addOn.id}
-                                      onClick={() => {
-                                        if (isSelected) {
-                                          setSelectedAddOnIds(selectedAddOnIds.filter((id) => id !== addOn.id))
-                                        } else {
-                                          setSelectedAddOnIds([...selectedAddOnIds, addOn.id])
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-slate-700">Tips</p>
+                        <p className="text-xs text-slate-400">Chef notes for great results</p>
+                      </div>
+                      {recipeTips.length === 0 ? (
+                        <p className="text-xs text-slate-500">
+                          Add a few tips to help the team serve the dish consistently.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {recipeTips.map((tip, index) => (
+                            <div
+                              key={`tip-${index}`}
+                              className="flex items-start gap-3 border border-dashed border-slate-200 rounded-md p-3 bg-slate-50"
+                            >
+                              <Badge variant="outline" className="text-xs uppercase">
+                                Tip {index + 1}
+                              </Badge>
+                              <div className="flex-1 space-y-2">
+                                <Textarea
+                                  rows={2}
+                                  placeholder="e.g., Garnish with parsley..."
+                                  value={tip}
+                                  onChange={(e) => updateRecipeTip(index, e.target.value)}
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeRecipeTip(index)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div
+                  className={cn(
+                    'rounded-lg p-3 transition-all duration-300',
+                    nextStepHighlight === 'recipe' && 'ring-2 ring-emerald-400 ring-offset-2 bg-emerald-50/70'
+                  )}
+                >
+                  {nextStepHighlight === 'recipe' && (
+                    <p className="text-sm font-medium text-emerald-700 mb-3 flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Add at least one ingredient to continue (or use AI Recipe)
+                    </p>
+                  )}
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle>Recipe Builder</CardTitle>
+                      <div className="flex gap-2">
+                        {recipe.some((r) => r.supplierProductId) && (
+                          <Button type="button" variant="outline" size="sm" onClick={refreshAllCosts} title="Refresh all supplier costs to latest prices">
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Refresh Costs
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowRecipeDialog(true)}
+                          disabled={!formData.name}
+                          title={!formData.name ? 'Enter item name first' : 'Get AI recipe suggestion'}
+                        >
+                          <ChefHat className="h-4 w-4 mr-2" />
+                          AI Recipe
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={addIngredient}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Ingredient
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {recipe.length === 0 ? (
+                        <div className="text-center py-8 text-slate-500">
+                          No ingredients added. Click &quot;Add Ingredient&quot; or use &quot;AI Recipe&quot; to get suggestions.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {recipe.map((item, index) => {
+                            const ingredient = allIngredients.find((i) => i.id === item.ingredientId)
+                            const itemCost = getItemCost(item)
+                            const filteredIngredientOptions = allIngredients.filter((ing) => {
+                              const query = ingredientSearchQuery.trim().toLowerCase()
+                              if (!query) return true
+                              return (
+                                ing.name.toLowerCase().includes(query) ||
+                                ing.unit.toLowerCase().includes(query)
+                              )
+                            })
+                            const countLabel = formatCountLabel(
+                              getCountLabelForIngredient(ingredient, item.pieceCount, item.quantity),
+                              item.pieceCount || undefined
+                            )
+
+                            // Format display: If pieceCount exists and represents a recipe unit (tsp, tbsp, cups),
+                            // show it with the count label, otherwise show quantity with ingredient unit
+                            let displayQuantity: string
+
+                            if (item.pieceCount !== null && item.pieceCount !== undefined) {
+                              // pieceCount exists - check if it's a recipe unit (tsp, tbsp, cups) or a piece count
+                              const recipeUnitLabel = getCountLabelForIngredient(ingredient, item.pieceCount, item.quantity)
+
+                              // If the label is tsp, tbsp, or cups, it's a recipe unit - show pieceCount with that unit
+                              if (['tsp', 'tbsp', 'cups', 'cup'].includes(recipeUnitLabel)) {
+                                const unitDisplay = recipeUnitLabel === 'cup' && item.pieceCount !== 1 ? 'cups' :
+                                  recipeUnitLabel === 'tsp' && item.pieceCount !== 1 ? 'tsp' :
+                                    recipeUnitLabel === 'tbsp' && item.pieceCount !== 1 ? 'tbsp' :
+                                      recipeUnitLabel
+                                displayQuantity = `${item.pieceCount} ${unitDisplay} (${item.quantity.toFixed(4)} ${ingredient?.unit || ''})`
+                              } else {
+                                // It's a piece count (onions, tomatoes, etc.)
+                                displayQuantity = `${item.pieceCount} ${countLabel} (${item.quantity} ${ingredient?.unit || ''})`
+                              }
+                            } else {
+                              // No pieceCount - just show quantity with ingredient unit
+                              displayQuantity = `${item.quantity} ${ingredient?.unit || ''}`
+                            }
+
+                            return (
+                              <div
+                                key={index}
+                                className="p-3 border border-slate-200 rounded-md space-y-3"
+                              >
+                                <div className="flex items-end gap-3">
+                                  <div className="flex-1 space-y-2">
+                                    <Label>Ingredient</Label>
+                                    <Popover
+                                      open={activeIngredientPickerIndex === index}
+                                      onOpenChange={(open) => {
+                                        if (open) {
+                                          setActiveIngredientPickerIndex(index)
+                                          setIngredientSearchQuery('')
+                                        } else if (activeIngredientPickerIndex === index) {
+                                          setActiveIngredientPickerIndex(null)
+                                          setIngredientSearchQuery('')
                                         }
                                       }}
-                                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
-                                        isSelected
-                                          ? 'border-emerald-500 bg-emerald-50'
-                                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                                      }`}
                                     >
-                                      <div className="flex items-center gap-3">
-                                        <div
-                                          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                                            isSelected
-                                              ? 'bg-emerald-500 border-emerald-500'
-                                              : 'border-slate-300'
-                                          }`}
+                                      <PopoverTrigger asChild>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="w-full h-10 justify-between border-slate-300 bg-white hover:bg-slate-50 px-3"
                                         >
-                                          {isSelected && <Check className="h-3 w-3 text-white" />}
+                                          <span className="flex items-center gap-2 min-w-0">
+                                            <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                            <span className={cn(
+                                              'truncate text-sm',
+                                              ingredient ? 'text-slate-900' : 'text-slate-500'
+                                            )}>
+                                              {ingredient ? `${ingredient.name} (${ingredient.unit})` : 'Search ingredient...'}
+                                            </span>
+                                          </span>
+                                          <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+                                        </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+                                        <div className="p-2 border-b border-slate-100">
+                                          <div className="relative">
+                                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                                            <Input
+                                              autoFocus
+                                              value={ingredientSearchQuery}
+                                              onChange={(e) => setIngredientSearchQuery(e.target.value)}
+                                              placeholder="Type to filter ingredients..."
+                                              className="h-9 pl-8 border-slate-200 focus-visible:ring-emerald-500"
+                                            />
+                                          </div>
                                         </div>
-                                        <div>
-                                          <p className="font-medium text-slate-800">{addOn.name}</p>
-                                          {addOn.description && (
-                                            <p className="text-xs text-slate-500 line-clamp-1">{addOn.description}</p>
+                                        <div className="max-h-64 overflow-y-auto py-1">
+                                          {filteredIngredientOptions.map((ing) => (
+                                            <button
+                                              key={ing.id}
+                                              type="button"
+                                              onClick={() => {
+                                                applyIngredientSelection(index, ing.id)
+                                                setActiveIngredientPickerIndex(null)
+                                                setIngredientSearchQuery('')
+                                              }}
+                                              className="w-full px-3 py-2 text-left hover:bg-emerald-50 flex items-center justify-between gap-3"
+                                            >
+                                              <span className="truncate text-sm text-slate-800">{ing.name}</span>
+                                              <span className="flex items-center gap-2 shrink-0">
+                                                <span className="text-xs text-slate-500">({ing.unit})</span>
+                                                {item.ingredientId === ing.id && (
+                                                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                                )}
+                                              </span>
+                                            </button>
+                                          ))}
+                                          {filteredIngredientOptions.length === 0 && (
+                                            <p className="px-3 py-3 text-xs text-slate-500">
+                                              No ingredient matches your search.
+                                            </p>
                                           )}
                                         </div>
-                                      </div>
-                                      <span className="font-mono text-sm text-slate-600 whitespace-nowrap">
-                                        +{formatCurrency(addOn.price)}
-                                      </span>
-                                    </div>
-                                  )
-                                })}
-                              </div>
+                                      </PopoverContent>
+                                    </Popover>
+                                  </div>
 
-                              {/* Pagination */}
-                              {totalPages > 1 && (
-                                <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-                                  <p className="text-xs text-slate-500">
-                                    Showing {startIndex + 1}-{Math.min(startIndex + addOnsPerPage, filteredAddOns.length)} of {filteredAddOns.length}
-                                  </p>
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setAddOnPage(Math.max(1, addOnPage - 1))}
-                                      disabled={addOnPage === 1}
-                                      className="h-8 w-8 p-0"
-                                    >
-                                      <ChevronLeft className="h-4 w-4" />
-                                    </Button>
-                                    <span className="text-sm text-slate-600 px-2">
-                                      {addOnPage} / {totalPages}
-                                    </span>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setAddOnPage(Math.min(totalPages, addOnPage + 1))}
-                                      disabled={addOnPage === totalPages}
-                                      className="h-8 w-8 p-0"
-                                    >
-                                      <ChevronRight className="h-4 w-4" />
-                                    </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeIngredient(index)}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-3">
+                                  <div className="space-y-2">
+                                    <Label>Count (optional)</Label>
+                                    <Input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      value={item.pieceCount ?? ''}
+                                      onChange={(e) =>
+                                        updateIngredient(
+                                          index,
+                                          'pieceCount' as any,
+                                          e.target.value ? Number(e.target.value) : null
+                                        )
+                                      }
+                                      placeholder="e.g., 2"
+                                    />
+                                    <p className="text-xs text-slate-400">
+                                      Use cups for dry goods (lentils, rice) or pieces for countable veggies.
+                                    </p>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label>Quantity ({ingredient?.unit || 'unit'})</Label>
+                                    <Input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      value={item.quantity || ''}
+                                      onChange={(e) =>
+                                        updateIngredient(
+                                          index,
+                                          'quantity',
+                                          parseFloat(e.target.value) || 0
+                                        )
+                                      }
+                                      placeholder="0.00"
+                                    />
+                                    <p className="text-xs text-slate-400">Weight/Volume</p>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label>Cost</Label>
+                                    <div className="h-10 px-3 py-2 bg-slate-50 rounded-md text-sm font-mono text-slate-700">
+                                      {formatCurrency(itemCost)}
+                                    </div>
                                   </div>
                                 </div>
-                              )}
-                            </>
-                          )}
-                        </>
-                      )
-                    })()}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
-            {/* Create add-on dialog (inline from menu form) */}
-            <Dialog open={createAddOnOpen} onOpenChange={setCreateAddOnOpen}>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Create new add-on</DialogTitle>
-                  <DialogDescription>Add an extra that guests can choose with this menu item.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="create-addon-name">Name</Label>
-                    <Input
-                      id="create-addon-name"
-                      value={createAddOnName}
-                      onChange={(e) => setCreateAddOnName(e.target.value)}
-                      placeholder="e.g. Extra cheese"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="create-addon-price">Price</Label>
-                    <Input
-                      id="create-addon-price"
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={createAddOnPrice}
-                      onChange={(e) => setCreateAddOnPrice(e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="create-addon-desc">Description (optional)</Label>
-                    <Textarea
-                      id="create-addon-desc"
-                      rows={2}
-                      value={createAddOnDescription}
-                      onChange={(e) => setCreateAddOnDescription(e.target.value)}
-                      placeholder="Optional"
-                    />
-                  </div>
+                                {/* Supplier name input + auto-priced from supplier database */}
+                                {supplierProducts.length > 0 && (
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Supplier (optional)</Label>
+                                      <Input
+                                        value={item.supplierName ?? ''}
+                                        onChange={(e) => {
+                                          const supplierName = e.target.value
+                                          updateIngredient(index, 'supplierName', supplierName)
+                                          const nextLine = autoFillSupplierCost(
+                                            { ...item, supplierName },
+                                            ingredient
+                                          )
+                                          updateIngredient(index, 'supplierProductId', nextLine.supplierProductId)
+                                          updateIngredient(index, 'unitCostCached', nextLine.unitCostCached)
+                                          updateIngredient(index, 'currency', nextLine.currency)
+                                          updateIngredient(index, 'lastPricedAt', nextLine.lastPricedAt)
+                                        }}
+                                        placeholder="Type supplier name"
+                                        className="h-8 text-xs"
+                                      />
+                                      <p className="text-[10px] text-slate-400">
+                                        We auto-select the best matching supplier price for this ingredient.
+                                      </p>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Supplier price source</Label>
+                                      <div className="h-8 px-2 py-1 rounded-md border border-input bg-slate-50 text-xs text-slate-600 flex items-center">
+                                        {item.supplierProductId
+                                          ? (() => {
+                                            const selected = supplierProducts.find((sp) => sp.id === item.supplierProductId)
+                                            return selected
+                                              ? `${selected.supplierName} — ${selected.name}`
+                                              : 'Matched supplier product'
+                                          })()
+                                          : 'No supplier match (using ingredient base cost)'}
+                                      </div>
+                                      {item.supplierProductId && item.unitCostCached != null && (
+                                        <p className="text-[10px] text-slate-400">
+                                          Unit cost: {item.unitCostCached.toFixed(2)} {item.currency}/{ingredient?.unit || 'unit'}
+                                          {item.lastPricedAt && ` — priced ${new Date(item.lastPricedAt).toLocaleDateString()}`}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {ingredient && (
+                                  <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
+                                    Display: <strong>{ingredient.name}</strong> - {displayQuantity}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Add-ons Section - Moved from More tab */}
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                      <div className="flex items-center gap-2">
+                        <CardTitle>Available Add-ons</CardTitle>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => {
+                            setCreateAddOnName('')
+                            setCreateAddOnPrice('')
+                            setCreateAddOnDescription('')
+                            setCreateAddOnOpen(true)
+                          }}
+                        >
+                          <Plus className="h-4 w-4" />
+                          Create new add-on
+                        </Button>
+                      </div>
+                      {selectedAddOnIds.length > 0 && (
+                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                          {selectedAddOnIds.length} selected
+                        </Badge>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      {addOnsList.length === 0 ? (
+                        <div className="text-center py-6 text-slate-500">
+                          <p className="text-sm">No add-ons available.</p>
+                          <p className="text-xs mt-2 mb-3">Create an add-on to offer extras with this menu item.</p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => {
+                              setCreateAddOnName('')
+                              setCreateAddOnPrice('')
+                              setCreateAddOnDescription('')
+                              setCreateAddOnOpen(true)
+                            }}
+                          >
+                            <Plus className="h-4 w-4" />
+                            Create new add-on
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {/* Search Bar */}
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <Input
+                              placeholder="Search add-ons..."
+                              value={addOnSearchQuery}
+                              onChange={(e) => {
+                                setAddOnSearchQuery(e.target.value)
+                                setAddOnPage(1)
+                              }}
+                              className="pl-9"
+                            />
+                          </div>
+
+                          {(() => {
+                            const filteredAddOns = addOnsList.filter(
+                              (addOn) =>
+                                addOn.name.toLowerCase().includes(addOnSearchQuery.toLowerCase()) ||
+                                addOn.description?.toLowerCase().includes(addOnSearchQuery.toLowerCase())
+                            )
+                            const totalPages = Math.ceil(filteredAddOns.length / addOnsPerPage)
+                            const startIndex = (addOnPage - 1) * addOnsPerPage
+                            const paginatedAddOns = filteredAddOns.slice(startIndex, startIndex + addOnsPerPage)
+
+                            return (
+                              <>
+                                {filteredAddOns.length === 0 ? (
+                                  <div className="text-center py-6 text-slate-500">
+                                    <p className="text-sm">No add-ons match your search.</p>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="grid gap-2">
+                                      {paginatedAddOns.map((addOn) => {
+                                        const isSelected = selectedAddOnIds.includes(addOn.id)
+                                        return (
+                                          <div
+                                            key={addOn.id}
+                                            onClick={() => toggleAddOn(addOn.id)}
+                                            className={cn(
+                                              'flex items-start gap-3 border border-dashed border-slate-200 rounded-md p-3 bg-slate-50 cursor-pointer transition-all hover:bg-emerald-50 hover:border-emerald-300',
+                                              isSelected && 'bg-emerald-50 border-emerald-400'
+                                            )}
+                                          >
+                                            <div
+                                              className={cn(
+                                                'h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors',
+                                                isSelected
+                                                  ? 'bg-emerald-500 border-emerald-500'
+                                                  : 'border-slate-300 bg-white'
+                                              )}
+                                            >
+                                              {isSelected && <Check className="h-3 w-3 text-white" />}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-medium text-slate-800 truncate">
+                                                {addOn.name}
+                                              </p>
+                                              {addOn.description && (
+                                                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                                                  {addOn.description}
+                                                </p>
+                                              )}
+                                            </div>
+                                            <div className="text-sm font-semibold text-emerald-700 shrink-0">
+                                              {formatCurrency(addOn.price)}
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+
+                                    {totalPages > 1 && (
+                                      <div className="flex items-center justify-between pt-2">
+                                        <p className="text-xs text-slate-500">
+                                          Page {addOnPage} of {totalPages}
+                                        </p>
+                                        <div className="flex gap-1">
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setAddOnPage((p) => Math.max(1, p - 1))}
+                                            disabled={addOnPage === 1}
+                                          >
+                                            <ChevronLeft className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setAddOnPage((p) => Math.min(totalPages, p + 1))}
+                                            disabled={addOnPage === totalPages}
+                                          >
+                                            <ChevronRight className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            )
+                          })()}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setCreateAddOnOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={createAddOnLoading || !createAddOnName.trim() || !createAddOnPrice.trim()}
-                    onClick={async () => {
-                      const price = parseFloat(createAddOnPrice)
-                      if (Number.isNaN(price) || price < 0) {
-                        toast({ title: 'Enter a valid price', variant: 'destructive' })
-                        return
-                      }
-                      setCreateAddOnLoading(true)
-                      try {
-                        const res = await fetch('/api/addons', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            name: createAddOnName.trim(),
-                            price,
-                            description: createAddOnDescription.trim() || null,
-                          }),
-                        })
-                        if (!res.ok) throw new Error('Failed to create')
-                        const newAddOn = await res.json()
-                        setAddOnsList((prev) => [...prev, newAddOn].sort((a, b) => a.name.localeCompare(b.name)))
-                        setSelectedAddOnIds((prev) => [...prev, newAddOn.id])
-                        setCreateAddOnOpen(false)
-                        setCreateAddOnName('')
-                        setCreateAddOnPrice('')
-                        setCreateAddOnDescription('')
-                        toast({ title: 'Add-on created', description: `${newAddOn.name} added and selected for this item.` })
-                      } catch {
-                        toast({ title: 'Could not create add-on', variant: 'destructive' })
-                      } finally {
-                        setCreateAddOnLoading(false)
-                      }
-                    }}
-                  >
-                    {createAddOnLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    Create add-on
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+              </TabsContent>
+              <TabsContent value="more" className="space-y-6 mt-0">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Menu Translations</CardTitle>
+                    <CardDescription>
+                      Auto-generate Iraqi Arabic and Sorani Kurdish names and descriptions.
+                      You can always edit them before saving.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {translationLanguages.map((language) => {
+                      const translation = translationsState[language.code]
+                      if (!translation) return null
+
+                      return (
+                        <div
+                          key={language.code}
+                          className="space-y-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-800">
+                                {language.label}
+                              </p>
+                              {translation.dirty && (
+                                <Badge variant="destructive" className="text-[10px] uppercase">
+                                  Edited
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => regenerateTranslation(language.code)}
+                              disabled={!translationPayload || translation.loading}
+                            >
+                              {translation.loading ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                'Refresh'
+                              )}
+                            </Button>
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor={`edit-translation-name-${language.code}`}>Name</Label>
+                              <Input
+                                id={`edit-translation-name-${language.code}`}
+                                value={translation.name}
+                                onChange={(event) =>
+                                  updateTranslationField(
+                                    language.code,
+                                    'name',
+                                    event.target.value
+                                  )
+                                }
+                                placeholder={`Auto translated name (${language.label})`}
+                              />
+                            </div>
+                            <div className="md:col-span-2 space-y-2">
+                              <Label htmlFor={`edit-translation-description-${language.code}`}>
+                                Description
+                              </Label>
+                              <Textarea
+                                id={`edit-translation-description-${language.code}`}
+                                rows={2}
+                                value={translation.description}
+                                onChange={(event) =>
+                                  updateTranslationField(
+                                    language.code,
+                                    'description',
+                                    event.target.value
+                                  )
+                                }
+                                placeholder={`Auto translated description (${language.label})`}
+                              />
+                            </div>
+                          </div>
+
+                          {translation.aiDescription && (
+                            <p className="text-xs italic text-slate-500">
+                              {translation.aiDescription}
+                            </p>
+                          )}
+
+                          <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+                            <span>
+                              Protein:{' '}
+                              {translation.protein !== null
+                                ? `${translation.protein}g`
+                                : '—'}
+                            </span>
+                            <span>
+                              Carbs:{' '}
+                              {translation.carbs !== null ? `${translation.carbs}g` : '—'}
+                            </span>
+                          </div>
+
+                          {translation.error && (
+                            <p className="text-xs text-red-600">{translation.error}</p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </CardContent>
+                </Card>
+
               </TabsContent>
             </Tabs>
           </div>
@@ -3173,8 +3167,8 @@ export default function MenuForm({
           setPreviewImageUrl(null)
         }
       }}>
-          <DialogContent className="max-w-lg max-h-[80vh]">
-            <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[80vh]">
+          <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-emerald-500" />
               Generate Image with AI
@@ -3340,11 +3334,10 @@ export default function MenuForm({
                             key={option.value}
                             type="button"
                             onClick={() => setImageOrientation(option.value)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
-                              isActive
-                                ? 'border-emerald-500 bg-emerald-100 text-slate-900'
-                                : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
-                            }`}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
+                              ? 'border-emerald-500 bg-emerald-100 text-slate-900'
+                              : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
+                              }`}
                           >
                             <span className="block text-sm">{option.label}</span>
                             <span className="text-[10px] text-slate-400">{option.aspect}</span>
@@ -3368,11 +3361,10 @@ export default function MenuForm({
                             key={option.value}
                             type="button"
                             onClick={() => setImageSizePreset(option.value)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
-                              isActive
-                                ? 'border-emerald-500 bg-emerald-100 text-slate-900'
-                                : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
-                            }`}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
+                              ? 'border-emerald-500 bg-emerald-100 text-slate-900'
+                              : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
+                              }`}
                           >
                             <span className="block text-sm">{option.label}</span>
                             <span className="text-[10px] text-slate-400">{`${option.pixels}px`}</span>
@@ -3402,10 +3394,10 @@ export default function MenuForm({
               >
                 Cancel
               </Button>
-                      <Button
-                        type="button"
-                        onClick={generateImage}
-                      >
+              <Button
+                type="button"
+                onClick={generateImage}
+              >
                 <Sparkles className="h-4 w-4 mr-2" />
                 {uploadedPhoto ? 'Enhance Photo' : 'Generate Image'}
               </Button>
@@ -3484,11 +3476,10 @@ export default function MenuForm({
                   {suggestedRecipe.ingredients?.map((ing: any, index: number) => (
                     <div
                       key={index}
-                      className={`flex items-center justify-between p-3 rounded-lg border ${
-                        ing.isAvailable
-                          ? 'bg-green-50 border-green-200'
-                          : 'bg-amber-50 border-amber-200'
-                      }`}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${ing.isAvailable
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-amber-50 border-amber-200'
+                        }`}
                     >
                       <div className="flex items-center gap-3">
                         {ing.isAvailable ? (

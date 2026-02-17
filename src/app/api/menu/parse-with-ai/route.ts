@@ -24,6 +24,7 @@ export interface ParseWithAIResponse {
   recipeTips?: string[]
   prepTime?: string | null
   cookTime?: string | null
+  recipeYield?: number | null
   ingredients?: ParsedIngredient[]
 }
 
@@ -42,6 +43,7 @@ Return ONLY valid JSON in this exact shape (no markdown, no extra text):
   "recipeTips": ["Tip 1", "Tip 2"],
   "prepTime": "10 min",
   "cookTime": "25 min",
+  "recipeYield": null,
   "ingredients": [{"name": "chicken", "quantity": 0.2, "unit": "kg", "pieceCount": null}, {"name": "rice", "quantity": 0.15, "unit": "kg", "pieceCount": null}]
 }
 RULES:
@@ -51,7 +53,8 @@ RULES:
 - recipeSteps: Extract from "Steps:", numbered lines, or recipe text. Each step one string.
 - recipeTips: Extract from "Tips:", "Tip:", or bullet points. Put each tip as a separate string. If the user gives tips, you MUST include them in recipeTips.
 - prepTime, cookTime: extract if present; else null.
-- ingredients: Extract from the user text (ingredient lists, recipe steps, "marinate with X", "add Y"). Each item: name (string), quantity (number), unit (kg for meats/veg, g for small, cup for rice/lentils, tsp/tbsp for spices, L for liquids), pieceCount (number for countable items like "2 onions", else null). Use reasonable per-serving quantities if not stated. If no ingredients mentioned, use empty array [].`
+- recipeYield: extract the number of servings/portions this recipe makes (e.g. "Serves 4" -> 4, "Yields 10" -> 10). Return null if not mentioned.
+- ingredients: Extract from the user text (ingredient lists, recipe steps, "marinate with X", "add Y"). Each item: name (string), quantity (number), unit (kg for meats/veg, g for small, cup for rice/lentils, tsp/tbsp for spices, L for liquids), pieceCount (number for countable items like "2 onions", else null). If no ingredients mentioned, use empty array [].`
 
 async function parseWithGemini(text: string, categoryNames: string[]): Promise<ParseWithAIResponse> {
   const apiKey = process.env.GOOGLE_AI_KEY
@@ -73,8 +76,9 @@ ${text}
 
 ${categoryHint}
 
-Extract: name, description, price (IQD), categoryName, recipeSteps, recipeTips, prepTime, cookTime, ingredients.
+Extract: name, description, price (IQD), categoryName, recipeSteps, recipeTips, prepTime, cookTime, recipeYield, ingredients.
 - recipeSteps: from "Steps:" or numbered instructions. recipeTips: from "Tips:" or tip bullets—always extract these if the user provided any.
+- recipeYield: number of servings this recipe makes (null if not mentioned).
 - ingredients: list of {name, quantity, unit, pieceCount} inferred from the text (ingredient lists, recipe steps). Use kg/g/cup/tsp/tbsp/L; pieceCount for countable items.
 For calories/protein/carbs: use if given, else estimate. For tags: use if given, else suggest.
 ${JSON_SCHEMA}`
@@ -102,8 +106,9 @@ ${text}
 
 ${categoryHint}
 
-Extract: name, description, price (IQD), categoryName, recipeSteps, recipeTips, prepTime, cookTime, ingredients.
+Extract: name, description, price (IQD), categoryName, recipeSteps, recipeTips, prepTime, cookTime, recipeYield, ingredients.
 - recipeSteps from steps/instructions; recipeTips from "Tips:" or bullets—always include if user provided.
+- recipeYield: number of servings (default null).
 - ingredients: [{name, quantity, unit, pieceCount}] from ingredient lists or recipe text.
 Calories/protein/carbs: use if given else estimate. Tags: use if given else suggest.
 ${JSON_SCHEMA}`
@@ -142,6 +147,7 @@ function parseJsonResponse(raw: string): ParseWithAIResponse {
       : [],
     prepTime: typeof data.prepTime === 'string' ? data.prepTime : null,
     cookTime: typeof data.cookTime === 'string' ? data.cookTime : null,
+    recipeYield: typeof data.recipeYield === 'number' ? data.recipeYield : null,
     ingredients: parseIngredients(data.ingredients),
   }
 }

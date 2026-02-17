@@ -58,13 +58,53 @@ export async function DELETE(
     }
 
     const restaurantId = session.user.restaurantId
+
+    // Count items in this category
+    const itemCount = await prisma.menuItem.count({
+      where: { categoryId: params.id, restaurantId },
+    })
+
+    // Update showcases that reference this category
     await prisma.menuShowcase.updateMany({
       where: { insertAfterCategoryId: params.id, restaurantId },
       data: { insertAfterCategoryId: null },
     })
-    await prisma.menuItem.deleteMany({
-      where: { categoryId: params.id, restaurantId },
-    })
+
+    // If there are items, move them to "Uncategorized"
+    if (itemCount > 0) {
+      // Find or create "Uncategorized" category
+      let uncategorized = await prisma.category.findFirst({
+        where: {
+          restaurantId,
+          name: 'Uncategorized'
+        },
+      })
+
+      if (!uncategorized) {
+        // Create Uncategorized category
+        const maxOrder = await prisma.category.findFirst({
+          where: { restaurantId },
+          orderBy: { displayOrder: 'desc' },
+          select: { displayOrder: true },
+        })
+
+        uncategorized = await prisma.category.create({
+          data: {
+            name: 'Uncategorized',
+            description: 'Items without a category',
+            restaurantId,
+            displayOrder: (maxOrder?.displayOrder ?? 0) + 1,
+            showOnMenu: false, // Hidden by default
+          },
+        })
+      }
+
+      // Move all items to Uncategorized
+      await prisma.menuItem.updateMany({
+        where: { categoryId: params.id, restaurantId },
+        data: { categoryId: uncategorized.id },
+      })
+    }
 
     const deleted = await prisma.category.deleteMany({
       where: {
@@ -77,7 +117,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Category not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, itemsMoved: itemCount })
   } catch (error) {
     console.error('Error deleting category:', error)
     return NextResponse.json(

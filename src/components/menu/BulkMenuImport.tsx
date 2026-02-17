@@ -510,22 +510,22 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
           {step === 'upload' && (
             <div className="space-y-4 py-4">
-              <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
-                <Upload className="h-12 w-12 mx-auto text-slate-400 mb-4" />
-                <Label htmlFor="menu-image" className="cursor-pointer">
-                  <div className="text-sm text-slate-600 mb-2">
-                    Click to upload or drag and drop your menu image
+              <Label htmlFor="menu-image" className="block cursor-pointer">
+                <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-emerald-400 hover:bg-emerald-50/30 transition-colors">
+                  <Upload className="h-12 w-12 mx-auto text-slate-400 mb-4" />
+                  <div className="text-sm text-slate-600 mb-2 font-medium">
+                    Click anywhere to upload or drag and drop your menu image
                   </div>
                   <div className="text-xs text-slate-500">PNG, JPG up to 10MB</div>
-                </Label>
-                <Input
-                  id="menu-image"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
-              </div>
+                </div>
+              </Label>
+              <Input
+                id="menu-image"
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
 
               {menuImage && (
                 <div className="space-y-4">
@@ -587,11 +587,10 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                   return (
                     <div
                       key={index}
-                      className={`border rounded-lg transition-all ${
-                        hasIssues
+                      className={`border rounded-lg transition-all ${hasIssues
                           ? 'border-amber-300 bg-amber-50/30'
                           : 'border-slate-200 bg-white'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-start gap-3 p-3">
                         <span className="text-xs font-medium text-slate-400 mt-1 w-6 text-right shrink-0">
@@ -1027,11 +1026,10 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                             key={option.value}
                             type="button"
                             onClick={() => setImageOrientation(option.value)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
-                              isActive
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
                                 ? 'border-emerald-500 bg-emerald-100 text-slate-900'
                                 : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
-                            }`}
+                              }`}
                           >
                             <span className="block text-sm">{option.label}</span>
                             <span className="text-[10px] text-slate-400">{option.aspect}</span>
@@ -1055,11 +1053,10 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                             key={option.value}
                             type="button"
                             onClick={() => setImageSizePreset(option.value)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
-                              isActive
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
                                 ? 'border-emerald-500 bg-emerald-100 text-slate-900'
                                 : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
-                            }`}
+                              }`}
                           >
                             <span className="block text-sm">{option.label}</span>
                             <span className="text-[10px] text-slate-400">{`${option.pixels}px`}</span>

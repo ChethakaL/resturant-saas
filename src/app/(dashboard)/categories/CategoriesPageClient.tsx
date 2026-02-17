@@ -14,7 +14,7 @@ const TOUR_STEPS = [
   {
     id: 'tour-ai-categorization',
     title: 'AI categorization',
-    body: 'Run this to auto-assign your menu items into standard categories like Signature Dishes, Main Dishes, Shareables, Add-ons, Drinks, Desserts, Kids, and Sides. Great for a new menu or a reset.',
+    body: 'Automatically organizes your menu items into standard restaurant categories. Great for setting up a new menu or reorganizing an existing one.',
   },
   {
     id: 'tour-add-category',

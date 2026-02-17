@@ -7,9 +7,17 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: ['error'],
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+// Ensure we use the singleton in development
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma
+}
+
+// Graceful shutdown - disconnect on process termination
+process.on('beforeExit', async () => {
+  await prisma.$disconnect()
+})
 
 export default prisma

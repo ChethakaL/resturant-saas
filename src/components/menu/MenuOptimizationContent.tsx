@@ -72,6 +72,16 @@ interface CategoryOption {
   displayOrder: number
 }
 
+const quadrantLabelMap: Record<string, string> = {
+  PUZZLE: 'High Margin, Low Sales',
+  STAR: 'High Margin, High Sales',
+  DOG: 'Low Margin, Low Sales',
+  WORKHORSE: 'Low Margin, High Sales',
+}
+
+const getQuadrantLabel = (quadrant: string): string => quadrantLabelMap[quadrant] ?? quadrant
+const formatDishCount = (count: number): string => `${count} ${count === 1 ? 'dish' : 'dishes'}`
+
 export interface MenuOptimizationContentProps {
   categories: CategoryOption[]
   showcases: Showcase[]
@@ -128,7 +138,7 @@ export default function MenuOptimizationContent({
   const [scheduleSearch, setScheduleSearch] = useState('')
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(false)
   const prevEngineModeRef = useRef<EngineMode>(resolvedMode)
-  const maxCarouselItems = (engineMode === 'profit' || engineMode === 'adaptive') ? 3 : 999
+  const maxCarouselItems = (engineMode === 'profit' || engineMode === 'adaptive') ? 6 : 999
 
   // When switching to Profit or Smart Profit, default the five suggestion toggles to on (preset).
   useEffect(() => {
@@ -320,24 +330,24 @@ export default function MenuOptimizationContent({
       const body =
         engineMode === 'classic'
           ? {
-              mode: 'classic' as const,
-              moodFlow,
-              bundles,
-              upsells,
-              scarcityBadges,
-              priceAnchoring,
-              maxItemsPerCategory,
-              maxInitialItemsPerCategory,
-              idleUpsellDelaySeconds,
-            }
+            mode: 'classic' as const,
+            moodFlow,
+            bundles,
+            upsells,
+            scarcityBadges,
+            priceAnchoring,
+            maxItemsPerCategory,
+            maxInitialItemsPerCategory,
+            idleUpsellDelaySeconds,
+          }
           : {
-              mode: engineMode,
-              moodFlow,
-              bundles,
-              upsells,
-              scarcityBadges,
-              priceAnchoring,
-            }
+            mode: engineMode,
+            moodFlow,
+            bundles,
+            upsells,
+            scarcityBadges,
+            priceAnchoring,
+          }
       const res = await fetch('/api/settings/menu-engine', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -360,26 +370,59 @@ export default function MenuOptimizationContent({
     try {
       const res = await fetch(`/api/menu-showcases/suggested-items?mode=${engineMode}`)
       if (!res.ok) throw new Error('Failed to load suggestions')
-      const suggested: { day: string[]; evening: string[]; night: string[] } = await res.json()
-      const firstCategory = categories[0]
-      const titles: { title: string; slot: 'day' | 'evening' | 'night' }[] = [
-        { title: 'Breakfast', slot: 'day' },
-        { title: 'Lunch', slot: 'evening' },
-        { title: 'Dinner', slot: 'night' },
+      const suggested: {
+        mode?: 'profit' | 'adaptive'
+        usedSalesData?: boolean
+        recommended?: string[]
+        day?: string[]
+        evening?: string[]
+        night?: string[]
+      } = await res.json()
+      const primaryIds = (suggested.recommended ?? suggested.day ?? []).slice(0, maxCarouselItems)
+      const secondaryPool = [
+        ...(suggested.evening ?? []),
+        ...(suggested.night ?? []),
+        ...(suggested.day ?? []),
       ]
+      const secondaryIds = secondaryPool
+        .filter((id, index, arr) => arr.indexOf(id) === index)
+        .filter((id) => !primaryIds.includes(id))
+        .slice(0, maxCarouselItems)
+      const recommendationIds = secondaryIds.length > 0 ? secondaryIds : primaryIds
+      const firstCategory = categories[0]
+
       let list = [...showcases]
-      for (let i = 0; i < 3; i++) {
-        const { title, slot } = titles[i]
-        let showcase = list.find((s) => s.title === title)
+
+      // Remove legacy auto-generated sections so only useful carousel(s) remain.
+      const legacyTitles = new Set(['Breakfast', 'Lunch', 'Dinner'])
+      const toDelete = list.filter((s) => legacyTitles.has((s.title || '').trim()))
+      for (const section of toDelete) {
+        await fetch(`/api/menu-showcases/${section.id}`, { method: 'DELETE' })
+      }
+      list = list.filter((s) => !legacyTitles.has((s.title || '').trim()))
+
+      const upsertShowcase = async (
+        def: {
+          title: string
+          type: 'CHEFS_HIGHLIGHTS' | 'RECOMMENDATIONS'
+          displayVariant: 'hero' | 'cards'
+          itemIds: string[]
+          position?: 'top' | 'between-categories'
+          insertAfterCategoryId?: string | null
+          schedule?: TimeSlotSchedule | null
+        }
+      ) => {
+        let showcase = list.find((s) => s.title === def.title) ?? list.find((s) => s.type === def.type)
         if (!showcase) {
           const createRes = await fetch('/api/menu-showcases', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              title,
-              type: 'CHEFS_HIGHLIGHTS',
+              title: def.title,
+              type: def.type,
               position: 'top',
               insertAfterCategoryId: null,
+              displayVariant: def.displayVariant,
             }),
           })
           if (!createRes.ok) throw new Error('Failed to create showcase')
@@ -387,36 +430,122 @@ export default function MenuOptimizationContent({
           showcase = { ...created, items: [], schedule: null }
           list = [...list, showcase]
         }
-        const itemIds = (suggested[slot] ?? []).slice(0, 3)
-        const schedule: TimeSlotSchedule = {
-          useTimeSlots: true,
-          day: slot === 'day' ? { itemIds } : { itemIds: [] },
-          evening: slot === 'evening' ? { itemIds } : { itemIds: [] },
-          night: slot === 'night' ? { itemIds } : { itemIds: [] },
-        }
-        await fetch(`/api/menu-showcases/${showcase.id}`, {
+
+        const updateRes = await fetch(`/api/menu-showcases/${showcase.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            schedule,
-            position: 'top',
-            insertAfterCategoryId: null,
+            title: def.title,
+            type: def.type,
+            position: def.position ?? 'top',
+            insertAfterCategoryId: def.position === 'between-categories' ? (def.insertAfterCategoryId ?? null) : null,
+            displayVariant: def.displayVariant,
+            schedule: def.schedule ?? null,
           }),
         })
-        list = list.map((s) =>
+        if (!updateRes.ok) throw new Error('Failed to update showcase')
+
+        const itemsPayload = def.itemIds.map((menuItemId, index) => ({
+          menuItemId,
+          displayOrder: index + 1,
+        }))
+        const saveItemsRes = await fetch(`/api/menu-showcases/${showcase.id}/items`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: itemsPayload }),
+        })
+        if (!saveItemsRes.ok) throw new Error('Failed to save showcase items')
+
+        const itemMap = new Map(menuItems.map((item) => [item.id, item]))
+        const mappedItems: ShowcaseItem[] = itemsPayload
+          .map(({ menuItemId, displayOrder }) => {
+            const menuItem = itemMap.get(menuItemId)
+            if (!menuItem) return null
+            return {
+              id: `${showcase!.id}-${menuItemId}`,
+              showcaseId: showcase!.id,
+              menuItemId,
+              displayOrder,
+              menuItem,
+            }
+          })
+          .filter(Boolean) as ShowcaseItem[]
+
+        return list.map((s) =>
           s.id === showcase!.id
-            ? { ...s, schedule, position: 'top', insertAfterCategoryId: null }
+            ? {
+                ...s,
+                title: def.title,
+                type: def.type,
+                displayVariant: def.displayVariant,
+                schedule: def.schedule ?? null,
+                position: def.position ?? 'top',
+                insertAfterCategoryId: def.position === 'between-categories' ? (def.insertAfterCategoryId ?? null) : null,
+                items: mappedItems,
+              }
             : s
         )
       }
+
+      list = await upsertShowcase({
+        title: "Chef's Highlights",
+        type: 'CHEFS_HIGHLIGHTS',
+        displayVariant: 'hero',
+        itemIds: primaryIds,
+        position: 'top',
+        insertAfterCategoryId: null,
+      })
+
+      const dayIds = (suggested.day ?? primaryIds).slice(0, maxCarouselItems)
+      const eveningIds = (suggested.evening ?? recommendationIds).slice(0, maxCarouselItems)
+      const nightIds = (suggested.night ?? recommendationIds).slice(0, maxCarouselItems)
+      const adaptiveSchedule: TimeSlotSchedule | null =
+        engineMode === 'adaptive'
+          ? {
+              useTimeSlots: true,
+              day: { itemIds: dayIds },
+              evening: { itemIds: eveningIds },
+              night: { itemIds: nightIds },
+            }
+          : null
+      const recommendationPool =
+        engineMode === 'adaptive'
+          ? Array.from(new Set([...dayIds, ...eveningIds, ...nightIds]))
+          : recommendationIds
+
+      list = await upsertShowcase({
+        title: 'Recommended for Guests',
+        type: 'RECOMMENDATIONS',
+        displayVariant: 'cards',
+        itemIds: recommendationPool,
+        position: firstCategory ? 'between-categories' : 'top',
+        insertAfterCategoryId: firstCategory?.id ?? null,
+        schedule: adaptiveSchedule,
+      })
+
       setShowcases(list)
-      toast({ title: 'Carousels auto-filled', description: 'Breakfast, Lunch, and Dinner carousels are set. You can still edit them.' })
+
+      if (engineMode === 'adaptive' && !suggested.usedSalesData) {
+        toast({
+          title: 'Smart Profit fallback used',
+          description: 'No sales history yet, so Smart Profit used high-margin fallback. Carousels may look similar to Profit mode until sales data is available.',
+        })
+      } else {
+        toast({
+          title: 'Carousels ready',
+          description: "Created Chef's Highlights and Recommendations from high-margin items.",
+        })
+      }
     } catch {
       toast({ title: 'Failed to auto-fill carousels', variant: 'destructive' })
     } finally {
       setAutoFillingCarousels(false)
     }
   }
+
+  useEffect(() => {
+    if (engineMode === 'profit' || engineMode === 'adaptive') void autoFillCarousels()
+  }, [engineMode])
 
   return (
     <div className="space-y-6">
@@ -446,9 +575,9 @@ export default function MenuOptimizationContent({
                     {mode === 'adaptive' && '3. Smart Profit Mode'}
                   </span>
                   <p className="text-xs text-slate-500 mt-1">
-                    {mode === 'classic' && 'Guests see your categories and items in the order you set. No reordering and no extra suggestions (e.g. add-ons or combos).'}
-                    {mode === 'profit' && 'Items with higher profit margin appear first. We also suggest combos and add-ons. Uses your margin data only; guests never see it.'}
-                    {mode === 'adaptive' && 'We use your restaurant’s sales numbers and profit (margin) per item to decide the order guests see and which add-ons to suggest. This data stays in your dashboard; it is never shown to guests.'}
+                    {mode === 'classic' && 'Display your menu exactly as you organize it. No automatic reordering or suggestions.'}
+                    {mode === 'profit' && 'Highlights high-margin items and suggests profitable combinations to guests.'}
+                    {mode === 'adaptive' && 'Uses your sales and profit data to optimize what guests see and suggest add-ons that increase revenue.'}
                   </p>
                 </button>
               ))}
@@ -459,7 +588,7 @@ export default function MenuOptimizationContent({
             <>
               <div className="space-y-2">
                 <Label>Suggestions and highlights</Label>
-                <p className="text-xs text-slate-500 mb-2">Turn on or off different ways the menu suggests items to guests.</p>
+                <p className="text-xs text-slate-500 mb-2">Enable or disable menu suggestion features.</p>
                 <div className="flex flex-wrap gap-4">
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={moodFlow} onChange={(e) => setMoodFlow(e.target.checked)} className="rounded" />
@@ -588,45 +717,49 @@ export default function MenuOptimizationContent({
                 <div className="grid grid-cols-2 gap-0">
                   {/* Row 1: High margin */}
                   <div className="min-h-[100px] p-3 border-b border-r border-slate-200 bg-amber-50/80">
-                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-1">Puzzle</p>
-                    <p className="text-2xl font-bold text-amber-900">{quadrantData.counts.PUZZLE ?? 0}</p>
+                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-1">High Margin, Low Sales</p>
+                    <p className="text-2xl font-bold text-amber-900">{formatDishCount(quadrantData.counts.PUZZLE ?? 0)}</p>
                     <p className="text-[10px] text-amber-700 mt-0.5">High margin, fewer sales</p>
                     <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
                       {quadrantData.items.filter((i) => i.quadrant === 'PUZZLE').slice(0, 4).map((i) => (
                         <li key={i.menuItemId} className="truncate">{i.name}</li>
                       ))}
                     </ul>
+                    <p className="mt-1 text-[10px] text-slate-500">Showing up to 4 example dishes.</p>
                   </div>
                   <div className="min-h-[100px] p-3 border-b border-slate-200 bg-emerald-50">
-                    <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1">Star</p>
-                    <p className="text-2xl font-bold text-emerald-900">{quadrantData.counts.STAR ?? 0}</p>
+                    <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1">High Margin, High Sales</p>
+                    <p className="text-2xl font-bold text-emerald-900">{formatDishCount(quadrantData.counts.STAR ?? 0)}</p>
                     <p className="text-[10px] text-emerald-700 mt-0.5">High margin, high sales</p>
                     <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
                       {quadrantData.items.filter((i) => i.quadrant === 'STAR').slice(0, 4).map((i) => (
                         <li key={i.menuItemId} className="truncate">{i.name}</li>
                       ))}
                     </ul>
+                    <p className="mt-1 text-[10px] text-slate-500">Showing up to 4 example dishes.</p>
                   </div>
                   {/* Row 2: Low margin */}
                   <div className="min-h-[100px] p-3 border-r border-slate-200 bg-slate-100">
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Dog</p>
-                    <p className="text-2xl font-bold text-slate-700">{quadrantData.counts.DOG ?? 0}</p>
+                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Low Margin, Low Sales</p>
+                    <p className="text-2xl font-bold text-slate-700">{formatDishCount(quadrantData.counts.DOG ?? 0)}</p>
                     <p className="text-[10px] text-slate-600 mt-0.5">Lower margin, fewer sales</p>
                     <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
                       {quadrantData.items.filter((i) => i.quadrant === 'DOG').slice(0, 4).map((i) => (
                         <li key={i.menuItemId} className="truncate">{i.name}</li>
                       ))}
                     </ul>
+                    <p className="mt-1 text-[10px] text-slate-500">Showing up to 4 example dishes.</p>
                   </div>
                   <div className="min-h-[100px] p-3 border-slate-200 bg-blue-50/80">
-                    <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-1">Workhorse</p>
-                    <p className="text-2xl font-bold text-blue-900">{quadrantData.counts.WORKHORSE ?? 0}</p>
+                    <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-1">Low Margin, High Sales</p>
+                    <p className="text-2xl font-bold text-blue-900">{formatDishCount(quadrantData.counts.WORKHORSE ?? 0)}</p>
                     <p className="text-[10px] text-blue-700 mt-0.5">High sales, lower margin</p>
                     <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
                       {quadrantData.items.filter((i) => i.quadrant === 'WORKHORSE').slice(0, 4).map((i) => (
                         <li key={i.menuItemId} className="truncate">{i.name}</li>
                       ))}
                     </ul>
+                    <p className="mt-1 text-[10px] text-slate-500">Showing up to 4 example dishes.</p>
                   </div>
                 </div>
                 <div className="px-2 py-1.5 border-t border-slate-200 bg-slate-100/80 flex justify-center gap-6 text-[10px] text-slate-500">
@@ -634,7 +767,7 @@ export default function MenuOptimizationContent({
                   <span>↓ Low margin</span>
                 </div>
               </div>
-              <p className="text-xs text-slate-500">Matrix: rows = margin (high at top, low at bottom), columns = popularity (low left, high right).</p>
+              <p className="text-xs text-slate-500">Matrix: rows = margin (high at top, low at bottom), columns = popularity (low left, high right). The big number is total dishes in that group; the names under it are up to 4 examples.</p>
               <div className="max-h-64 overflow-y-auto rounded border border-slate-200">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 sticky top-0">
@@ -643,7 +776,7 @@ export default function MenuOptimizationContent({
                   <tbody>
                     {quadrantData.items.map((row) => (
                       <tr key={row.menuItemId} className="border-t border-slate-100">
-                        <td className="p-2">{row.name}</td><td className="p-2 text-slate-500">{row.categoryName ?? '—'}</td><td className="p-2">{row.quadrant}</td><td className="p-2 text-right">{row.marginPercent}</td><td className="p-2 text-right">{row.unitsSold}</td>
+                        <td className="p-2">{row.name}</td><td className="p-2 text-slate-500">{row.categoryName ?? '—'}</td><td className="p-2">{getQuadrantLabel(row.quadrant)}</td><td className="p-2 text-right">{row.marginPercent}</td><td className="p-2 text-right">{row.unitsSold}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -661,7 +794,7 @@ export default function MenuOptimizationContent({
               <CardTitle>Featured item sections (carousels)</CardTitle>
               <p className="text-sm text-slate-500 mt-1">
                 Swipeable rows of items on the menu. {engineMode === 'classic' && 'You choose items or use defaults.'}
-                {(engineMode === 'profit' || engineMode === 'adaptive') && 'Profit and Smart Profit modes can auto-fill three carousels (Breakfast, Lunch, Dinner) with high-margin or popular items. Max 3 items per carousel, ordered high to low price.'}
+                {(engineMode === 'profit' || engineMode === 'adaptive') && "Profit and Smart Profit modes auto-build Chef's Highlights and Recommendations carousels using your highest-margin items. Up to 6 items per carousel."}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -685,7 +818,7 @@ export default function MenuOptimizationContent({
               <p className="text-sm font-medium text-slate-700 mb-1">No featured sections yet</p>
               <p className="text-xs text-slate-500 mb-4">
                 {(engineMode === 'profit' || engineMode === 'adaptive')
-                  ? 'Click &quot;Auto-fill carousels&quot; to create Breakfast, Lunch, and Dinner carousels with suggested items. You can still edit them.'
+                  ? 'Click &quot;Auto-fill carousels&quot; to create Chef&apos;s Highlights and Recommendations using your high-margin items. You can still edit them.'
                   : 'Featured sections are swipeable rows of items. You can pick items yourself or create default sections.'}
               </p>
               {(engineMode === 'profit' || engineMode === 'adaptive') ? (
@@ -814,7 +947,7 @@ export default function MenuOptimizationContent({
           <DialogHeader>
             <DialogTitle>Select Carousel Items</DialogTitle>
             <DialogDescription>
-              Choose which menu items to display in this carousel. {(engineMode === 'profit' || engineMode === 'adaptive') && 'Maximum 3 items. '}
+              Choose which menu items to display in this carousel. {(engineMode === 'profit' || engineMode === 'adaptive') && 'Maximum 6 items. '}
               Leave empty for automatic selection.
             </DialogDescription>
           </DialogHeader>
@@ -844,7 +977,7 @@ export default function MenuOptimizationContent({
           <DialogHeader>
             <DialogTitle>Time-based carousel items</DialogTitle>
             <DialogDescription>
-              Choose which items appear for each time of day (menu timezone). Day = morning (6am–12pm), Evening = lunch (12–6pm), Night = evening (6pm–6am). {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 3 items per slot. '}
+              Choose which items appear for each time of day (menu timezone). Day = morning (6am–12pm), Evening = lunch (12–6pm), Night = evening (6pm–6am). {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 6 items per slot. '}
               Leave a slot empty to use AI suggestions or manual picks.
             </DialogDescription>
           </DialogHeader>
