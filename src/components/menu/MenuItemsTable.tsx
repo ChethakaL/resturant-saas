@@ -368,7 +368,7 @@ export default function MenuItemsTable({
     setSavingCosting(true)
 
     try {
-      // Update all ingredient prices
+      // Step 1: Update all ingredient prices
       await Promise.all(
         costingIngredients.map(ing =>
           fetch(`/api/inventory/${ing.id}`, {
@@ -378,6 +378,15 @@ export default function MenuItemsTable({
           })
         )
       )
+
+      // Step 2: Recalculate costing status for the menu item
+      const recalcResponse = await fetch(`/api/menu/${costingMenuItem.id}/recalculate-costing`, {
+        method: 'POST',
+      })
+
+      if (!recalcResponse.ok) {
+        console.warn('Failed to recalculate costing status')
+      }
 
       toast({
         title: 'Costing completed',
@@ -701,7 +710,7 @@ export default function MenuItemsTable({
                   Complete Costing: {costingMenuItem?.name}
                 </DialogTitle>
                 <DialogDescription>
-                  Enter the cost per unit for each ingredient to complete the costing for this menu item.
+                  <strong>Required:</strong> Enter cost per unit for <strong>ALL</strong> ingredients below. Costing will only be marked complete when every ingredient has a price greater than 0.
                 </DialogDescription>
               </DialogHeader>
 
@@ -719,7 +728,7 @@ export default function MenuItemsTable({
                   <>
                     <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 mb-4">
                       <p className="text-sm text-amber-900">
-                        💡 <strong>Tip:</strong> Enter actual supplier prices for accurate costing and profit calculations.
+                        💡 <strong>Important:</strong> ALL ingredients must have a cost greater than 0. Enter actual supplier prices for accurate profit calculations.
                       </p>
                     </div>
 

@@ -51,7 +51,22 @@ export async function PATCH(
       (ing: any) => ing.ingredientId && ing.quantity > 0
     )
     const hasRecipe = validIngredients.length > 0
-    const hasCosting = validIngredients.some((ing: any) => ing.unitCostCached != null)
+
+    // Check if ALL ingredients have costs (not just some)
+    // Fetch actual ingredient costs from database
+    let hasCosting = false
+    if (hasRecipe) {
+      const ingredientIds = validIngredients.map((ing: any) => ing.ingredientId)
+      const ingredients = await prisma.ingredient.findMany({
+        where: { id: { in: ingredientIds } },
+        select: { id: true, costPerUnit: true }
+      })
+
+      // All ingredients must have costPerUnit > 0
+      hasCosting = ingredients.length === validIngredients.length &&
+        ingredients.every(ing => ing.costPerUnit > 0)
+    }
+
     const costingStatus = hasRecipe && hasCosting ? 'COMPLETE' : 'INCOMPLETE'
 
     // Update menu item and ingredients in a transaction
