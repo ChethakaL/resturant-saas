@@ -127,25 +127,25 @@ const languageOptions: { value: LanguageCode; label: string }[] = [
 
 const sortOptions: {
   value:
-    | 'popular'
-    | 'price-low'
-    | 'price-high'
-    | 'protein-high'
-    | 'carbs-high'
-    | 'protein-low'
-    | 'carbs-low'
-    | 'calories-low'
+  | 'popular'
+  | 'price-low'
+  | 'price-high'
+  | 'protein-high'
+  | 'carbs-high'
+  | 'protein-low'
+  | 'carbs-low'
+  | 'calories-low'
   label: string
 }[] = [
-  { value: 'popular', label: 'Most Popular' },
-  { value: 'price-low', label: 'Price: Low → High' },
-  { value: 'price-high', label: 'Price: High → Low' },
-  { value: 'protein-high', label: 'Protein: High → Low' },
-  { value: 'carbs-high', label: 'Carbs: High → Low' },
-  { value: 'protein-low', label: 'Protein: Low → High' },
-  { value: 'carbs-low', label: 'Carbs: Low → High' },
-  { value: 'calories-low', label: 'Calories: Low → High' },
-]
+    { value: 'popular', label: 'Most Popular' },
+    { value: 'price-low', label: 'Price: Low → High' },
+    { value: 'price-high', label: 'Price: High → Low' },
+    { value: 'protein-high', label: 'Protein: High → Low' },
+    { value: 'carbs-high', label: 'Carbs: High → Low' },
+    { value: 'protein-low', label: 'Protein: Low → High' },
+    { value: 'carbs-low', label: 'Carbs: Low → High' },
+    { value: 'calories-low', label: 'Calories: Low → High' },
+  ]
 
 const tagTranslations: Record<string, Partial<Record<LanguageCode, string>>> = {
   spicy: { ar: 'حار', ku: 'تێز' },
@@ -832,23 +832,23 @@ export default function SmartMenu({
         const translatedMap = (data.items as any[]).reduce(
           (acc: Record<string, MenuItemTranslation>, translated: any) => {
             acc[translated.id] = {
-            name: translated.name,
-            description: translated.description,
-            aiDescription:
-              translated.aiDescription ||
-              translated.description ||
-              '',
-            protein:
-              typeof translated.protein === 'number'
-                ? translated.protein
-                : null,
-            carbs:
-              typeof translated.carbs === 'number'
-                ? translated.carbs
-                : null,
-          }
-          return acc
-        }, {})
+              name: translated.name,
+              description: translated.description,
+              aiDescription:
+                translated.aiDescription ||
+                translated.description ||
+                '',
+              protein:
+                typeof translated.protein === 'number'
+                  ? translated.protein
+                  : null,
+              carbs:
+                typeof translated.carbs === 'number'
+                  ? translated.carbs
+                  : null,
+            }
+            return acc
+          }, {})
 
         updateCache(translatedMap)
         setTranslatedCount((prev) => ({
@@ -1043,9 +1043,9 @@ export default function SmartMenu({
       : currentCopy.resultsSummaryPlural
   const smartSearchSummary = trimmedSearch
     ? formatTemplate(summaryTemplate, {
-        count: filteredItems.length.toString(),
-        query: trimmedSearch,
-      })
+      count: filteredItems.length.toString(),
+      query: trimmedSearch,
+    })
     : currentCopy.smartSearchDescription
 
 
@@ -1108,35 +1108,35 @@ export default function SmartMenu({
     return null
   }
 
-const getLocalizedTagLabel = (tag: string) => {
-  if (language === 'en') return tag
-  const normalized = tag.toLowerCase()
-  const lang = language === 'ar_fusha' ? 'ar' : language
-  return tagTranslations[normalized]?.[lang] || tag
-}
+  const getLocalizedTagLabel = (tag: string) => {
+    if (language === 'en') return tag
+    const normalized = tag.toLowerCase()
+    const lang = language === 'ar_fusha' ? 'ar' : language
+    return tagTranslations[normalized]?.[lang] || tag
+  }
 
-const getLocalizedCategoryName = (category?: string | null) => {
-  if (!category) return 'General'
-  if (language === 'en') return category
-  const normalized = category.toLowerCase()
-  const lang = language === 'ar_fusha' ? 'ar' : language
-  return categoryTranslations[normalized]?.[lang] || category
-}
+  const getLocalizedCategoryName = (category?: string | null) => {
+    if (!category) return 'General'
+    if (language === 'en') return category
+    const normalized = category.toLowerCase()
+    const lang = language === 'ar_fusha' ? 'ar' : language
+    return categoryTranslations[normalized]?.[lang] || category
+  }
 
-const getLocalizedSavingsText = (savingsText: string) => {
-  if (language === 'en') return savingsText
-  const match = savingsText.match(/^Save\s+(.+)$/i)
-  if (!match) return savingsText
-  const saveLabel = engineCopyMap[language]?.saveLabel ?? 'Save'
-  return `${saveLabel} ${match[1]}`
-}
+  const getLocalizedSavingsText = (savingsText: string) => {
+    if (language === 'en') return savingsText
+    const match = savingsText.match(/^Save\s+(.+)$/i)
+    if (!match) return savingsText
+    const saveLabel = engineCopyMap[language]?.saveLabel ?? 'Save'
+    return `${saveLabel} ${match[1]}`
+  }
 
-const getLocalizedAddOnName = (name: string) => {
-  if (language === 'en') return name
-  const normalized = name.toLowerCase()
-  const lang = language === 'ar_fusha' ? 'ar' : language
-  return addOnTranslations[normalized]?.[lang] || name
-}
+  const getLocalizedAddOnName = (name: string) => {
+    if (language === 'en') return name
+    const normalized = name.toLowerCase()
+    const lang = language === 'ar_fusha' ? 'ar' : language
+    return addOnTranslations[normalized]?.[lang] || name
+  }
 
   const pairingItemTranslation = selectedItemForPairing
     ? translationCache[language]?.[selectedItemForPairing.id]
@@ -1187,10 +1187,10 @@ const getLocalizedAddOnName = (name: string) => {
   const isDarkBg = theme?.backgroundStyle !== 'light'
   const bgImageStyle = theme?.backgroundImageUrl
     ? {
-        backgroundImage: `url(${theme.backgroundImageUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }
+      backgroundImage: `url(${theme.backgroundImageUrl})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    }
     : undefined
 
   // Tier order for placement: hero=0, featured=1, standard=2, minimal=3 (DOG last)
@@ -1207,10 +1207,10 @@ const getLocalizedAddOnName = (name: string) => {
     const sortedCategories =
       categoryOrder && categoryOrder.length > 0
         ? [...categoriesProp].sort(
-            (a, b) =>
-              (categoryOrder.indexOf(a.id) === -1 ? 999 : categoryOrder.indexOf(a.id)) -
-              (categoryOrder.indexOf(b.id) === -1 ? 999 : categoryOrder.indexOf(b.id))
-          )
+          (a, b) =>
+            (categoryOrder.indexOf(a.id) === -1 ? 999 : categoryOrder.indexOf(a.id)) -
+            (categoryOrder.indexOf(b.id) === -1 ? 999 : categoryOrder.indexOf(b.id))
+        )
         : [...categoriesProp].sort((a, b) => a.displayOrder - b.displayOrder)
 
     for (const cat of sortedCategories) {
@@ -1296,9 +1296,8 @@ const getLocalizedAddOnName = (name: string) => {
         <div className="fixed inset-0 bg-black/40 pointer-events-none z-0" aria-hidden />
       )}
       <div
-        className={`relative overflow-hidden transition-all duration-300 ${theme?.backgroundImageUrl ? 'z-10' : ''} ${
-          isSmartSearchActive ? 'pointer-events-none blur-sm' : 'pointer-events-auto'
-        }`}
+        className={`relative overflow-hidden transition-all duration-300 ${theme?.backgroundImageUrl ? 'z-10' : ''} ${isSmartSearchActive ? 'pointer-events-none blur-sm' : 'pointer-events-auto'
+          }`}
       >
         {/* Background Effects */}
         <div className="absolute inset-0 opacity-20">
@@ -1310,101 +1309,99 @@ const getLocalizedAddOnName = (name: string) => {
         <div className="relative mx-auto max-w-7xl px-3 sm:px-6 pt-3 sm:pt-6">
           {/* Header: logo left, category tabs center, cart + language right */}
           <header className="flex items-center gap-2 sm:gap-4">
-              <div className="flex-shrink-0 flex items-center gap-2 min-w-0">
-                {logoSrc ? (
-                  <img
-                    src={logoSrc}
-                    width={40}
-                    height={40}
-                    alt=""
-                    className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg object-contain shrink-0 ${isDarkBg ? 'bg-white/10 border border-white/20' : 'bg-white border border-slate-200'}`}
-                  />
-                ) : (
-                  <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${isDarkBg ? 'bg-white/10 text-white border border-white/20' : 'bg-slate-800 text-white border border-slate-200'}`}>
-                    {(restaurantName || 'M').slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-                <span className={`font-display font-semibold text-sm sm:text-base truncate max-w-[90px] sm:max-w-[140px] ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
-                  {restaurantName || 'Menu'}
-                </span>
-              </div>
-              <nav className="flex-1 min-w-0 flex justify-center overflow-x-auto scrollbar-hide scroll-px-3 -mx-1">
-                <div className="flex gap-1.5 sm:gap-2 py-1 px-1">
-                  {categorizedSections.filter((s) => s.category).map((section) => {
-                    const isActive = activeSectionId === section.category!.id
-                    return (
-                      <button
-                        key={section.category!.id}
-                        type="button"
-                        onClick={() => scrollToSection(section.category!.id)}
-                        className={`flex-shrink-0 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
-                          isActive
-                            ? isDarkBg
-                              ? 'bg-[var(--menu-accent,theme colors.amber.500)] text-white'
-                              : 'bg-slate-800 text-white'
-                            : isDarkBg
-                              ? 'text-white/80 hover:bg-white/10'
-                              : 'text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {getLocalizedCategoryName(section.category!.name)}
-                      </button>
-                    )
-                  })}
+            <div className="flex-shrink-0 flex items-center gap-2 min-w-0">
+              {logoSrc ? (
+                <img
+                  src={logoSrc}
+                  width={40}
+                  height={40}
+                  alt=""
+                  className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg object-contain shrink-0 ${isDarkBg ? 'bg-white/10 border border-white/20' : 'bg-white border border-slate-200'}`}
+                />
+              ) : (
+                <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${isDarkBg ? 'bg-white/10 text-white border border-white/20' : 'bg-slate-800 text-white border border-slate-200'}`}>
+                  {(restaurantName || 'M').slice(0, 2).toUpperCase()}
                 </div>
-              </nav>
-              <div className="flex-shrink-0 flex items-center gap-1 sm:gap-1.5">
-              <CustomerSignInControl isDarkBg={isDarkBg} />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`relative h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
-                  onClick={() => setCartOpen(true)}
-                  aria-label="Open cart"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                  {cart.length > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[var(--menu-accent,#f59e0b)] text-white text-[10px] font-bold flex items-center justify-center">
-                      {cart.reduce((n, line) => n + line.quantity, 0)}
-                    </span>
-                  )}
-                </Button>
-                <Popover open={isLanguageMenuOpen} onOpenChange={setIsLanguageMenuOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
-                      aria-label={`Language: ${currentLanguageLabel}`}
-                    >
-                      <Globe className="h-4 w-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="end"
-                    sideOffset={8}
-                    className={`w-40 rounded-xl p-1 shadow-xl ${isDarkBg ? 'border-white/20 bg-slate-900' : 'border-slate-200 bg-white'} text-sm`}
-                  >
-                    {languageOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => {
-                          setLanguage(option.value)
-                          setIsLanguageMenuOpen(false)
-                        }}
-                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${
-                          language === option.value
-                            ? 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-200'
-                            : isDarkBg ? 'text-white/80 hover:bg-white/5' : 'text-slate-700 hover:bg-slate-100'
+              )}
+              <span className={`font-display font-semibold text-sm sm:text-base truncate max-w-[90px] sm:max-w-[140px] ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                {restaurantName || 'Menu'}
+              </span>
+            </div>
+            <nav className="flex-1 min-w-0 flex justify-center overflow-x-auto scrollbar-hide scroll-px-3 -mx-1">
+              <div className="flex gap-1.5 sm:gap-2 py-1 px-1">
+                {categorizedSections.filter((s) => s.category).map((section) => {
+                  const isActive = activeSectionId === section.category!.id
+                  return (
+                    <button
+                      key={section.category!.id}
+                      type="button"
+                      onClick={() => scrollToSection(section.category!.id)}
+                      className={`flex-shrink-0 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${isActive
+                          ? isDarkBg
+                            ? 'bg-[var(--menu-accent,theme colors.amber.500)] text-white'
+                            : 'bg-slate-800 text-white'
+                          : isDarkBg
+                            ? 'text-white/80 hover:bg-white/10'
+                            : 'text-slate-600 hover:bg-slate-200'
                         }`}
-                      >
-                        <span>{option.label}</span>
-                        {language === option.value && <span>✓</span>}
-                      </button>
-                    ))}
-                  </PopoverContent>
-                </Popover>
+                    >
+                      {getLocalizedCategoryName(section.category!.name)}
+                    </button>
+                  )
+                })}
               </div>
+            </nav>
+            <div className="flex-shrink-0 flex items-center gap-1 sm:gap-1.5">
+              <CustomerSignInControl isDarkBg={isDarkBg} />
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`relative h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
+                onClick={() => setCartOpen(true)}
+                aria-label="Open cart"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                {cart.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[var(--menu-accent,#f59e0b)] text-white text-[10px] font-bold flex items-center justify-center">
+                    {cart.reduce((n, line) => n + line.quantity, 0)}
+                  </span>
+                )}
+              </Button>
+              <Popover open={isLanguageMenuOpen} onOpenChange={setIsLanguageMenuOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
+                    aria-label={`Language: ${currentLanguageLabel}`}
+                  >
+                    <Globe className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  sideOffset={8}
+                  className={`w-40 rounded-xl p-1 shadow-xl ${isDarkBg ? 'border-white/20 bg-slate-900' : 'border-slate-200 bg-white'} text-sm`}
+                >
+                  {languageOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setLanguage(option.value)
+                        setIsLanguageMenuOpen(false)
+                      }}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${language === option.value
+                          ? 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-200'
+                          : isDarkBg ? 'text-white/80 hover:bg-white/5' : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                    >
+                      <span>{option.label}</span>
+                      {language === option.value && <span>✓</span>}
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            </div>
           </header>
         </div>
 
@@ -1464,473 +1461,466 @@ const getLocalizedAddOnName = (name: string) => {
               chefRecommendationLabel={currentCopy.chefRecommendationLabel}
             />
           ))}
-            {/* "What do you feel like eating today?" section (mood options) */}
-            {engineMode !== 'classic' && moods.length > 0 && (
-              <section className="w-full space-y-3" aria-label="What do you feel like eating today?">
-                <h2 className={`text-base sm:text-lg font-semibold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
-                  {language === 'ar' || language === 'ar_fusha'
-                    ? 'ماذا تشتهي أن تأكل؟'
-                    : language === 'ku'
-                      ? 'حەزت لە چی خواردنە؟'
-                      : 'What do you feel like eating?'}
-                </h2>
-                <MoodSelector
-                  moods={moods}
-                  language={language}
-                  selectedMoodId={selectedMoodId}
-                  onSelectMood={setSelectedMoodId}
-                  showAllLabel={currentEngineCopy.showAll}
-                  isDarkTheme={isDarkBg}
-                />
-              </section>
-            )}
+          {/* "What do you feel like eating today?" section (mood options) */}
+          {engineMode !== 'classic' && moods.length > 0 && (
+            <section className="w-full space-y-3" aria-label="What do you feel like eating today?">
+              <h2 className={`text-base sm:text-lg font-semibold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                {language === 'ar' || language === 'ar_fusha'
+                  ? 'ماذا تشتهي أن تأكل؟'
+                  : language === 'ku'
+                    ? 'حەزت لە چی خواردنە؟'
+                    : 'What do you feel like eating?'}
+              </h2>
+              <MoodSelector
+                moods={moods}
+                language={language}
+                selectedMoodId={selectedMoodId}
+                onSelectMood={setSelectedMoodId}
+                showAllLabel={currentEngineCopy.showAll}
+                isDarkTheme={isDarkBg}
+              />
+            </section>
+          )}
 
-            {/* Search row */}
-            <div
-              className={`flex flex-col sm:flex-row w-full gap-3 transition duration-300 ${
-                isSmartSearchActive ? 'opacity-0 pointer-events-none' : ''
+          {/* Search row */}
+          <div
+            className={`flex flex-col sm:flex-row w-full gap-3 transition duration-300 ${isSmartSearchActive ? 'opacity-0 pointer-events-none' : ''
               }`}
-            >
-              <div className="flex flex-1 min-w-0 gap-2">
-                <Input
-                  placeholder={currentCopy.searchPlaceholder}
-                  value={search}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className={`flex-1 h-10 rounded-xl text-sm ${
-                    isDarkBg
-                      ? 'bg-white/10 border-white/20 text-white placeholder:text-white/50'
-                      : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-500'
+          >
+            <div className="flex flex-1 min-w-0 gap-2">
+              <Input
+                placeholder={currentCopy.searchPlaceholder}
+                value={search}
+                onFocus={() => setIsSearchFocused(true)}
+                onChange={(event) => setSearch(event.target.value)}
+                className={`flex-1 h-10 rounded-xl text-sm ${isDarkBg
+                    ? 'bg-white/10 border-white/20 text-white placeholder:text-white/50'
+                    : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-500'
                   }`}
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`flex h-10 rounded-xl px-3 sm:px-4 shrink-0 ${
-                    isDarkBg
-                      ? 'border border-white/20 bg-white/5 text-white hover:bg-white/10'
-                      : 'border border-slate-200 bg-slate-100 text-slate-800 hover:bg-slate-200'
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`flex h-10 rounded-xl px-3 sm:px-4 shrink-0 ${isDarkBg
+                    ? 'border border-white/20 bg-white/5 text-white hover:bg-white/10'
+                    : 'border border-slate-200 bg-slate-100 text-slate-800 hover:bg-slate-200'
                   }`}
-                  onClick={() => setIsFilterDialogOpen(true)}
-                  aria-label={currentCopy.smartSearchFilters}
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
-                  <span className="ml-1.5 sm:ml-2 text-xs font-semibold uppercase tracking-wider hidden sm:inline">{currentCopy.smartSearchFilters}</span>
-                </Button>
-              </div>
+                onClick={() => setIsFilterDialogOpen(true)}
+                aria-label={currentCopy.smartSearchFilters}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                <span className="ml-1.5 sm:ml-2 text-xs font-semibold uppercase tracking-wider hidden sm:inline">{currentCopy.smartSearchFilters}</span>
+              </Button>
             </div>
-            
-            <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+          </div>
+
+          <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
             <DialogContent className="max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
               <DialogHeader>
-                  <DialogTitle className="text-lg font-semibold text-slate-900">
-                    Filters
-                  </DialogTitle>
-                  <DialogDescription className="text-sm text-slate-500">
-                    Select categories, dietary attributes, and sort order.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-5 pt-3">
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                      Categories
-                    </p>
-                    <div className="flex flex-wrap gap-2">
+                <DialogTitle className="text-lg font-semibold text-slate-900">
+                  Filters
+                </DialogTitle>
+                <DialogDescription className="text-sm text-slate-500">
+                  Select categories, dietary attributes, and sort order.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-5 pt-3">
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                    Categories
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setSelectedCategory('all')}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition ${selectedCategory === 'all'
+                          ? 'bg-slate-900 text-white'
+                          : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                    >
+                      All
+                    </button>
+                    {categories.map((category) => (
                       <button
-                        onClick={() => setSelectedCategory('all')}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
-                          selectedCategory === 'all'
+                        key={category.id}
+                        onClick={() => setSelectedCategory(category.id)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition ${selectedCategory === category.id
                             ? 'bg-slate-900 text-white'
                             : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
+                          }`}
                       >
-                        All
+                        {category.name}
                       </button>
-                      {categories.map((category) => (
-                        <button
-                          key={category.id}
-                          onClick={() => setSelectedCategory(category.id)}
-                          className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
-                            selectedCategory === category.id
-                              ? 'bg-slate-900 text-white'
-                              : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
-                        >
-                          {category.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {allTags.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                        Dietary
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {allTags.map((tag) => (
-                          <button
-                            key={tag}
-                            onClick={() => toggleTag(tag)}
-                            className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                              selectedTags.includes(tag)
-                                ? 'border-emerald-400 bg-emerald-500/20 text-emerald-900'
-                                : 'border-slate-200 bg-slate-100 text-slate-700 hover:border-slate-300 hover:text-slate-900'
-                            }`}
-                          >
-                            {getTagIcon(tag)}
-                            {getLocalizedTagLabel(tag)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                      Sort by
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {sortOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => setSortBy(option.value)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
-                            sortBy === option.value
-                              ? 'bg-slate-900 text-white'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
+                    ))}
                   </div>
                 </div>
-                <DialogFooter className="justify-between pt-4">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setSelectedCategory('all')
-                      setSelectedTags([])
-                      setSortBy('popular')
-                    }}
-                  >
-                    Clear filters
-                  </Button>
-                  <Button onClick={() => setIsFilterDialogOpen(false)}>
-                    Apply
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
-            {/* Active Filters Display */}
-            {(selectedCategory !== 'all' || selectedTags.length > 0) && (
-              <div className="flex flex-wrap gap-2 justify-center items-center">
-                <span className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>{currentCopy.filtersLabel}</span>
-                {selectedCategory !== 'all' && (
-                  <Badge
-                    variant="secondary"
-                    className="bg-emerald-500/20 text-emerald-200 border-emerald-500/30"
-                  >
-                    {categories.find((c) => c.id === selectedCategory)?.name}
-                    <X
-                      className="h-3 w-3 ml-1 cursor-pointer"
-                      onClick={() => setSelectedCategory('all')}
-                    />
-                  </Badge>
-                )}
-                {selectedTags.map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="secondary"
-                    className="bg-amber-500/20 text-amber-200 border-amber-500/30"
-                  >
-                    {getLocalizedTagLabel(tag)}
-                    <X
-                      className="h-3 w-3 ml-1 cursor-pointer"
-                      onClick={() => toggleTag(tag)}
-                    />
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            {lastOrder && lastOrder.itemIds.length > 0 && (() => {
-              const seen = new Set<string>()
-              const lastOrderDisplayNames: string[] = []
-              for (let i = 0; i < lastOrder.itemIds.length && lastOrderDisplayNames.length < 3; i++) {
-                const id = lastOrder.itemIds[i]
-                if (seen.has(id)) continue
-                seen.add(id)
-                lastOrderDisplayNames.push(translationCache[language]?.[id]?.name ?? lastOrder.names[i] ?? '')
-              }
-              return (
-                <div className="px-4 py-2">
-                  <div className={`rounded-xl border p-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}>
-                    <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDarkBg ? 'text-white/70' : 'text-slate-600'}`}>{currentCopy.lastTimeYouOrdered}</p>
-                    <p className={`text-sm mb-3 ${isDarkBg ? 'text-white/90' : 'text-slate-800'}`}>
-                      {lastOrderDisplayNames.join(', ')}
-                      {lastOrder.itemIds.length > 3 ? '…' : ''}
+                {allTags.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                      Dietary
                     </p>
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {allTags.map((tag) => (
+                        <button
+                          key={tag}
+                          onClick={() => toggleTag(tag)}
+                          className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${selectedTags.includes(tag)
+                              ? 'border-emerald-400 bg-emerald-500/20 text-emerald-900'
+                              : 'border-slate-200 bg-slate-100 text-slate-700 hover:border-slate-300 hover:text-slate-900'
+                            }`}
+                        >
+                          {getTagIcon(tag)}
+                          {getLocalizedTagLabel(tag)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                    Sort by
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {sortOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => setSortBy(option.value)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${sortBy === option.value
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <DialogFooter className="justify-between pt-4">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setSelectedCategory('all')
+                    setSelectedTags([])
+                    setSortBy('popular')
+                  }}
+                >
+                  Clear filters
+                </Button>
+                <Button onClick={() => setIsFilterDialogOpen(false)}>
+                  Apply
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Active Filters Display */}
+          {(selectedCategory !== 'all' || selectedTags.length > 0) && (
+            <div className="flex flex-wrap gap-2 justify-center items-center">
+              <span className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>{currentCopy.filtersLabel}</span>
+              {selectedCategory !== 'all' && (
+                <Badge
+                  variant="secondary"
+                  className="bg-emerald-500/20 text-emerald-200 border-emerald-500/30"
+                >
+                  {categories.find((c) => c.id === selectedCategory)?.name}
+                  <X
+                    className="h-3 w-3 ml-1 cursor-pointer"
+                    onClick={() => setSelectedCategory('all')}
+                  />
+                </Badge>
+              )}
+              {selectedTags.map((tag) => (
+                <Badge
+                  key={tag}
+                  variant="secondary"
+                  className="bg-amber-500/20 text-amber-200 border-amber-500/30"
+                >
+                  {getLocalizedTagLabel(tag)}
+                  <X
+                    className="h-3 w-3 ml-1 cursor-pointer"
+                    onClick={() => toggleTag(tag)}
+                  />
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {lastOrder && lastOrder.itemIds.length > 0 && (() => {
+            const seen = new Set<string>()
+            const lastOrderDisplayNames: string[] = []
+            for (let i = 0; i < lastOrder.itemIds.length && lastOrderDisplayNames.length < 3; i++) {
+              const id = lastOrder.itemIds[i]
+              if (seen.has(id)) continue
+              seen.add(id)
+              lastOrderDisplayNames.push(translationCache[language]?.[id]?.name ?? lastOrder.names[i] ?? '')
+            }
+            return (
+              <div className="px-4 py-2">
+                <div className={`rounded-xl border p-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}>
+                  <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDarkBg ? 'text-white/70' : 'text-slate-600'}`}>{currentCopy.lastTimeYouOrdered}</p>
+                  <p className={`text-sm mb-3 ${isDarkBg ? 'text-white/90' : 'text-slate-800'}`}>
+                    {lastOrderDisplayNames.join(', ')}
+                    {lastOrder.itemIds.length > 3 ? '…' : ''}
+                  </p>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const byId = new Map(menuItems.map((m) => [m.id, m]))
+                          for (const id of lastOrder.itemIds) {
+                            const item = byId.get(id)
+                            if (item) dispatchCart({ type: 'ADD_ITEM', item })
+                          }
+                        }}
+                        className={
+                          isDarkBg
+                            ? 'rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/25'
+                            : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-100'
+                        }
+                      >
+                        {currentCopy.orderAgain}
+                      </button>
+                      {nextOrderSuggestionLoading && (
+                        <span className={`text-xs py-1.5 ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>{currentCopy.suggestingLabel}</span>
+                      )}
+                      {!nextOrderSuggestionLoading && nextOrderSuggestion && (
                         <button
                           type="button"
                           onClick={() => {
-                            const byId = new Map(menuItems.map((m) => [m.id, m]))
-                            for (const id of lastOrder.itemIds) {
-                              const item = byId.get(id)
-                              if (item) dispatchCart({ type: 'ADD_ITEM', item })
-                            }
+                            const item = menuItems.find((m) => m.id === nextOrderSuggestion.itemId)
+                            if (item) dispatchCart({ type: 'ADD_ITEM', item })
                           }}
-                          className={
-                            isDarkBg
-                              ? 'rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/25'
-                              : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-100'
-                          }
+                          className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
                         >
-                          {currentCopy.orderAgain}
+                          {currentCopy.tryItemLabel} {translationCache[language]?.[nextOrderSuggestion.itemId]?.name ?? nextOrderSuggestion.name}
                         </button>
-                        {nextOrderSuggestionLoading && (
-                          <span className={`text-xs py-1.5 ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>{currentCopy.suggestingLabel}</span>
-                        )}
-                        {!nextOrderSuggestionLoading && nextOrderSuggestion && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const item = menuItems.find((m) => m.id === nextOrderSuggestion.itemId)
-                              if (item) dispatchCart({ type: 'ADD_ITEM', item })
-                            }}
-                            className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
-                          >
-                            {currentCopy.tryItemLabel} {translationCache[language]?.[nextOrderSuggestion.itemId]?.name ?? nextOrderSuggestion.name}
-                          </button>
-                        )}
-                      </div>
-                      {!nextOrderSuggestionLoading && nextOrderSuggestion && (
-                        <p className={`text-xs leading-snug ${isDarkBg ? 'text-white/70' : 'text-slate-600'}`}>
-                          {nextOrderSuggestion.message}
-                        </p>
                       )}
                     </div>
+                    {!nextOrderSuggestionLoading && nextOrderSuggestion && (
+                      <p className={`text-xs leading-snug ${isDarkBg ? 'text-white/70' : 'text-slate-600'}`}>
+                        {nextOrderSuggestion.message}
+                      </p>
+                    )}
                   </div>
                 </div>
-              )
-            })()}
-
-            {tableSize != null && tableSize > 3 && moods.some((m) => m.id === 'sharing') && (
-              <div className="px-4 py-1">
-                <button
-                  type="button"
-                  onClick={() => setSelectedMoodId('sharing')}
-                  className={`text-sm font-medium px-3 py-2 rounded-lg w-full text-left transition ${isDarkBg ? 'bg-amber-500/20 text-amber-200 hover:bg-amber-500/30' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
-                >
-                  Dining with a group? Try something to share.
-                </button>
               </div>
-            )}
+            )
+          })()}
 
-            {engineMode !== 'classic' && bundles.length > 0 && (() => {
-              const bundleItemNames = Object.fromEntries(
-                menuItems.map((i) => [i.id, translationCache[language]?.[i.id]?.name ?? i.name])
-              )
-              const bundleNameSeparator = (language === 'ar' || language === 'ar_fusha') ? ' و ' : (language === 'ku' ? ' و ' : ' + ')
-              return (
-                <div className="px-3 sm:px-4">
-                  <BundleCarousel
-                    bundles={bundles}
-                    itemNames={bundleItemNames}
-                    itemImageUrls={Object.fromEntries(menuItems.map((i) => [i.id, i.imageUrl]))}
-                    onAddBundle={(bundle) => {
-                      const items = bundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
-                      if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: bundle.itemIds, items, bundlePrice: bundle.bundlePrice })
-                    }}
-                    title={currentEngineCopy.bundlesTitle}
-                    addBundleLabel={currentEngineCopy.addBundleLabel}
-                    bundleNameSeparator={bundleNameSeparator}
-                    getLocalizedSavingsText={getLocalizedSavingsText}
-                    isDarkTheme={isDarkBg}
-                  />
-                </div>
-              )
-            })()}
+          {tableSize != null && tableSize > 3 && moods.some((m) => m.id === 'sharing') && (
+            <div className="px-4 py-1">
+              <button
+                type="button"
+                onClick={() => setSelectedMoodId('sharing')}
+                className={`text-sm font-medium px-3 py-2 rounded-lg w-full text-left transition ${isDarkBg ? 'bg-amber-500/20 text-amber-200 hover:bg-amber-500/30' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
+              >
+                Dining with a group? Try something to share.
+              </button>
+            </div>
+          )}
 
-            {/* Menu Items — grouped by category with carousels between */}
-            <div className="space-y-8 sm:space-y-6 relative px-3 sm:px-4">
-              {filteredItems.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className={isDarkBg ? 'text-white/60' : 'text-slate-500'}>{currentCopy.noItemsMessage}</p>
-                </div>
-              ) : (
-                categorizedSections.map((section) => (
-                  <div
-                    key={section.category?.id || 'uncategorized'}
-                    ref={section.category ? setSectionRef(section.category.id) : undefined}
-                    className="scroll-mt-24"
-                  >
-                    {section.category && (
-                      <div className="mb-4 mt-6 sm:mt-4 first:mt-0">
-                        <h2 className={`text-xl sm:text-lg font-bold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
-                          {getLocalizedCategoryName(section.category.name)}
-                        </h2>
-                      </div>
-                    )}
+          {engineMode !== 'classic' && bundles.length > 0 && (() => {
+            const bundleItemNames = Object.fromEntries(
+              menuItems.map((i) => [i.id, translationCache[language]?.[i.id]?.name ?? i.name])
+            )
+            const bundleNameSeparator = (language === 'ar' || language === 'ar_fusha') ? ' و ' : (language === 'ku' ? ' و ' : ' + ')
+            return (
+              <div className="px-3 sm:px-4">
+                <BundleCarousel
+                  bundles={bundles}
+                  itemNames={bundleItemNames}
+                  itemImageUrls={Object.fromEntries(menuItems.map((i) => [i.id, i.imageUrl]))}
+                  onAddBundle={(bundle) => {
+                    const items = bundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
+                    if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: bundle.itemIds, items, bundlePrice: bundle.bundlePrice })
+                  }}
+                  title={currentEngineCopy.bundlesTitle}
+                  addBundleLabel={currentEngineCopy.addBundleLabel}
+                  bundleNameSeparator={bundleNameSeparator}
+                  getLocalizedSavingsText={getLocalizedSavingsText}
+                  isDarkTheme={isDarkBg}
+                />
+              </div>
+            )
+          })()}
 
-                    {section.category && categoryAnchorBundle[section.category.id] && (() => {
-                      const anchorBundle = categoryAnchorBundle[section.category!.id]
-                      if (!anchorBundle) return null
-                      const anchorItemNames = Object.fromEntries(
-                        menuItems.map((i) => [i.id, translationCache[language]?.[i.id]?.name ?? i.name])
-                      )
-                      const anchorSeparator = (language === 'ar' || language === 'ar_fusha') ? ' و ' : (language === 'ku' ? ' و ' : ' + ')
-                      const anchorDisplayName = anchorBundle.itemIds.map((id) => anchorItemNames[id]).filter(Boolean).join(anchorSeparator) || anchorBundle.name
-                      return (
-                        <div className="mb-3">
-                          <div
-                            className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}
-                          >
-                            <div>
-                              <p className={`font-semibold ${isDarkBg ? 'text-white/90' : 'text-slate-900'}`}>{anchorDisplayName}</p>
-                              <p className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-600'}`}>{getLocalizedSavingsText(anchorBundle.savingsText)}</p>
-                            </div>
-                            <Button
-                              size="sm"
-                              className="bg-amber-500 hover:bg-amber-600"
-                              onClick={() => {
-                                const items = anchorBundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
-                                if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: anchorBundle.itemIds, items, bundlePrice: anchorBundle.bundlePrice })
-                              }}
-                            >
-                              {currentEngineCopy.addLabel}
-                            </Button>
-                          </div>
-                        </div>
-                      )
-                    })()}
-
-                    <div className="grid gap-3">
-                      {(() => {
-                        const visibleItems =
-                          engineMode === 'classic'
-                            ? section.items
-                            : section.items.filter(
-                                (item) => !item._hints?.scrollDepthHide || scrollDepth >= 0.6
-                              )
-                        const itemsToShow = expandedCategoryIds.has(section.category?.id ?? '')
-                          ? visibleItems
-                          : visibleItems.slice(0, maxInitialItemsPerCategory)
-                        const priceVariant = getVariant('price_format')
-                        return itemsToShow.map((item) => {
-                          const translation =
-                            translationCache[language]?.[item.id]
-                          const displayName = translation?.name || item.name
-                          const displayDescription =
-                            translation?.description || item.description || ''
-                          const macroSegments = buildMacroSegments(item, translation)
-                          const handleAddToOrder = () => {
-                            dispatchCart({ type: 'ADD_ITEM', item })
-                            logMenuEvent(restaurantId, 'add_to_cart', { menuItemId: item.id }, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
-                            const suggestions = upsellMap[item.id]
-                            if (suggestions?.length) {
-                              setUpsellAfterAdd({ itemId: item.id })
-                              setUpsellIndex(0)
-                            }
-                          }
-                          return (
-                            <MenuItemCard
-                              key={item.id}
-                              item={item}
-                              hints={item._hints}
-                              displayName={displayName}
-                              displayDescription={displayDescription}
-                              macroSegments={macroSegments}
-                              getLocalizedCategoryName={getLocalizedCategoryName}
-                              getLocalizedTagLabel={getLocalizedTagLabel}
-                              getTagIcon={getTagIcon}
-                              onDetail={() => setSelectedItemForDetail(item)}
-                              onPairings={() => fetchPairingSuggestions(item)}
-                              onAddToOrder={handleAddToOrder}
-                              addToOrderLabel={currentEngineCopy.addToOrder}
-                              badgeLabels={{
-                                signature: currentEngineCopy.signatureBadge,
-                                mostLoved: currentEngineCopy.mostLovedBadge,
-                                chefSelection: currentEngineCopy.chefSelectionBadge,
-                              }}
-                              loadingPairings={loadingSuggestions}
-                              isSelectedForPairing={selectedItemForPairing?.id === item.id}
-                              isDarkTheme={isDarkBg}
-                              displayPriceOverride={formatMenuPriceWithVariant(item.price, priceVariant)}
-                              forceHideImage={hideImages}
-                            />
-                          )
-                        })
-                      })()}
+          {/* Menu Items — grouped by category with carousels between */}
+          <div className="space-y-8 sm:space-y-6 relative px-3 sm:px-4">
+            {filteredItems.length === 0 ? (
+              <div className="text-center py-12">
+                <p className={isDarkBg ? 'text-white/60' : 'text-slate-500'}>{currentCopy.noItemsMessage}</p>
+              </div>
+            ) : (
+              categorizedSections.map((section) => (
+                <div
+                  key={section.category?.id || 'uncategorized'}
+                  ref={section.category ? setSectionRef(section.category.id) : undefined}
+                  className="scroll-mt-24"
+                >
+                  {section.category && (
+                    <div className="mb-4 mt-6 sm:mt-4 first:mt-0">
+                      <h2 className={`text-xl sm:text-lg font-bold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                        {getLocalizedCategoryName(section.category.name)}
+                      </h2>
                     </div>
+                  )}
 
-                    {section.category && (() => {
+                  {section.category && categoryAnchorBundle[section.category.id] && (() => {
+                    const anchorBundle = categoryAnchorBundle[section.category!.id]
+                    if (!anchorBundle) return null
+                    const anchorItemNames = Object.fromEntries(
+                      menuItems.map((i) => [i.id, translationCache[language]?.[i.id]?.name ?? i.name])
+                    )
+                    const anchorSeparator = (language === 'ar' || language === 'ar_fusha') ? ' و ' : (language === 'ku' ? ' و ' : ' + ')
+                    const anchorDisplayName = anchorBundle.itemIds.map((id) => anchorItemNames[id]).filter(Boolean).join(anchorSeparator) || anchorBundle.name
+                    return (
+                      <div className="mb-3">
+                        <div
+                          className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}
+                        >
+                          <div>
+                            <p className={`font-semibold ${isDarkBg ? 'text-white/90' : 'text-slate-900'}`}>{anchorDisplayName}</p>
+                            <p className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-600'}`}>{getLocalizedSavingsText(anchorBundle.savingsText)}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="bg-amber-500 hover:bg-amber-600"
+                            onClick={() => {
+                              const items = anchorBundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
+                              if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: anchorBundle.itemIds, items, bundlePrice: anchorBundle.bundlePrice })
+                            }}
+                          >
+                            {currentEngineCopy.addLabel}
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  <div className="grid gap-3">
+                    {(() => {
                       const visibleItems =
                         engineMode === 'classic'
                           ? section.items
                           : section.items.filter(
-                              (item) => !item._hints?.scrollDepthHide || scrollDepth >= 0.6
-                            )
-                      return visibleItems.length > maxInitialItemsPerCategory && !expandedCategoryIds.has(section.category.id) ? (
-                        <button
-                          type="button"
-                          onClick={() => setExpandedCategoryIds((prev) => new Set(prev).add(section.category!.id))}
-                          className={`mt-2 text-sm font-medium py-2 rounded-lg border ${isDarkBg ? 'border-white/20 text-white/80 hover:bg-white/10' : 'border-slate-200 text-slate-600 hover:bg-slate-100'}`}
-                        >
-                          See more ({visibleItems.length - maxInitialItemsPerCategory} more)
-                        </button>
-                      ) : null
-                    })()}
-
-                    {/* Insert carousels configured for after this category */}
-                    {betweenShowcases
-                      .filter(
-                        (s) =>
-                          s.insertAfterCategoryId === section.category?.id
-                      )
-                      .map((showcase) => (
-                        <div key={showcase.id} className="py-4">
-                          <MenuCarousel
-                            title={showcase.title}
-                            type={showcase.type}
-                            variant={showcase.displayVariant === 'hero' ? 'hero' : 'default'}
-                            items={showcase.items}
-                            onItemClick={(item) =>
-                              setSelectedItemForDetail(item as MenuItem)
-                            }
-                            getDisplayName={(id) =>
-                              translationCache[language]?.[id]?.name
-                            }
-                            getDescription={(id) =>
-                              translationCache[language]?.[id]?.aiDescription || menuItems.find((m) => m.id === id)?.description
-                            }
-                            getCategoryName={getLocalizedCategoryName}
-                            accentColor={theme?.accentColor}
-                            primaryColor={theme?.primaryColor}
+                            (item) => !item._hints?.scrollDepthHide || scrollDepth >= 0.6
+                          )
+                      const itemsToShow = expandedCategoryIds.has(section.category?.id ?? '')
+                        ? visibleItems
+                        : visibleItems.slice(0, maxInitialItemsPerCategory)
+                      const priceVariant = getVariant('price_format')
+                      return itemsToShow.map((item) => {
+                        const translation =
+                          translationCache[language]?.[item.id]
+                        const displayName = translation?.name || item.name
+                        const displayDescription =
+                          translation?.description || item.description || ''
+                        const macroSegments = buildMacroSegments(item, translation)
+                        const handleAddToOrder = () => {
+                          dispatchCart({ type: 'ADD_ITEM', item })
+                          logMenuEvent(restaurantId, 'add_to_cart', { menuItemId: item.id }, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
+                          const suggestions = upsellMap[item.id]
+                          if (suggestions?.length) {
+                            setUpsellAfterAdd({ itemId: item.id })
+                            setUpsellIndex(0)
+                          }
+                        }
+                        return (
+                          <MenuItemCard
+                            key={item.id}
+                            item={item}
+                            hints={item._hints}
+                            displayName={displayName}
+                            displayDescription={displayDescription}
+                            macroSegments={macroSegments}
+                            getLocalizedCategoryName={getLocalizedCategoryName}
+                            getLocalizedTagLabel={getLocalizedTagLabel}
+                            getTagIcon={getTagIcon}
+                            onDetail={() => setSelectedItemForDetail(item)}
+                            onPairings={() => fetchPairingSuggestions(item)}
+                            onAddToOrder={handleAddToOrder}
+                            addToOrderLabel={currentEngineCopy.addToOrder}
+                            badgeLabels={{
+                              signature: currentEngineCopy.signatureBadge,
+                              mostLoved: currentEngineCopy.mostLovedBadge,
+                              chefSelection: currentEngineCopy.chefSelectionBadge,
+                            }}
+                            loadingPairings={loadingSuggestions}
+                            isSelectedForPairing={selectedItemForPairing?.id === item.id}
                             isDarkTheme={isDarkBg}
-                            displayFontClassName="font-display"
-                            displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
-                            chefRecommendationLabel={currentCopy.chefRecommendationLabel}
+                            displayPriceOverride={formatMenuPriceWithVariant(item.price, priceVariant)}
+                            forceHideImage={hideImages}
                           />
-                        </div>
-                      ))}
+                        )
+                      })
+                    })()}
                   </div>
-                ))
-              )}
-            </div>
-            <footer className="pt-10">
-              <div className={`flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.3em] ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>
-                <span>Powered by</span>
-                <span className="font-bold bg-gradient-to-r from-emerald-400 to-amber-400 bg-clip-text text-transparent">
-                  Invisible AI
-                </span>
-              </div>
-            </footer>
+
+                  {section.category && (() => {
+                    const visibleItems =
+                      engineMode === 'classic'
+                        ? section.items
+                        : section.items.filter(
+                          (item) => !item._hints?.scrollDepthHide || scrollDepth >= 0.6
+                        )
+                    return visibleItems.length > maxInitialItemsPerCategory && !expandedCategoryIds.has(section.category.id) ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCategoryIds((prev) => new Set(prev).add(section.category!.id))}
+                        className={`mt-2 text-sm font-medium py-2 rounded-lg border ${isDarkBg ? 'border-white/20 text-white/80 hover:bg-white/10' : 'border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        See more ({visibleItems.length - maxInitialItemsPerCategory} more)
+                      </button>
+                    ) : null
+                  })()}
+
+                  {/* Insert carousels configured for after this category */}
+                  {betweenShowcases
+                    .filter(
+                      (s) =>
+                        s.insertAfterCategoryId === section.category?.id
+                    )
+                    .map((showcase) => (
+                      <div key={showcase.id} className="py-4">
+                        <MenuCarousel
+                          title={showcase.title}
+                          type={showcase.type}
+                          variant={showcase.displayVariant === 'hero' ? 'hero' : 'default'}
+                          items={showcase.items}
+                          onItemClick={(item) =>
+                            setSelectedItemForDetail(item as MenuItem)
+                          }
+                          getDisplayName={(id) =>
+                            translationCache[language]?.[id]?.name
+                          }
+                          getDescription={(id) =>
+                            translationCache[language]?.[id]?.aiDescription || menuItems.find((m) => m.id === id)?.description
+                          }
+                          getCategoryName={getLocalizedCategoryName}
+                          accentColor={theme?.accentColor}
+                          primaryColor={theme?.primaryColor}
+                          isDarkTheme={isDarkBg}
+                          displayFontClassName="font-display"
+                          displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
+                          chefRecommendationLabel={currentCopy.chefRecommendationLabel}
+                        />
+                      </div>
+                    ))}
+                </div>
+              ))
+            )}
           </div>
+          <footer className="pt-10">
+            <div className={`flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.3em] ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>
+              <span>Powered by</span>
+              <span className="font-bold bg-gradient-to-r from-emerald-400 to-amber-400 bg-clip-text text-transparent">
+                Invisible AI
+              </span>
+            </div>
+          </footer>
         </div>
+      </div>
 
       {isSmartSearchActive && (
         <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-10 sm:pt-16">
@@ -2317,7 +2307,7 @@ const getLocalizedAddOnName = (name: string) => {
                 onAdd={() => dispatchCart({ type: 'ADD_ITEM', item: topBeverage })}
                 addLabel={currentEngineCopy.addLabel}
                 dismissLabel={currentEngineCopy.dismissLabel}
-                onDismiss={() => {}}
+                onDismiss={() => { }}
               />
             )
           if (!hasDessert && topDessert)
@@ -2329,7 +2319,7 @@ const getLocalizedAddOnName = (name: string) => {
                 onAdd={() => dispatchCart({ type: 'ADD_ITEM', item: topDessert })}
                 addLabel={currentEngineCopy.addLabel}
                 dismissLabel={currentEngineCopy.dismissLabel}
-                onDismiss={() => {}}
+                onDismiss={() => { }}
               />
             )
           return null

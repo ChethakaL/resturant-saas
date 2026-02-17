@@ -26,6 +26,23 @@ import {
 import { useToast } from '@/components/ui/use-toast'
 import { Trash, Eye, EyeOff, Loader2, Sparkles, GripVertical, AlertTriangle } from 'lucide-react'
 import { Category } from '@prisma/client'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 export interface CategoryWithItems extends Category {
   menuItems: { id: string; name: string }[]
@@ -33,6 +50,178 @@ export interface CategoryWithItems extends Category {
 
 interface CategoriesManagerProps {
   initialCategories: CategoryWithItems[]
+}
+
+// Sortable category item wrapper
+interface SortableCategoryItemProps {
+  category: CategoryWithItems
+  index: number
+  categories: CategoryWithItems[]
+  editingNameId: string | null
+  editingNameValue: string
+  updatingVisibilityIds: string[]
+  deletingIds: string[]
+  movingItemId: string | null
+  highlightedItems: Set<string>
+  onStartEditName: (cat: CategoryWithItems) => void
+  onSaveEditName: () => void
+  onEditNameChange: (value: string) => void
+  onToggleShowOnMenu: (categoryId: string) => void
+  onOpenDeleteDialog: (category: CategoryWithItems) => void
+  onMoveItemToCategory: (menuItemId: string, categoryId: string) => void
+}
+
+function SortableCategoryItem({
+  category,
+  index,
+  categories,
+  editingNameId,
+  editingNameValue,
+  updatingVisibilityIds,
+  deletingIds,
+  movingItemId,
+  highlightedItems,
+  onStartEditName,
+  onSaveEditName,
+  onEditNameChange,
+  onToggleShowOnMenu,
+  onOpenDeleteDialog,
+  onMoveItemToCategory,
+}: SortableCategoryItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: category.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="rounded-lg border border-slate-200 bg-slate-50/50 p-4 space-y-3"
+    >
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing touch-none"
+            aria-label="Drag to reorder"
+          >
+            <GripVertical className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+          </button>
+          {editingNameId === category.id ? (
+            <div className="flex items-center gap-2">
+              <Input
+                value={editingNameValue}
+                onChange={(e) => onEditNameChange(e.target.value)}
+                onBlur={onSaveEditName}
+                onKeyDown={(e) => e.key === 'Enter' && onSaveEditName()}
+                className="h-8 w-48"
+                autoFocus
+              />
+              <Button size="sm" variant="ghost" onClick={onSaveEditName}>Save</Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <p className="font-medium text-slate-900">{category.name}</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-slate-500 h-7"
+                onClick={() => onStartEditName(category)}
+              >
+                Edit name
+              </Button>
+            </div>
+          )}
+          {category.description && (
+            <p className="text-sm text-slate-500">{category.description}</p>
+          )}
+          <Badge variant="secondary" className="text-[11px]">{`Order ${index + 1}`}</Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={category.showOnMenu !== false ? 'outline' : 'secondary'}
+            size="sm"
+            onClick={() => onToggleShowOnMenu(category.id)}
+            disabled={updatingVisibilityIds.includes(category.id)}
+            title={category.showOnMenu !== false ? 'Visible on menu (click to hide)' : 'Hidden (click to show)'}
+          >
+            {updatingVisibilityIds.includes(category.id) ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : category.showOnMenu !== false ? (
+              <Eye className="h-4 w-4" />
+            ) : (
+              <EyeOff className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenDeleteDialog(category)}
+            disabled={deletingIds.includes(category.id)}
+          >
+            <Trash className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <div className="pl-6">
+        <p className="text-xs font-medium text-slate-500 mb-1.5">Dishes in this category</p>
+        {(!category.menuItems || category.menuItems.length === 0) ? (
+          <p className="text-sm text-slate-400">No items</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {category.menuItems.map((item) => (
+              <li
+                key={item.id}
+                className={`flex items-center justify-between gap-2 text-sm transition-all duration-500 ${highlightedItems.has(item.id)
+                  ? 'bg-emerald-50 border-l-4 border-emerald-500 pl-2 -ml-2 rounded animate-pulse'
+                  : ''
+                  }`}
+              >
+                <span className="text-slate-700">{item.name}</span>
+                <Select
+                  value=""
+                  onValueChange={(val) => val && val !== category.id && onMoveItemToCategory(item.id, val)}
+                  disabled={movingItemId === item.id}
+                >
+                  <SelectTrigger className="w-[180px] h-8 text-xs">
+                    {movingItemId === item.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <SelectValue placeholder="Move to…" />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories
+                      .filter((c) => c.id !== category.id)
+                      .map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    {categories.filter((c) => c.id !== category.id).length === 0 && (
+                      <SelectItem value="__none__" disabled>No other categories</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function CategoriesManager({ initialCategories }: CategoriesManagerProps) {
@@ -64,6 +253,14 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
   } | null>(null)
   const [highlightedItems, setHighlightedItems] = useState<Set<string>>(new Set())
   const { toast } = useToast()
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   const toggleShowOnMenu = async (categoryId: string) => {
     const cat = categories.find((c) => c.id === categoryId)
@@ -270,6 +467,49 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
     router.refresh()
   }
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (!over || active.id === over.id) {
+      return
+    }
+
+    const oldIndex = categories.findIndex((cat) => cat.id === active.id)
+    const newIndex = categories.findIndex((cat) => cat.id === over.id)
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return
+    }
+
+    // Optimistically update UI
+    const newCategories = arrayMove(categories, oldIndex, newIndex)
+    setCategories(newCategories)
+
+    // Update displayOrder for all affected categories
+    try {
+      const updates = newCategories.map((cat, index) => ({
+        id: cat.id,
+        displayOrder: index,
+      }))
+
+      const response = await fetch('/api/categories/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update order')
+      }
+
+      toast({ title: 'Category order updated' })
+    } catch (error) {
+      // Revert on error
+      setCategories(categories)
+      toast({ title: 'Could not update order', variant: 'destructive' })
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card data-tour="tour-ai-categorization">
@@ -326,124 +566,44 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
         <CardHeader>
           <CardTitle>Current Categories</CardTitle>
           <CardDescription>
-            See which dishes are in each category. Edit names or move items to another category.
+            Drag categories to reorder them. The order here controls how they appear on your client-facing menu.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {categories.length === 0 ? (
             <p className="text-sm text-slate-500">No categories yet.</p>
           ) : (
-            categories.map((category, index) => (
-              <div
-                key={category.id}
-                className="rounded-lg border border-slate-200 bg-slate-50/50 p-4 space-y-3"
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={categories.map((cat) => cat.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <GripVertical className="h-4 w-4 text-slate-400" />
-                    {editingNameId === category.id ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={editingNameValue}
-                          onChange={(e) => setEditingNameValue(e.target.value)}
-                          onBlur={saveEditName}
-                          onKeyDown={(e) => e.key === 'Enter' && saveEditName()}
-                          className="h-8 w-48"
-                          autoFocus
-                        />
-                        <Button size="sm" variant="ghost" onClick={saveEditName}>Save</Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-slate-900">{category.name}</p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-xs text-slate-500 h-7"
-                          onClick={() => startEditName(category)}
-                        >
-                          Edit name
-                        </Button>
-                      </div>
-                    )}
-                    {category.description && (
-                      <p className="text-sm text-slate-500">{category.description}</p>
-                    )}
-                    <Badge variant="secondary" className="text-[11px]">{`Order ${index + 1}`}</Badge>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant={category.showOnMenu !== false ? 'outline' : 'secondary'}
-                      size="sm"
-                      onClick={() => toggleShowOnMenu(category.id)}
-                      disabled={updatingVisibilityIds.includes(category.id)}
-                      title={category.showOnMenu !== false ? 'Visible on menu (click to hide)' : 'Hidden (click to show)'}
-                    >
-                      {updatingVisibilityIds.includes(category.id) ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : category.showOnMenu !== false ? (
-                        <Eye className="h-4 w-4" />
-                      ) : (
-                        <EyeOff className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openDeleteDialog(category)}
-                      disabled={deletingIds.includes(category.id)}
-                    >
-                      <Trash className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="pl-6">
-                  <p className="text-xs font-medium text-slate-500 mb-1.5">Dishes in this category</p>
-                  {(!category.menuItems || category.menuItems.length === 0) ? (
-                    <p className="text-sm text-slate-400">No items</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {category.menuItems.map((item) => (
-                        <li
-                          key={item.id}
-                          className={`flex items-center justify-between gap-2 text-sm transition-all duration-500 ${highlightedItems.has(item.id)
-                            ? 'bg-emerald-50 border-l-4 border-emerald-500 pl-2 -ml-2 rounded animate-pulse'
-                            : ''
-                            }`}
-                        >
-                          <span className="text-slate-700">{item.name}</span>
-                          <Select
-                            value=""
-                            onValueChange={(val) => val && val !== category.id && moveItemToCategory(item.id, val)}
-                            disabled={movingItemId === item.id}
-                          >
-                            <SelectTrigger className="w-[180px] h-8 text-xs">
-                              {movingItemId === item.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <SelectValue placeholder="Move to…" />
-                              )}
-                            </SelectTrigger>
-                            <SelectContent>
-                              {categories
-                                .filter((c) => c.id !== category.id)
-                                .map((c) => (
-                                  <SelectItem key={c.id} value={c.id}>
-                                    {c.name}
-                                  </SelectItem>
-                                ))}
-                              {categories.filter((c) => c.id !== category.id).length === 0 && (
-                                <SelectItem value="__none__" disabled>No other categories</SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            ))
+                {categories.map((category, index) => (
+                  <SortableCategoryItem
+                    key={category.id}
+                    category={category}
+                    index={index}
+                    categories={categories}
+                    editingNameId={editingNameId}
+                    editingNameValue={editingNameValue}
+                    updatingVisibilityIds={updatingVisibilityIds}
+                    deletingIds={deletingIds}
+                    movingItemId={movingItemId}
+                    highlightedItems={highlightedItems}
+                    onStartEditName={startEditName}
+                    onSaveEditName={saveEditName}
+                    onEditNameChange={setEditingNameValue}
+                    onToggleShowOnMenu={toggleShowOnMenu}
+                    onOpenDeleteDialog={openDeleteDialog}
+                    onMoveItemToCategory={moveItemToCategory}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
         </CardContent>
       </Card>

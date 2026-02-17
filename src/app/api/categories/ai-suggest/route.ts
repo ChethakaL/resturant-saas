@@ -76,9 +76,20 @@ export async function POST() {
     }
 
     // Create any missing standard categories
+    // But skip "Signature Dishes" if any signature category already exists
+    const hasSignatureCategory = categories.some(cat =>
+      cat.name.toLowerCase().includes('signature')
+    )
+
     const createdCategories: string[] = []
     for (const name of DEFAULT_CATEGORY_NAMES) {
       if (existingNames.has(name)) continue
+
+      // Skip creating "Signature Dishes" if we already have a signature category
+      if (name === 'Signature Dishes' && hasSignatureCategory) {
+        continue
+      }
+
       const created = await prisma.category.create({
         data: {
           name,
@@ -112,7 +123,13 @@ export async function POST() {
         const signatureIds = new Set<string>()
         for (let i = 0; i < 4 && i < mains.length; i++) signatureIds.add(mains[i].id)
         for (let i = 0; i < 2 && i < shareables.length; i++) signatureIds.add(shareables[i].id)
-        const signatureCatId = nameToId['Signature Dishes']
+
+        // Find existing signature category (prefer "Signature Sandwiches" over "Signature Dishes")
+        const existingSignatureCategory = categories.find(cat =>
+          cat.name.toLowerCase().includes('signature')
+        )
+        const signatureCatId = existingSignatureCategory?.id ?? nameToId['Signature Dishes']
+
         assignments = new Map<string, string>()
         for (const item of itemsForSuggest) {
           const key = aiClassifications.get(item.id) ?? 'Main Dishes'

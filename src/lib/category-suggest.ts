@@ -66,7 +66,7 @@ const CATEGORY_KEYWORDS: Record<DefaultCategoryKey, string[]> = {
 
 /** Existing category name (e.g. from DB) → our category key. Used when item already has a category. */
 const CATEGORY_NAME_PRIORITY: Record<DefaultCategoryKey, string[]> = {
-  'Signature Dishes': ['signature dishes', 'signature dish', 'signature'],
+  'Signature Dishes': ['signature dishes', 'signature dish', 'signature', 'signature sandwich', 'signature sandwiches'],
   'Main Dishes': [
     'main dishes', 'main dish', 'mains', 'main', 'main course', 'main courses', 'entrees', 'entree',
     'pizza', 'specials', 'grill', 'grills', 'grilled', 'pasta', 'steak', 'burgers', 'rice & mains',

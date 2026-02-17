@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
+import { Trash2, AlertTriangle } from 'lucide-react'
 
 type IngredientRow = {
   id: string
@@ -45,7 +47,11 @@ export function InventoryTable({
   totalPages: number
   currentPage: number
 }) {
+  const router = useRouter()
   const [requestModalOpen, setRequestModalOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [ingredientToDelete, setIngredientToDelete] = useState<IngredientRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [selectedIngredient, setSelectedIngredient] = useState<IngredientRow | null>(null)
   const [products, setProducts] = useState<SupplierProduct[]>([])
   const [quantity, setQuantity] = useState('')
@@ -121,6 +127,46 @@ export function InventoryTable({
     }
   }
 
+  const openDeleteDialog = (ingredient: IngredientRow) => {
+    setIngredientToDelete(ingredient)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!ingredientToDelete) return
+
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/inventory/${ingredientToDelete.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to delete ingredient')
+      }
+
+      toast({
+        title: 'Ingredient deleted',
+        description: `${ingredientToDelete.name} has been removed from inventory.`,
+      })
+
+      setDeleteDialogOpen(false)
+      setIngredientToDelete(null)
+
+      // Refresh the page to show updated list
+      router.refresh()
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to delete ingredient',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const supplierName = (ing: IngredientRow) =>
     ing.preferredSupplier?.name ?? ing.supplier ?? '—'
 
@@ -165,10 +211,10 @@ export function InventoryTable({
                     ingredient.preferredSupplier
                       ? openRequestModal(ingredient)
                       : toast({
-                          title: 'Set supplier first',
-                          description: 'Edit this ingredient and set a preferred supplier to request stock.',
-                          variant: 'destructive',
-                        })
+                        title: 'Set supplier first',
+                        description: 'Edit this ingredient and set a preferred supplier to request stock.',
+                        variant: 'destructive',
+                      })
                   }
                 >
                   Request more
@@ -178,11 +224,21 @@ export function InventoryTable({
                 {formatCurrency(ingredient.costPerUnit)}
               </td>
               <td className="py-3 px-4 text-right">
-                <Link href={`/inventory/${ingredient.id}`}>
-                  <Button variant="ghost" size="sm">
-                    Edit
+                <div className="flex items-center justify-end gap-2">
+                  <Link href={`/inventory/${ingredient.id}`}>
+                    <Button variant="ghost" size="sm">
+                      Edit
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openDeleteDialog(ingredient)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
                   </Button>
-                </Link>
+                </div>
               </td>
             </tr>
           ))}
@@ -269,6 +325,48 @@ export function InventoryTable({
                 {submitting ? 'Sending...' : 'Send request'}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Delete Ingredient?
+            </DialogTitle>
+            <DialogDescription>
+              {ingredientToDelete && (
+                <div className="space-y-2 pt-2">
+                  <p>
+                    Are you sure you want to delete <strong>{ingredientToDelete.name}</strong>?
+                  </p>
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                    <p className="text-sm text-amber-900">
+                      ⚠️ This action cannot be undone. Any menu items using this ingredient will lose their recipe costing.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete Ingredient'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
