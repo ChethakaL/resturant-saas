@@ -8,6 +8,52 @@ import { buildSourceFingerprint } from '@/lib/menu-translations'
 import { normalizeTranslationInputs } from '@/lib/menu-translation-input'
 import { generateMenuDescription } from '@/lib/menu-description-ai'
 
+function normalizeMenuIngredients(ingredients: any[] = []) {
+  const mergedByIngredient = new Map<string, any>()
+
+  for (const raw of ingredients) {
+    const ingredientId = raw?.ingredientId
+    const quantity = Number(raw?.quantity)
+    if (!ingredientId || !Number.isFinite(quantity) || quantity <= 0) continue
+
+    const existing = mergedByIngredient.get(ingredientId)
+    if (!existing) {
+      mergedByIngredient.set(ingredientId, {
+        ...raw,
+        ingredientId,
+        quantity,
+        pieceCount:
+          raw?.pieceCount == null || raw?.pieceCount === ''
+            ? null
+            : Number(raw.pieceCount),
+      })
+      continue
+    }
+
+    // DB allows one row per (menuItemId, ingredientId), so duplicate entries must be merged.
+    existing.quantity += quantity
+    if (raw?.pieceCount != null && raw?.pieceCount !== '') {
+      const nextPieceCount = Number(raw.pieceCount)
+      if (Number.isFinite(nextPieceCount)) {
+        existing.pieceCount = (existing.pieceCount ?? 0) + nextPieceCount
+      }
+    }
+    if (!existing.unit && raw?.unit) existing.unit = raw.unit
+    if (!existing.supplierProductId && raw?.supplierProductId) {
+      existing.supplierProductId = raw.supplierProductId
+    }
+    if (existing.unitCostCached == null && raw?.unitCostCached != null) {
+      existing.unitCostCached = raw.unitCostCached
+    }
+    if (!existing.currency && raw?.currency) existing.currency = raw.currency
+    if (!existing.lastPricedAt && raw?.lastPricedAt) {
+      existing.lastPricedAt = raw.lastPricedAt
+    }
+  }
+
+  return Array.from(mergedByIngredient.values())
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -34,16 +80,16 @@ export async function POST(request: Request) {
     // Create menu item with ingredients in a transaction
     const menuItem = await prisma.$transaction(async (tx) => {
       // Create the menu item
-      const validIngredients = (data.ingredients || []).filter(
-        (ing: any) => ing.ingredientId && ing.quantity > 0
-      )
+      const validIngredients = normalizeMenuIngredients(data.ingredients)
       const hasRecipe = validIngredients.length > 0
 
       // Check if ALL ingredients have costs (not just some)
       // Fetch actual ingredient costs from database
       let hasCosting = false
       if (hasRecipe) {
-        const ingredientIds = validIngredients.map((ing: any) => ing.ingredientId)
+        const ingredientIds = Array.from(
+          new Set(validIngredients.map((ing: any) => ing.ingredientId))
+        )
         const ingredients = await tx.ingredient.findMany({
           where: { id: { in: ingredientIds } },
           select: { id: true, costPerUnit: true }
