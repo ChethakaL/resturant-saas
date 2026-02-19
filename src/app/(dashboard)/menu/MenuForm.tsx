@@ -1098,9 +1098,11 @@ export default function MenuForm({
 
   const applyParsedDataToForm = async (
     data: ParsedAIResponse,
-    options?: { autoCreateIngredients?: boolean; quietToast?: boolean }
+    options?: { autoCreateIngredients?: boolean; quietToast?: boolean },
+    additionalIngredients?: Ingredient[]
   ) => {
     const autoCreateIngredients = options?.autoCreateIngredients === true
+    const effectiveIngredients = additionalIngredients?.length ? [...allIngredients, ...additionalIngredients] : allIngredients
     const categoryId = findCategoryIdByName(data.categoryName)
     setFormData((prev) => ({
       ...prev,
@@ -1132,14 +1134,14 @@ export default function MenuForm({
 
       for (const ing of data.ingredients) {
         const nameLower = (ing.name || '').toLowerCase().trim()
-        let match = allIngredients.find((i) => {
+        let match = effectiveIngredients.find((i) => {
           const n = i.name.toLowerCase().trim()
           return n === nameLower || n.includes(nameLower) || nameLower.includes(n)
         })
         // Closest match: e.g. "Parmesan" in inventory matches "Fresh Parmesan" or "parmesan cheese" in recipe
         if (!match && nameLower.length > 0) {
           const recipeWords = nameLower.split(/\s+/).filter((w) => w.length > 2)
-          match = allIngredients.find((i) => {
+          match = effectiveIngredients.find((i) => {
             const n = i.name.toLowerCase().trim()
             const invWords = n.split(/[\s,]+/).filter((w) => w.length > 2)
             return invWords.some((invW) => nameLower.includes(invW)) || recipeWords.some((rw) => n.includes(rw))
@@ -1163,6 +1165,24 @@ export default function MenuForm({
 
         if (!autoCreateIngredients) {
           unmatched.push(ing.name.trim() || ing.name)
+          continue
+        }
+
+        // Already created in this session (e.g. real-time add from Smart Chef)
+        const alreadyCreated = additionalIngredients?.find((i) => (i.name || '').toLowerCase().trim() === nameLower)
+        if (alreadyCreated) {
+          const converted = convertRecipeUnitToBaseUnit(
+            ing.quantity,
+            ing.unit,
+            alreadyCreated.unit,
+            alreadyCreated.name
+          )
+          newRecipe.push({
+            ingredientId: alreadyCreated.id,
+            quantity: converted.quantity / yieldFactor,
+            pieceCount: converted.pieceCount != null ? converted.pieceCount / yieldFactor : null,
+          })
+          filledRecipeCount++
           continue
         }
 
@@ -1192,10 +1212,25 @@ export default function MenuForm({
           unmatched.push(ing.name.trim() || ing.name)
         }
       }
+      // Merge duplicate ingredients by ingredientId (same ingredient listed twice => one line with summed quantity)
+      const mergedByIngredient = new Map<string, RecipeIngredient>()
+      for (const line of newRecipe) {
+        const existing = mergedByIngredient.get(line.ingredientId)
+        if (existing) {
+          mergedByIngredient.set(line.ingredientId, {
+            ...existing,
+            quantity: existing.quantity + line.quantity,
+            pieceCount: existing.pieceCount != null && line.pieceCount != null ? existing.pieceCount + line.pieceCount : existing.pieceCount ?? line.pieceCount,
+          })
+        } else {
+          mergedByIngredient.set(line.ingredientId, { ...line })
+        }
+      }
+      const dedupedRecipe = Array.from(mergedByIngredient.values())
       if (createdIngredients.length > 0) {
         setNewlyCreatedIngredients((prev) => [...prev, ...createdIngredients])
       }
-      setRecipe(newRecipe)
+      setRecipe(dedupedRecipe)
       setUnmatchedIngredientsFromPrompt(unmatched)
     } else {
       setUnmatchedIngredientsFromPrompt([])
@@ -1327,7 +1362,7 @@ export default function MenuForm({
         body: JSON.stringify({
           messages: nextMessages,
           categories: categories.map(c => c.name),
-          inventory: ingredients.map(i => ({
+          inventory: allIngredients.map(i => ({
             name: i.name,
             unit: i.unit,
             costPerUnit: i.costPerUnit
@@ -1348,6 +1383,37 @@ export default function MenuForm({
       if (!response.ok) throw new Error('Smart Chef failed to respond')
       const result = await response.json()
 
+      // When the AI returns an ingredient with costPerUnit (user just provided cost), create it in inventory immediately so "has been added" is true
+      const createdFromChat: Ingredient[] = []
+      const dataIngredients = Array.isArray(result.data?.ingredients) ? result.data.ingredients : []
+      const existingNames = new Set(allIngredients.map((i) => i.name.toLowerCase().trim()))
+      for (const ing of dataIngredients) {
+        const name = (ing.name || '').trim()
+        const costPerUnit = typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : null
+        if (!name || costPerUnit == null) continue
+        if (existingNames.has(name.toLowerCase())) continue
+        try {
+          const createRes = await fetch('/api/ingredients', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name,
+              unit: ing.unit || 'g',
+              costPerUnit,
+            }),
+          })
+          if (!createRes.ok) continue
+          const newIng = await createRes.json()
+          createdFromChat.push(newIng)
+          existingNames.add(name.toLowerCase())
+        } catch {
+          // ignore
+        }
+      }
+      if (createdFromChat.length > 0) {
+        setNewlyCreatedIngredients((prev) => [...prev, ...createdFromChat])
+      }
+
       setAssistantMessages((prev) => [
         ...prev,
         {
@@ -1360,7 +1426,7 @@ export default function MenuForm({
       setAttachedDocs([])
       setAttachedImages([])
 
-      // When Smart Chef says FINISHED, auto-fill the form with the summary/description (per spec: "generate a summary... which then all autofills")
+      // When Smart Chef says FINISHED, auto-fill the form with the summary/description
       const isFinished = result.data?.isFinished || result.message.toLowerCase().includes('finished')
       if (isFinished && result.data && typeof result.data === 'object') {
         const d = result.data
@@ -1382,7 +1448,7 @@ export default function MenuForm({
               }))
             : undefined,
         }
-        await applyParsedDataToForm(parsed, { autoCreateIngredients: true, quietToast: true })
+        await applyParsedDataToForm(parsed, { autoCreateIngredients: true, quietToast: true }, createdFromChat)
         setAssistantMessages((prev) => [
           ...prev,
           {
@@ -1480,7 +1546,7 @@ export default function MenuForm({
   const fillFormFromAI = async () => {
     let text = aiAssistantText.trim()
 
-    // If text area is empty, use the whole conversation history
+    // If text area is empty, use the whole conversation history for research path
     if (!text && assistantMessages.length > 0) {
       text = assistantMessages
         .filter((m) => m.role === 'user')
@@ -1493,47 +1559,119 @@ export default function MenuForm({
       return
     }
 
-    // Lock research to the dish the user is adding (e.g. lasagna), so "Fill Form Now" doesn't return a different dish
     const existingName = formData.name?.trim()
     const firstUserMessage = assistantMessages.find((m) => m.role === 'user')?.text?.trim()
     const firstLineOfText = text.split(/\n/)[0]?.trim()
     const dishName = existingName || firstUserMessage || firstLineOfText || ''
 
+    // If user has been chatting with Smart Chef, use the conversation to fill the form (so agreed ingredients and costs are included)
+    const hasConversation = assistantMessages.length > 1 && assistantMessages.some((m) => m.role === 'user')
+
     setAiParseLoading(true)
     try {
-      const response = await fetch('/api/menu/research', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          dishName: dishName || undefined,
-          categoryNames: categories.map(c => c.name),
-          attachments: [
-            ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
-            ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
-          ]
-        }),
-      })
+      if (hasConversation) {
+        const response = await fetch('/api/menu/smart-chef', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: assistantMessages,
+            categories: categories.map(c => c.name),
+            inventory: allIngredients.map(i => ({ name: i.name, unit: i.unit, costPerUnit: i.costPerUnit })),
+            currentData: {
+              name: formData.name,
+              categoryName: categories.find(c => c.id === formData.categoryId)?.name || '',
+              price: parseFloat(formData.price) || 0,
+              ingredients: recipe,
+              recipeSteps,
+              recipeTips,
+              recipeYield
+            },
+            attachments: [
+              ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
+              ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
+            ],
+            finalize: true
+          }),
+        })
+        if (!response.ok) throw new Error('Smart Chef failed')
+        const result = await response.json()
+        const isFinished = result.data?.isFinished || (result.message || '').toLowerCase().includes('finished')
+        if (isFinished && result.data && typeof result.data === 'object') {
+          const d = result.data
+          const parsed = {
+            name: d.name,
+            description: d.description,
+            price: typeof d.price === 'number' ? d.price : undefined,
+            categoryName: d.categoryName,
+            recipeSteps: Array.isArray(d.recipeSteps) ? d.recipeSteps : undefined,
+            recipeTips: Array.isArray(d.recipeTips) ? d.recipeTips : undefined,
+            recipeYield: typeof d.recipeYield === 'number' ? d.recipeYield : undefined,
+            ingredients: Array.isArray(d.ingredients)
+              ? d.ingredients.map((ing: any) => ({
+                  name: ing.name ?? '',
+                  quantity: Number(ing.quantity) || 0,
+                  unit: ing.unit ?? 'g',
+                  pieceCount: ing.pieceCount ?? null,
+                  costPerUnit: typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : null,
+                }))
+              : undefined,
+          }
+          await applyParsedDataToForm(parsed, { autoCreateIngredients: true, quietToast: true })
+          setAssistantMessages((prev) => [
+            ...prev,
+            { role: 'assistant', text: "I've filled the form with everything we discussed. Review the Manual and Recipe tabs, then save when ready." },
+          ])
+          toast({ title: 'Form filled', description: 'Recipe and ingredients from our conversation are in the form.' })
+          setActiveTab('details')
+        } else {
+          // Fallback to research if Smart Chef didn't return finished data
+          const researchRes = await fetch('/api/menu/research', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text,
+              dishName: dishName || undefined,
+              categoryNames: categories.map(c => c.name),
+              attachments: [
+                ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
+                ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
+              ]
+            }),
+          })
+          if (!researchRes.ok) throw new Error('Research failed')
+          const data = await researchRes.json()
+          await applyParsedDataToForm(data, { autoCreateIngredients: true })
+          setAssistantMessages((prev) => [...prev, { role: 'assistant', text: 'I have researched and filled the form. Review the Manual and Recipe tabs.' }])
+          toast({ title: 'Form filled', description: 'Recipe and details gathered.' })
+          setActiveTab('details')
+        }
+      } else {
+        const response = await fetch('/api/menu/research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            dishName: dishName || undefined,
+            categoryNames: categories.map(c => c.name),
+            attachments: [
+              ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
+              ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
+            ]
+          }),
+        })
+        if (!response.ok) throw new Error('Research failed')
+        const data = await response.json()
+        await applyParsedDataToForm(data, { autoCreateIngredients: true })
+        setAssistantMessages((prev) => [
+          ...prev,
+          { role: 'assistant', text: 'I have researched and gathered the full recipe, ingredients, and SOP steps for you! You can review them in the "Manual" and "Recipe" tabs.' },
+        ])
+        toast({ title: 'Form Research Complete', description: 'Recipe and details gathered and filled.' })
+        setActiveTab('details')
+      }
 
-      if (!response.ok) throw new Error('Research failed')
-      const data = await response.json()
-
-      await applyParsedDataToForm(data, { autoCreateIngredients: true })
-
-      setAssistantMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          text: 'I have researched and gathered the full recipe, ingredients, and SOP steps for you! You can review them in the "Manual" and "Recipe" tabs.',
-        },
-      ])
-
-      // Clear attachments
       setAttachedDocs([])
       setAttachedImages([])
-
-      toast({ title: 'Form Research Complete', description: 'Recipe and details gathered and filled.' })
-      setActiveTab('details')
     } catch (err) {
       toast({
         title: 'Could not research',

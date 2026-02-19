@@ -29,9 +29,10 @@ THE STRUCTURED FLOW:
 6. **Inventory & Costing**: 
    - Check ingredients against this inventory (use **closest match**, not exact name only):
 ${inventory.map(i => `- ${i.name} (${i.unit}, Cost: ${i.costPerUnit} IQD)`).join('\n')}
-   - **Closest match**: Treat recipe ingredients and inventory items as the same when the key product is the same (e.g. "Parmesan" = "Fresh Parmesan" = "parmesan cheese"; "Mozzarella" = "Fresh Mozzarella"). Do not treat as missing just because the label differs.
+   - **Closest match**: Treat recipe ingredients and inventory items as the same when the key product is the same. Examples: "Parmesan" = "Fresh Parmesan" = "parmesan cheese"; "Mozzarella" = "Fresh Mozzarella". **Name and spelling**: If the recipe says "Fresh tomato" and inventory has "Tomato" or "Tomatoe", treat as the same — use the inventory item and put the **inventory name** in the "data" block. Do NOT ask to add. Same for "Tomatoes" / "Tomato" / "Fresh tomato" / "Roma tomatoes" (any spelling or variant of the same word).
+   - **Tomato rules**: Crushed tomato / Canned crushed tomatoes = SAME as Tomato or Fresh tomato — if they have "Tomato" or "Fresh Tomato" in inventory, use it (put inventory name in data). Do NOT ask to add. Tomato paste = DIFFERENT product; if they have Tomato in inventory, offer: "Do you use your **Tomato** for this, or buy tomato paste separately?" Only if they say separately, ask to add and get cost.
    - **Confirm with user when not exact**: If the recipe says "Fresh Parmesan" and inventory has "Parmesan", say: "I found **Parmesan** in your inventory — is that the same as the Fresh Parmesan in this recipe?" Only if the user says no (or there is no close match) treat it as missing.
-   - If an ingredient is truly missing (no close match, or user confirmed it's different): Use this structure: "**[Ingredient name]** is not in your inventory. Let's add it. Here's what I need: the cost per [unit] in IQD (e.g. per kg or per L)." Handle one missing ingredient per message. When the user provides the price, include it in the "data" block as "costPerUnit" (number, IQD per unit) so the form can create the ingredient.
+   - If an ingredient is truly missing (no close match, or user confirmed it's different): Say "**[Ingredient name]** is not in your inventory. Let's add it. Here's what I need: the cost per [unit] in IQD (e.g. per kg or per L)." When the user provides the cost, include it in the "data" block as "costPerUnit" (number, IQD per unit). The system creates the ingredient immediately. Then say: "Thank you. [Ingredient] has been added to your inventory. Now [next question]." and move to the next missing ingredient or next step.
    - If present (exact or confirmed match): Calculate the direct cost for ONE serving using your knowledge. Use the inventory item's name in the "data" block so the form can link correctly.
 7. **Pricing**: 
    - Decide if the item is FOOD or DRINK (infer from category: e.g. Beverages, Drinks, Coffee, Tea = drink; otherwise food; ask the user if unclear).
@@ -44,8 +45,8 @@ RULES:
 - **Confirmation First**: If a document is uploaded, start with: "Are you trying to add a menu item called '**[Name]**'? I have extracted the recipe and ingredients from your document."
 - **Document already has recipe**: If the document (or user message) already provided ingredients and steps, do NOT re-suggest a recipe or ask "is this recipe accurate, any changes?". Use the extracted data and proceed (e.g. confirm category, then yield, then inventory/costing).
 - **Yield phrasing**: Say "This recipe seems like it makes one dish" or "This looks like it makes about 4 servings" (or similar natural phrasing), then ask for confirmation. Do not sound robotic.
-- **Closest match & confirm**: When the recipe ingredient name does not exactly match an inventory item but is clearly the same product (e.g. "Fresh Parmesan" vs "Parmesan"), say "I found **[inventory name]** in your inventory — is that the same as the [recipe ingredient] in this recipe?" Only ask to add a new ingredient when there is no close match or the user says no.
-- **Missing ingredient phrasing**: For ingredients that are truly not in inventory, say "[Ingredient] is not in your inventory. Let's add it. Here's what I need: ..." One missing ingredient per message.
+- **Closest match & confirm**: When the recipe ingredient name does not exactly match an inventory item but is the same base product (e.g. "Fresh Parmesan" vs "Parmesan"; crushed tomatoes = tomato/fresh tomato), use the inventory item. For tomato paste (different product), offer existing Tomato first; only add if they say they buy it separately.
+- **Missing ingredient phrasing**: For ingredients that are truly not in inventory, say "[Ingredient] is not in your inventory. Let's add it. Here's what I need: the cost per [unit] in IQD." When the user gives the cost, put it in the data block and reply: "Thank you. [Ingredient] has been added to your inventory. Now [next question]." The system creates the ingredient right away.
 - **One Step at a Time**: Only ask for ONE thing per message.
 - **Short & Professional**: Max 2 sentences for the chat message.
 - **Auto-Fill**: Always update the JSON "data" block with everything you know.
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json()
-        const { messages, categories, inventory, currentData, attachments } = body
+        const { messages, categories, inventory, currentData, attachments, finalize } = body
 
         const googleKey = process.env.GOOGLE_AI_KEY
         if (!googleKey) {
@@ -80,7 +81,9 @@ ${messages.map((m: any) => `${m.role.toUpperCase()}: ${m.text}`).join('\n')}
 
 ${attachments && attachments.length > 0 ? `The user has attached ${attachments.length} files (documents or images). Extract any recipe, ingredient, or plating info from them.` : ''}
 
-Respond with the Smart Chef's next move in the flow.
+${finalize ? `
+CRITICAL: The user clicked "Fill Form Now". You MUST respond with isFinished: true and a complete "data" block containing ALL ingredients for the recipe (every ingredient you have discussed). Use the exact inventory item names for ingredients that matched. For any ingredient NOT in inventory, include it with name, quantity, unit, and costPerUnit: 0 (the form will create it; no need to ask the user for cost). Do not duplicate ingredients: each ingredient appears once with its total quantity.
+` : 'Respond with the Smart Chef\'s next move in the flow.'}
 
 JSON RESPONSE FORMAT:
 {

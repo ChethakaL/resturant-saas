@@ -66,8 +66,6 @@ export default function BillingClient({
       })
     : null
 
-  const hasPrices = PRICE_MONTHLY_ID && PRICE_ANNUAL_ID
-
   return (
     <div className="space-y-6">
       <div>
