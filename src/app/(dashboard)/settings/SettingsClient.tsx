@@ -63,6 +63,7 @@ export default function SettingsClient({
   const [defaultBackgroundDraft, setDefaultBackgroundDraft] = useState(initialDefaultBackgroundPrompt)
   const [describingImage, setDescribingImage] = useState(false)
   const [savingBackgroundPrompt, setSavingBackgroundPrompt] = useState(false)
+  const [applyBackgroundProgress, setApplyBackgroundProgress] = useState<{ total: number; done: number } | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -83,7 +84,7 @@ export default function SettingsClient({
   /** Suggested dish-photo background prompt per preset (background only; food stays the same). */
   const PRESET_SUGGESTED_BACKGROUNDS: Record<string, string> = {
     classy: 'Elegant dark marble or white linen surface, soft studio lighting, minimal props, refined restaurant ambiance.',
-    fast_food: 'Clean bright surface, casual diner or counter style, vibrant and energetic, simple backdrop.',
+    fast_food: 'Fast food booth table, laminated tabletop, casual diner booth seating visible, tray or simple placemat, clean and vibrant.',
     cozy: 'Warm wooden table, soft natural light, cozy restaurant or home dining vibe, shallow depth of field.',
     minimal: 'Clean neutral background, soft diffused light, minimal props, calm and simple aesthetic.',
     luxe: 'Premium dark surface or velvet texture, dramatic soft lighting, high-end restaurant atmosphere.',
@@ -96,6 +97,29 @@ export default function SettingsClient({
   const [themePreviewImageUrl, setThemePreviewImageUrl] = useState<string | null>(null)
   const [themePreviewLoading, setThemePreviewLoading] = useState(false)
   const [themeSuggestApplying, setThemeSuggestApplying] = useState(false)
+  const [themeSuggestItemCount, setThemeSuggestItemCount] = useState<number | null>(null)
+  const [themeSuggestApplyProgress, setThemeSuggestApplyProgress] = useState<{ done: number; total: number } | null>(null)
+
+  // When theme-suggest dialog opens, fetch how many dish photos will be updated
+  useEffect(() => {
+    if (!themeSuggestDialogOpen) {
+      setThemeSuggestItemCount(null)
+      setThemeSuggestApplyProgress(null)
+      return
+    }
+    let cancelled = false
+    fetch('/api/menu/items-with-images')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        const ids: string[] = data.itemIds ?? []
+        setThemeSuggestItemCount(ids.length)
+      })
+      .catch(() => {
+        if (!cancelled) setThemeSuggestItemCount(0)
+      })
+    return () => { cancelled = true }
+  }, [themeSuggestDialogOpen])
 
   const saveTheme = async () => {
     setSavingTheme(true)
@@ -138,22 +162,22 @@ export default function SettingsClient({
     setThemePreviewLoading(true)
     setThemePreviewImageUrl(null)
     try {
-      const res = await fetch('/api/menu/generate-image', {
+      const res = await fetch('/api/menu/preview-background', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          itemName: 'Grilled chicken breast',
-          description: 'Sample dish for preview',
-          category: 'Main',
-          prompt: themeSuggestPrompt,
-        }),
+        body: JSON.stringify({ prompt: themeSuggestPrompt }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed')
       setThemePreviewImageUrl(data.imageUrl ?? null)
-      toast({ title: 'Preview generated' })
-    } catch {
-      toast({ title: 'Could not generate preview', variant: 'destructive' })
+      toast({ title: 'Preview generated', description: 'One of your dish photos with the new background.' })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not generate preview'
+      toast({
+        title: msg.includes('No dish photos') ? 'No dish photos yet' : 'Could not generate preview',
+        description: msg.includes('No dish photos') ? 'Add at least one menu item with a photo to see a preview.' : msg,
+        variant: 'destructive',
+      })
     } finally {
       setThemePreviewLoading(false)
     }
@@ -162,6 +186,7 @@ export default function SettingsClient({
   const applyThemeBackground = async () => {
     if (!themeSuggestPrompt) return
     setThemeSuggestApplying(true)
+    setThemeSuggestApplyProgress(null)
     try {
       const res = await fetch('/api/user/background', {
         method: 'POST',
@@ -172,15 +197,46 @@ export default function SettingsClient({
       if (!res.ok) throw new Error(data.error || 'Failed')
       setDefaultBackgroundPrompt(data.defaultBackgroundPrompt ?? themeSuggestPrompt)
       setDefaultBackgroundDraft(data.defaultBackgroundPrompt ?? themeSuggestPrompt)
+
+      const listRes = await fetch('/api/menu/items-with-images')
+      const listData = await listRes.json()
+      if (!listRes.ok) throw new Error(listData.error || 'Failed to list items')
+      const ids: string[] = listData.itemIds ?? []
+
+      if (ids.length === 0) {
+        setThemeSuggestDialogOpen(false)
+        toast({
+          title: 'Background style saved',
+          description: 'No dish photos to update. New photos will use this style.',
+        })
+        return
+      }
+
+      setThemeSuggestApplyProgress({ done: 0, total: ids.length })
+      let done = 0
+      for (const id of ids) {
+        const applyRes = await fetch(`/api/menu/${id}/apply-background`, { method: 'POST' })
+        if (!applyRes.ok) {
+          const err = await applyRes.json().catch(() => ({}))
+          throw new Error(err.error || err.details || `Failed for item`)
+        }
+        done += 1
+        setThemeSuggestApplyProgress((p) => (p ? { ...p, done } : null))
+      }
       setThemeSuggestDialogOpen(false)
       toast({
-        title: 'Dish photo background updated',
-        description: 'Future generated menu item photos will use this style.',
+        title: 'All dish photos updated',
+        description: `${ids.length} dish photo${ids.length === 1 ? '' : 's'} now use the new background style.`,
       })
-    } catch {
-      toast({ title: 'Could not update background', variant: 'destructive' })
+    } catch (e) {
+      toast({
+        title: 'Could not update dish photos',
+        description: e instanceof Error ? e.message : 'Unknown error',
+        variant: 'destructive',
+      })
     } finally {
       setThemeSuggestApplying(false)
+      setThemeSuggestApplyProgress(null)
     }
   }
 
@@ -559,6 +615,65 @@ export default function SettingsClient({
                   )}
                   {describingImage ? 'Describing…' : 'Choose image from computer'}
                 </Button>
+                <div className="pt-3 border-t border-slate-200 space-y-2">
+                  <p className="text-xs text-slate-500">
+                    Apply the saved background style above to all existing dish photos. This re-enhances each photo and may take a minute.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={!!applyBackgroundProgress || !defaultBackgroundPrompt?.trim()}
+                    onClick={async () => {
+                      setApplyBackgroundProgress({ total: 0, done: 0 })
+                      try {
+                        const listRes = await fetch('/api/menu/items-with-images')
+                        const listData = await listRes.json()
+                        if (!listRes.ok) throw new Error(listData.error || 'Failed to list items')
+                        const ids: string[] = listData.itemIds ?? []
+                        if (ids.length === 0) {
+                          toast({ title: 'No dish photos to update', description: 'Add images to menu items first.' })
+                          setApplyBackgroundProgress(null)
+                          return
+                        }
+                        setApplyBackgroundProgress((p) => (p ? { ...p, total: ids.length } : null))
+                        let done = 0
+                        for (const id of ids) {
+                          const res = await fetch(`/api/menu/${id}/apply-background`, { method: 'POST' })
+                          if (!res.ok) {
+                            const err = await res.json().catch(() => ({}))
+                            throw new Error(err.error || err.details || `Failed for item ${id}`)
+                          }
+                          done += 1
+                          setApplyBackgroundProgress((p) => (p ? { ...p, done } : null))
+                        }
+                        toast({
+                          title: 'Background applied',
+                          description: `Updated ${ids.length} dish photo${ids.length === 1 ? '' : 's'}.`,
+                        })
+                      } catch (e) {
+                        toast({
+                          title: 'Could not apply background to all photos',
+                          description: e instanceof Error ? e.message : 'Unknown error',
+                          variant: 'destructive',
+                        })
+                      } finally {
+                        setApplyBackgroundProgress(null)
+                      }
+                    }}
+                  >
+                    {applyBackgroundProgress ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        {applyBackgroundProgress.total > 0
+                          ? `Updating ${applyBackgroundProgress.done} of ${applyBackgroundProgress.total}…`
+                          : 'Loading…'}
+                      </>
+                    ) : (
+                      'Apply to all dish photos'
+                    )}
+                  </Button>
+                </div>
               </div>
 
               {/* Logo: upload from computer (S3) or paste URL */}
@@ -701,20 +816,34 @@ export default function SettingsClient({
           <DialogHeader>
             <DialogTitle>Dish photo background for {themeSuggestPresetLabel}</DialogTitle>
             <DialogDescription>
-              This theme suggests a new background style for generated menu item photos. The food stays the same; only the plate/setting changes to match the vibe. Preview below, then choose to apply or skip.
+              This theme suggests a new background style for your menu item photos. The food stays the same; only the plate/setting changes to match the vibe. Preview uses one of your existing dish photos with only the background changed. Then verify to update all dish photos.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-medium text-slate-500 mb-1">Suggested background style</p>
-              <p className="text-sm text-slate-800">{themeSuggestPrompt}</p>
+              <Label htmlFor="theme-suggest-prompt" className="text-xs font-medium text-slate-500">
+                Suggested background style (you can edit)
+              </Label>
+              <textarea
+                id="theme-suggest-prompt"
+                value={themeSuggestPrompt}
+                onChange={(e) => setThemeSuggestPrompt(e.target.value)}
+                placeholder="e.g. Fast food booth table, laminated tabletop…"
+                className="mt-1.5 min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800"
+                rows={3}
+              />
             </div>
+            {themeSuggestItemCount !== null && (
+              <p className="text-sm text-slate-600">
+                <strong>{themeSuggestItemCount}</strong> dish photo{themeSuggestItemCount !== 1 ? 's' : ''} will be updated to this background when you verify.
+              </p>
+            )}
             <div>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={themePreviewLoading}
+                disabled={themePreviewLoading || !!themeSuggestApplyProgress}
                 onClick={generateThemePreview}
               >
                 {themePreviewLoading ? (
@@ -729,18 +858,23 @@ export default function SettingsClient({
                     alt="Preview with suggested background"
                     className="w-full aspect-video object-cover"
                   />
-                  <p className="text-xs text-slate-500 px-2 py-1.5 bg-slate-50">Sample dish with this background style</p>
+                  <p className="text-xs text-slate-500 px-2 py-1.5 bg-slate-50">One of your dish photos with this background style</p>
                 </div>
               )}
             </div>
+            {themeSuggestApplyProgress && (
+              <p className="text-sm text-slate-600">
+                Updating {themeSuggestApplyProgress.done} of {themeSuggestApplyProgress.total}…
+              </p>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setThemeSuggestDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setThemeSuggestDialogOpen(false)} disabled={!!themeSuggestApplyProgress}>
               Skip (keep current)
             </Button>
             <Button onClick={applyThemeBackground} disabled={themeSuggestApplying}>
               {themeSuggestApplying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-              Apply to dish photos
+              {themeSuggestApplyProgress ? `Updating ${themeSuggestApplyProgress.done} of ${themeSuggestApplyProgress.total}…` : 'Verify and update all'}
             </Button>
           </DialogFooter>
         </DialogContent>

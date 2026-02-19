@@ -368,6 +368,11 @@ export default function MenuOptimizationContent({
     if (engineMode !== 'profit' && engineMode !== 'adaptive') return
     setAutoFillingCarousels(true)
     try {
+      // Refetch current showcases so we don't create duplicates (e.g. two tabs or two users).
+      const listRes = await fetch('/api/menu-showcases')
+      const currentShowcases = listRes.ok ? await listRes.json() : []
+      let list = Array.isArray(currentShowcases) ? [...currentShowcases] : [...showcases]
+
       const res = await fetch(`/api/menu-showcases/suggested-items?mode=${engineMode}`)
       if (!res.ok) throw new Error('Failed to load suggestions')
       const suggested: {
@@ -390,8 +395,6 @@ export default function MenuOptimizationContent({
         .slice(0, maxCarouselItems)
       const recommendationIds = secondaryIds.length > 0 ? secondaryIds : primaryIds
       const firstCategory = categories[0]
-
-      let list = [...showcases]
 
       // Remove legacy auto-generated sections so only useful carousel(s) remain.
       const legacyTitles = new Set(['Breakfast', 'Lunch', 'Dinner'])

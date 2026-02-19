@@ -3,15 +3,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 
-const MAX_SIZE = 2 * 1024 * 1024 // 2MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml', 'image/gif']
+const MAX_SIZE = 5 * 1024 * 1024 // 5MB for dish photos
 
 function getS3Client() {
   const region = process.env.AWS_S3_REGION
   const accessKey = process.env.AWS_ACCESS_KEY_ID
   const secretKey = process.env.AWS_SECRET_ACCESS_KEY
   if (!region || !accessKey || !secretKey) {
-    throw new Error('AWS S3 is not configured (AWS_S3_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)')
+    throw new Error('AWS S3 is not configured')
   }
   return new S3Client({
     region,
@@ -33,59 +32,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const formData = await request.formData()
-    const file = formData.get('logo') as File | null
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json(
-        { error: 'No file provided. Use form field "logo".' },
-        { status: 400 }
-      )
+    const body = await request.json()
+    let imageData = typeof body.imageData === 'string' ? body.imageData : ''
+    if (!imageData) {
+      return NextResponse.json({ error: 'No imageData provided' }, { status: 400 })
     }
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { error: 'Invalid file type. Use JPEG, PNG, WebP, SVG, or GIF.' },
-        { status: 400 }
-      )
+
+    let buffer: Buffer
+    let mimeType = 'image/jpeg'
+    if (imageData.startsWith('data:')) {
+      const match = imageData.match(/^data:([^;]+);base64,(.+)$/)
+      if (!match) {
+        return NextResponse.json({ error: 'Invalid data URL' }, { status: 400 })
+      }
+      mimeType = match[1].split('/')[1]?.includes('png') ? 'image/png' : 'image/jpeg'
+      buffer = Buffer.from(match[2], 'base64')
+    } else {
+      buffer = Buffer.from(imageData, 'base64')
     }
-    if (file.size > MAX_SIZE) {
-      return NextResponse.json(
-        { error: 'File too large. Maximum 2MB.' },
-        { status: 400 }
-      )
+    if (buffer.length > MAX_SIZE) {
+      return NextResponse.json({ error: 'Image too large (max 5MB)' }, { status: 400 })
     }
 
     const bucket = process.env.AWS_S3_BUCKET_NAME
     if (!bucket) {
-      return NextResponse.json(
-        { error: 'AWS_S3_BUCKET_NAME is not set' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'AWS_S3_BUCKET_NAME is not set' }, { status: 500 })
     }
 
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
-    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_').slice(0, 80)
-    const key = `logos/${session.user.restaurantId}/${Date.now()}-${safeName}`
-
+    const ext = mimeType === 'image/png' ? 'png' : 'jpg'
+    const key = `menu-items/${session.user.restaurantId}/${Date.now()}.${ext}`
     const client = getS3Client()
-    const buffer = Buffer.from(await file.arrayBuffer())
-
     await client.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: key,
         Body: buffer,
-        ContentType: file.type,
+        ContentType: mimeType,
       })
     )
     const url = getPublicUrl(key)
     return NextResponse.json({ url })
   } catch (error) {
-    console.error('Logo upload error:', error)
+    console.error('Menu image upload error:', error)
     return NextResponse.json(
-      {
-        error: 'Failed to upload logo',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
+      { error: 'Failed to upload image', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

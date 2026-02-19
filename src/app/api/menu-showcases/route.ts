@@ -53,6 +53,52 @@ export async function POST(request: Request) {
       )
     }
 
+    const validType = type === 'CHEFS_HIGHLIGHTS' ? 'CHEFS_HIGHLIGHTS' : 'RECOMMENDATIONS'
+    const validDisplayVariant = displayVariant === 'hero' ? 'hero' : 'cards'
+    const trimmedTitle = String(title).trim()
+
+    // Never create a duplicate: if a carousel with this name already exists, update it and return.
+    const existingByName = await prisma.menuShowcase.findFirst({
+      where: {
+        restaurantId: session.user.restaurantId,
+        title: { equals: trimmedTitle, mode: 'insensitive' },
+      },
+      include: {
+        items: {
+          orderBy: { displayOrder: 'asc' },
+          include: {
+            menuItem: {
+              select: { id: true, name: true, imageUrl: true, price: true },
+            },
+          },
+        },
+      },
+    })
+    if (existingByName) {
+      const updated = await prisma.menuShowcase.update({
+        where: { id: existingByName.id },
+        data: {
+          title: trimmedTitle,
+          type: validType,
+          displayVariant: validDisplayVariant,
+          position: position ?? existingByName.position,
+          insertAfterCategoryId: insertAfterCategoryId !== undefined ? insertAfterCategoryId : existingByName.insertAfterCategoryId,
+        },
+        include: {
+          items: {
+            orderBy: { displayOrder: 'asc' },
+            include: {
+              menuItem: {
+                select: { id: true, name: true, imageUrl: true, price: true },
+              },
+            },
+          },
+        },
+      })
+      revalidatePath('/')
+      return NextResponse.json(updated)
+    }
+
     const lastShowcase = await prisma.menuShowcase.findFirst({
       where: { restaurantId: session.user.restaurantId },
       orderBy: { displayOrder: 'desc' },
@@ -60,13 +106,10 @@ export async function POST(request: Request) {
     })
     const nextOrder = (lastShowcase?.displayOrder ?? 0) + 1
 
-    const validType = type === 'CHEFS_HIGHLIGHTS' ? 'CHEFS_HIGHLIGHTS' : 'RECOMMENDATIONS'
-    const validDisplayVariant = displayVariant === 'hero' ? 'hero' : 'cards'
-
     const showcase = await prisma.menuShowcase.create({
       data: {
         restaurantId: session.user.restaurantId,
-        title,
+        title: trimmedTitle,
         type: validType,
         displayVariant: validDisplayVariant,
         position: position || 'top',
