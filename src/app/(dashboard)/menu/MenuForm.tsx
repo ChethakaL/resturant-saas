@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard, Mic, MicOff, Paperclip, Send } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard, Mic, MicOff, Send } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
@@ -2196,19 +2196,10 @@ export default function MenuForm({
                       </div>
                     )}
 
-                    {/* Input row: placeholder + paperclip + send (reference style) */}
+                    {/* Input row: placeholder + send */}
                     <div className="p-4 border-t border-slate-200 bg-white">
                       <div className="flex items-end gap-2">
                         <div className="flex-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 min-h-[44px] px-3">
-                          <button
-                            type="button"
-                            className="shrink-0 p-1.5 rounded-md text-slate-500 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-50"
-                            title="Attach document"
-                            onClick={() => assistantDocInputRef.current?.click()}
-                            disabled={aiParseLoading}
-                          >
-                            <Paperclip className="h-5 w-5" />
-                          </button>
                           <input
                             type="file"
                             ref={assistantDocInputRef}
