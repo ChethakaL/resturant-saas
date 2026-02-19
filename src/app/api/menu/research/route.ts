@@ -42,31 +42,33 @@ async function searchTavily(query: string): Promise<RecipeSearchResult[]> {
 }
 
 const RESEARCH_PROMPT = (text: string, searchData: string, categoryHint: string) => `
-You are a "Smart Chef" with extensive F&B and kitchen knowledge. The user wants to fill a restaurant menu form for: "${text}".
+You are a "Smart Chef" assistant focused on professional F&B management. You are tasked with gathering and structuring data for the following item: "${text}".
+
+TONE: Professional, succinct, and clinical. Avoid marketing fluff or excitement. Do not use Markdown headers (e.g. # or ##). Use bold text (**) for emphasis.
 
 ${searchData ? `I found some research data online about this dish:\n${searchData}\n` : ''}
 ${categoryHint}
 
-Your task is to provide a complete, high-quality restaurant-grade recipe and menu details.
+Your task is to provide a complete, technical restaurant-grade recipe and menu details.
 
 GUIDELINES:
 1. name: Exact dish name.
-2. description: High-quality sensory menu description (max 18 words). Focus on taste, texture, and appeal.
+2. description: Professional sensory menu description (max 18 words). Focus on key ingredients and taste profile.
 3. price: Calculate a realistic selling price in IQD. 
    - CATEGORIZATION: Decide if this is a "FOOD" item or a "DRINK" item.
-   - FOOD LOGIC: Price = (Estimated Direct Cost per serving) / 0.75 (Aim for 25% margin on selling price).
-   - DRINK LOGIC: Price = (Estimated Direct Cost per serving) / 0.85 (Aim for 15% margin on selling price).
+   - FOOD LOGIC: Price = (Estimated Direct Cost per serving) / 0.75 (Target: 25% margin on selling price).
+   - DRINK LOGIC: Price = (Estimated Direct Cost per serving) / 0.85 (Target: 15% margin on selling price).
    - If user provided a price, still validate it against this logic in your "tips".
 4. recipeYield: Number of servings (default to a standard batch like 4 or 6, or 1 for individual items).
 5. recipeSteps: Detailed SOP steps for a commercial kitchen.
-6. recipeTips: Pro tips for plating, consistency, and margin advice.
+6. recipeTips: Technical tips for plating, consistency, and margin management.
 7. ingredients: Detailed list with {name, quantity, unit, pieceCount}. Use metric units (kg, g, L, ml) or standard kitchen units (cup, tsp, tbsp). 
    - quantity should be for the WHOLE recipe (yield).
 
 RELIABILITY RULES:
 - Use kg/g for solids, L/ml for liquids.
 - Spices in tsp/tbsp.
-- Estimated prepTime and cookTime should be realistic for a restaurant.
+- Estimated prepTime and cookTime should be realistic for a commercial service environment.
 
 Return ONLY valid JSON in this exact shape:
 {

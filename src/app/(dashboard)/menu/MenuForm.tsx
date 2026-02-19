@@ -2059,7 +2059,14 @@ export default function MenuForm({
                           <p className="text-[11px] uppercase tracking-wide mb-1 opacity-70">
                             {message.role === 'assistant' ? 'Assistant' : 'You'}
                           </p>
-                          <p>{message.text}</p>
+                          <div className="whitespace-pre-wrap">
+                            {message.text.split(/(\*\*.*?\*\*)/).map((part, i) => {
+                              if (part.startsWith('**') && part.endsWith('**')) {
+                                return <strong key={i} className="font-bold">{part.slice(2, -2)}</strong>
+                              }
+                              return part
+                            })}
+                          </div>
                         </div>
                       ))}
                     </div>
