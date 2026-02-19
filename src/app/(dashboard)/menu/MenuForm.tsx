@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard, Mic, MicOff } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard, Mic, MicOff, Paperclip, Send } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
@@ -183,11 +183,10 @@ export default function MenuForm({
   // AI Assistant tab: free-text → auto-fill form
   const [aiAssistantText, setAiAssistantText] = useState('')
   const [aiParseLoading, setAiParseLoading] = useState(false)
+  const AI_ASSISTANT_WELCOME =
+    "Hello! I'm Smart Chef, your menu item assistant. I help with item name, description, how it appears to guests, and layout. Upload images or documents and I'll suggest improvements. Use **Fill Form Now** to have me research and fill the form from your message or attachments. For cost, recipe, and translations, use the Manual, Recipe, and Translations tabs."
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
-    {
-      role: 'assistant',
-      text: 'Tell me about the dish you want to add. I will ask follow-up questions to gather details. You can also click "Fill Form Now" at any time to have me research and fill the entire recipe, ingredients, and SOP for you!',
-    },
+    { role: 'assistant', text: AI_ASSISTANT_WELCOME },
   ])
   const [isListening, setIsListening] = useState(false)
   const speechRecognitionRef = useRef<any>(null)
@@ -1295,6 +1294,13 @@ export default function MenuForm({
     return { ready, question: '' }
   }
 
+  const resetAssistantChat = () => {
+    setAssistantMessages([{ role: 'assistant', text: AI_ASSISTANT_WELCOME }])
+    setAiAssistantText('')
+    setAttachedDocs([])
+    setAttachedImages([])
+  }
+
   const submitAssistantMessage = async () => {
     const text = aiAssistantText.trim()
     if (!text && attachedDocs.length === 0 && attachedImages.length === 0) return
@@ -1967,8 +1973,8 @@ export default function MenuForm({
       </div>
 
       <form onSubmit={(e) => e.preventDefault()}>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+        <div className={cn('grid gap-6', activeTab === 'ai' ? 'lg:grid-cols-1' : 'lg:grid-cols-3')}>
+          <div className={activeTab === 'ai' ? 'w-full' : 'lg:col-span-2'}>
             <Tabs
               value={activeTab}
               onValueChange={(v) => {
@@ -1986,7 +1992,7 @@ export default function MenuForm({
                 ) : (
                   <TabsTrigger value="ai" className="flex items-center gap-2">
                     <BotMessageSquare className="h-4 w-4" />
-                    AI Assistant
+                    Smart Chef
                   </TabsTrigger>
                 )}
                 <TabsTrigger value="details" className="flex items-center gap-2">
@@ -2106,35 +2112,61 @@ export default function MenuForm({
                 </TabsContent>
               )}
               <TabsContent value="ai" className="space-y-4 mt-0">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5 text-emerald-500" />
-                      Smart Chef
-                    </CardTitle>
-                    <CardDescription>
-                      A chatbot that helps you create menu items. It asks follow-up questions and can use your uploaded images or documents. Use &quot;Fill Form Now&quot; to have the AI research and fill the form from your text or attachments.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="max-h-[50vh] min-h-[160px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+                <Card className="overflow-hidden">
+                  <CardContent className="p-0">
+                    {/* Header: title + subtitle + action buttons (reference style) */}
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 p-6 pb-4 border-b border-slate-200">
+                      <div>
+                        <h2 className="text-xl font-bold text-slate-900">Smart Chef</h2>
+                        <p className="text-sm text-slate-500 mt-1">
+                          Ask questions, upload images or documents, and get help with name, description, and how the item appears to guests.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <Button
+                          type="button"
+                          onClick={fillFormFromAI}
+                          disabled={aiParseLoading || (!aiAssistantText.trim() && assistantMessages.length <= 1 && attachedDocs.length === 0 && attachedImages.length === 0)}
+                        >
+                          {aiParseLoading ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4 mr-2" />
+                          )}
+                          {aiParseLoading ? 'Researching...' : 'Fill Form Now'}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={resetAssistantChat} disabled={aiParseLoading}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          New Chat
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAiAssistantText(SAMPLE_AI_PROMPT)}
+                          disabled={aiParseLoading}
+                        >
+                          Try sample
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Chat area: messages in scrollable area, assistant = teal bubble */}
+                    <div className="max-h-[65vh] min-h-[480px] overflow-y-auto px-6 py-4 space-y-4 bg-slate-50/50">
                       {assistantMessages.map((message, index) => (
                         <div
                           key={`${message.role}-${index}`}
                           className={cn(
-                            'rounded-lg px-3 py-2 text-sm',
+                            'rounded-xl px-4 py-3 text-sm max-w-[85%]',
                             message.role === 'assistant'
-                              ? 'bg-white border border-slate-200 text-slate-700'
-                              : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                              ? 'bg-emerald-50 border border-emerald-100 text-slate-800 ml-0 mr-auto'
+                              : 'bg-white border border-slate-200 text-slate-700 ml-auto mr-0 shadow-sm'
                           )}
                         >
-                          <p className="text-[11px] uppercase tracking-wide mb-1 opacity-70">
-                            {message.role === 'assistant' ? 'Assistant' : 'You'}
-                          </p>
                           <div className="whitespace-pre-wrap leading-relaxed">
                             {message.text.split(/(\*\*.*?\*\*)/g).map((part, i) => {
                               if (part.startsWith('**') && part.endsWith('**')) {
-                                return <strong key={i} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>
+                                return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
                               }
                               return part
                             })}
@@ -2144,150 +2176,127 @@ export default function MenuForm({
                       <div ref={assistantMessagesEndRef} />
                     </div>
 
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-sm text-slate-600">Your message</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setAiAssistantText(SAMPLE_AI_PROMPT)}
-                      >
-                        Try sample prompt
-                      </Button>
-                    </div>
+                    {/* Attachments row (compact) */}
+                    {(attachedDocs.length > 0 || attachedImages.length > 0) && (
+                      <div className="flex flex-wrap gap-2 px-6 pt-1">
+                        {attachedDocs.map((doc) => (
+                          <Badge key={doc.name} variant="secondary" className="flex items-center gap-1">
+                            <FileText className="h-3 w-3" />
+                            <span className="max-w-[120px] truncate">{doc.name}</span>
+                            <Trash2 className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700" onClick={() => removeAttachment(doc.name, 'doc')} />
+                          </Badge>
+                        ))}
+                        {attachedImages.map((img) => (
+                          <Badge key={img.name} variant="secondary" className="flex items-center gap-1 bg-emerald-50 border-emerald-200 text-emerald-700">
+                            <ImagePlus className="h-3 w-3" />
+                            <span className="max-w-[120px] truncate">{img.name}</span>
+                            <Trash2 className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700" onClick={() => removeAttachment(img.name, 'image')} />
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
 
-                    <Textarea
-                      placeholder="Describe your dish. Include ingredients and yield (e.g. 'Serves 4'). Example: Lentil soup, 8000 IQD..."
-                      value={aiAssistantText}
-                      onChange={(e) => setAiAssistantText(e.target.value)}
-                      rows={4}
-                      className="resize-y"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      {attachedDocs.map((doc) => (
-                        <Badge key={doc.name} variant="secondary" className="flex items-center gap-1">
-                          <FileText className="h-3 w-3" />
-                          <span className="max-w-[100px] truncate">{doc.name}</span>
-                          <Trash2
-                            className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700"
-                            onClick={() => removeAttachment(doc.name, 'doc')}
+                    {/* Input row: placeholder + paperclip + send (reference style) */}
+                    <div className="p-4 border-t border-slate-200 bg-white">
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 min-h-[44px] px-3">
+                          <button
+                            type="button"
+                            className="shrink-0 p-1.5 rounded-md text-slate-500 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-50"
+                            title="Attach document"
+                            onClick={() => assistantDocInputRef.current?.click()}
+                            disabled={aiParseLoading}
+                          >
+                            <Paperclip className="h-5 w-5" />
+                          </button>
+                          <input
+                            type="file"
+                            ref={assistantDocInputRef}
+                            className="hidden"
+                            accept=".pdf,.doc,.docx,.txt"
+                            multiple
+                            onChange={(e) => handleAssistantFileUpload(e, 'doc')}
                           />
-                        </Badge>
-                      ))}
-                      {attachedImages.map((img) => (
-                        <Badge key={img.name} variant="secondary" className="flex items-center gap-1 bg-emerald-50 border-emerald-200 text-emerald-700">
-                          <ImagePlus className="h-3 w-3" />
-                          <span className="max-w-[100px] truncate">{img.name}</span>
-                          <Trash2
-                            className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700"
-                            onClick={() => removeAttachment(img.name, 'image')}
+                          <input
+                            type="file"
+                            ref={assistantImageInputRef}
+                            className="hidden"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => handleAssistantFileUpload(e, 'image')}
                           />
-                        </Badge>
-                      ))}
+                          <Textarea
+                            placeholder="Ask about item name, description, how it appears to guests, or upload images/documents..."
+                            value={aiAssistantText}
+                            onChange={(e) => setAiAssistantText(e.target.value)}
+                            rows={1}
+                            className="min-h-[36px] max-h-[120px] resize-y border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 py-2.5 text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault()
+                                submitAssistantMessage()
+                              }
+                            }}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          className="shrink-0 h-11 w-11 rounded-lg bg-emerald-600 hover:bg-emerald-700"
+                          onClick={submitAssistantMessage}
+                          disabled={aiParseLoading || (!aiAssistantText.trim() && attachedDocs.length === 0 && attachedImages.length === 0)}
+                        >
+                          {aiParseLoading ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <Send className="h-5 w-5" />
+                          )}
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-slate-500"
+                          onClick={() => assistantDocInputRef.current?.click()}
+                          disabled={aiParseLoading}
+                        >
+                          <FileText className="h-3.5 w-3 mr-1" />
+                          Document
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-slate-500"
+                          onClick={() => assistantImageInputRef.current?.click()}
+                          disabled={aiParseLoading}
+                        >
+                          <ImagePlus className="h-3.5 w-3 mr-1" />
+                          Image
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-slate-500"
+                          onClick={isListening ? stopSpeechToText : startSpeechToText}
+                          disabled={aiParseLoading}
+                        >
+                          {isListening ? <MicOff className="h-3.5 w-3 mr-1" /> : <Mic className="h-3.5 w-3 mr-1" />}
+                          {isListening ? 'Stop' : 'Speak'}
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 text-slate-500" onClick={() => setActiveTab('details')}>
+                          Skip to form
+                        </Button>
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        onClick={submitAssistantMessage}
-                        disabled={aiParseLoading || (!aiAssistantText.trim() && attachedDocs.length === 0 && attachedImages.length === 0)}
-                      >
-                        {aiParseLoading ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Submit
-                          </>
-                        )}
-                      </Button>
-
-                      <input
-                        type="file"
-                        ref={assistantDocInputRef}
-                        className="hidden"
-                        accept=".pdf,.doc,.docx,.txt"
-                        multiple
-                        onChange={(e) => handleAssistantFileUpload(e, 'doc')}
-                      />
-                      <input
-                        type="file"
-                        ref={assistantImageInputRef}
-                        className="hidden"
-                        accept="image/*"
-                        multiple
-                        onChange={(e) => handleAssistantFileUpload(e, 'image')}
-                      />
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        title="Upload document reference"
-                        onClick={() => assistantDocInputRef.current?.click()}
-                        disabled={aiParseLoading}
-                      >
-                        <FileText className="h-4 w-4" />
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        title="Upload image/photo"
-                        onClick={() => assistantImageInputRef.current?.click()}
-                        disabled={aiParseLoading}
-                      >
-                        <ImagePlus className="h-4 w-4" />
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={isListening ? stopSpeechToText : startSpeechToText}
-                        disabled={aiParseLoading}
-                      >
-                        {isListening ? (
-                          <>
-                            <MicOff className="h-4 w-4 mr-2" />
-                            Stop Mic
-                          </>
-                        ) : (
-                          <>
-                            <Mic className="h-4 w-4 mr-2" />
-                            Speak
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={fillFormFromAI}
-                        disabled={aiParseLoading || (!aiAssistantText.trim() && assistantMessages.length <= 1 && attachedDocs.length === 0 && attachedImages.length === 0)}
-                      >
-                        {aiParseLoading ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Researching...
-                          </>
-                        ) : (
-                          'Fill Form Now'
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setActiveTab('details')}
-                      >
-                        Skip
-                      </Button>
+                    {/* Footer */}
+                    <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/50 text-center text-xs text-slate-400">
+                      Powered by Bab Al Ilm AI
                     </div>
-                    <p className="text-xs text-slate-500">
-                      Upload image: AI guides you to enhance it. Upload document: used as reference for recipe, instructions, or ingredients. Fill Form Now: uses your message and attachments so AI generates the rest and fills the form.
-                    </p>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -3334,9 +3343,10 @@ export default function MenuForm({
                 </Card>
 
               </TabsContent>
-            </Tabs>
+              </Tabs>
           </div>
 
+          {activeTab !== 'ai' && (
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -3424,6 +3434,7 @@ export default function MenuForm({
               </Link>
             </div>
           </div>
+          )}
         </div>
       </form>
 
