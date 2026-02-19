@@ -187,25 +187,23 @@ async function getMenuData() {
   const timezone = (settings.menuTimezone as string) || restaurant.timezone || 'Asia/Baghdad'
   const currentSlot = getCurrentTimeSlot(timezone)
 
-  // Build showcase data — time-based schedule (when enabled), manual items, or AI by time of day
-  const scheduleType = (s: typeof showcases[0]) => s.schedule as { useTimeSlots?: boolean; displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'; breakfast?: { itemIds?: string[] }; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] } } | null
-  // Only show time-slot carousels (Breakfast / Day / Evening / Night) during their slot; always show others (Chef's Highlights, Recommended for Guests)
-  const filtered = showcases.filter((s) => {
-    const schedule = scheduleType(s)
+  type ScheduleShape = { useTimeSlots?: boolean; displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'; displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]; breakfast?: { itemIds?: string[] }; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] } } | null
+  const scheduleType = (s: typeof showcases[0]) => s.schedule as ScheduleShape
+  const slotMatches = (schedule: ScheduleShape) => {
+    const slots = schedule?.displayForSlots
+    if (Array.isArray(slots) && slots.length > 0) return slots.includes(currentSlot)
     const slot = schedule?.displayForSlot
     if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') return currentSlot === slot
     return true
-  })
-  // When we're showing a time-slot carousel (e.g. Evening), don't show Chef's Highlights so only one carousel is at the top
-  const hasActiveSlotCarousel = filtered.some((s) => scheduleType(s)?.displayForSlot === currentSlot)
-  const withoutChefsWhenSlotActive = hasActiveSlotCarousel
-    ? filtered.filter((s) => (s as { title?: string; type?: string }).title !== "Chef's Highlights" && (s as { type?: string }).type !== 'CHEFS_HIGHLIGHTS')
-    : filtered
-  const showcasesToShow = [...withoutChefsWhenSlotActive].sort((a, b) => {
-    const aSlot = scheduleType(a)?.displayForSlot
-    const bSlot = scheduleType(b)?.displayForSlot
-    const aIsCurrentSlot = (aSlot === 'breakfast' || aSlot === 'day' || aSlot === 'evening' || aSlot === 'night') && aSlot === currentSlot
-    const bIsCurrentSlot = (bSlot === 'breakfast' || bSlot === 'day' || bSlot === 'evening' || bSlot === 'night') && bSlot === currentSlot
+  }
+  const filtered = showcases.filter((s) => slotMatches(scheduleType(s)))
+  const showcasesToShow = [...filtered].sort((a, b) => {
+    const aSlots = scheduleType(a)?.displayForSlots
+    const aSingle = scheduleType(a)?.displayForSlot
+    const bSlots = scheduleType(b)?.displayForSlots
+    const bSingle = scheduleType(b)?.displayForSlot
+    const aIsCurrentSlot = (Array.isArray(aSlots) && aSlots.includes(currentSlot)) || (aSingle && aSingle === currentSlot)
+    const bIsCurrentSlot = (Array.isArray(bSlots) && bSlots.includes(currentSlot)) || (bSingle && bSingle === currentSlot)
     if (aIsCurrentSlot && !bIsCurrentSlot) return -1
     if (!aIsCurrentSlot && bIsCurrentSlot) return 1
     return 0
@@ -239,6 +237,7 @@ async function getMenuData() {
     evening: '2pm–6pm',
     night: '6pm–6am',
   }
+  const LUNCH_RANGE = '10am–6pm'
 
   const showcaseData = await Promise.all(
     showcasesToShow.map(async (showcase) => {
@@ -296,11 +295,13 @@ async function getMenuData() {
         showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
       }
 
-      const scheduleWithSlot = schedule as { displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night' } | null
-      const displaySlot = scheduleWithSlot?.displayForSlot
-      const activeTimeRange = displaySlot && (displaySlot === 'breakfast' || displaySlot === 'day' || displaySlot === 'evening' || displaySlot === 'night')
-        ? SLOT_TIME_RANGES[displaySlot]
-        : undefined
+      const displaySlots = (schedule as { displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[] })?.displayForSlots
+      const displaySlot = (schedule as { displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night' })?.displayForSlot
+      const activeTimeRange = Array.isArray(displaySlots) && displaySlots.length > 0
+        ? (displaySlots.includes('day') && displaySlots.includes('evening') ? LUNCH_RANGE : displaySlots.map((sl) => SLOT_TIME_RANGES[sl]).join(', '))
+        : displaySlot && (displaySlot === 'breakfast' || displaySlot === 'day' || displaySlot === 'evening' || displaySlot === 'night')
+          ? SLOT_TIME_RANGES[displaySlot]
+          : undefined
 
       return {
         id: showcase.id,

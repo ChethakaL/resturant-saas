@@ -65,8 +65,10 @@ interface TimeSlotSchedule {
   day?: { itemIds: string[] }
   evening?: { itemIds: string[] }
   night?: { itemIds: string[] }
-  /** When set, this carousel is only shown during this time slot (Breakfast / Day / Evening / Night). */
+  /** When set, this carousel is only shown during this time slot. */
   displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'
+  /** When set, this carousel is shown during any of these slots (e.g. lunch = day + evening). */
+  displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]
 }
 
 interface CategoryOption {
@@ -139,6 +141,7 @@ export default function MenuOptimizationContent({
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [scheduleSlotTab, setScheduleSlotTab] = useState<'breakfast' | 'day' | 'evening' | 'night'>('breakfast')
   const [scheduleSearch, setScheduleSearch] = useState('')
+  const [itemPickerSearch, setItemPickerSearch] = useState('')
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(false)
   const prevEngineModeRef = useRef<EngineMode>(resolvedMode)
   const maxCarouselItems = (engineMode === 'profit' || engineMode === 'adaptive') ? 6 : 999
@@ -205,10 +208,12 @@ export default function MenuOptimizationContent({
   const updateShowcase = async (id: string, updates: Partial<Pick<Showcase, 'title' | 'position' | 'insertAfterCategoryId' | 'isActive' | 'type' | 'schedule' | 'displayVariant'>>) => {
     setSavingShowcase(id)
     try {
-      // Slot-only carousels (Breakfast/Day/Evening/Night): persist only displayForSlot, never useTimeSlots
+      // Slot-only carousels: persist only displayForSlot or displayForSlots, never useTimeSlots
       const payload = { ...updates }
       const s = payload.schedule as TimeSlotSchedule | null | undefined
-      if (s?.displayForSlot) {
+      if (Array.isArray(s?.displayForSlots) && s.displayForSlots.length > 0) {
+        payload.schedule = { displayForSlots: s.displayForSlots }
+      } else if (s?.displayForSlot) {
         payload.schedule = { displayForSlot: s.displayForSlot }
       }
       const response = await fetch(`/api/menu-showcases/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -240,6 +245,7 @@ export default function MenuOptimizationContent({
     const showcase = showcases.find((s) => s.id === showcaseId)
     setSelectedItemIds(new Set((showcase?.items || []).map((item) => item.menuItemId)))
     setEditingShowcaseId(showcaseId)
+    setItemPickerSearch('')
     setItemPickerOpen(true)
   }
 
@@ -407,21 +413,30 @@ export default function MenuOptimizationContent({
       const recommendationIds = secondaryIds.length > 0 ? secondaryIds : primaryIds
       const firstCategory = categories[0]
 
-      // Remove legacy auto-generated sections so only useful carousel(s) remain.
-      const legacyTitles = new Set(['Breakfast', 'Lunch', 'Dinner'])
-      const toDelete = list.filter((s) => legacyTitles.has((s.title || '').trim()))
+      // Remove old carousels so we only have the 3 boss-approved ones: breakfast, lunch, dinner.
+      const titlesToRemove = new Set([
+        "Chef's Highlights",
+        'Recommended for Guests',
+        'Breakfast (6am–10am)',
+        'Day (10am–2pm)',
+        'Evening (2pm–6pm)',
+        'Night (6pm–6am)',
+        'Breakfast',
+        'Lunch',
+        'Dinner',
+      ])
+      const toDelete = list.filter((s) => titlesToRemove.has((s.title || '').trim()))
       for (const section of toDelete) {
         await fetch(`/api/menu-showcases/${section.id}`, { method: 'DELETE' })
       }
-      list = list.filter((s) => !legacyTitles.has((s.title || '').trim()))
+      list = list.filter((s) => !titlesToRemove.has((s.title || '').trim()))
 
-      // In Smart Profit (adaptive) mode: breakfast 6–10, day 10–14, evening 14–18, night 18–6 (restaurant timezone, e.g. Erbil).
       const breakfastIds = (suggested.breakfast ?? primaryIds).slice(0, maxCarouselItems)
       const dayIds = (suggested.day ?? primaryIds).slice(0, maxCarouselItems)
       const eveningIds = (suggested.evening ?? recommendationIds).slice(0, maxCarouselItems)
       const nightIds = (suggested.night ?? recommendationIds).slice(0, maxCarouselItems)
-      // Chef's Highlights and Recommended for Guests: one set of items, shown all day (no useTimeSlots).
-      // Breakfast/Day/Evening/Night carousels use displayForSlot only (shown only in that time window).
+      const lunchIds = Array.from(new Set([...(suggested.day ?? []), ...(suggested.evening ?? [])])).slice(0, maxCarouselItems)
+
       const upsertShowcase = async (
         def: {
           title: string
@@ -433,10 +448,8 @@ export default function MenuOptimizationContent({
           schedule?: TimeSlotSchedule | null
         }
       ) => {
-        // Match by title first. Only for the two main carousels fall back to type, so time-slot carousels (Breakfast, Day, Evening, Night) don't reuse "Recommended for Guests".
         const byTitle = list.find((s) => s.title === def.title)
-        const byType = (def.title === "Chef's Highlights" || def.title === 'Recommended for Guests') ? list.find((s) => s.type === def.type) : undefined
-        let showcase = byTitle ?? byType
+        let showcase = byTitle
         if (!showcase) {
           const createRes = await fetch('/api/menu-showcases', {
             method: 'POST',
@@ -513,69 +526,29 @@ export default function MenuOptimizationContent({
         )
       }
 
-      const chefHighlightPool =
-        engineMode === 'adaptive'
-          ? Array.from(new Set([...breakfastIds, ...dayIds, ...eveningIds, ...nightIds]))
-          : primaryIds
-
+      // Only 3 carousels: Chef's recommendation for breakfast, lunch, dinner (boss requirement).
       list = await upsertShowcase({
-        title: "Chef's Highlights",
+        title: "Chef's recommendation for breakfast",
         type: 'CHEFS_HIGHLIGHTS',
         displayVariant: 'hero',
-        itemIds: chefHighlightPool,
-        position: 'top',
-        insertAfterCategoryId: null,
-        schedule: null,
-      })
-
-      const recommendationPool =
-        engineMode === 'adaptive'
-          ? Array.from(new Set([...breakfastIds, ...dayIds, ...eveningIds, ...nightIds]))
-          : recommendationIds
-
-      list = await upsertShowcase({
-        title: 'Recommended for Guests',
-        type: 'RECOMMENDATIONS',
-        displayVariant: 'cards',
-        itemIds: recommendationPool,
-        position: firstCategory ? 'between-categories' : 'top',
-        insertAfterCategoryId: firstCategory?.id ?? null,
-        schedule: null,
-      })
-
-      // In both Profit and Smart Profit: add four time-slot carousels (Breakfast, Day, Evening, Night).
-      // Each is only shown on the guest menu during that time slot in the menu timezone.
-      list = await upsertShowcase({
-        title: 'Breakfast (6am–10am)',
-        type: 'RECOMMENDATIONS',
-        displayVariant: 'cards',
         itemIds: breakfastIds,
         position: 'top',
         insertAfterCategoryId: null,
         schedule: { displayForSlot: 'breakfast' },
       })
       list = await upsertShowcase({
-        title: 'Day (10am–2pm)',
-        type: 'RECOMMENDATIONS',
-        displayVariant: 'cards',
-        itemIds: dayIds,
+        title: "Chef's recommendation for lunch",
+        type: 'CHEFS_HIGHLIGHTS',
+        displayVariant: 'hero',
+        itemIds: lunchIds.length > 0 ? lunchIds : dayIds,
         position: 'top',
         insertAfterCategoryId: null,
-        schedule: { displayForSlot: 'day' },
+        schedule: { displayForSlots: ['day', 'evening'] },
       })
       list = await upsertShowcase({
-        title: 'Evening (2pm–6pm)',
-        type: 'RECOMMENDATIONS',
-        displayVariant: 'cards',
-        itemIds: eveningIds,
-        position: 'top',
-        insertAfterCategoryId: null,
-        schedule: { displayForSlot: 'evening' },
-      })
-      list = await upsertShowcase({
-        title: 'Night (6pm–6am)',
-        type: 'RECOMMENDATIONS',
-        displayVariant: 'cards',
+        title: "Chef's recommendation for dinner",
+        type: 'CHEFS_HIGHLIGHTS',
+        displayVariant: 'hero',
         itemIds: nightIds,
         position: 'top',
         insertAfterCategoryId: null,
@@ -587,17 +560,12 @@ export default function MenuOptimizationContent({
       if (engineMode === 'adaptive' && !suggested.usedSalesData) {
         toast({
           title: 'Smart Profit fallback used',
-          description: 'No sales history yet, so Smart Profit used high-margin fallback. Carousels may look similar to Profit mode until sales data is available.',
-        })
-      } else if (engineMode === 'adaptive') {
-        toast({
-          title: 'Carousels ready',
-          description: "Chef's Highlights, Recommendations, plus Breakfast / Day / Evening / Night carousels. Time-slot carousels show only in that period (menu timezone).",
+          description: 'No sales history yet; used high-margin fallback for all three carousels.',
         })
       } else {
         toast({
           title: 'Carousels ready',
-          description: "Created Chef's Highlights and Recommendations from high-margin items.",
+          description: "Three carousels: Chef's recommendation for breakfast, lunch, and dinner. Each shows only in its time period (menu timezone).",
         })
       }
     } catch {
@@ -858,7 +826,7 @@ export default function MenuOptimizationContent({
               <CardTitle>Featured item sections (carousels)</CardTitle>
               <p className="text-sm text-slate-500 mt-1">
                 Swipeable rows of items on the menu. {engineMode === 'classic' && 'You choose items or use defaults.'}
-                {(engineMode === 'profit' || engineMode === 'adaptive') && "Profit and Smart Profit modes auto-build Chef's Highlights and Recommendations carousels using your highest-margin items. Up to 6 items per carousel."}
+                {(engineMode === 'profit' || engineMode === 'adaptive') && "Profit and Smart Profit modes auto-build three carousels: Chef's recommendation for breakfast, lunch, and dinner. Each shows only in its time period. Up to 6 items per carousel."}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -954,8 +922,8 @@ export default function MenuOptimizationContent({
                         ))}
                       </select>
                     </div>
-                    {/* Chef's Highlights and Recommended for Guests: optional "Use time slots" (different items per slot). Breakfast/Day/Evening/Night: no checkbox – they only show in that time window. */}
-                    {!(showcase.schedule as TimeSlotSchedule)?.displayForSlot ? (
+                    {/* Time-slot carousels (breakfast/lunch/dinner): no "Use time slots" checkbox – they only show in that time window. */}
+                    {!(showcase.schedule as TimeSlotSchedule)?.displayForSlot && !(Array.isArray((showcase.schedule as TimeSlotSchedule)?.displayForSlots) && (showcase.schedule as TimeSlotSchedule)!.displayForSlots!.length > 0) ? (
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -983,7 +951,7 @@ export default function MenuOptimizationContent({
                           {showcase.items.length > 0 ? `${showcase.items.length} items selected` : 'Auto-populated (AI or high-margin when no slots)'}
                         </p>
                         <div className="flex gap-2">
-                          {(showcase.schedule as TimeSlotSchedule)?.useTimeSlots && !(showcase.schedule as TimeSlotSchedule)?.displayForSlot && (
+                          {(showcase.schedule as TimeSlotSchedule)?.useTimeSlots && !(showcase.schedule as TimeSlotSchedule)?.displayForSlot && !(Array.isArray((showcase.schedule as TimeSlotSchedule)?.displayForSlots) && (showcase.schedule as TimeSlotSchedule)!.displayForSlots!.length > 0) && (
                             <Button variant="outline" size="sm" onClick={() => openScheduleDialog(showcase)} title="Set different items by time of day">
                               <Clock className="h-4 w-4 mr-1" />Time slots
                             </Button>
@@ -1014,7 +982,7 @@ export default function MenuOptimizationContent({
       </Card>
 
       <Dialog open={itemPickerOpen} onOpenChange={setItemPickerOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Select Carousel Items</DialogTitle>
             <DialogDescription>
@@ -1022,19 +990,44 @@ export default function MenuOptimizationContent({
               Leave empty for automatic selection.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-1 py-2">
-            {menuItems.map((item) => {
-              const isSelected = selectedItemIds.has(item.id)
-              const atLimit = !isSelected && selectedItemIds.size >= maxCarouselItems
-              return (
-                <button key={item.id} onClick={() => !atLimit && toggleItemSelection(item.id)} disabled={atLimit} className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${isSelected ? 'border-emerald-400 bg-emerald-50' : atLimit ? 'opacity-60 cursor-not-allowed border-slate-200' : 'border-slate-200 hover:bg-slate-50'}`}>
-                  <div className={`flex h-5 w-5 items-center justify-center rounded border ${isSelected ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>{isSelected && <Check className="h-3 w-3" />}</div>
-                  {item.imageUrl && <img src={item.imageUrl} alt="" className="h-8 w-8 rounded object-cover" />}
-                  <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{item.name}</p></div>
-                  <span className="text-xs font-medium text-slate-500">{formatCurrency(item.price)}</span>
-                </button>
-              )
-            })}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search menu items..."
+              value={itemPickerSearch}
+              onChange={(e) => setItemPickerSearch(e.target.value)}
+              className="pl-9"
+            />
+            {itemPickerSearch && (
+              <button type="button" onClick={() => setItemPickerSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Clear search">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-1 py-2">
+            {(() => {
+              const q = itemPickerSearch.trim().toLowerCase()
+              const filtered = q ? menuItems.filter((item) => item.name.toLowerCase().includes(q)) : menuItems
+              if (filtered.length === 0) {
+                return (
+                  <div className="py-8 text-center text-sm text-slate-500">
+                    {itemPickerSearch ? 'No menu items match your search.' : 'No menu items.'}
+                  </div>
+                )
+              }
+              return filtered.map((item) => {
+                const isSelected = selectedItemIds.has(item.id)
+                const atLimit = !isSelected && selectedItemIds.size >= maxCarouselItems
+                return (
+                  <button key={item.id} onClick={() => !atLimit && toggleItemSelection(item.id)} disabled={atLimit} className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${isSelected ? 'border-emerald-400 bg-emerald-50' : atLimit ? 'opacity-60 cursor-not-allowed border-slate-200' : 'border-slate-200 hover:bg-slate-50'}`}>
+                    <div className={`flex h-5 w-5 items-center justify-center rounded border ${isSelected ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>{isSelected && <Check className="h-3 w-3" />}</div>
+                    {item.imageUrl && <img src={item.imageUrl} alt="" className="h-8 w-8 rounded object-cover" />}
+                    <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{item.name}</p></div>
+                    <span className="text-xs font-medium text-slate-500">{formatCurrency(item.price)}</span>
+                  </button>
+                )
+              })
+            })()}
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setSelectedItemIds(new Set())}>Clear All</Button>
