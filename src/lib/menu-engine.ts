@@ -21,6 +21,7 @@ import {
   MOOD_CATEGORY_MAPPING,
   CATEGORY_PRIORITY_KEYWORDS,
 } from '@/lib/menu-engine-defaults'
+import { classifyItemType } from '@/lib/category-suggest'
 
 /** Server-side item with cost and sales (never sent to client). */
 export interface EngineMenuItem {
@@ -299,6 +300,18 @@ function orderItemsForAdaptiveMode(
 /** Top N "often bought together" pairs by purchase count. Filter by co-purchase correlation (e.g. 35%). */
 const TOP_BUNDLES_BY_COUNT = 5
 
+/** True if item is classified as Main Dishes (so we never bundle two mains). */
+function isMainDish(item: EngineMenuItem): boolean {
+  const type = classifyItemType({
+    id: item.id,
+    name: item.name,
+    categoryName: item.categoryName ?? null,
+    marginPercent: item._marginPercent,
+    unitsSold: item._unitsSold,
+  })
+  return type === 'Main Dishes'
+}
+
 function generateBundles(
   pairs: CoPurchasePair[],
   items: EngineMenuItem[],
@@ -317,12 +330,13 @@ function generateBundles(
   const sorted = [...withCorrelation].sort((a, b) => b.pairCount - a.pairCount)
   const bundles: BundleHint[] = []
   const used = new Set<string>()
-  for (let i = 0; i < Math.min(TOP_BUNDLES_BY_COUNT, sorted.length); i++) {
+  for (let i = 0; i < sorted.length && bundles.length < TOP_BUNDLES_BY_COUNT; i++) {
     const { p } = sorted[i]
     if (used.has(p.itemIdA + p.itemIdB) || used.has(p.itemIdB + p.itemIdA)) continue
     const a = itemMap.get(p.itemIdA)
     const b = itemMap.get(p.itemIdB)
     if (!a || !b) continue
+    if (isMainDish(a) && isMainDish(b)) continue
     const originalPrice = a.price + b.price
     const discount = Math.round(originalPrice * 0.07)
     const bundlePrice = originalPrice - discount

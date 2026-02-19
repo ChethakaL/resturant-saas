@@ -873,7 +873,7 @@ export default function MenuOptimizationContent({
                         value={showcase.title}
                         onChange={(e) => setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, title: e.target.value } : s)))}
                         onBlur={() => updateShowcase(showcase.id, { title: showcase.title })}
-                        className="text-sm font-semibold max-w-[200px]"
+                        className="text-sm font-semibold min-w-[280px] max-w-[420px]"
                       />
                       <select
                         value={showcase.type ?? 'RECOMMENDATIONS'}
@@ -939,11 +939,26 @@ export default function MenuOptimizationContent({
                         />
                         <Label htmlFor={`use-time-slots-${showcase.id}`} className="text-sm font-normal cursor-pointer">Use time slots (different items per Breakfast / Day / Evening / Night)</Label>
                       </div>
-                    ) : (
-                      <p className="text-xs text-slate-500">
-                        Shown only during this time period on the guest menu (menu timezone).
-                      </p>
-                    )}
+                    ) : (() => {
+                      const s = showcase.schedule as TimeSlotSchedule | null | undefined
+                      const slotRanges: Record<string, string> = { breakfast: '6am–10am', day: '10am–2pm', evening: '2pm–6pm', night: '6pm–6am' }
+                      const slots = s?.displayForSlots
+                      const slot = s?.displayForSlot
+                      const timeLabel = Array.isArray(slots) && slots.length > 0
+                        ? (slots.includes('day') && slots.includes('evening') ? '10am–6pm' : slots.map((sl) => slotRanges[sl]).join(', '))
+                        : slot && slotRanges[slot]
+                          ? slotRanges[slot]
+                          : null
+                      return (
+                        <p className="text-xs text-slate-500">
+                          {timeLabel ? (
+                            <>Shown <strong>{timeLabel}</strong> on the guest menu (menu timezone).</>
+                          ) : (
+                            'Shown only during this time period on the guest menu (menu timezone).'
+                          )}
+                        </p>
+                      )
+                    })()}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <p className="text-xs text-slate-500">
