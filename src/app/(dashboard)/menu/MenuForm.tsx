@@ -184,11 +184,17 @@ export default function MenuForm({
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
     {
       role: 'assistant',
-      text: 'Tell me about the dish. I will ask follow-up questions, then fill the form, SOP, and ingredients for you. I will not generate the image; I will guide you to add it.',
+      text: 'Tell me about the dish you want to add. I will ask follow-up questions to gather details. You can also click "Fill Form Now" at any time to have me research and fill the entire recipe, ingredients, and SOP for you!',
     },
   ])
   const [isListening, setIsListening] = useState(false)
   const speechRecognitionRef = useRef<any>(null)
+
+  // AI Assistant attachment state
+  const assistantDocInputRef = useRef<HTMLInputElement>(null)
+  const assistantImageInputRef = useRef<HTMLInputElement>(null)
+  const [attachedDocs, setAttachedDocs] = useState<{ name: string, type: string, base64: string }[]>([])
+  const [attachedImages, setAttachedImages] = useState<{ name: string, type: string, base64: string }[]>([])
 
   // Guided next-step: which tab to show and which field to highlight after AI fill
   const [activeTab, setActiveTab] = useState<string>(mode === 'edit' ? 'overview' : 'ai')
@@ -464,6 +470,7 @@ export default function MenuForm({
   const [recipeTips, setRecipeTips] = useState<string[]>(menuItem?.recipeTips || [])
   const [prepTime, setPrepTime] = useState(menuItem?.prepTime || '')
   const [cookTime, setCookTime] = useState(menuItem?.cookTime || '')
+  const [recipeYield, setRecipeYield] = useState<number>((menuItem as any)?.recipeYield || 1)
 
   // Track newly created ingredients (so they show in the recipe builder before page refresh)
   const [newlyCreatedIngredients, setNewlyCreatedIngredients] = useState<Ingredient[]>([])
@@ -1114,6 +1121,7 @@ export default function MenuForm({
       const unmatched: string[] = []
       const createdIngredients: Ingredient[] = []
       const yieldFactor = (data.recipeYield && data.recipeYield > 0) ? data.recipeYield : 1
+      if (data.recipeYield && data.recipeYield > 0) setRecipeYield(data.recipeYield)
 
       for (const ing of data.ingredients) {
         const nameLower = (ing.name || '').toLowerCase().trim()
@@ -1259,61 +1267,93 @@ export default function MenuForm({
   }
 
   const buildFollowUpQuestion = (data: ParsedAIResponse): { question: string; ready: boolean } => {
-    const missingName = !data.name || !data.name.trim()
-    const missingCategory = !findCategoryIdByName(data.categoryName)
-    const missingYield = data.recipeYield == null
-    const missingPrice = !(typeof data.price === 'number' && data.price > 0)
-    const missingIngredients = !Array.isArray(data.ingredients) || data.ingredients.length === 0
-    const missingSteps = !Array.isArray(data.recipeSteps) || data.recipeSteps.length === 0
-    const missingTips = !Array.isArray(data.recipeTips) || data.recipeTips.length === 0
+    // With Smart Chef, the AI drives the conversation. 
+    // We only consider it 'ready' when explicitly marked or when name, category, and ingredients exist.
+    const hasName = data.name && data.name.trim().length > 0
+    const hasCategory = !!findCategoryIdByName(data.categoryName)
+    const hasIngredients = Array.isArray(data.ingredients) && data.ingredients.length > 0
+    const hasPrice = typeof data.price === 'number' && data.price > 0
 
-    if (missingName) return { ready: false, question: 'What is the exact menu item name?' }
-    if (missingCategory) return { ready: false, question: 'Which category should this item be in?' }
-    if (missingYield) return { ready: false, question: 'How many servings does this recipe make? (e.g. 1, 4, 10)' }
-    if (missingPrice) return { ready: false, question: 'What is the selling price in IQD?' }
-    if (missingIngredients) return { ready: false, question: 'Please list ingredients with quantity and unit (for example: chicken 0.2 kg, rice 0.15 kg).' }
-    if (missingSteps) return { ready: false, question: 'Please provide SOP steps for preparation and cooking.' }
-    if (missingTips) return { ready: false, question: 'Any SOP tips for consistency or plating? If none, say \"no tips\".' }
-    return { ready: true, question: '' }
+    const ready = !!hasName && !!hasCategory && !!hasIngredients && !!hasPrice
+    return { ready, question: '' }
   }
 
   const submitAssistantMessage = async () => {
     const text = aiAssistantText.trim()
-    if (!text) return
+    if (!text && attachedDocs.length === 0 && attachedImages.length === 0) return
+
     setAiParseLoading(true)
     try {
-      const nextMessages = [...assistantMessages, { role: 'user' as const, text }]
+      const userMessage = {
+        role: 'user' as const,
+        text: text || (attachedDocs.length > 0 || attachedImages.length > 0 ? "Sent attachments" : "")
+      }
+      const nextMessages = [...assistantMessages, userMessage]
       setAssistantMessages(nextMessages)
       setAiAssistantText('')
-      const transcript = nextMessages
-        .filter((m) => m.role === 'user')
-        .map((m) => m.text)
-        .join('\n')
-      const data = await parseMenuWithAI(transcript)
-      const followUp = buildFollowUpQuestion(data)
-      if (followUp.ready) {
-        await applyParsedDataToForm(data, { autoCreateIngredients: true, quietToast: true })
-        setAssistantMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            text: 'Great, I have enough data. I filled details, SOP, and ingredients (creating missing ingredients where possible). Next step: go to Details tab and add/generate image manually.',
+
+      // Prepare attachments for API
+      const attachments = [
+        ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
+        ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
+      ]
+
+      const response = await fetch('/api/menu/smart-chef', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: nextMessages,
+          categories: categories.map(c => c.name),
+          inventory: ingredients.map(i => ({
+            name: i.name,
+            unit: i.unit,
+            costPerUnit: i.costPerUnit
+          })),
+          currentData: {
+            name: formData.name,
+            categoryName: categories.find(c => c.id === formData.categoryId)?.name || '',
+            price: parseFloat(formData.price) || 0,
+            ingredients: recipe,
+            recipeSteps,
+            recipeTips,
+            recipeYield
           },
-        ])
-        setActiveTab('details')
-        setNextStepHighlight('image')
-      } else {
+          attachments
+        }),
+      })
+
+      if (!response.ok) throw new Error('Smart Chef failed to respond')
+      const result = await response.json()
+
+      setAssistantMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: result.message,
+        },
+      ])
+
+      // Clear attachments after sending
+      setAttachedDocs([])
+      setAttachedImages([])
+
+      // If the AI says it's finished or matches our "ready" criteria, we can highlight the Fill button
+      if (result.data?.isFinished || result.message.toLowerCase().includes('finished')) {
         setAssistantMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            text: followUp.question,
+            text: 'I have all the information! Click "Fill Form Now" to finalize the menu item.',
           },
         ])
       }
+
+      // We don't auto-apply here to keep chat clean as per request, 
+      // but we could store the latest data in a ref or state if needed.
+
     } catch (err) {
       toast({
-        title: 'Assistant error',
+        title: 'Smart Chef Error',
         description: err instanceof Error ? err.message : 'Something went wrong.',
         variant: 'destructive',
       })
@@ -1357,19 +1397,98 @@ export default function MenuForm({
     }
   }
 
+  const handleAssistantFileUpload = async (e: ChangeEvent<HTMLInputElement>, type: 'doc' | 'image') => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const newAttachments: { name: string, type: string, base64: string }[] = []
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const reader = new FileReader()
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = () => {
+          const result = reader.result as string
+          resolve(result.split(',')[1]) // Remove data URL prefix
+        }
+      })
+      reader.readAsDataURL(file)
+      const base64 = await base64Promise
+      newAttachments.push({ name: file.name, type: file.type, base64 })
+    }
+
+    if (type === 'doc') {
+      setAttachedDocs((prev) => [...prev, ...newAttachments])
+    } else {
+      setAttachedImages((prev) => [...prev, ...newAttachments])
+    }
+
+    // Reset input
+    e.target.value = ''
+  }
+
+  const removeAttachment = (name: string, type: 'doc' | 'image') => {
+    if (type === 'doc') {
+      setAttachedDocs((prev) => prev.filter((d) => d.name !== name))
+    } else {
+      setAttachedImages((prev) => prev.filter((i) => i.name !== name))
+    }
+  }
+
   const fillFormFromAI = async () => {
-    const text = aiAssistantText.trim()
-    if (!text) {
-      toast({ title: 'Enter a description', description: 'Paste or type the menu item info you have (name, price, description, etc.)', variant: 'destructive' })
+    let text = aiAssistantText.trim()
+
+    // If text area is empty, use the whole conversation history
+    if (!text && assistantMessages.length > 0) {
+      text = assistantMessages
+        .filter((m) => m.role === 'user')
+        .map((m) => m.text)
+        .join('\n')
+    }
+
+    if (!text && attachedDocs.length === 0 && attachedImages.length === 0) {
+      toast({ title: 'No info to fill', description: 'Please type a dish name, upload a file, or chat with the AI first.', variant: 'destructive' })
       return
     }
+
     setAiParseLoading(true)
     try {
-      const data = await parseMenuWithAI(text)
+      // Use the new deep research API that can search the web if info is missing
+      const response = await fetch('/api/menu/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          categoryNames: categories.map(c => c.name),
+          attachments: [
+            ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
+            ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
+          ]
+        }),
+      })
+
+      if (!response.ok) throw new Error('Research failed')
+      const data = await response.json()
+
       await applyParsedDataToForm(data, { autoCreateIngredients: true })
+
+      setAssistantMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: 'I have researched and gathered the full recipe, ingredients, and SOP steps for you! You can review them in the "Manual" and "Recipe" tabs.',
+        },
+      ])
+
+      // Clear attachments
+      setAttachedDocs([])
+      setAttachedImages([])
+
+      toast({ title: 'Form Research Complete', description: 'Recipe and details gathered and filled.' })
+      setActiveTab('details')
     } catch (err) {
       toast({
-        title: 'Could not parse',
+        title: 'Could not research',
         description: err instanceof Error ? err.message : 'Something went wrong.',
         variant: 'destructive',
       })
@@ -1800,7 +1919,7 @@ export default function MenuForm({
                 )}
                 <TabsTrigger value="details" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  Details
+                  Manual
                 </TabsTrigger>
                 <TabsTrigger value="recipe" className="flex items-center gap-2">
                   <ChefHat className="h-4 w-4" />
@@ -1919,7 +2038,7 @@ export default function MenuForm({
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Sparkles className="h-5 w-5 text-emerald-500" />
-                      AI Assistant
+                      Smart Chef
                     </CardTitle>
                     <CardDescription>
                       Chat with AI. It will ask follow-up questions and fill details, SOP, and ingredients. Image is not auto-generated here.
@@ -1964,11 +2083,34 @@ export default function MenuForm({
                       rows={4}
                       className="resize-y"
                     />
+                    <div className="flex flex-wrap gap-2">
+                      {attachedDocs.map((doc) => (
+                        <Badge key={doc.name} variant="secondary" className="flex items-center gap-1">
+                          <FileText className="h-3 w-3" />
+                          <span className="max-w-[100px] truncate">{doc.name}</span>
+                          <Trash2
+                            className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700"
+                            onClick={() => removeAttachment(doc.name, 'doc')}
+                          />
+                        </Badge>
+                      ))}
+                      {attachedImages.map((img) => (
+                        <Badge key={img.name} variant="secondary" className="flex items-center gap-1 bg-emerald-50 border-emerald-200 text-emerald-700">
+                          <ImagePlus className="h-3 w-3" />
+                          <span className="max-w-[100px] truncate">{img.name}</span>
+                          <Trash2
+                            className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700"
+                            onClick={() => removeAttachment(img.name, 'image')}
+                          />
+                        </Badge>
+                      ))}
+                    </div>
+
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         onClick={submitAssistantMessage}
-                        disabled={aiParseLoading || !aiAssistantText.trim()}
+                        disabled={aiParseLoading || (!aiAssistantText.trim() && attachedDocs.length === 0 && attachedImages.length === 0)}
                       >
                         {aiParseLoading ? (
                           <>
@@ -1982,6 +2124,46 @@ export default function MenuForm({
                           </>
                         )}
                       </Button>
+
+                      <input
+                        type="file"
+                        ref={assistantDocInputRef}
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.txt"
+                        multiple
+                        onChange={(e) => handleAssistantFileUpload(e, 'doc')}
+                      />
+                      <input
+                        type="file"
+                        ref={assistantImageInputRef}
+                        className="hidden"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => handleAssistantFileUpload(e, 'image')}
+                      />
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        title="Upload document reference"
+                        onClick={() => assistantDocInputRef.current?.click()}
+                        disabled={aiParseLoading}
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        title="Upload image/photo"
+                        onClick={() => assistantImageInputRef.current?.click()}
+                        disabled={aiParseLoading}
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                      </Button>
+
                       <Button
                         type="button"
                         variant="outline"
@@ -2004,9 +2186,16 @@ export default function MenuForm({
                         type="button"
                         variant="outline"
                         onClick={fillFormFromAI}
-                        disabled={aiParseLoading || !aiAssistantText.trim()}
+                        disabled={aiParseLoading || (!aiAssistantText.trim() && assistantMessages.length <= 1 && attachedDocs.length === 0 && attachedImages.length === 0)}
                       >
-                        Fill Form Now
+                        {aiParseLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Researching...
+                          </>
+                        ) : (
+                          'Fill Form Now'
+                        )}
                       </Button>
                       <Button
                         type="button"
@@ -2017,7 +2206,7 @@ export default function MenuForm({
                       </Button>
                     </div>
                     <p className="text-xs text-slate-500">
-                      For Arabic speech-to-text, backend Whisper integration is recommended for better accuracy.
+                      Upload recipes, spreadsheets, or photos for the AI to extract data.
                     </p>
                   </CardContent>
                 </Card>

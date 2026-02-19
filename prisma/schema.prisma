@@ -369,7 +369,7 @@ model SaleItem {
   price      Float
   cost       Float
   createdAt  DateTime @default(now())
-  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   sale       Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
@@ -443,7 +443,7 @@ model MealPrepItem {
   menuItemId      String
   quantityPrepped Int
   createdAt       DateTime        @default(now())
-  menuItem        MenuItem        @relation(fields: [menuItemId], references: [id])
+  menuItem        MenuItem        @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   prepSession     MealPrepSession @relation(fields: [prepSessionId], references: [id], onDelete: Cascade)
 
   @@index([prepSessionId])

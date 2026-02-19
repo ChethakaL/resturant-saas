@@ -6,10 +6,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number): string {
+  const isSmall = amount > 0 && amount < 1
   return new Intl.NumberFormat('en-IQ', {
     style: 'currency',
     currency: 'IQD',
-    minimumFractionDigits: 0,
+    minimumFractionDigits: isSmall ? 2 : 0,
+    maximumFractionDigits: isSmall ? 4 : 0,
   }).format(amount)
 }
 

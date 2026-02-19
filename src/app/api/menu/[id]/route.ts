@@ -232,8 +232,16 @@ export async function DELETE(
     revalidatePath('/')
 
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error deleting menu item:', error)
+
+    if (error.code === 'P2003') {
+      return NextResponse.json(
+        { error: 'Cannot delete this item because it is referenced by other records (e.g., sales or meal prep). Please try again or archive it.' },
+        { status: 400 }
+      )
+    }
+
     return NextResponse.json(
       { error: 'Failed to delete menu item' },
       { status: 500 }

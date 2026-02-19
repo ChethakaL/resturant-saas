@@ -50,16 +50,17 @@ export async function POST(request: NextRequest) {
       prompt += ` Additional instructions from the user: ${additionalInstructions}.`
     }
 
-  prompt += `
+    prompt += `
 
 The restaurant has these ingredients available: ${ingredientNames || 'No ingredients in inventory yet'}.
 
-You must tailor the recipe to a single serving and obey the following portion guidelines:
+You must tailor the recipe to a realistic batch size and obey the following portion guidelines:
   - Keep vegetables/fruits under 0.25 kg per serving (e.g., 2 tomatoes ~0.15 kg) and provide piece counts for countable items.
   - Dry goods like lentils, rice, beans should never exceed 2 cups per serving.
   - Liquids should stay below 0.2 L per serving unless a broth is required, and spices should be under 2 tbsp.
   - Always fill the \`pieceCount\` field when you refer to whole onions, tomatoes, eggs, cloves, etc., otherwise leave it null.
-  - Use realistic per-serving quantities; avoid suggesting 1 kg of turmeric or 1 kg of tomatoes unless you explain they will be stretched across the batch.
+  - Use realistic quantities; avoid suggesting 1 kg of turmeric or 1 kg of tomatoes unless you explain they will be stretched across the batch.
+  - ESTIMATE THE NUMBER OF SERVINGS (yield) carefully based on the total quantity of ingredients (typical main course is 300g-500g total per serving).
 
 Please provide a detailed recipe with:
 1. A list of ingredients with quantities using appropriate units:
@@ -71,12 +72,13 @@ Please provide a detailed recipe with:
 2. Step-by-step cooking instructions
 3. Estimated cooking time
 4. Estimated calories per serving
-5. Any tips for best results
+5. Estimated yield (number of servings) — carefully estimate this based on the total quantity of ingredients.
+6. Any tips for best results
 
 IMPORTANT: Return your response in this exact JSON format, replacing the placeholder numbers with realistic values:
 {
   "recipeName": "Name of the dish",
-  "servings": 1,
+  "servings": 4, 
   "prepTime": "10 minutes",
   "cookTime": "20 minutes",
   "price": 0,
@@ -107,6 +109,7 @@ IMPORTANT FOR INGREDIENTS:
 - For countable items (tomatoes, onions, eggs, carrots, etc.), include "pieceCount" with the count
 - The "quantity" should be the weight/volume measurement
 - The "pieceCount" should be the number of whole items (e.g., 2 for 2 onions) - set to null for non-countable items
+- Estimate "servings" (recipeYield) realistically. If the user didn't specify, assume a standard batch size (e.g., 4 or 6) or 1 for individual items.
 - For each ingredient, check if it matches one from the available ingredients list. Set "isAvailable" to true if available, false if not.
 Return ONLY valid JSON, no additional text or markdown.`
 

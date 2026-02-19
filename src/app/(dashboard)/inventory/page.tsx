@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import { InventoryTable } from '@/app/(dashboard)/inventory/InventoryTable'
+import { InventorySearch } from '@/app/(dashboard)/inventory/InventorySearch'
 
 const PAGE_SIZE = 25
 
@@ -18,13 +19,23 @@ type IngredientSelectRow = {
   preferredSupplierId: string | null
 }
 
-async function getInventoryData(restaurantId: string, page: number) {
+async function getInventoryData(restaurantId: string, page: number, query?: string) {
   const skip = (page - 1) * PAGE_SIZE
 
+  const where = {
+    restaurantId,
+    ...(query && {
+      OR: [
+        { name: { contains: query, mode: 'insensitive' as const } },
+        { supplier: { contains: query, mode: 'insensitive' as const } },
+      ],
+    }),
+  }
+
   const [totalCount, ingredientsRaw] = await Promise.all([
-    prisma.ingredient.count({ where: { restaurantId } }),
+    prisma.ingredient.count({ where }),
     prisma.ingredient.findMany({
-      where: { restaurantId },
+      where,
       orderBy: { name: 'asc' },
       skip,
       take: PAGE_SIZE,
@@ -45,9 +56,9 @@ async function getInventoryData(restaurantId: string, page: number) {
   const suppliers =
     supplierIds.length > 0
       ? await (prisma as any).supplier.findMany({
-          where: { id: { in: supplierIds } },
-          select: { id: true, name: true },
-        })
+        where: { id: { in: supplierIds } },
+        select: { id: true, name: true },
+      })
       : []
   const supplierById = Object.fromEntries(suppliers.map((s) => [s.id, s]))
 
@@ -70,28 +81,32 @@ async function getInventoryData(restaurantId: string, page: number) {
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams?: { page?: string }
+  searchParams?: { page?: string; q?: string }
 }) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
   const page = Math.max(Number(searchParams?.page || 1), 1)
+  const query = searchParams?.q
 
-  const data = await getInventoryData(restaurantId, page)
+  const data = await getInventoryData(restaurantId, page, query)
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Inventory Management</h1>
           <p className="text-slate-500 mt-1">Manage your ingredients</p>
         </div>
-        <Link href="/inventory/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Ingredient
-          </Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <InventorySearch />
+          <Link href="/inventory/new">
+            <Button className="shrink-0">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Ingredient
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Ingredients Table */}

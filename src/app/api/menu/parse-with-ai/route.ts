@@ -68,7 +68,7 @@ async function parseWithGemini(text: string, categoryNames: string[]): Promise<P
       ? `Available categories (pick the closest match): ${categoryNames.join(', ')}.`
       : 'Suggest a short category name like Main Course, Appetizer, Dessert, Drinks, Sides.'
 
-  const prompt = `You are helping fill a restaurant menu form. The user provided this description:
+  const prompt = `You are helping fill a restaurant menu form. The user provided:
 
 """
 ${text}
@@ -77,10 +77,10 @@ ${text}
 ${categoryHint}
 
 Extract: name, description, price (IQD), categoryName, recipeSteps, recipeTips, prepTime, cookTime, recipeYield, ingredients.
-- recipeSteps: from "Steps:" or numbered instructions. recipeTips: from "Tips:" or tip bullets—always extract these if the user provided any.
-- recipeYield: number of servings this recipe makes (null if not mentioned).
-- ingredients: list of {name, quantity, unit, pieceCount} inferred from the text (ingredient lists, recipe steps). Use kg/g/cup/tsp/tbsp/L; pieceCount for countable items.
-For calories/protein/carbs: use if given, else estimate. For tags: use if given, else suggest.
+- recipeSteps from steps/instructions; recipeTips from "Tips:" or bullets—always include if user provided.
+- recipeYield: ESTIMATE the number of servings this recipe makes if not mentioned (default to 1 for individual items, 4-6 for batch items). If you estimate it, make it sound like a guess.
+- ingredients: [{name, quantity, unit, pieceCount}] from ingredient lists or recipe text. Use kg/g/cup/tsp/tbsp/L; pieceCount for countable items.
+Calories/protein/carbs: use if given else estimate. Tags: use if given else suggest.
 ${JSON_SCHEMA}`
 
   const result = await model.generateContent(prompt)
@@ -108,7 +108,7 @@ ${categoryHint}
 
 Extract: name, description, price (IQD), categoryName, recipeSteps, recipeTips, prepTime, cookTime, recipeYield, ingredients.
 - recipeSteps from steps/instructions; recipeTips from "Tips:" or bullets—always include if user provided.
-- recipeYield: number of servings (default null).
+- recipeYield: ESTIMATE the number of servings this recipe makes if not mentioned (default to 1 for individual items, 4-6 for batch items). If you estimate it, make it sound like a guess.
 - ingredients: [{name, quantity, unit, pieceCount}] from ingredient lists or recipe text.
 Calories/protein/carbs: use if given else estimate. Tags: use if given else suggest.
 ${JSON_SCHEMA}`
@@ -147,7 +147,7 @@ function parseJsonResponse(raw: string): ParseWithAIResponse {
       : [],
     prepTime: typeof data.prepTime === 'string' ? data.prepTime : null,
     cookTime: typeof data.cookTime === 'string' ? data.cookTime : null,
-    recipeYield: typeof data.recipeYield === 'number' ? data.recipeYield : null,
+    recipeYield: (typeof data.recipeYield === 'number' || (typeof data.recipeYield === 'string' && !isNaN(Number(data.recipeYield)))) ? Number(data.recipeYield) : null,
     ingredients: parseIngredients(data.ingredients),
   }
 }
