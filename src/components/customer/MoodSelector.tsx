@@ -26,7 +26,7 @@ export function MoodSelector({
 
   const getLabel = (mood: MoodOption) => mood.label[language === 'ar_fusha' ? 'ar' : language] ?? mood.label.en
 
-  const selectedClass = 'bg-amber-500 text-white'
+  const selectedClass = 'bg-[var(--menu-accent,#f59e0b)] text-white'
   const unselectedClass = isDarkTheme
     ? 'bg-white/10 text-white/90 hover:bg-white/20'
     : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'

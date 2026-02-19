@@ -18,6 +18,7 @@ import {
   Wallet,
   Zap,
   Square,
+  CreditCard,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -28,6 +29,7 @@ const navigation = [
   { name: 'Add Menu Items', href: '/menu', icon: UtensilsCrossed },
   { name: 'Optimize your menu sales', href: '/menu?tab=optimization', icon: Zap },
   { name: 'Restaurant Theme and Design', href: '/settings', icon: Settings },
+  { name: 'Membership', href: '/billing', icon: CreditCard },
   { name: 'P&L', href: '/profit-loss', icon: TrendingUp },
   { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart },
   { name: 'Orders', href: '/orders', icon: Receipt },

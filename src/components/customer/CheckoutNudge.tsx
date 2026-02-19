@@ -22,7 +22,7 @@ export function CheckoutNudge({
   onDismiss,
 }: CheckoutNudgeProps) {
   return (
-    <div className="rounded-xl bg-amber-500/20 border border-amber-500/40 p-3 flex flex-col gap-2">
+    <div className="rounded-xl bg-[var(--menu-accent,#f59e0b)]/20 border border-[var(--menu-accent,#f59e0b)]/40 p-3 flex flex-col gap-2">
       <p className="text-sm text-white/90">{message}</p>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="font-medium text-white">{itemName} — {itemPrice}</span>
@@ -30,7 +30,7 @@ export function CheckoutNudge({
           <Button
             size="sm"
             onClick={onAdd}
-            className="bg-amber-500 hover:bg-amber-600 text-white"
+            className="bg-[var(--menu-accent,#f59e0b)] hover:opacity-90 text-white"
           >
             {addLabel}
           </Button>

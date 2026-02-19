@@ -66,7 +66,7 @@ async function getMenuData(
         where: { restaurantId },
         orderBy: { name: 'asc' },
       }),
-      // Calculate average margin from all items (lightweight query for summary)
+      // Average margin: sample up to 500 items to avoid loading thousands (perf)
       prisma.menuItem.findMany({
         where,
         select: {
@@ -80,6 +80,8 @@ async function getMenuData(
             },
           },
         },
+        orderBy: { id: 'asc' },
+        take: 500,
       }),
       prisma.chefPick.findMany({
         where: { restaurantId },
@@ -147,7 +149,8 @@ export default async function MenuPage({
       : ''
   const statusFilter = searchParams?.status ?? ''
 
-  const [data, user, restaurant, showcases, allMenuItemsForOptimization] = await Promise.all([
+  // Defer showcases + all menu items to optimization tab (loaded client-side when user opens that tab)
+  const [data, user, restaurant] = await Promise.all([
     getMenuData(restaurantId, page, normalizedSearch, statusFilter),
     prisma.user.findUnique({
       where: { id: session!.user.id },
@@ -156,25 +159,6 @@ export default async function MenuPage({
     prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { settings: true, slug: true },
-    }),
-    prisma.menuShowcase.findMany({
-      where: { restaurantId },
-      orderBy: { displayOrder: 'asc' },
-      include: {
-        items: {
-          orderBy: { displayOrder: 'asc' },
-          include: {
-            menuItem: {
-              select: { id: true, name: true, imageUrl: true, price: true },
-            },
-          },
-        },
-      },
-    }),
-    prisma.menuItem.findMany({
-      where: { restaurantId, available: true },
-      select: { id: true, name: true, imageUrl: true, price: true },
-      orderBy: { name: 'asc' },
     }),
   ])
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
@@ -186,7 +170,6 @@ export default async function MenuPage({
   const publicMenuPath = restaurant?.slug ? `/${restaurant.slug}` : '/'
   const clientFacingMenuUrl = normalizedBaseUrl ? `${normalizedBaseUrl}${publicMenuPath}` : publicMenuPath
   const categoryOptions = data.categories.map((c) => ({ id: c.id, name: c.name, displayOrder: c.displayOrder }))
-  const showcasesSerialized = JSON.parse(JSON.stringify(showcases))
 
   return (
     <div className="space-y-6">
@@ -207,8 +190,6 @@ export default async function MenuPage({
       </div>
       <MenuPageTabs
         categories={categoryOptions}
-        showcases={showcasesSerialized}
-        menuItems={allMenuItemsForOptimization}
         menuEngineSettings={menuEngineSettings}
       >
         <div className="space-y-6">

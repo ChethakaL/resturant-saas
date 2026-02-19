@@ -53,14 +53,14 @@ export function BundleCard({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
           <span className="text-slate-400 line-through text-xs">{formatMenuPrice(bundle.originalPrice)}</span>
           <span className="text-emerald-700 font-bold text-sm">{formatMenuPrice(bundle.bundlePrice)}</span>
-          <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
+          <span className="text-[10px] bg-[var(--menu-accent,#f59e0b)]/20 text-[var(--menu-accent,#f59e0b)] px-1.5 py-0.5 rounded border border-[var(--menu-accent,#f59e0b)]/30">
             {savingsDisplay}
           </span>
         </div>
         <Button
           onClick={onAddBundle}
           size="sm"
-          className="w-full bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm"
+          className="w-full bg-[var(--menu-accent,#f59e0b)] hover:opacity-90 text-white font-medium text-sm"
         >
           {addBundleLabel}
         </Button>

@@ -67,7 +67,7 @@ export function SequentialUpsell({
         <div className="flex gap-2 mt-4">
           <Button
             onClick={onAccept}
-            className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold"
+            className="flex-1 bg-[var(--menu-accent,#f59e0b)] hover:opacity-90 text-white font-semibold"
           >
             {addLabel}
           </Button>

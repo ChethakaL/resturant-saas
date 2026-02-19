@@ -89,7 +89,7 @@ export function CartDrawer({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="w-full flex items-center justify-between gap-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 px-4 rounded-xl shadow-lg transition-colors"
+            className="w-full flex items-center justify-between gap-3 bg-[var(--menu-accent,#f59e0b)] hover:opacity-90 text-white font-semibold py-3 px-4 rounded-xl shadow-lg transition-colors"
           >
             <span className="flex items-center gap-2">
               <ShoppingBag className="h-5 w-5" />
@@ -201,7 +201,7 @@ export function CartDrawer({
                               }}
                               className={`aspect-square rounded-xl flex items-center justify-center text-lg font-semibold transition-colors ${
                                 selectedTableNumber === t.number
-                                  ? 'bg-amber-500 text-white ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900'
+                                  ? 'bg-[var(--menu-accent,#f59e0b)] text-white ring-2 ring-[var(--menu-accent,#f59e0b)]/80 ring-offset-2 ring-offset-slate-900'
                                   : 'bg-white/10 text-white hover:bg-white/20'
                               }`}
                             >
@@ -235,7 +235,7 @@ export function CartDrawer({
                   setOpen(false)
                 }}
                 disabled={lines.length === 0 || isPlacing}
-                className="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold"
+                className="w-full bg-[var(--menu-accent,#f59e0b)] hover:opacity-90 text-white font-semibold"
               >
                 {isPlacing ? 'Placing…' : placeOrderLabel}
               </Button>

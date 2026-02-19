@@ -40,6 +40,10 @@ A comprehensive restaurant management system built with Next.js, featuring inven
    DATABASE_URL="your_postgresql_connection_string"
    NEXTAUTH_SECRET="your-secret-key"
    ANTHROPIC_API_KEY="your-claude-api-key" # Optional for AI features
+   STRIPE_SECRET_KEY="sk_..." # or STRIPE_API_KEY — for payments and membership
+   STRIPE_PRICE_MONTHLY="price_..." # $40/month subscription price ID from Stripe Dashboard
+   STRIPE_PRICE_ANNUAL="price_..." # $400/year subscription price ID from Stripe Dashboard
+   STRIPE_WEBHOOK_SECRET="whsec_..." # for membership webhook (checkout.session.completed, subscription updated/deleted)
    ```
 
 3. **Set up database:**

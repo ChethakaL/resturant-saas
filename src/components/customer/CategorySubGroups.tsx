@@ -35,7 +35,7 @@ export function CategorySubGroups({
             type="button"
             onClick={() => setActiveId(g.id)}
             className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              activeId === g.id ? 'bg-amber-500 text-white' : 'bg-white/10 text-white/90 hover:bg-white/20'
+              activeId === g.id ? 'bg-[var(--menu-accent,#f59e0b)] text-white' : 'bg-white/10 text-white/90 hover:bg-white/20'
             }`}
           >
             {g.label}

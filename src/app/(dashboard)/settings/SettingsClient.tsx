@@ -310,7 +310,7 @@ export default function SettingsClient({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="accentColor">Secondary color</Label>
+                  <Label htmlFor="accentColor">Client menu button color</Label>
                   <div className="flex items-center gap-3">
                     <input
                       type="color"
@@ -327,7 +327,7 @@ export default function SettingsClient({
                     />
                   </div>
                   <p className="text-xs text-slate-500">
-                    Used for featured sections and secondary highlights.
+                    Used for &quot;Add bundle&quot;, &quot;View order&quot; bar, Save tags, and other buttons on the customer-facing menu.
                   </p>
                 </div>
               </div>

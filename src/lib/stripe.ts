@@ -1,9 +1,9 @@
 import Stripe from 'stripe'
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY
 
 if (!stripeSecretKey) {
-  throw new Error('STRIPE_SECRET_KEY is not set')
+  throw new Error('STRIPE_SECRET_KEY or STRIPE_API_KEY must be set')
 }
 
 export const stripe = new Stripe(stripeSecretKey, {

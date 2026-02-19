@@ -853,6 +853,15 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* Menu Item Analytics */}
+      <MenuItemAnalytics
+        topSellingItems={analyticsData.topSellingItems}
+        worstSellingItems={analyticsData.worstSellingItems}
+        highestMarginItems={analyticsData.highestMarginItems}
+        lowestMarginItems={analyticsData.lowestMarginItems}
+        topCombos={analyticsData.topCombos}
+      />
+
       {/* Daily Revenue and Margin Chart */}
       <Card>
         <CardHeader>
@@ -863,15 +872,6 @@ export default async function DashboardPage() {
           <DailyRevenueMarginChart />
         </CardContent>
       </Card>
-
-      {/* Menu Item Analytics */}
-      <MenuItemAnalytics
-        topSellingItems={analyticsData.topSellingItems}
-        worstSellingItems={analyticsData.worstSellingItems}
-        highestMarginItems={analyticsData.highestMarginItems}
-        lowestMarginItems={analyticsData.lowestMarginItems}
-        topCombos={analyticsData.topCombos}
-      />
 
       {/* WASTAGE (this month — same as P&L) */}
       <Card>

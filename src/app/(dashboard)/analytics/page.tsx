@@ -398,15 +398,6 @@ export default async function AnalyticsPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Revenue & Cost Trends</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AnalyticsCharts trendData={data.trendData} categoryData={data.categoryData} />
-        </CardContent>
-      </Card>
-
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -705,6 +696,15 @@ export default async function AnalyticsPage() {
               <p className="text-center py-6 text-slate-500">No combo data yet.</p>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Revenue & Cost Trends</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AnalyticsCharts trendData={data.trendData} categoryData={data.categoryData} />
         </CardContent>
       </Card>
     </div>

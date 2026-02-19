@@ -68,7 +68,7 @@ export function BundledUpsell({
               <Button
                 size="sm"
                 onClick={() => onAddItem(item.itemId)}
-                className="flex-shrink-0 bg-amber-500 hover:bg-amber-600 text-white"
+                className="flex-shrink-0 bg-[var(--menu-accent,#f59e0b)] hover:opacity-90 text-white"
               >
                 {addLabel}
               </Button>

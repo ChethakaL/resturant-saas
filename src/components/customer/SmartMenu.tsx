@@ -1633,7 +1633,7 @@ export default function SmartMenu({
                 <Badge
                   key={tag}
                   variant="secondary"
-                  className="bg-amber-500/20 text-amber-200 border-amber-500/30"
+                  className="bg-[var(--menu-accent,#f59e0b)]/20 text-[var(--menu-accent,#f59e0b)] border-[var(--menu-accent,#f59e0b)]/30"
                 >
                   {getLocalizedTagLabel(tag)}
                   <X
@@ -1691,7 +1691,7 @@ export default function SmartMenu({
                             const item = menuItems.find((m) => m.id === nextOrderSuggestion.itemId)
                             if (item) dispatchCart({ type: 'ADD_ITEM', item })
                           }}
-                          className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
+                          className="rounded-md bg-[var(--menu-accent,#f59e0b)] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
                         >
                           {currentCopy.tryItemLabel} {translationCache[language]?.[nextOrderSuggestion.itemId]?.name ?? nextOrderSuggestion.name}
                         </button>
@@ -1713,7 +1713,7 @@ export default function SmartMenu({
               <button
                 type="button"
                 onClick={() => setSelectedMoodId('sharing')}
-                className={`text-sm font-medium px-3 py-2 rounded-lg w-full text-left transition ${isDarkBg ? 'bg-amber-500/20 text-amber-200 hover:bg-amber-500/30' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
+                className={`text-sm font-medium px-3 py-2 rounded-lg w-full text-left transition ${isDarkBg ? 'bg-[var(--menu-accent,#f59e0b)]/20 text-[var(--menu-accent,#f59e0b)] hover:bg-[var(--menu-accent,#f59e0b)]/30' : 'bg-[var(--menu-accent,#f59e0b)]/10 text-[var(--menu-accent,#f59e0b)] hover:bg-[var(--menu-accent,#f59e0b)]/20'}`}
               >
                 Dining with a group? Try something to share.
               </button>
@@ -1785,7 +1785,7 @@ export default function SmartMenu({
                           </div>
                           <Button
                             size="sm"
-                            className="bg-amber-500 hover:bg-amber-600"
+                            className="bg-[var(--menu-accent,#f59e0b)] hover:opacity-90 text-white"
                             onClick={() => {
                               const items = anchorBundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
                               if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: anchorBundle.itemIds, items, bundlePrice: anchorBundle.bundlePrice })

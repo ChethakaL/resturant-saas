@@ -41,8 +41,9 @@ async function searchTavily(query: string): Promise<RecipeSearchResult[]> {
     }
 }
 
-const RESEARCH_PROMPT = (text: string, searchData: string, categoryHint: string) => `
+const RESEARCH_PROMPT = (text: string, searchData: string, categoryHint: string, dishNameLock?: string) => `
 You are a "Smart Chef" assistant focused on professional F&B management. You are tasked with gathering and structuring data for the following item: "${text}".
+${dishNameLock ? `\nCRITICAL: The user is adding exactly this dish: **${dishNameLock}**. You MUST return name, description, and recipe for this dish only. Do NOT return a different dish (e.g. if the user said lasagna, do NOT return shawarma or any other dish). The "name" field in your JSON must be "${dishNameLock}" or a standard spelling of it.\n` : ''}
 
 TONE: Professional, succinct, and clinical. Avoid marketing fluff or excitement. Do not use Markdown headers (e.g. # or ##). Use bold text (**) for emphasis.
 
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
 
         const body = await request.json()
         const text = typeof body.text === 'string' ? body.text.trim() : ''
+        const dishName = typeof body.dishName === 'string' ? body.dishName.trim() : ''
         const categoryNames = Array.isArray(body.categoryNames) ? body.categoryNames : []
         const attachments = Array.isArray(body.attachments) ? body.attachments : []
 
@@ -105,10 +107,14 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Text or attachments are required' }, { status: 400 })
         }
 
-        // 1. Search for data if it looks like a simple name or sparse info
+        // Use dish name for search and prompt lock so we don't return a different dish (e.g. lasagna -> shawarma)
+        const searchQuery = dishName || text.split(/\n/)[0]?.trim() || text
+        const dishNameLock = dishName || (searchQuery.length <= 50 ? searchQuery : '')
+
+        // 1. Search for data using the specific dish name
         let searchData = ''
-        if (text.length > 0 && text.length < 50 && attachments.length === 0) {
-            const results = await searchTavily(text)
+        if (searchQuery.length > 0 && searchQuery.length <= 80 && attachments.length === 0) {
+            const results = await searchTavily(searchQuery)
             searchData = results.map(r => `Source: ${r.title}\n${r.content}`).join('\n\n')
         }
 
@@ -116,7 +122,7 @@ export async function POST(request: NextRequest) {
             ? `Available categories: ${categoryNames.join(', ')}.`
             : 'Suggest a category like Main Course, Appetizer, etc.'
 
-        const finalPrompt = RESEARCH_PROMPT(text, searchData, categoryHint)
+        const finalPrompt = RESEARCH_PROMPT(text, searchData, categoryHint, dishNameLock)
 
         let resultJson: any
 
@@ -158,6 +164,16 @@ export async function POST(request: NextRequest) {
         } catch (parseErr) {
             console.error('Failed to parse AI response as JSON:', parseErr)
             throw new Error('The AI provided a response that could not be parsed. Please try again.')
+        }
+
+        // Ensure we don't return a different dish than the user asked for (e.g. lasagna -> shawarma)
+        if (dishNameLock && resultJson && typeof resultJson === 'object') {
+            const returnedName = (resultJson.name || '').trim().toLowerCase()
+            const lockLower = dishNameLock.trim().toLowerCase()
+            const isSameDish = returnedName === lockLower || returnedName.includes(lockLower) || lockLower.includes(returnedName)
+            if (!isSameDish) {
+                resultJson.name = dishNameLock
+            }
         }
 
         return NextResponse.json(resultJson)

@@ -99,6 +99,8 @@ interface ParsedAIIngredient {
   quantity: number
   unit: string
   pieceCount?: number | null
+  /** When creating a new ingredient, cost per unit in IQD (e.g. from Smart Chef asking for price) */
+  costPerUnit?: number | null
 }
 
 interface ParsedAIResponse {
@@ -193,8 +195,14 @@ export default function MenuForm({
   // AI Assistant attachment state
   const assistantDocInputRef = useRef<HTMLInputElement>(null)
   const assistantImageInputRef = useRef<HTMLInputElement>(null)
+  const assistantMessagesEndRef = useRef<HTMLDivElement>(null)
   const [attachedDocs, setAttachedDocs] = useState<{ name: string, type: string, base64: string }[]>([])
   const [attachedImages, setAttachedImages] = useState<{ name: string, type: string, base64: string }[]>([])
+
+  // Keep latest Smart Chef message in view (like project management chat)
+  useEffect(() => {
+    assistantMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [assistantMessages])
 
   // Guided next-step: which tab to show and which field to highlight after AI fill
   const [activeTab, setActiveTab] = useState<string>(mode === 'edit' ? 'overview' : 'ai')
@@ -1125,10 +1133,19 @@ export default function MenuForm({
 
       for (const ing of data.ingredients) {
         const nameLower = (ing.name || '').toLowerCase().trim()
-        const match = allIngredients.find((i) => {
+        let match = allIngredients.find((i) => {
           const n = i.name.toLowerCase().trim()
           return n === nameLower || n.includes(nameLower) || nameLower.includes(n)
         })
+        // Closest match: e.g. "Parmesan" in inventory matches "Fresh Parmesan" or "parmesan cheese" in recipe
+        if (!match && nameLower.length > 0) {
+          const recipeWords = nameLower.split(/\s+/).filter((w) => w.length > 2)
+          match = allIngredients.find((i) => {
+            const n = i.name.toLowerCase().trim()
+            const invWords = n.split(/[\s,]+/).filter((w) => w.length > 2)
+            return invWords.some((invW) => nameLower.includes(invW)) || recipeWords.some((rw) => n.includes(rw))
+          }) ?? null
+        }
         if (match) {
           const converted = convertRecipeUnitToBaseUnit(
             ing.quantity,
@@ -1157,7 +1174,7 @@ export default function MenuForm({
             body: JSON.stringify({
               name: ing.name,
               unit: ing.unit || 'kg',
-              costPerUnit: 0,
+              costPerUnit: typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : 0,
             }),
           })
           if (!createResponse.ok) {
@@ -1337,19 +1354,38 @@ export default function MenuForm({
       setAttachedDocs([])
       setAttachedImages([])
 
-      // If the AI says it's finished or matches our "ready" criteria, we can highlight the Fill button
-      if (result.data?.isFinished || result.message.toLowerCase().includes('finished')) {
+      // When Smart Chef says FINISHED, auto-fill the form with the summary/description (per spec: "generate a summary... which then all autofills")
+      const isFinished = result.data?.isFinished || result.message.toLowerCase().includes('finished')
+      if (isFinished && result.data && typeof result.data === 'object') {
+        const d = result.data
+        const parsed: ParsedAIResponse = {
+          name: d.name,
+          description: d.description || undefined,
+          price: typeof d.price === 'number' ? d.price : undefined,
+          categoryName: d.categoryName,
+          recipeSteps: Array.isArray(d.recipeSteps) ? d.recipeSteps : undefined,
+          recipeTips: Array.isArray(d.recipeTips) ? d.recipeTips : undefined,
+          recipeYield: typeof d.recipeYield === 'number' ? d.recipeYield : undefined,
+          ingredients: Array.isArray(d.ingredients)
+            ? d.ingredients.map((ing: { name?: string; quantity?: number; unit?: string; pieceCount?: number | null; costPerUnit?: number | null }) => ({
+                name: ing.name ?? '',
+                quantity: Number(ing.quantity) || 0,
+                unit: ing.unit ?? 'g',
+                pieceCount: ing.pieceCount ?? null,
+                costPerUnit: typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : null,
+              }))
+            : undefined,
+        }
+        await applyParsedDataToForm(parsed, { autoCreateIngredients: true, quietToast: true })
         setAssistantMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            text: 'I have all the information! Click "Fill Form Now" to finalize the menu item.',
+            text: "I've filled the form with the summary and description. Review the Details and Recipe tabs, then save when ready.",
           },
         ])
+        toast({ title: 'Smart Chef finished', description: 'Form filled with recipe, ingredients, and description. Review and save.' })
       }
-
-      // We don't auto-apply here to keep chat clean as per request, 
-      // but we could store the latest data in a ref or state if needed.
 
     } catch (err) {
       toast({
@@ -1451,14 +1487,20 @@ export default function MenuForm({
       return
     }
 
+    // Lock research to the dish the user is adding (e.g. lasagna), so "Fill Form Now" doesn't return a different dish
+    const existingName = formData.name?.trim()
+    const firstUserMessage = assistantMessages.find((m) => m.role === 'user')?.text?.trim()
+    const firstLineOfText = text.split(/\n/)[0]?.trim()
+    const dishName = existingName || firstUserMessage || firstLineOfText || ''
+
     setAiParseLoading(true)
     try {
-      // Use the new deep research API that can search the web if info is missing
       const response = await fetch('/api/menu/research', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text,
+          dishName: dishName || undefined,
           categoryNames: categories.map(c => c.name),
           attachments: [
             ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
@@ -2041,11 +2083,11 @@ export default function MenuForm({
                       Smart Chef
                     </CardTitle>
                     <CardDescription>
-                      Chat with AI. It will ask follow-up questions and fill details, SOP, and ingredients. Image is not auto-generated here.
+                      A chatbot that helps you create menu items. It asks follow-up questions and can use your uploaded images or documents. Use &quot;Fill Form Now&quot; to have the AI research and fill the form from your text or attachments.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+                    <div className="max-h-[50vh] min-h-[160px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
                       {assistantMessages.map((message, index) => (
                         <div
                           key={`${message.role}-${index}`}
@@ -2059,16 +2101,17 @@ export default function MenuForm({
                           <p className="text-[11px] uppercase tracking-wide mb-1 opacity-70">
                             {message.role === 'assistant' ? 'Assistant' : 'You'}
                           </p>
-                          <div className="whitespace-pre-wrap">
-                            {message.text.split(/(\*\*.*?\*\*)/).map((part, i) => {
+                          <div className="whitespace-pre-wrap leading-relaxed">
+                            {message.text.split(/(\*\*.*?\*\*)/g).map((part, i) => {
                               if (part.startsWith('**') && part.endsWith('**')) {
-                                return <strong key={i} className="font-bold">{part.slice(2, -2)}</strong>
+                                return <strong key={i} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>
                               }
                               return part
                             })}
                           </div>
                         </div>
                       ))}
+                      <div ref={assistantMessagesEndRef} />
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
@@ -2213,7 +2256,7 @@ export default function MenuForm({
                       </Button>
                     </div>
                     <p className="text-xs text-slate-500">
-                      Upload recipes, spreadsheets, or photos for the AI to extract data.
+                      Upload image: AI guides you to enhance it. Upload document: used as reference for recipe, instructions, or ingredients. Fill Form Now: uses your message and attachments so AI generates the rest and fills the form.
                     </p>
                   </CardContent>
                 </Card>
