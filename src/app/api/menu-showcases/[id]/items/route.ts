@@ -6,16 +6,17 @@ import { revalidatePath } from 'next/cache'
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: showcaseId } = await params
     const session = await getServerSession(authOptions)
     if (!session?.user?.restaurantId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const showcase = await prisma.menuShowcase.findFirst({
-      where: { id: params.id, restaurantId: session.user.restaurantId },
+      where: { id: showcaseId, restaurantId: session.user.restaurantId },
     })
 
     if (!showcase) {
@@ -26,23 +27,32 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const items: Array<{ menuItemId: string; displayOrder: number }> =
+    const rawItems: Array<{ menuItemId: string; displayOrder: number }> =
       body.items || []
 
-    await prisma.$transaction([
-      prisma.menuShowcaseItem.deleteMany({
-        where: { showcaseId: params.id },
-      }),
-      ...items.map((item) =>
-        prisma.menuShowcaseItem.create({
-          data: {
-            showcaseId: params.id,
+    // Dedupe by menuItemId (keep first occurrence) to avoid unique constraint on (showcaseId, menuItemId)
+    const seen = new Set<string>()
+    const items = rawItems.filter((item) => {
+      if (seen.has(item.menuItemId)) return false
+      seen.add(item.menuItemId)
+      return true
+    })
+
+    await prisma.$transaction(async (tx) => {
+      await tx.menuShowcaseItem.deleteMany({
+        where: { showcaseId },
+      })
+      if (items.length > 0) {
+        await tx.menuShowcaseItem.createMany({
+          data: items.map((item) => ({
+            showcaseId,
             menuItemId: item.menuItemId,
             displayOrder: item.displayOrder,
-          },
+          })),
+          skipDuplicates: true,
         })
-      ),
-    ])
+      }
+    })
 
     revalidatePath('/')
 

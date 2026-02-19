@@ -65,6 +65,8 @@ interface ShowcaseSection {
   displayVariant?: 'hero' | 'cards'
   position: string
   insertAfterCategoryId: string | null
+  /** When this carousel is shown only in a time slot (e.g. "6am–10am"), label shown under the title */
+  activeTimeRange?: string
   items: MenuItem[]
 }
 
@@ -1405,14 +1407,14 @@ export default function SmartMenu({
           </header>
         </div>
 
-        {/* First top showcase: hero or cards per section setting */}
+        {/* Top of menu: always full-width hero (no cards). Elsewhere: card carousel. */}
         {topShowcases.length > 0 && (
           <div className="w-full mt-4">
             <MenuCarousel
               key={topShowcases[0].id}
               title={topShowcases[0].title}
               type={topShowcases[0].type}
-              variant={topShowcases[0].displayVariant === 'hero' ? 'hero' : 'default'}
+              variant="hero"
               items={topShowcases[0].items}
               onItemClick={(item) =>
                 setSelectedItemForDetail(item as MenuItem)
@@ -1430,18 +1432,19 @@ export default function SmartMenu({
               displayFontClassName="font-display"
               displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
               chefRecommendationLabel={currentCopy.chefRecommendationLabel}
+              activeTimeRange={topShowcases[0].activeTimeRange}
             />
           </div>
         )}
 
         <div className="relative mx-auto max-w-7xl px-3 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6">
-          {/* Remaining top showcases (non-hero) */}
+          {/* Remaining top showcases: full-width hero when at top */}
           {topShowcases.slice(1).map((showcase) => (
             <MenuCarousel
               key={showcase.id}
               title={showcase.title}
               type={showcase.type}
-              variant={showcase.displayVariant === 'hero' ? 'hero' : 'default'}
+              variant="hero"
               items={showcase.items}
               onItemClick={(item) =>
                 setSelectedItemForDetail(item as MenuItem)
@@ -1459,6 +1462,7 @@ export default function SmartMenu({
               displayFontClassName="font-display"
               displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
               chefRecommendationLabel={currentCopy.chefRecommendationLabel}
+              activeTimeRange={showcase.activeTimeRange}
             />
           ))}
           {/* "What do you feel like eating today?" section (mood options) */}
@@ -1886,7 +1890,7 @@ export default function SmartMenu({
                         <MenuCarousel
                           title={showcase.title}
                           type={showcase.type}
-                          variant={showcase.displayVariant === 'hero' ? 'hero' : 'default'}
+                          variant="default"
                           items={showcase.items}
                           onItemClick={(item) =>
                             setSelectedItemForDetail(item as MenuItem)
@@ -1904,6 +1908,7 @@ export default function SmartMenu({
                           displayFontClassName="font-display"
                           displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
                           chefRecommendationLabel={currentCopy.chefRecommendationLabel}
+                          activeTimeRange={showcase.activeTimeRange}
                         />
                       </div>
                     ))}

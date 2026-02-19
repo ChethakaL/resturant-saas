@@ -61,9 +61,12 @@ interface Showcase {
 
 interface TimeSlotSchedule {
   useTimeSlots?: boolean
+  breakfast?: { itemIds: string[] }
   day?: { itemIds: string[] }
   evening?: { itemIds: string[] }
   night?: { itemIds: string[] }
+  /** When set, this carousel is only shown during this time slot (Breakfast / Day / Evening / Night). */
+  displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'
 }
 
 interface CategoryOption {
@@ -132,9 +135,9 @@ export default function MenuOptimizationContent({
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set())
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
   const [scheduleShowcaseId, setScheduleShowcaseId] = useState<string | null>(null)
-  const [scheduleDraft, setScheduleDraft] = useState<TimeSlotSchedule>({ day: { itemIds: [] }, evening: { itemIds: [] }, night: { itemIds: [] } })
+  const [scheduleDraft, setScheduleDraft] = useState<TimeSlotSchedule>({ breakfast: { itemIds: [] }, day: { itemIds: [] }, evening: { itemIds: [] }, night: { itemIds: [] } })
   const [scheduleSaving, setScheduleSaving] = useState(false)
-  const [scheduleSlotTab, setScheduleSlotTab] = useState<'day' | 'evening' | 'night'>('day')
+  const [scheduleSlotTab, setScheduleSlotTab] = useState<'breakfast' | 'day' | 'evening' | 'night'>('breakfast')
   const [scheduleSearch, setScheduleSearch] = useState('')
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(false)
   const prevEngineModeRef = useRef<EngineMode>(resolvedMode)
@@ -202,7 +205,13 @@ export default function MenuOptimizationContent({
   const updateShowcase = async (id: string, updates: Partial<Pick<Showcase, 'title' | 'position' | 'insertAfterCategoryId' | 'isActive' | 'type' | 'schedule' | 'displayVariant'>>) => {
     setSavingShowcase(id)
     try {
-      const response = await fetch(`/api/menu-showcases/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      // Slot-only carousels (Breakfast/Day/Evening/Night): persist only displayForSlot, never useTimeSlots
+      const payload = { ...updates }
+      const s = payload.schedule as TimeSlotSchedule | null | undefined
+      if (s?.displayForSlot) {
+        payload.schedule = { displayForSlot: s.displayForSlot }
+      }
+      const response = await fetch(`/api/menu-showcases/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!response.ok) throw new Error('Failed to update')
       setShowcases((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)))
       toast({ title: 'Carousel updated' })
@@ -270,17 +279,17 @@ export default function MenuOptimizationContent({
   const openScheduleDialog = (showcase: Showcase) => {
     setScheduleShowcaseId(showcase.id)
     const s = showcase.schedule
-    setScheduleDraft({ useTimeSlots: s?.useTimeSlots ?? false, day: s?.day ?? { itemIds: [] }, evening: s?.evening ?? { itemIds: [] }, night: s?.night ?? { itemIds: [] } })
-    setScheduleSlotTab('day')
+    setScheduleDraft({ useTimeSlots: s?.useTimeSlots ?? false, breakfast: s?.breakfast ?? { itemIds: [] }, day: s?.day ?? { itemIds: [] }, evening: s?.evening ?? { itemIds: [] }, night: s?.night ?? { itemIds: [] } })
+    setScheduleSlotTab('breakfast')
     setScheduleSearch('')
     setScheduleDialogOpen(true)
   }
 
-  const clearScheduleSlot = (slot: 'day' | 'evening' | 'night') => {
+  const clearScheduleSlot = (slot: 'breakfast' | 'day' | 'evening' | 'night') => {
     setScheduleDraft((prev) => ({ ...prev, [slot]: { itemIds: [] } }))
   }
 
-  const toggleScheduleSlotItem = (slot: 'day' | 'evening' | 'night', menuItemId: string) => {
+  const toggleScheduleSlotItem = (slot: 'breakfast' | 'day' | 'evening' | 'night', menuItemId: string) => {
     setScheduleDraft((prev) => {
       const ids = prev[slot]?.itemIds ?? []
       const next = ids.includes(menuItemId)
@@ -379,12 +388,14 @@ export default function MenuOptimizationContent({
         mode?: 'profit' | 'adaptive'
         usedSalesData?: boolean
         recommended?: string[]
+        breakfast?: string[]
         day?: string[]
         evening?: string[]
         night?: string[]
       } = await res.json()
       const primaryIds = (suggested.recommended ?? suggested.day ?? []).slice(0, maxCarouselItems)
       const secondaryPool = [
+        ...(suggested.breakfast ?? []),
         ...(suggested.evening ?? []),
         ...(suggested.night ?? []),
         ...(suggested.day ?? []),
@@ -404,6 +415,13 @@ export default function MenuOptimizationContent({
       }
       list = list.filter((s) => !legacyTitles.has((s.title || '').trim()))
 
+      // In Smart Profit (adaptive) mode: breakfast 6–10, day 10–14, evening 14–18, night 18–6 (restaurant timezone, e.g. Erbil).
+      const breakfastIds = (suggested.breakfast ?? primaryIds).slice(0, maxCarouselItems)
+      const dayIds = (suggested.day ?? primaryIds).slice(0, maxCarouselItems)
+      const eveningIds = (suggested.evening ?? recommendationIds).slice(0, maxCarouselItems)
+      const nightIds = (suggested.night ?? recommendationIds).slice(0, maxCarouselItems)
+      // Chef's Highlights and Recommended for Guests: one set of items, shown all day (no useTimeSlots).
+      // Breakfast/Day/Evening/Night carousels use displayForSlot only (shown only in that time window).
       const upsertShowcase = async (
         def: {
           title: string
@@ -415,7 +433,10 @@ export default function MenuOptimizationContent({
           schedule?: TimeSlotSchedule | null
         }
       ) => {
-        let showcase = list.find((s) => s.title === def.title) ?? list.find((s) => s.type === def.type)
+        // Match by title first. Only for the two main carousels fall back to type, so time-slot carousels (Breakfast, Day, Evening, Night) don't reuse "Recommended for Guests".
+        const byTitle = list.find((s) => s.title === def.title)
+        const byType = (def.title === "Chef's Highlights" || def.title === 'Recommended for Guests') ? list.find((s) => s.type === def.type) : undefined
+        let showcase = byTitle ?? byType
         if (!showcase) {
           const createRes = await fetch('/api/menu-showcases', {
             method: 'POST',
@@ -448,7 +469,9 @@ export default function MenuOptimizationContent({
         })
         if (!updateRes.ok) throw new Error('Failed to update showcase')
 
-        const itemsPayload = def.itemIds.map((menuItemId, index) => ({
+        // Dedupe itemIds (keep order) so we never send duplicate (showcaseId, menuItemId) to the API
+        const uniqueIds = def.itemIds.filter((id, i, arr) => arr.indexOf(id) === i)
+        const itemsPayload = uniqueIds.map((menuItemId, index) => ({
           menuItemId,
           displayOrder: index + 1,
         }))
@@ -490,30 +513,24 @@ export default function MenuOptimizationContent({
         )
       }
 
+      const chefHighlightPool =
+        engineMode === 'adaptive'
+          ? Array.from(new Set([...breakfastIds, ...dayIds, ...eveningIds, ...nightIds]))
+          : primaryIds
+
       list = await upsertShowcase({
         title: "Chef's Highlights",
         type: 'CHEFS_HIGHLIGHTS',
         displayVariant: 'hero',
-        itemIds: primaryIds,
+        itemIds: chefHighlightPool,
         position: 'top',
         insertAfterCategoryId: null,
+        schedule: null,
       })
 
-      const dayIds = (suggested.day ?? primaryIds).slice(0, maxCarouselItems)
-      const eveningIds = (suggested.evening ?? recommendationIds).slice(0, maxCarouselItems)
-      const nightIds = (suggested.night ?? recommendationIds).slice(0, maxCarouselItems)
-      const adaptiveSchedule: TimeSlotSchedule | null =
-        engineMode === 'adaptive'
-          ? {
-              useTimeSlots: true,
-              day: { itemIds: dayIds },
-              evening: { itemIds: eveningIds },
-              night: { itemIds: nightIds },
-            }
-          : null
       const recommendationPool =
         engineMode === 'adaptive'
-          ? Array.from(new Set([...dayIds, ...eveningIds, ...nightIds]))
+          ? Array.from(new Set([...breakfastIds, ...dayIds, ...eveningIds, ...nightIds]))
           : recommendationIds
 
       list = await upsertShowcase({
@@ -523,7 +540,46 @@ export default function MenuOptimizationContent({
         itemIds: recommendationPool,
         position: firstCategory ? 'between-categories' : 'top',
         insertAfterCategoryId: firstCategory?.id ?? null,
-        schedule: adaptiveSchedule,
+        schedule: null,
+      })
+
+      // In both Profit and Smart Profit: add four time-slot carousels (Breakfast, Day, Evening, Night).
+      // Each is only shown on the guest menu during that time slot in the menu timezone.
+      list = await upsertShowcase({
+        title: 'Breakfast (6am–10am)',
+        type: 'RECOMMENDATIONS',
+        displayVariant: 'cards',
+        itemIds: breakfastIds,
+        position: 'top',
+        insertAfterCategoryId: null,
+        schedule: { displayForSlot: 'breakfast' },
+      })
+      list = await upsertShowcase({
+        title: 'Day (10am–2pm)',
+        type: 'RECOMMENDATIONS',
+        displayVariant: 'cards',
+        itemIds: dayIds,
+        position: 'top',
+        insertAfterCategoryId: null,
+        schedule: { displayForSlot: 'day' },
+      })
+      list = await upsertShowcase({
+        title: 'Evening (2pm–6pm)',
+        type: 'RECOMMENDATIONS',
+        displayVariant: 'cards',
+        itemIds: eveningIds,
+        position: 'top',
+        insertAfterCategoryId: null,
+        schedule: { displayForSlot: 'evening' },
+      })
+      list = await upsertShowcase({
+        title: 'Night (6pm–6am)',
+        type: 'RECOMMENDATIONS',
+        displayVariant: 'cards',
+        itemIds: nightIds,
+        position: 'top',
+        insertAfterCategoryId: null,
+        schedule: { displayForSlot: 'night' },
       })
 
       setShowcases(list)
@@ -532,6 +588,11 @@ export default function MenuOptimizationContent({
         toast({
           title: 'Smart Profit fallback used',
           description: 'No sales history yet, so Smart Profit used high-margin fallback. Carousels may look similar to Profit mode until sales data is available.',
+        })
+      } else if (engineMode === 'adaptive') {
+        toast({
+          title: 'Carousels ready',
+          description: "Chef's Highlights, Recommendations, plus Breakfast / Day / Evening / Night carousels. Time-slot carousels show only in that period (menu timezone).",
         })
       } else {
         toast({
@@ -893,21 +954,28 @@ export default function MenuOptimizationContent({
                         ))}
                       </select>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id={`use-time-slots-${showcase.id}`}
-                        checked={(showcase.schedule as TimeSlotSchedule)?.useTimeSlots ?? false}
-                        onChange={(e) => {
-                          const useTimeSlots = e.target.checked
-                          const nextSchedule = { ...(showcase.schedule || {}), useTimeSlots } as TimeSlotSchedule
-                          setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, schedule: nextSchedule } : s)))
-                          updateShowcase(showcase.id, { schedule: nextSchedule })
-                        }}
-                        className="rounded border-slate-300"
-                      />
-                      <Label htmlFor={`use-time-slots-${showcase.id}`} className="text-sm font-normal cursor-pointer">Use time slots (Day / Evening / Night)</Label>
-                    </div>
+                    {/* Chef's Highlights and Recommended for Guests: optional "Use time slots" (different items per slot). Breakfast/Day/Evening/Night: no checkbox – they only show in that time window. */}
+                    {!(showcase.schedule as TimeSlotSchedule)?.displayForSlot ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id={`use-time-slots-${showcase.id}`}
+                          checked={(showcase.schedule as TimeSlotSchedule)?.useTimeSlots ?? false}
+                          onChange={(e) => {
+                            const useTimeSlots = e.target.checked
+                            const nextSchedule = { ...(showcase.schedule || {}), useTimeSlots } as TimeSlotSchedule
+                            setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, schedule: nextSchedule } : s)))
+                            updateShowcase(showcase.id, { schedule: nextSchedule })
+                          }}
+                          className="rounded border-slate-300"
+                        />
+                        <Label htmlFor={`use-time-slots-${showcase.id}`} className="text-sm font-normal cursor-pointer">Use time slots (different items per Breakfast / Day / Evening / Night)</Label>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">
+                        Shown only during this time period on the guest menu (menu timezone).
+                      </p>
+                    )}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <p className="text-xs text-slate-500">
@@ -915,7 +983,7 @@ export default function MenuOptimizationContent({
                           {showcase.items.length > 0 ? `${showcase.items.length} items selected` : 'Auto-populated (AI or high-margin when no slots)'}
                         </p>
                         <div className="flex gap-2">
-                          {(showcase.schedule as TimeSlotSchedule)?.useTimeSlots && (
+                          {(showcase.schedule as TimeSlotSchedule)?.useTimeSlots && !(showcase.schedule as TimeSlotSchedule)?.displayForSlot && (
                             <Button variant="outline" size="sm" onClick={() => openScheduleDialog(showcase)} title="Set different items by time of day">
                               <Clock className="h-4 w-4 mr-1" />Time slots
                             </Button>
@@ -980,15 +1048,15 @@ export default function MenuOptimizationContent({
           <DialogHeader>
             <DialogTitle>Time-based carousel items</DialogTitle>
             <DialogDescription>
-              Choose which items appear for each time of day (menu timezone). Day = morning (6am–12pm), Evening = lunch (12–6pm), Night = evening (6pm–6am). {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 6 items per slot. '}
+              Choose which items appear for each time of day (menu timezone). Breakfast 6–10am, Day 10am–2pm, Evening 2–6pm, Night 6pm–6am. {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 6 items per slot. '}
               Leave a slot empty to use AI suggestions or manual picks.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col flex-1 min-h-0 gap-3 py-2">
             <div className="flex rounded-lg border border-slate-200 p-1 bg-slate-100">
-              {(['day', 'evening', 'night'] as const).map((slot) => {
+              {(['breakfast', 'day', 'evening', 'night'] as const).map((slot) => {
                 const count = scheduleDraft[slot]?.itemIds?.length ?? 0
-                const label = slot === 'day' ? 'Day (6am–12pm)' : slot === 'evening' ? 'Evening (12–6pm)' : 'Night (6pm–6am)'
+                const label = slot === 'breakfast' ? 'Breakfast (6–10am)' : slot === 'day' ? 'Day (10am–2pm)' : slot === 'evening' ? 'Evening (2–6pm)' : 'Night (6pm–6am)'
                 return (
                   <button key={slot} type="button" onClick={() => setScheduleSlotTab(slot)} className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${scheduleSlotTab === slot ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}>
                     {label}{count > 0 && <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700">{count}</span>}

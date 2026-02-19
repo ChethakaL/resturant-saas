@@ -8,22 +8,23 @@ import type { ItemForSuggest } from '@/lib/category-suggest'
 export const dynamic = 'force-dynamic'
 
 const MAX_CAROUSEL_ITEMS = 6
-type Slot = 'day' | 'evening' | 'night'
+type Slot = 'breakfast' | 'day' | 'evening' | 'night'
 
-/** Get time slot for a date in tz (day 6–12, evening 12–18, night 18–6). */
+/** Get time slot for a date in tz: breakfast 6–10, day 10–14, evening 14–18, night 18–6. */
 function getTimeSlotForDate(date: Date, tz: string): Slot {
   const hour = parseInt(
     new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(date),
     10
   )
-  if (hour >= 6 && hour < 12) return 'day'
-  if (hour >= 12 && hour < 18) return 'evening'
+  if (hour >= 6 && hour < 10) return 'breakfast'
+  if (hour >= 10 && hour < 14) return 'day'
+  if (hour >= 14 && hour < 18) return 'evening'
   return 'night'
 }
 
 /**
  * GET ?mode=profit|adaptive
- * Returns suggested carousel item IDs: { recommended: string[], day: string[], evening: string[], night: string[] }
+ * Returns suggested carousel item IDs: { recommended, breakfast, day, evening, night: string[] }
  * Each array max 6 items, ordered high price to lowest.
  * Profit: high-margin mains + shareables first, then fill from other high-margin non-drink items.
  * Adaptive: top 6 by margin + popularity in that slot (or high-margin fallback when no sales), then sort by price desc.
@@ -76,7 +77,7 @@ export async function GET(request: Request) {
         cur.quantity += si.quantity
         cur.costSum += (si.cost ?? 0) * si.quantity
         salesByItem.set(si.menuItemId, cur)
-        const slotMap = unitsBySlot.get(si.menuItemId) ?? { day: 0, evening: 0, night: 0 }
+        const slotMap = unitsBySlot.get(si.menuItemId) ?? { breakfast: 0, day: 0, evening: 0, night: 0 }
         slotMap[slot] += si.quantity
         unitsBySlot.set(si.menuItemId, slotMap)
       }
@@ -134,6 +135,7 @@ export async function GET(request: Request) {
         mode,
         usedSalesData: false,
         recommended: byPriceDesc(selected),
+        breakfast: byPriceDesc(selected),
         day: byPriceDesc(selected),
         evening: byPriceDesc(selected),
         night: byPriceDesc(selected),
@@ -187,9 +189,9 @@ export async function GET(request: Request) {
 
       return byPriceDesc(result)
     }
-    const result: Record<Slot, string[]> = { day: [], evening: [], night: [] }
+    const result: Record<Slot, string[]> = { breakfast: [], day: [], evening: [], night: [] }
     const hasAnySalesData = Array.from(unitsBySlot.values()).some(
-      (slotMap) => slotMap.day > 0 || slotMap.evening > 0 || slotMap.night > 0
+      (slotMap) => Object.values(slotMap).some((v: number) => v > 0)
     )
     const byHighMargin = [...itemsForSuggest].sort(
       (a, b) => b.marginPercent - a.marginPercent || b.price - a.price
@@ -201,13 +203,14 @@ export async function GET(request: Request) {
         mode,
         usedSalesData: false,
         recommended: selected,
+        breakfast: selected,
         day: selected,
         evening: selected,
         night: selected,
       })
     }
 
-    for (const slot of ['day', 'evening', 'night'] as const) {
+    for (const slot of ['breakfast', 'day', 'evening', 'night'] as const) {
       const sorted = [...itemsForSuggest].sort((a, b) => score(b, slot) - score(a, slot))
       result[slot] = prioritizeForSlot(sorted)
     }

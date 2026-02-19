@@ -1744,6 +1744,36 @@ export default function MenuForm({
       return
     }
 
+    const duplicateCounts = new Map<string, number>()
+    for (const item of validRecipeLines) {
+      duplicateCounts.set(
+        item.ingredientId,
+        (duplicateCounts.get(item.ingredientId) || 0) + 1
+      )
+    }
+    const duplicateIngredientIds = Array.from(duplicateCounts.entries())
+      .filter(([, count]) => count > 1)
+      .map(([ingredientId]) => ingredientId)
+
+    if (duplicateIngredientIds.length > 0) {
+      const duplicateNames = duplicateIngredientIds.map((ingredientId) => {
+        const ingredient = allIngredients.find((ing) => ing.id === ingredientId)
+        return ingredient?.name || 'Unknown ingredient'
+      })
+
+      const description =
+        duplicateNames.length === 1
+          ? `${duplicateNames[0]} is inserted twice. Keep one row per ingredient.`
+          : `These ingredients are inserted multiple times: ${duplicateNames.join(', ')}. Keep one row per ingredient.`
+
+      toast({
+        title: 'Duplicate ingredients',
+        description,
+        variant: 'destructive',
+      })
+      return
+    }
+
     setLoading(true)
 
     try {

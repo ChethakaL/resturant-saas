@@ -31,25 +31,27 @@ async function getCachedCarouselSuggestions(
   )()
 }
 
-/** Day 6–12, Evening 12–18, Night 18–6 (local time in tz). Used for menu ordering and time-based popularity. */
-function getCurrentTimeSlot(tz: string): 'day' | 'evening' | 'night' {
+/** Breakfast 6–10, Day 10–14, Evening 14–18, Night 18–6 (local time in tz). */
+function getCurrentTimeSlot(tz: string): 'breakfast' | 'day' | 'evening' | 'night' {
   const hour = parseInt(
     new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date()),
     10
   )
-  if (hour >= 6 && hour < 12) return 'day'
-  if (hour >= 12 && hour < 18) return 'evening'
+  if (hour >= 6 && hour < 10) return 'breakfast'
+  if (hour >= 10 && hour < 14) return 'day'
+  if (hour >= 14 && hour < 18) return 'evening'
   return 'night'
 }
 
-/** Get time slot for a given date in tz (for aggregating sales by breakfast/lunch/dinner). */
-function getTimeSlotForDate(date: Date, tz: string): 'day' | 'evening' | 'night' {
+/** Get time slot for a given date in tz (for aggregating sales by slot). */
+function getTimeSlotForDate(date: Date, tz: string): 'breakfast' | 'day' | 'evening' | 'night' {
   const hour = parseInt(
     new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(date),
     10
   )
-  if (hour >= 6 && hour < 12) return 'day'
-  if (hour >= 12 && hour < 18) return 'evening'
+  if (hour >= 6 && hour < 10) return 'breakfast'
+  if (hour >= 10 && hour < 14) return 'day'
+  if (hour >= 14 && hour < 18) return 'evening'
   return 'night'
 }
 
@@ -187,7 +189,28 @@ async function getMenuData(slug: string) {
   const currentSlot = getCurrentTimeSlot(timezone)
 
   // Build showcase data — time-based schedule (when enabled), manual items, or AI by time of day
-  const scheduleType = (s: typeof showcases[0]) => s.schedule as { useTimeSlots?: boolean; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] } } | null
+  const scheduleType = (s: typeof showcases[0]) => s.schedule as { useTimeSlots?: boolean; displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'; breakfast?: { itemIds?: string[] }; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] } } | null
+  // Only show time-slot carousels (Breakfast / Day / Evening / Night) during their slot
+  const filtered = showcases.filter((s) => {
+    const schedule = scheduleType(s)
+    const slot = schedule?.displayForSlot
+    if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') return currentSlot === slot
+    return true
+  })
+  // When we're showing a time-slot carousel (e.g. Evening), don't show Chef's Highlights so only one carousel is at the top
+  const hasActiveSlotCarousel = filtered.some((s) => scheduleType(s)?.displayForSlot === currentSlot)
+  const withoutChefsWhenSlotActive = hasActiveSlotCarousel
+    ? filtered.filter((s) => (s as { title?: string; type?: string }).title !== "Chef's Highlights" && (s as { type?: string }).type !== 'CHEFS_HIGHLIGHTS')
+    : filtered
+  const showcasesToShow = [...withoutChefsWhenSlotActive].sort((a, b) => {
+    const aSlot = scheduleType(a)?.displayForSlot
+    const bSlot = scheduleType(b)?.displayForSlot
+    const aIsCurrentSlot = (aSlot === 'breakfast' || aSlot === 'day' || aSlot === 'evening' || aSlot === 'night') && aSlot === currentSlot
+    const bIsCurrentSlot = (bSlot === 'breakfast' || bSlot === 'day' || bSlot === 'evening' || bSlot === 'night') && bSlot === currentSlot
+    if (aIsCurrentSlot && !bIsCurrentSlot) return -1
+    if (!aIsCurrentSlot && bIsCurrentSlot) return 1
+    return 0
+  })
   const fullCarouselPool = enrichedMenuItems.map((item: any) => ({
     id: item.id,
     name: item.name,
@@ -211,8 +234,16 @@ async function getMenuData(slug: string) {
   const sortByMarginThenCost = (a: { _featuredScore?: number; price: number }, b: { _featuredScore?: number; price: number }) =>
     (b._featuredScore ?? 0) - (a._featuredScore ?? 0) || b.price - a.price
 
+  /** Time range label for time-slot carousels (shown on the guest menu). */
+  const SLOT_TIME_RANGES: Record<'breakfast' | 'day' | 'evening' | 'night', string> = {
+    breakfast: '6am–10am',
+    day: '10am–2pm',
+    evening: '2pm–6pm',
+    night: '6pm–6am',
+  }
+
   const showcaseData = await Promise.all(
-    showcases.map(async (showcase) => {
+    showcasesToShow.map(async (showcase) => {
       let showcaseMenuItems: typeof enrichedMenuItems
       const schedule = scheduleType(showcase)
       const useTimeSlots = schedule?.useTimeSlots === true
@@ -267,6 +298,11 @@ async function getMenuData(slug: string) {
         showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
       }
 
+      const displaySlot = schedule?.displayForSlot
+      const activeTimeRange = displaySlot && (displaySlot === 'breakfast' || displaySlot === 'day' || displaySlot === 'evening' || displaySlot === 'night')
+        ? SLOT_TIME_RANGES[displaySlot]
+        : undefined
+
       return {
         id: showcase.id,
         title: showcase.title,
@@ -274,6 +310,7 @@ async function getMenuData(slug: string) {
         displayVariant: (showcase as any).displayVariant === 'hero' ? 'hero' : 'cards',
         position: showcase.position,
         insertAfterCategoryId: showcase.insertAfterCategoryId,
+        activeTimeRange,
         items: showcaseMenuItems.map(
           ({ _featuredScore: _fs, ...item }: any) => item
         ),

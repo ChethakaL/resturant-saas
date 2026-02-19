@@ -1,6 +1,6 @@
 import { callGemini } from './generative'
 
-export type TimeSlotLabel = 'Morning' | 'Lunch' | 'Evening' | 'Night'
+export type TimeSlotLabel = 'Breakfast' | 'Morning' | 'Lunch' | 'Evening' | 'Night'
 
 export interface CarouselMenuItem {
   id: string
@@ -11,12 +11,13 @@ export interface CarouselMenuItem {
 }
 
 const SLOT_LABELS: Record<string, TimeSlotLabel> = {
+  breakfast: 'Breakfast',
   day: 'Morning',
   evening: 'Lunch',
   night: 'Evening',
 }
 
-export function getTimeSlotLabel(slot: 'day' | 'evening' | 'night'): TimeSlotLabel {
+export function getTimeSlotLabel(slot: 'breakfast' | 'day' | 'evening' | 'night'): TimeSlotLabel {
   return SLOT_LABELS[slot] ?? 'Lunch'
 }
 

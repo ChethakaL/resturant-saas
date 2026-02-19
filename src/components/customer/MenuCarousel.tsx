@@ -34,6 +34,8 @@ interface MenuCarouselProps {
   displayMode?: 'sliding' | 'static'
   /** Localized label for hero badge (e.g. "Chef's recommendation" / "توصية الشيف") */
   chefRecommendationLabel?: string
+  /** When this carousel is shown only in a time slot (e.g. "6am–10am"), show that range under the title */
+  activeTimeRange?: string
 }
 
 const defaultImage =
@@ -54,6 +56,7 @@ export function MenuCarousel({
   isDarkTheme = true,
   displayMode = 'sliding',
   chefRecommendationLabel,
+  activeTimeRange,
 }: MenuCarouselProps) {
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
@@ -86,72 +89,15 @@ export function MenuCarousel({
   const highlightColor = isChefsHighlights ? (primaryColor || '#10b981') : (accentColor || '#f59e0b')
   const isHero = variant === 'hero'
 
-  // Static row: horizontal scroll, no sliding (old menu style)
-  if (displayMode === 'static') {
-    const titleClass = isChefsHighlights
-      ? 'text-xs uppercase tracking-[0.35em] font-semibold'
-      : 'text-xs uppercase tracking-[0.35em]'
-    const titleColor = isDarkTheme
-      ? isChefsHighlights ? undefined : 'text-white/70'
-      : isChefsHighlights ? undefined : 'text-slate-500'
-    const textPrimary = isDarkTheme ? 'text-white' : 'text-slate-900'
-    const cardBg = isDarkTheme ? 'bg-white/5' : 'bg-slate-100'
-    const cardWidth = isHero ? 'min-w-[260px] sm:min-w-[300px]' : 'min-w-[180px] sm:min-w-[200px]'
-
-    return (
-      <section className="w-full space-y-4">
-        <div className="px-4 sm:px-6">
-          <p
-            className={`font-body ${titleClass} ${titleColor}`}
-            style={isChefsHighlights ? { color: highlightColor } : undefined}
-          >
-            {title}
-          </p>
-        </div>
-        <div className="overflow-x-auto scrollbar-hide px-4 sm:px-6 -mx-4 sm:-mx-6">
-          <div className="flex gap-4 pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            {items.map((item) => {
-              const displayName = getDisplayName?.(item.id) || item.name
-              const categoryName = getCategoryName?.(item.category?.name ?? null) || item.category?.name || ''
-              return (
-                <button
-                  type="button"
-                  key={item.id}
-                  className={`${cardWidth} flex-shrink-0 w-[min(200px,70vw)] sm:w-[200px] text-left rounded-2xl overflow-hidden transition-transform active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--menu-accent,#f59e0b)]`}
-                  onClick={() => onItemClick?.(item as CarouselItem)}
-                >
-                  <div className={`aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${cardBg}`}>
-                    <img
-                      src={item.imageUrl || defaultImage}
-                      alt={item.name}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <div className={`rounded-b-2xl px-3 py-3 ${isDarkTheme ? 'bg-slate-900/90' : 'bg-slate-800'} text-left`}>
-                    <p className={`font-body text-sm font-semibold ${textPrimary} line-clamp-2 ${displayFontClassName ?? ''}`}>
-                      {displayName}
-                    </p>
-                    {categoryName && (
-                      <p className={`mt-0.5 text-[10px] uppercase tracking-wider ${isDarkTheme ? 'text-white/60' : 'text-slate-500'}`}>
-                        {categoryName}
-                      </p>
-                    )}
-                    <p className="mt-1 text-sm font-bold" style={{ color: highlightColor }}>
-                      {formatMenuPrice(item.price)}
-                    </p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      </section>
-    )
-  }
-
+  // Full-width hero: always use hero layout when variant is hero (top-of-menu), regardless of theme's static/sliding setting
   if (isHero) {
     return (
       <div className="w-full overflow-hidden bg-black/30">
+        {activeTimeRange && (
+          <p className="font-body text-[11px] text-white/50 px-4 sm:px-6 pt-2 text-center">
+            Shown {activeTimeRange}
+          </p>
+        )}
         {/* Full-width hero: shorter on mobile, moderate height on desktop */}
         <div
           ref={emblaRef}
@@ -172,6 +118,11 @@ export function MenuCarousel({
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                 <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-8 text-white">
+                  {title && (
+                    <p className="font-body text-xs sm:text-sm text-white/80 uppercase tracking-wider mb-1.5">
+                      {title}
+                    </p>
+                  )}
                   <span
                     className="inline-block px-2.5 py-1 rounded text-[10px] uppercase tracking-wider font-semibold mb-2"
                     style={{ backgroundColor: highlightColor }}
@@ -225,6 +176,74 @@ export function MenuCarousel({
     )
   }
 
+  // Static row: horizontal scroll, no sliding (old menu style) — only for card carousels
+  if (displayMode === 'static') {
+    const titleClass = isChefsHighlights
+      ? 'text-xs uppercase tracking-[0.35em] font-semibold'
+      : 'text-xs uppercase tracking-[0.35em]'
+    const titleColor = isDarkTheme
+      ? isChefsHighlights ? undefined : 'text-white/70'
+      : isChefsHighlights ? undefined : 'text-slate-500'
+    const textPrimary = isDarkTheme ? 'text-white' : 'text-slate-900'
+    const cardBg = isDarkTheme ? 'bg-white/5' : 'bg-slate-100'
+    const cardWidth = isHero ? 'min-w-[260px] sm:min-w-[300px]' : 'min-w-[180px] sm:min-w-[200px]'
+
+    return (
+      <section className="w-full space-y-4">
+        <div className="px-4 sm:px-6">
+          <p
+            className={`font-body ${titleClass} ${titleColor}`}
+            style={isChefsHighlights ? { color: highlightColor } : undefined}
+          >
+            {title}
+          </p>
+          {activeTimeRange && (
+            <p className={`font-body text-[11px] mt-0.5 ${isDarkTheme ? 'text-white/50' : 'text-slate-400'}`}>
+              Shown {activeTimeRange}
+            </p>
+          )}
+        </div>
+        <div className="overflow-x-auto scrollbar-hide px-4 sm:px-6 -mx-4 sm:-mx-6">
+          <div className="flex gap-4 pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            {items.map((item) => {
+              const displayName = getDisplayName?.(item.id) || item.name
+              const categoryName = getCategoryName?.(item.category?.name ?? null) || item.category?.name || ''
+              return (
+                <button
+                  type="button"
+                  key={item.id}
+                  className={`${cardWidth} flex-shrink-0 w-[min(200px,70vw)] sm:w-[200px] text-left rounded-2xl overflow-hidden transition-transform active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--menu-accent,#f59e0b)]`}
+                  onClick={() => onItemClick?.(item as CarouselItem)}
+                >
+                  <div className={`aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${cardBg}`}>
+                    <img
+                      src={item.imageUrl || defaultImage}
+                      alt={item.name}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className={`rounded-b-2xl px-3 py-3 ${isDarkTheme ? 'bg-slate-900/90' : 'bg-slate-800'} text-left`}>
+                    <p className={`font-body text-sm font-semibold ${textPrimary} line-clamp-2 ${displayFontClassName ?? ''}`}>
+                      {displayName}
+                    </p>
+                    {categoryName && (
+                      <p className={`mt-0.5 text-[10px] uppercase tracking-wider ${isDarkTheme ? 'text-white/60' : 'text-slate-500'}`}>
+                        {categoryName}
+                      </p>
+                    )}
+                    <p className="mt-1 text-sm font-bold" style={{ color: highlightColor }}>
+                      {formatMenuPrice(item.price)}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   const titleClass = isChefsHighlights
     ? 'text-xs uppercase tracking-[0.35em] font-semibold'
     : 'text-xs uppercase tracking-[0.35em]'
@@ -247,6 +266,11 @@ export function MenuCarousel({
         >
           {title}
         </p>
+        {activeTimeRange && (
+          <p className={`font-body text-[11px] mt-0.5 ${isDarkTheme ? 'text-white/50' : 'text-slate-400'}`}>
+            Shown {activeTimeRange}
+          </p>
+        )}
       </div>
       {/* Full-width track with horizontal padding for first/last card */}
       <div className="relative w-full">
