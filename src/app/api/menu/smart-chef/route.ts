@@ -53,7 +53,7 @@ THE STRUCTURED FLOW:
 
    Then ask: "Is this recipe suitable, or would you like any adjustments?" The "max 2 sentences" rule does NOT apply to recipe suggestions — the user MUST see both ingredients AND steps in the chat. Never hide the recipe only in the data block. If the user uploaded a document or message that already contains the full recipe, display those ingredients and steps — do NOT re-suggest. Only suggest a recipe when they did NOT provide one.
 4. **Grams & Weights**: Summarize the amounts you have (use conversions yourself if user said tsp/cups). Only ask the user about quantities that are genuinely missing or ambiguous (e.g. "how much salt?" if not stated). Do not ask for conversions.
-5. **Yield**: From the ingredient quantities, estimate how many servings the recipe yields. Phrase it in a natural, conversational way, e.g. "This recipe seems like it makes one dish." or "This looks like it makes about 4 servings." Then ask the user to confirm (e.g. "Is that right?"). Do not ask open-ended "how many servings would you expect?" — always give your estimate first in plain language.
+5. **Yield**: From the ingredient quantities, estimate how many servings the recipe yields. Phrase it in a natural, conversational way, e.g. "This recipe seems like it makes one dish." or "This looks like it makes about 4 servings." Then ask the user to confirm (e.g. "Is that right?"). Do not ask open-ended "how many servings would you expect?" — always give your estimate first in plain language. Once the user confirms (yes/correct/ok/sure), IMMEDIATELY move to step 6 — never pause or ask "how would you like to continue".
 6. **Inventory & Costing** (you MUST go through every recipe ingredient — do not skip any, including salt, flour, baking powder, etc.):
    - Inventory list:
 ${inventory.map(i => `- ${i.name} (${i.unit}, Cost: ${i.costPerUnit} IQD)`).join('\n')}
@@ -80,6 +80,7 @@ RULES:
 - **Flour / salt / variant rule**: Only ask when the difference is meaningful (e.g. "all-purpose flour" vs "flour", "kosher salt" vs "Salt"). Do NOT ask for trivial capitalisation or plural differences — "Fresh Mint" vs "fresh mint" is the same, use it silently.
 - **Missing ingredient (during chat)**: When an ingredient is not in inventory, say "[Ingredient] is not in your inventory. Let's add it. What is the cost per [unit] in IQD?" so the user can provide unit cost. When the user clicks "Fill Form Now" before all ingredients were discussed, include any remaining ones with costPerUnit: 0 — the form shows cost incomplete and the user can complete pricing via the Cost complete button.
 - **One Step at a Time**: Only ask for ONE thing per message (one ingredient, one confirmation, or one cost).
+- **Always advance the flow**: After any user confirmation (yes/correct/ok/sure/sounds good), IMMEDIATELY proceed to the next step in the structured flow — never say "let me know how you'd like to continue" or wait passively. The flow is always: name → category → recipe → yield → inventory/costing (each ingredient) → pricing → finalize.
 - **Short & Professional**: Max 2 sentences for most messages — EXCEPT when presenting a recipe (step 3), which MUST show the full **Ingredients:** list AND **Steps (SOP):** numbered list in the message, and when showing a cost breakdown. Never truncate a recipe suggestion.
 - **No praise or enthusiasm**: NEVER start a message with phrases like "Great choice!", "Excellent!", "That's a classic!", "Perfect!", "Wonderful!", "Sounds great!", "Nice!" or any similar compliment. This is a professional business tool. Get straight to the point every time.
 - **Auto-Fill**: Always update the JSON "data" block with everything you know.
@@ -210,9 +211,12 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
         }
         // Ensure message is never undefined/null — a blank response would crash the client
         if (!responseData.message) {
-          responseData.message = responseData.data?.ingredients?.length
-            ? 'Here is what I have so far. Does this look right?'
-            : 'Got it — let me know how you\'d like to continue.'
+          const ings = Array.isArray((responseData.data as Record<string,unknown>)?.ingredients)
+            ? (responseData.data as Record<string,unknown>).ingredients as unknown[]
+            : []
+          responseData.message = ings.length
+            ? 'Noted. Now let\'s check each ingredient against your inventory to calculate costs.'
+            : 'Noted. Please share the recipe or dish name so I can continue.'
         }
 
         const requestDebugId = `smart-chef-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
