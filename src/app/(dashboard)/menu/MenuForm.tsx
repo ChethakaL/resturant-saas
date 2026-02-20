@@ -1414,20 +1414,17 @@ export default function MenuForm({
         setNewlyCreatedIngredients((prev) => [...prev, ...createdFromChat])
       }
 
-      setAssistantMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          text: result.message,
-        },
-      ])
+      const replyText = result.message || ''
+      if (replyText) {
+        setAssistantMessages((prev) => [...prev, { role: 'assistant', text: replyText }])
+      }
 
       // Clear attachments after sending
       setAttachedDocs([])
       setAttachedImages([])
 
       // When Smart Chef says FINISHED, auto-fill the form with the summary/description
-      const isFinished = result.data?.isFinished || result.message.toLowerCase().includes('finished')
+      const isFinished = result.data?.isFinished || (result.message || '').toLowerCase().includes('finished')
       if (isFinished && result.data && typeof result.data === 'object') {
         const d = result.data
         const parsed: ParsedAIResponse = {
@@ -2302,7 +2299,7 @@ export default function MenuForm({
                           )}
                         >
                           <div className="whitespace-pre-wrap leading-relaxed">
-                            {message.text.split(/(\*\*.*?\*\*)/g).map((part, i) => {
+                            {(message.text || '').split(/(\*\*.*?\*\*)/g).map((part, i) => {
                               if (part.startsWith('**') && part.endsWith('**')) {
                                 return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
                               }

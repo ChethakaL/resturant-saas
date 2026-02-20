@@ -157,6 +157,12 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
         }
 
         const responseData = JSON.parse(jsonMatch[0])
+        // Ensure message is never undefined/null — a blank response would crash the client
+        if (!responseData.message) {
+          responseData.message = responseData.data?.ingredients?.length
+            ? 'Here is what I have so far. Does this look right?'
+            : 'Got it — let me know how you\'d like to continue.'
+        }
 
         const requestDebugId = `smart-chef-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
