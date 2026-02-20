@@ -58,10 +58,10 @@ THE STRUCTURED FLOW:
    - Inventory list:
 ${inventory.map(i => `- ${i.name} (${i.unit}, Cost: ${i.costPerUnit} IQD)`).join('\n')}
    - **Unit cost** means: the price you pay per unit (e.g. per kg, per L, per g) in IQD. When an ingredient is not in inventory, we need this to calculate recipe cost.
-   - **Exact or spelling match**: Same product, different spelling — e.g. "Tomato" / "Tomatoe" / "Fresh tomato" / "Roma tomatoes". Use the inventory name in the "data" block. Do not ask to add.
-   - **Tomato rules**: Crushed tomato / Canned crushed tomatoes = SAME as Tomato or Fresh tomato — use inventory name. Tomato paste = DIFFERENT; if they have Tomato, ask: "Do you use your **Tomato** for this, or buy tomato paste separately?" Only if separately, ask to add and get cost.
-   - **Same base product, different variant (IMPORTANT)**: When the recipe uses a more specific name and inventory has a broader item, do NOT auto-match. You MUST ask the user. Examples: recipe says "all-purpose flour", inventory has "flour" → ask: "In your inventory you have **flour**. The recipe uses **all-purpose flour**. Do you want to use **flour** for this, or add **all-purpose flour** as a separate inventory item?" Recipe says "kosher salt", inventory has "Salt" → ask the same (use Salt or add kosher salt as separate). Only after the user answers, use the inventory name or add the new ingredient and ask for cost per unit.
-   - **Confirm when not exact (same product)**: If recipe says "Fresh Parmesan" and inventory has "Parmesan", say: "I found **Parmesan** in your inventory — is that the same as the Fresh Parmesan in this recipe?" Only if they say no (or no close match) treat as missing.
+   - **Exact or spelling match (SILENT — DO NOT ASK)**: If the recipe ingredient and inventory item are clearly the same product — same word(s) differing only in capitalisation, pluralisation, or a generic adjective like "fresh" / "dried" — use the inventory item SILENTLY. No confirmation needed. Examples of SILENT matches: "Fresh tomatoes" = "Fresh Tomato", "fresh parsley" = "Fresh Parsley", "fresh mint" = "Fresh Mint", "green onion" = "green onions", "bulgur" = "Bulgur (fine grain)", "tomato" = "Fresh Tomato". Never ask the user "Is that the same?" for these — just use the inventory item and move on.
+   - **Tomato rules**: Crushed tomato / Canned crushed tomatoes = SAME as Tomato or Fresh Tomato — use silently. Tomato paste = DIFFERENT; if they have Tomato, ask: "Do you use your **Tomato** for this, or buy tomato paste separately?" Only if separately, ask to add and get cost.
+   - **Same base product, different variant (ASK ONLY WHEN GENUINELY DIFFERENT)**: Only ask when the recipe ingredient is a meaningfully different product. Examples: recipe says "all-purpose flour", inventory has "flour" → ask. Recipe says "kosher salt", inventory has "Salt" → ask. Recipe says "Fresh Parmesan" and inventory has "Parmesan" → ask. But "fresh mint" vs "Fresh Mint" → SILENT, no question.
+   - **Rule of thumb**: If a reasonable chef would consider them interchangeable without thinking twice, use silently. Only ask when the products could genuinely differ (brand, processing, type).
    - **Not in inventory**: For each ingredient that has no match (or user said "add as separate"), say clearly: "**[Ingredient name]** is not in your inventory. Let's add it. What is the cost per [unit] in IQD (e.g. per kg or per L)?" When the user gives the cost, put it in the "data" block as costPerUnit. The system creates the ingredient. Then: "Thank you. [Ingredient] has been added. Now [next ingredient or step]."
    - **During the conversation**: Go through each ingredient one by one when you can — match to inventory (with variant question when relevant) or say it is not in inventory and ask for unit cost. If the user clicks "Fill Form Now" before every ingredient was discussed, include those ingredients with costPerUnit: 0; the form will show cost incomplete and the user can use the "Cost complete" button to add pricing later.
    - If present (exact or confirmed match): Use the inventory item's name in the "data" block so the form can link correctly and cost is known.
@@ -77,7 +77,7 @@ RULES:
 - **Document already has recipe**: If the document (or user message) already provided ingredients and steps, do NOT re-suggest a recipe or ask "is this recipe accurate, any changes?". Use the extracted data and proceed (e.g. confirm category, then yield, then inventory/costing).
 - **Yield phrasing**: Say "This recipe seems like it makes one dish" or "This looks like it makes about 4 servings" (or similar natural phrasing), then ask for confirmation. Do not sound robotic.
 - **Yield prerequisite (STRICT)**: Never ask about servings/yield until you have at least one concrete ingredient with quantity/unit in data.ingredients (from user text, attachment, or your suggested recipe).
-- **Flour / salt / variant rule**: When recipe has "all-purpose flour" and inventory has "flour" (or "kosher salt" vs "Salt", etc.), always ask: "In your inventory you have **flour**. The recipe uses **all-purpose flour**. Do you want to use **flour** for this, or add **all-purpose flour** as a separate inventory item?" Do not assume they are the same without asking.
+- **Flour / salt / variant rule**: Only ask when the difference is meaningful (e.g. "all-purpose flour" vs "flour", "kosher salt" vs "Salt"). Do NOT ask for trivial capitalisation or plural differences — "Fresh Mint" vs "fresh mint" is the same, use it silently.
 - **Missing ingredient (during chat)**: When an ingredient is not in inventory, say "[Ingredient] is not in your inventory. Let's add it. What is the cost per [unit] in IQD?" so the user can provide unit cost. When the user clicks "Fill Form Now" before all ingredients were discussed, include any remaining ones with costPerUnit: 0 — the form shows cost incomplete and the user can complete pricing via the Cost complete button.
 - **One Step at a Time**: Only ask for ONE thing per message (one ingredient, one confirmation, or one cost).
 - **Short & Professional**: Max 2 sentences for most messages — EXCEPT when presenting a recipe (step 3), which MUST show the full **Ingredients:** list AND **Steps (SOP):** numbered list in the message, and when showing a cost breakdown. Never truncate a recipe suggestion.
@@ -172,7 +172,7 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
         }
         const rawText = result!.response.text()
 
-        // Extract JSON from the response
+        // Extract and robustly parse JSON from the AI response
         const jsonMatch = rawText.match(/\{[\s\S]*\}/)
         if (!jsonMatch) {
             return NextResponse.json({
@@ -181,7 +181,33 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
             })
         }
 
-        const responseData = JSON.parse(jsonMatch[0])
+        let responseData: Record<string, unknown>
+        try {
+            responseData = JSON.parse(jsonMatch[0])
+        } catch {
+            // AI sometimes emits invalid JSON (unescaped apostrophes/quotes in strings).
+            // Attempt progressively more aggressive repairs before giving up.
+            let repaired = jsonMatch[0]
+
+            // 1. Replace smart/curly quotes with straight equivalents
+            repaired = repaired.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'")
+
+            // 2. Remove literal newlines inside JSON string values (replace with \n)
+            repaired = repaired.replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/gs, (_match, inner: string) =>
+                `"${inner.replace(/\n/g, '\\n').replace(/\r/g, '\\r')}"`
+            )
+
+            try {
+                responseData = JSON.parse(repaired)
+            } catch {
+                // 3. Last resort — extract just the message field so the user sees something
+                const msgMatch = repaired.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/s)
+                responseData = {
+                    message: msgMatch ? msgMatch[1].replace(/\\n/g, '\n') : 'I encountered a formatting issue. Please try again.',
+                    data: currentData || {},
+                }
+            }
+        }
         // Ensure message is never undefined/null — a blank response would crash the client
         if (!responseData.message) {
           responseData.message = responseData.data?.ingredients?.length
