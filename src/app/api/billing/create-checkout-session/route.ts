@@ -85,8 +85,8 @@ export async function POST(request: NextRequest) {
       customer: customerId,
       mode: 'subscription',
       line_items: [lineItem],
-      success_url: `${origin}/settings?tab=subscription&success=true`,
-      cancel_url: `${origin}/settings?tab=subscription&canceled=true`,
+      success_url: `${origin}/billing?success=true`,
+      cancel_url: `${origin}/billing?canceled=true`,
       metadata: { restaurantId: restaurant.id, plan },
       subscription_data: { metadata: { restaurantId: restaurant.id } },
     })

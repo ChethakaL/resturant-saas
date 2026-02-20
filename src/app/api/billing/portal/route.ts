@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     const origin = request.headers.get('origin') || process.env.NEXTAUTH_URL || 'http://localhost:3000'
-    const returnUrl = `${origin}/settings?tab=subscription`
+    const returnUrl = `${origin}/billing`
 
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: restaurant.stripeCustomerId,

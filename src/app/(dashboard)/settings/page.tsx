@@ -17,9 +17,6 @@ export default async function SettingsPage() {
         name: true,
         logo: true,
         settings: true,
-        subscriptionStatus: true,
-        subscriptionPriceId: true,
-        currentPeriodEnd: true,
       },
     }),
 
@@ -41,29 +38,10 @@ export default async function SettingsPage() {
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
 
-  const isActive =
-    restaurant?.subscriptionStatus === 'active' || restaurant?.subscriptionStatus === 'trialing'
-  const priceMonthly = process.env.STRIPE_PRICE_MONTHLY
-  const priceAnnual = process.env.STRIPE_PRICE_ANNUAL
-  const currentPlan =
-    restaurant?.subscriptionPriceId === priceAnnual
-      ? 'annual'
-      : restaurant?.subscriptionPriceId === priceMonthly
-        ? 'monthly'
-        : null
-
-  const subscription = {
-    isActive: !!isActive,
-    currentPeriodEnd: restaurant?.currentPeriodEnd?.toISOString() ?? null,
-    currentPlan,
-    pricesConfigured: !!(priceMonthly && priceAnnual),
-  }
-
   return (
     <SettingsClient
       currentTheme={currentTheme}
       defaultBackgroundPrompt={defaultBackgroundPrompt}
-      subscription={subscription}
     />
   )
 }

@@ -56,7 +56,6 @@ export function MenuCarousel({
   isDarkTheme = true,
   displayMode = 'sliding',
   chefRecommendationLabel,
-  activeTimeRange,
 }: MenuCarouselProps) {
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
@@ -93,11 +92,6 @@ export function MenuCarousel({
   if (isHero) {
     return (
       <div className="w-full overflow-hidden bg-black/30">
-        {activeTimeRange && (
-          <p className="font-body text-[11px] text-white/50 px-4 sm:px-6 pt-2 text-center">
-            Shown {activeTimeRange}
-          </p>
-        )}
         {/* Full-width hero: shorter on mobile, moderate height on desktop */}
         <div
           ref={emblaRef}
@@ -197,11 +191,6 @@ export function MenuCarousel({
           >
             {title}
           </p>
-          {activeTimeRange && (
-            <p className={`font-body text-[11px] mt-0.5 ${isDarkTheme ? 'text-white/50' : 'text-slate-400'}`}>
-              Shown {activeTimeRange}
-            </p>
-          )}
         </div>
         <div className="overflow-x-auto scrollbar-hide px-4 sm:px-6 -mx-4 sm:-mx-6">
           <div className="flex gap-4 pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
@@ -266,11 +255,6 @@ export function MenuCarousel({
         >
           {title}
         </p>
-        {activeTimeRange && (
-          <p className={`font-body text-[11px] mt-0.5 ${isDarkTheme ? 'text-white/50' : 'text-slate-400'}`}>
-            Shown {activeTimeRange}
-          </p>
-        )}
       </div>
       {/* Full-width track with horizontal padding for first/last card */}
       <div className="relative w-full">

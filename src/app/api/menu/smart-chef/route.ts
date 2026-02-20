@@ -26,14 +26,17 @@ THE STRUCTURED FLOW:
 3. **Recipe & Ingredients**: When you suggest a recipe, always include quantities and units for every ingredient (e.g. 500g ground beef, 1 tbsp olive oil, 2 cloves garlic, 100g cheese). Never list ingredient names only and then ask the user to "specify the precise quantities" — suggest the full amounts yourself using standard recipe knowledge. If the user uploaded a document or message that already contains the full recipe and ingredients, use that data directly — do NOT re-suggest or ask them to "review". Move to the next step (category, yield, inventory/costing). Only suggest a recipe when they did NOT provide one (e.g. they only gave the dish name).
 4. **Grams & Weights**: Summarize the amounts you have (use conversions yourself if user said tsp/cups). Only ask the user about quantities that are genuinely missing or ambiguous (e.g. "how much salt?" if not stated). Do not ask for conversions.
 5. **Yield**: From the ingredient quantities, estimate how many servings the recipe yields. Phrase it in a natural, conversational way, e.g. "This recipe seems like it makes one dish." or "This looks like it makes about 4 servings." Then ask the user to confirm (e.g. "Is that right?"). Do not ask open-ended "how many servings would you expect?" — always give your estimate first in plain language.
-6. **Inventory & Costing**: 
-   - Check ingredients against this inventory (use **closest match**, not exact name only):
+6. **Inventory & Costing** (you MUST go through every recipe ingredient — do not skip any, including salt, flour, baking powder, etc.):
+   - Inventory list:
 ${inventory.map(i => `- ${i.name} (${i.unit}, Cost: ${i.costPerUnit} IQD)`).join('\n')}
-   - **Closest match**: Treat recipe ingredients and inventory items as the same when the key product is the same. Examples: "Parmesan" = "Fresh Parmesan" = "parmesan cheese"; "Mozzarella" = "Fresh Mozzarella". **Name and spelling**: If the recipe says "Fresh tomato" and inventory has "Tomato" or "Tomatoe", treat as the same — use the inventory item and put the **inventory name** in the "data" block. Do NOT ask to add. Same for "Tomatoes" / "Tomato" / "Fresh tomato" / "Roma tomatoes" (any spelling or variant of the same word).
-   - **Tomato rules**: Crushed tomato / Canned crushed tomatoes = SAME as Tomato or Fresh tomato — if they have "Tomato" or "Fresh Tomato" in inventory, use it (put inventory name in data). Do NOT ask to add. Tomato paste = DIFFERENT product; if they have Tomato in inventory, offer: "Do you use your **Tomato** for this, or buy tomato paste separately?" Only if they say separately, ask to add and get cost.
-   - **Confirm with user when not exact**: If the recipe says "Fresh Parmesan" and inventory has "Parmesan", say: "I found **Parmesan** in your inventory — is that the same as the Fresh Parmesan in this recipe?" Only if the user says no (or there is no close match) treat it as missing.
-   - If an ingredient is truly missing (no close match, or user confirmed it's different): Say "**[Ingredient name]** is not in your inventory. Let's add it. Here's what I need: the cost per [unit] in IQD (e.g. per kg or per L)." When the user provides the cost, include it in the "data" block as "costPerUnit" (number, IQD per unit). The system creates the ingredient immediately. Then say: "Thank you. [Ingredient] has been added to your inventory. Now [next question]." and move to the next missing ingredient or next step.
-   - If present (exact or confirmed match): Calculate the direct cost for ONE serving using your knowledge. Use the inventory item's name in the "data" block so the form can link correctly.
+   - **Unit cost** means: the price you pay per unit (e.g. per kg, per L, per g) in IQD. When an ingredient is not in inventory, we need this to calculate recipe cost.
+   - **Exact or spelling match**: Same product, different spelling — e.g. "Tomato" / "Tomatoe" / "Fresh tomato" / "Roma tomatoes". Use the inventory name in the "data" block. Do not ask to add.
+   - **Tomato rules**: Crushed tomato / Canned crushed tomatoes = SAME as Tomato or Fresh tomato — use inventory name. Tomato paste = DIFFERENT; if they have Tomato, ask: "Do you use your **Tomato** for this, or buy tomato paste separately?" Only if separately, ask to add and get cost.
+   - **Same base product, different variant (IMPORTANT)**: When the recipe uses a more specific name and inventory has a broader item, do NOT auto-match. You MUST ask the user. Examples: recipe says "all-purpose flour", inventory has "flour" → ask: "In your inventory you have **flour**. The recipe uses **all-purpose flour**. Do you want to use **flour** for this, or add **all-purpose flour** as a separate inventory item?" Recipe says "kosher salt", inventory has "Salt" → ask the same (use Salt or add kosher salt as separate). Only after the user answers, use the inventory name or add the new ingredient and ask for cost per unit.
+   - **Confirm when not exact (same product)**: If recipe says "Fresh Parmesan" and inventory has "Parmesan", say: "I found **Parmesan** in your inventory — is that the same as the Fresh Parmesan in this recipe?" Only if they say no (or no close match) treat as missing.
+   - **Not in inventory**: For each ingredient that has no match (or user said "add as separate"), say clearly: "**[Ingredient name]** is not in your inventory. Let's add it. What is the cost per [unit] in IQD (e.g. per kg or per L)?" When the user gives the cost, put it in the "data" block as costPerUnit. The system creates the ingredient. Then: "Thank you. [Ingredient] has been added. Now [next ingredient or step]."
+   - **During the conversation**: Go through each ingredient one by one when you can — match to inventory (with variant question when relevant) or say it is not in inventory and ask for unit cost. If the user clicks "Fill Form Now" before every ingredient was discussed, include those ingredients with costPerUnit: 0; the form will show cost incomplete and the user can use the "Cost complete" button to add pricing later.
+   - If present (exact or confirmed match): Use the inventory item's name in the "data" block so the form can link correctly and cost is known.
 7. **Pricing**: 
    - Decide if the item is FOOD or DRINK (infer from category: e.g. Beverages, Drinks, Coffee, Tea = drink; otherwise food; ask the user if unclear).
    - Food: Suggested Price = (Direct Cost) / 0.75 so that (Selling Price - Direct Cost) = 25% of Selling Price.
@@ -45,9 +48,10 @@ RULES:
 - **Confirmation First**: If a document is uploaded, start with: "Are you trying to add a menu item called '**[Name]**'? I have extracted the recipe and ingredients from your document."
 - **Document already has recipe**: If the document (or user message) already provided ingredients and steps, do NOT re-suggest a recipe or ask "is this recipe accurate, any changes?". Use the extracted data and proceed (e.g. confirm category, then yield, then inventory/costing).
 - **Yield phrasing**: Say "This recipe seems like it makes one dish" or "This looks like it makes about 4 servings" (or similar natural phrasing), then ask for confirmation. Do not sound robotic.
-- **Closest match & confirm**: When the recipe ingredient name does not exactly match an inventory item but is the same base product (e.g. "Fresh Parmesan" vs "Parmesan"; crushed tomatoes = tomato/fresh tomato), use the inventory item. For tomato paste (different product), offer existing Tomato first; only add if they say they buy it separately.
-- **Missing ingredient phrasing**: For ingredients that are truly not in inventory, say "[Ingredient] is not in your inventory. Let's add it. Here's what I need: the cost per [unit] in IQD." When the user gives the cost, put it in the data block and reply: "Thank you. [Ingredient] has been added to your inventory. Now [next question]." The system creates the ingredient right away.
-- **One Step at a Time**: Only ask for ONE thing per message.
+- **Yield prerequisite (STRICT)**: Never ask about servings/yield until you have at least one concrete ingredient with quantity/unit in data.ingredients (from user text, attachment, or your suggested recipe).
+- **Flour / salt / variant rule**: When recipe has "all-purpose flour" and inventory has "flour" (or "kosher salt" vs "Salt", etc.), always ask: "In your inventory you have **flour**. The recipe uses **all-purpose flour**. Do you want to use **flour** for this, or add **all-purpose flour** as a separate inventory item?" Do not assume they are the same without asking.
+- **Missing ingredient (during chat)**: When an ingredient is not in inventory, say "[Ingredient] is not in your inventory. Let's add it. What is the cost per [unit] in IQD?" so the user can provide unit cost. When the user clicks "Fill Form Now" before all ingredients were discussed, include any remaining ones with costPerUnit: 0 — the form shows cost incomplete and the user can complete pricing via the Cost complete button.
+- **One Step at a Time**: Only ask for ONE thing per message (one ingredient, one confirmation, or one cost).
 - **Short & Professional**: Max 2 sentences for the chat message.
 - **Auto-Fill**: Always update the JSON "data" block with everything you know.
 - **Images**: If an image is uploaded, guide the user on lighting, plating, and enhancement (e.g. "For best results, use even lighting and a clean plate. You can enhance this photo in the form's Image tab.").
@@ -82,7 +86,7 @@ ${messages.map((m: any) => `${m.role.toUpperCase()}: ${m.text}`).join('\n')}
 ${attachments && attachments.length > 0 ? `The user has attached ${attachments.length} files (documents or images). Extract any recipe, ingredient, or plating info from them.` : ''}
 
 ${finalize ? `
-CRITICAL: The user clicked "Fill Form Now". You MUST respond with isFinished: true and a complete "data" block containing ALL ingredients for the recipe (every ingredient you have discussed). Use the exact inventory item names for ingredients that matched. For any ingredient NOT in inventory, include it with name, quantity, unit, and costPerUnit: 0 (the form will create it; no need to ask the user for cost). Do not duplicate ingredients: each ingredient appears once with its total quantity.
+CRITICAL: The user clicked "Fill Form Now". Respond with isFinished: true and a complete "data" block with ALL recipe ingredients. Use the exact inventory item names for ingredients that were matched or confirmed. For any ingredient that was not discussed or has no cost yet, include it with name, quantity, unit, and costPerUnit: 0. The form will show cost incomplete for those, and the user can use the "Cost complete" button to add pricing. In your "message" you may briefly mention which items have cost 0 if any. Do not duplicate ingredients: each appears once with its total quantity.
 ` : 'Respond with the Smart Chef\'s next move in the flow.'}
 
 JSON RESPONSE FORMAT:
@@ -134,6 +138,111 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
         }
 
         const responseData = JSON.parse(jsonMatch[0])
+
+        const requestDebugId = `smart-chef-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+
+        // Guardrail: do not allow yield/servings questions before recipe ingredients exist.
+        // This prevents stale or jumpy flow where the assistant asks servings right after category.
+        const currentIngredients = Array.isArray(currentData?.ingredients) ? currentData.ingredients : []
+        const responseIngredients = Array.isArray(responseData?.data?.ingredients) ? responseData.data.ingredients : []
+        const hasKnownIngredients =
+          [...currentIngredients, ...responseIngredients].some((ing: any) => {
+            const hasName = typeof ing?.name === 'string' && ing.name.trim().length > 0
+            const hasLinkedIngredient = typeof ing?.ingredientId === 'string' && ing.ingredientId.trim().length > 0
+            const hasQty = typeof ing?.quantity === 'number' && ing.quantity > 0
+            return (hasName || hasLinkedIngredient) && hasQty
+          })
+
+        const userMessages = (Array.isArray(messages) ? messages : []).filter((m: any) => m?.role === 'user')
+        const lastUserText = String(userMessages[userMessages.length - 1]?.text || '').trim()
+        const recentAssistantText = (Array.isArray(messages) ? messages : [])
+          .slice(-5)
+          .filter((m: any) => m?.role === 'assistant')
+          .map((m: any) => String(m?.text || ''))
+          .join(' ')
+          .toLowerCase()
+        const lastUserConfirmedCategory = /^(yes|yeah|yep|correct|right|ok|okay|sure|sounds good|exactly)\b/i.test(lastUserText)
+        const assistantAskedCategoryRecently =
+          recentAssistantText.includes('different category') ||
+          recentAssistantText.includes('is this correct') ||
+          recentAssistantText.includes('category')
+        const userProvidedRecipeSignals = userMessages.some((m: any) =>
+          /\b(recipe|ingredients?)\b/i.test(String(m?.text || '')) ||
+          /\b\d+(\.\d+)?\s?(g|gram|grams|kg|ml|l|liter|litre|cup|cups|tbsp|tsp|teaspoon|tablespoon|oz|ounce|lb|clove|cloves|pinch|piece|pieces)\b/i.test(String(m?.text || ''))
+        )
+        const hasRecipeContext =
+          hasKnownIngredients ||
+          (Array.isArray(attachments) && attachments.length > 0) ||
+          userProvidedRecipeSignals
+
+        const messageText = String(responseData?.message || '')
+        const lowerMsg = messageText.toLowerCase()
+        const asksYield =
+          lowerMsg.includes('servings') ||
+          lowerMsg.includes('recipe yield') ||
+          (lowerMsg.includes('is that right?') && lowerMsg.includes('recipe'))
+
+        const ingredientPreview = [...currentIngredients, ...responseIngredients]
+          .slice(0, 8)
+          .map((ing: any) => ({
+            name: ing?.name ?? null,
+            ingredientId: ing?.ingredientId ?? null,
+            quantity: typeof ing?.quantity === 'number' ? ing.quantity : null,
+            unit: ing?.unit ?? null,
+          }))
+
+        console.info('[smart-chef][yield-check]', {
+          debugId: requestDebugId,
+          finalize: !!finalize,
+          messageCount: Array.isArray(messages) ? messages.length : 0,
+          asksYield,
+          hasKnownIngredients,
+          hasRecipeContext,
+          lastUserConfirmedCategory,
+          assistantAskedCategoryRecently,
+          currentIngredientsCount: currentIngredients.length,
+          responseIngredientsCount: responseIngredients.length,
+          ingredientPreview,
+          aiMessagePreview: messageText.slice(0, 220),
+        })
+
+        // Guardrail: after category confirmation, do not auto-invent recipe/yield unless recipe context exists.
+        if (
+          !finalize &&
+          !hasRecipeContext &&
+          lastUserConfirmedCategory &&
+          assistantAskedCategoryRecently &&
+          (asksYield || responseIngredients.length > 0 || Number(responseData?.data?.recipeYield || 0) > 0)
+        ) {
+            console.warn('[smart-chef][category-to-recipe-guard-triggered]', {
+              debugId: requestDebugId,
+              reason: 'No recipe context, but AI attempted recipe/yield immediately after category confirmation',
+            })
+            responseData.message =
+              'Great, category confirmed. Would you like me to suggest a standard recipe for this dish, or will you provide your own recipe ingredients?'
+            responseData.data = {
+              ...(responseData.data || {}),
+              ingredients: [],
+              recipeSteps: [],
+              recipeTips: [],
+              recipeYield: 0,
+              isFinished: false,
+            }
+        }
+
+        if (asksYield && !hasKnownIngredients) {
+            console.warn('[smart-chef][yield-guard-triggered]', {
+              debugId: requestDebugId,
+              reason: 'AI asked servings/yield before ingredients were known',
+            })
+            responseData.message =
+              'Great, category confirmed. Please share the recipe ingredients with quantities (or upload the recipe), then I will estimate servings.'
+            responseData.data = {
+              ...(responseData.data || {}),
+              isFinished: false,
+            }
+        }
+
         return NextResponse.json(responseData)
 
     } catch (error) {

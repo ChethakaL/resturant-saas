@@ -34,7 +34,7 @@ export function SubscriptionGate({
   const { toast } = useToast()
   const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'annual' | null>(null)
 
-  const showPopup = !hasActiveSubscription && pathname !== '/settings'
+  const showPopup = !hasActiveSubscription && pathname !== '/billing' && pathname !== '/dashboard/billing'
 
   const handleSubscribe = async (plan: 'monthly' | 'annual') => {
     setLoadingPlan(plan)
@@ -59,8 +59,8 @@ export function SubscriptionGate({
     }
   }
 
-  const goToSettings = () => {
-    router.push('/settings?tab=subscription')
+  const goToBilling = () => {
+    router.push('/billing')
   }
 
   return (
@@ -94,8 +94,8 @@ export function SubscriptionGate({
           </div>
 
           <div className="mt-6 pt-4 border-t border-slate-200">
-            <Button variant="ghost" size="sm" onClick={goToSettings} className="text-slate-600">
-              Manage subscription in Settings →
+            <Button variant="ghost" size="sm" onClick={goToBilling} className="text-slate-600">
+              Open membership settings →
             </Button>
           </div>
         </DialogContent>
