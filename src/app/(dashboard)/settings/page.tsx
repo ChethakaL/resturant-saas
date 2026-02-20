@@ -34,6 +34,7 @@ export default async function SettingsPage() {
     themePreset: (settings.themePreset as string) ?? null,
     backgroundImageUrl: (settings.backgroundImageUrl as string) ?? '',
     managementLanguage: (settings.managementLanguage as string) || 'en',
+    restaurantName: restaurant?.name ?? '',
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''

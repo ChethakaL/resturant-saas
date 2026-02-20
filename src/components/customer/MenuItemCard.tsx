@@ -109,8 +109,12 @@ export function MenuItemCard({
   return (
     <Card
       className={`overflow-hidden backdrop-blur hover:shadow-lg transition-all border ${cardBg} ${textMain} ${
-        isHero ? 'ring-2 ring-[var(--menu-accent,#f59e0b)]/80' : ''
-      } ${isFeatured && !isHero ? 'border-l-4 border-[var(--menu-accent,#f59e0b)]' : ''}`}
+        isHero ? 'ring-2' : ''
+      } ${isFeatured && !isHero ? 'border-l-4' : ''}`}
+      style={{
+        ...(isHero ? { '--tw-ring-color': 'var(--menu-border, #1e40af)' } as React.CSSProperties : {}),
+        ...(isFeatured && !isHero ? { borderLeftColor: 'var(--menu-border, #1e40af)' } as React.CSSProperties : {}),
+      }}
       onClick={onDetail}
     >
       <div className={`flex min-h-[120px] sm:min-h-[140px] ${isHero ? 'flex-col sm:flex-row' : ''}`}>
@@ -126,7 +130,10 @@ export function MenuItemCard({
               className={`w-full h-full object-cover ${isHero ? 'rounded-lg' : 'rounded-xl'}`}
             />
             {badgeLabel && (
-              <span className="absolute top-2 left-2 bg-[var(--menu-accent,#f59e0b)] text-white text-[9px] font-bold px-2 py-0.5 rounded-md shadow-sm">
+              <span
+                className="absolute top-2 left-2 text-white text-[9px] font-bold px-2 py-0.5 rounded-md shadow-sm"
+                style={{ backgroundColor: 'var(--menu-chef-pick, #dc2626)' }}
+              >
                 {badgeLabel}
               </span>
             )}
@@ -191,7 +198,8 @@ export function MenuItemCard({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onAddToOrder() }}
-              className={`ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold ${isDarkTheme ? 'bg-[var(--menu-accent,#f59e0b)] text-white hover:opacity-90' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
+              className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold text-white hover:opacity-90 transition-opacity"
+              style={{ backgroundColor: 'var(--menu-accent, #f59e0b)' }}
             >
               {addToOrderLabel}
             </button>

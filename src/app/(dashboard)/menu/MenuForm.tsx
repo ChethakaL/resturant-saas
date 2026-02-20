@@ -184,7 +184,7 @@ export default function MenuForm({
   const [aiAssistantText, setAiAssistantText] = useState('')
   const [aiParseLoading, setAiParseLoading] = useState(false)
   const AI_ASSISTANT_WELCOME =
-    "Hello! I'm Smart Chef, your menu item assistant. I help with item name, description, how it appears to guests, and layout. Upload images or documents and I'll suggest improvements. Use **Fill Form Now** to have me research and fill the form from your message or attachments. For cost, recipe, and translations, use the Manual, Recipe, and Translations tabs."
+    "Hi! I'm Smart Chef. Tell me what dish you want to add — I'll handle everything: the name, description, recipe, ingredients, costs, and how it looks on your menu. You can also upload a photo or document and I'll work from that.\n\nJust describe your dish and I'll guide you through the rest. When you're happy, hit **Fill Form Now** to save it all automatically."
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
     { role: 'assistant', text: AI_ASSISTANT_WELCOME },
   ])
@@ -2257,7 +2257,7 @@ export default function MenuForm({
                       <div>
                         <h2 className="text-xl font-bold text-slate-900">Smart Chef</h2>
                         <p className="text-sm text-slate-500 mt-1">
-                          Ask questions, upload images or documents, and get help with name, description, and how the item appears to guests.
+                          Describe your dish and I&apos;ll fill in everything — name, description, recipe, ingredients, and costs. Upload a photo or document to get started even faster.
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 shrink-0">

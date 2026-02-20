@@ -31,11 +31,14 @@ interface ChatAction {
 
 export default function ChatbotWidget() {
   const [isOpen, setIsOpen] = useState(false)
+  const [imagePrompt, setImagePrompt] = useState('')
+  const [showImagePrompt, setShowImagePrompt] = useState(false)
+  const [generatingImage, setGeneratingImage] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
       content:
-        "Hi! I'm your restaurant management assistant. I can help you create menu items, search for recipes, generate images, and more. What would you like to do today?",
+        "Hi! I'm your restaurant assistant. I can help with menu items, recipes, inventory questions, and more. Use the image button below to generate a dish photo with AI.",
       timestamp: new Date(),
     },
   ])
@@ -248,6 +251,37 @@ export default function ChatbotWidget() {
     }
   }
 
+  const handleGenerateImage = async () => {
+    if (!imagePrompt.trim()) return
+    setGeneratingImage(true)
+    setShowImagePrompt(false)
+    const userMsg: Message = { role: 'user', content: `Generate image: ${imagePrompt.trim()}`, timestamp: new Date() }
+    setMessages((prev) => [...prev, userMsg])
+    try {
+      const res = await fetch('/api/menu/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: imagePrompt.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok && data.imageUrl) {
+        setGeneratedImageUrl(data.imageUrl)
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: `Image generated! You can save the URL below or use it when adding a menu item.\n\n${data.imageUrl}`,
+          timestamp: new Date(),
+        }])
+      } else {
+        setMessages((prev) => [...prev, { role: 'assistant', content: `Could not generate image: ${data.error || 'Unknown error'}`, timestamp: new Date() }])
+      }
+    } catch {
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Error generating image. Please try again.', timestamp: new Date() }])
+    } finally {
+      setGeneratingImage(false)
+      setImagePrompt('')
+    }
+  }
+
   return (
     <>
       {/* Floating Button */}
@@ -264,16 +298,16 @@ export default function ChatbotWidget() {
       {/* Chat Window */}
       {isOpen && (
         <Card className="fixed bottom-6 right-6 w-[400px] h-[600px] shadow-2xl z-50 flex flex-col">
-          <CardHeader className="bg-emerald-500 text-white rounded-t-lg p-4 flex flex-row items-center justify-between">
+          <CardHeader className="bg-slate-900 text-white rounded-t-lg p-4 flex flex-row items-center justify-between">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
+              <Sparkles className="h-5 w-5 text-slate-300" />
               <CardTitle className="text-lg">AI Assistant</CardTitle>
             </div>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setIsOpen(false)}
-              className="text-white hover:bg-emerald-600"
+              className="text-white hover:bg-slate-800"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -290,12 +324,12 @@ export default function ChatbotWidget() {
                 <div
                   className={`max-w-[80%] rounded-lg p-3 ${
                     message.role === 'user'
-                      ? 'bg-emerald-500 text-white'
+                      ? 'bg-slate-800 text-white'
                       : 'bg-slate-100 text-slate-900'
                   }`}
                 >
                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  <p className="text-xs mt-1 opacity-70">
+                  <p className="text-xs mt-1 opacity-50">
                     {message.timestamp.toLocaleTimeString([], {
                       hour: '2-digit',
                       minute: '2-digit',
@@ -305,10 +339,10 @@ export default function ChatbotWidget() {
               </div>
             ))}
 
-            {(isLoading || isProcessingAction) && (
+            {(isLoading || isProcessingAction || generatingImage) && (
               <div className="flex justify-start">
                 <div className="bg-slate-100 rounded-lg p-3">
-                  <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
+                  <Loader2 className="h-5 w-5 animate-spin text-slate-600" />
                 </div>
               </div>
             )}
@@ -339,21 +373,52 @@ export default function ChatbotWidget() {
             <div ref={messagesEndRef} />
           </CardContent>
 
-          <div className="border-t p-4">
+          <div className="border-t p-3 space-y-2">
+            {/* Image generation quick action */}
+            {showImagePrompt ? (
+              <div className="flex gap-2">
+                <Input
+                  value={imagePrompt}
+                  onChange={(e) => setImagePrompt(e.target.value)}
+                  placeholder="Describe the dish image to generate..."
+                  className="flex-1 text-sm"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleGenerateImage()
+                    if (e.key === 'Escape') setShowImagePrompt(false)
+                  }}
+                  autoFocus
+                />
+                <Button size="sm" onClick={handleGenerateImage} disabled={!imagePrompt.trim() || generatingImage} className="bg-slate-800 hover:bg-slate-700 text-white shrink-0">
+                  {generatingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Generate'}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowImagePrompt(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowImagePrompt(true)}
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+                Generate Image with AI
+              </button>
+            )}
             <div className="flex gap-2">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="Type your message..."
-                disabled={isLoading || isProcessingAction}
+                disabled={isLoading || isProcessingAction || generatingImage}
                 className="flex-1"
               />
               <Button
                 onClick={handleSendMessage}
-                disabled={isLoading || isProcessingAction || !input.trim()}
+                disabled={isLoading || isProcessingAction || generatingImage || !input.trim()}
                 size="icon"
-                className="bg-emerald-500 hover:bg-emerald-600"
+                className="bg-slate-800 hover:bg-slate-700"
               >
                 {isLoading || isProcessingAction ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

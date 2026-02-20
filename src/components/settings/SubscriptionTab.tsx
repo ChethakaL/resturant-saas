@@ -90,31 +90,29 @@ export default function SubscriptionTab({
     <div className="space-y-8">
       {/* Active subscription banner */}
       {isActive && (
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 p-6 text-white shadow-xl">
-          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10" />
-          <div className="absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-white/5" />
-          <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/20">
-                <Check className="h-8 w-8" strokeWidth={2.5} />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                <Check className="h-6 w-6" strokeWidth={2.5} />
               </div>
               <div>
-                <h3 className="text-xl font-semibold">Active subscription</h3>
-                <p className="mt-1 text-emerald-100">
+                <h3 className="text-lg font-semibold text-slate-900">Active subscription</h3>
+                <p className="mt-0.5 text-sm text-slate-500">
                   {currentPlan === 'annual'
                     ? 'Annual plan · $400/year'
                     : currentPlan === 'monthly'
                       ? 'Monthly plan · $40/month'
                       : 'Your subscription is active'}
                   {periodEndLabel && (
-                    <span className="block mt-1 text-sm">Renews on {periodEndLabel}</span>
+                    <span className="block mt-0.5 text-xs text-slate-400">Renews on {periodEndLabel}</span>
                   )}
                 </p>
               </div>
             </div>
             <Button
-              variant="secondary"
-              className="shrink-0 bg-white/20 hover:bg-white/30 text-white border-0"
+              variant="outline"
+              className="shrink-0"
               disabled={managingSubscription}
               onClick={handleManageSubscription}
             >
@@ -126,7 +124,7 @@ export default function SubscriptionTab({
               Manage subscription
             </Button>
           </div>
-          <p className="mt-4 text-sm text-emerald-100/90">
+          <p className="mt-3 text-xs text-slate-400 border-t border-slate-100 pt-3">
             Update payment method, view invoices, or cancel — in your secure Stripe portal.
           </p>
         </div>

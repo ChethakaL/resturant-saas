@@ -365,19 +365,22 @@ function mapMoods(
   const lightIds = items
     .filter((i) => {
       const cat = byCategory(i.categoryName ?? '')
-      return ['salad', 'appetizer', 'starter', 'soup', 'light'].some((k) => cat.includes(k))
+      const tags = (i.tags ?? []).join(' ').toLowerCase()
+      return ['salad', 'appetizer', 'starter', 'soup', 'light', 'drink', 'beverage', 'juice'].some((k) => cat.includes(k) || tags.includes(k))
     })
     .map((i) => i.id)
   const fillingIds = items
     .filter((i) => {
       const cat = byCategory(i.categoryName ?? '')
-      return ['main', 'grill', 'burger', 'pasta', 'rice'].some((k) => cat.includes(k))
+      const tags = (i.tags ?? []).join(' ').toLowerCase()
+      return ['main', 'grill', 'burger', 'pasta', 'rice', 'dish', 'sandwich', 'wrap', 'kebab', 'steak', 'meal'].some((k) => cat.includes(k) || tags.includes(k))
     })
     .map((i) => i.id)
   const sharingIds = items
     .filter((i) => {
       const cat = byCategory(i.categoryName ?? '')
-      return ['platter', 'appetizer', 'starter', 'share'].some((k) => cat.includes(k))
+      const tags = (i.tags ?? []).join(' ').toLowerCase()
+      return ['platter', 'appetizer', 'starter', 'share', 'party', 'family'].some((k) => cat.includes(k) || tags.includes(k))
     })
     .map((i) => i.id)
   const premiumIds = items

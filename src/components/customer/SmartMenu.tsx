@@ -987,9 +987,27 @@ export default function SmartMenu({
     // Mood filter (engine)
     if (selectedMoodId && moods.length > 0) {
       const mood = moods.find((m) => m.id === selectedMoodId)
-      if (mood && mood.itemIds.length > 0) {
-        const moodIds = new Set(mood.itemIds)
-        items = items.filter((item) => moodIds.has(item.id))
+      if (mood) {
+        if (mood.itemIds.length > 0) {
+          const moodIds = new Set(mood.itemIds)
+          items = items.filter((item) => moodIds.has(item.id))
+        } else {
+          // Fallback: filter by tags or category keywords if itemIds not populated
+          const moodKeywords: Record<string, string[]> = {
+            light: ['salad', 'soup', 'appetizer', 'starter', 'light'],
+            filling: ['main', 'grill', 'burger', 'pasta', 'rice', 'dish'],
+            sharing: ['platter', 'share', 'sharing', 'appetizer', 'starter'],
+            premium: ['premium', 'special', 'signature'],
+          }
+          const keywords = moodKeywords[mood.id] ?? []
+          if (keywords.length > 0) {
+            items = items.filter((item) => {
+              const cat = (item.category?.name ?? '').toLowerCase()
+              const tags = (item.tags ?? []).join(' ').toLowerCase()
+              return keywords.some((k) => cat.includes(k) || tags.includes(k))
+            })
+          }
+        }
       }
     }
 
@@ -1172,6 +1190,8 @@ export default function SmartMenu({
     return {
       '--menu-primary': theme?.primaryColor || '#10b981',
       '--menu-accent': theme?.accentColor || '#f59e0b',
+      '--menu-chef-pick': (theme as any)?.chefPickColor || '#dc2626',
+      '--menu-border': (theme as any)?.borderColor || '#1e40af',
       '--font-display': displayVar,
       '--font-body': 'var(--font-dm-sans)',
     } as React.CSSProperties

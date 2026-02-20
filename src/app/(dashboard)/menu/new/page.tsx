@@ -3,42 +3,51 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import MenuForm from '../MenuForm'
 
-async function getFormData(restaurantId: string) {
-  const [categories, ingredients, addOns] = await Promise.all([
-    prisma.category.findMany({
-      where: { restaurantId },
-      orderBy: { displayOrder: 'asc' },
-    }),
-    prisma.ingredient.findMany({
-      where: { restaurantId },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.addOn.findMany({
-      where: { restaurantId, available: true },
-      orderBy: { name: 'asc' },
-    }),
-  ])
-
-  return { categories, ingredients, addOns }
-}
-
 export default async function NewMenuItemPage() {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
 
-  const data = await getFormData(restaurantId)
-  const user = await prisma.user.findUnique({
-    where: { id: session!.user.id },
-  })
-  const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
+  // Run all DB queries in parallel for faster page load
+  const [categories, ingredients, addOns, user] = await Promise.all([
+    prisma.category.findMany({
+      where: { restaurantId },
+      orderBy: { displayOrder: 'asc' },
+      // Only select fields MenuForm needs
+      select: { id: true, name: true, displayOrder: true },
+    }),
+    prisma.ingredient.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+      // Only select fields used in the recipe/cost calculations
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        costPerUnit: true,
+        supplier: true,
+        minStockLevel: true,
+        notes: true,
+        preferredSupplierId: true,
+      },
+    }),
+    prisma.addOn.findMany({
+      where: { restaurantId, available: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, price: true, available: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: session!.user.id },
+      select: { defaultBackgroundPrompt: true },
+    }),
+  ])
 
   return (
     <MenuForm
-      categories={data.categories}
-      ingredients={data.ingredients}
-      addOns={data.addOns}
+      categories={categories as any}
+      ingredients={ingredients as any}
+      addOns={addOns as any}
       mode="create"
-      defaultBackgroundPrompt={defaultBackgroundPrompt}
+      defaultBackgroundPrompt={user?.defaultBackgroundPrompt ?? ''}
     />
   )
 }

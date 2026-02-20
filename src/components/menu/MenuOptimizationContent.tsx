@@ -101,8 +101,8 @@ export default function MenuOptimizationContent({
   menuEngineSettings: initialMenuEngineSettings,
 }: MenuOptimizationContentProps) {
   const { toast } = useToast()
-  const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'classic'
-  const resolvedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'classic'
+  const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'profit'
+  const resolvedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'profit'
   const [engineMode, setEngineMode] = useState<MenuEngineSettings['mode']>(resolvedMode)
   const [savingEngine, setSavingEngine] = useState(false)
 
@@ -128,6 +128,7 @@ export default function MenuOptimizationContent({
   const [idleUpsellDelaySeconds, setIdleUpsellDelaySeconds] = useState(defaults.idleUpsellDelaySeconds)
   const [quadrantData, setQuadrantData] = useState<{ counts: Record<string, number>; items: Array<{ menuItemId: string; name: string; categoryName?: string; quadrant: string; marginPercent: number; unitsSold: number }> } | null>(null)
   const [loadingQuadrants, setLoadingQuadrants] = useState(false)
+  const [expandedQuadrants, setExpandedQuadrants] = useState<Set<string>>(new Set())
 
   const [showcases, setShowcases] = useState<Showcase[]>(initialShowcases)
   const [savingShowcase, setSavingShowcase] = useState<string | null>(null)
@@ -588,7 +589,7 @@ export default function MenuOptimizationContent({
             Optimize your menu to increase profit and sales
           </CardTitle>
           <p className="text-sm text-slate-500">
-            We offer three options to optimize your menu: <strong>1. Manual Mode</strong> — do it yourself. <strong>2. Profit Mode</strong> — highlight high-margin items. <strong>3. Smart Profit Mode</strong> — use sales and profit data to order and suggest. Only you see this data; guests never do.
+            We offer three options to optimize your menu: <strong>1. Classic Mode</strong> — do it yourself. <strong>2. Profit Mode</strong> — highlight high-margin items. <strong>3. Smart Profit Mode</strong> — use sales and profit data to order and suggest. Only you see this data; guests never do.
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -602,7 +603,7 @@ export default function MenuOptimizationContent({
                   className={`rounded-xl border-2 p-4 text-left transition ${engineMode === mode ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
                 >
                   <span className="font-semibold">
-                    {mode === 'classic' && '1. Manual Mode: do it yourself'}
+                    {mode === 'classic' && '1. Classic Mode: do it yourself'}
                     {mode === 'profit' && '2. Profit Mode'}
                     {mode === 'adaptive' && '3. Smart Profit Mode'}
                   </span>
@@ -748,58 +749,49 @@ export default function MenuOptimizationContent({
                 </div>
                 <div className="grid grid-cols-2 gap-0">
                   {/* Row 1: High margin */}
-                  <div className="min-h-[100px] p-3 border-b border-r border-slate-200 bg-amber-50/80">
-                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-1">High Margin, Low Sales</p>
-                    <p className="text-2xl font-bold text-amber-900">{formatDishCount(quadrantData.counts.PUZZLE ?? 0)}</p>
-                    <p className="text-[10px] text-amber-700 mt-0.5">High margin, fewer sales</p>
-                    <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
-                      {quadrantData.items.filter((i) => i.quadrant === 'PUZZLE').slice(0, 4).map((i) => (
-                        <li key={i.menuItemId} className="truncate">{i.name}</li>
-                      ))}
-                    </ul>
-                    <p className="mt-1 text-[10px] text-slate-500">Showing up to 4 example dishes.</p>
-                  </div>
-                  <div className="min-h-[100px] p-3 border-b border-slate-200 bg-emerald-50">
-                    <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1">High Margin, High Sales</p>
-                    <p className="text-2xl font-bold text-emerald-900">{formatDishCount(quadrantData.counts.STAR ?? 0)}</p>
-                    <p className="text-[10px] text-emerald-700 mt-0.5">High margin, high sales</p>
-                    <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
-                      {quadrantData.items.filter((i) => i.quadrant === 'STAR').slice(0, 4).map((i) => (
-                        <li key={i.menuItemId} className="truncate">{i.name}</li>
-                      ))}
-                    </ul>
-                    <p className="mt-1 text-[10px] text-slate-500">Showing up to 4 example dishes.</p>
-                  </div>
-                  {/* Row 2: Low margin */}
-                  <div className="min-h-[100px] p-3 border-r border-slate-200 bg-slate-100">
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Low Margin, Low Sales</p>
-                    <p className="text-2xl font-bold text-slate-700">{formatDishCount(quadrantData.counts.DOG ?? 0)}</p>
-                    <p className="text-[10px] text-slate-600 mt-0.5">Lower margin, fewer sales</p>
-                    <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
-                      {quadrantData.items.filter((i) => i.quadrant === 'DOG').slice(0, 4).map((i) => (
-                        <li key={i.menuItemId} className="truncate">{i.name}</li>
-                      ))}
-                    </ul>
-                    <p className="mt-1 text-[10px] text-slate-500">Showing up to 4 example dishes.</p>
-                  </div>
-                  <div className="min-h-[100px] p-3 border-slate-200 bg-blue-50/80">
-                    <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-1">Low Margin, High Sales</p>
-                    <p className="text-2xl font-bold text-blue-900">{formatDishCount(quadrantData.counts.WORKHORSE ?? 0)}</p>
-                    <p className="text-[10px] text-blue-700 mt-0.5">High sales, lower margin</p>
-                    <ul className="mt-2 space-y-0.5 text-xs text-slate-600 line-clamp-3">
-                      {quadrantData.items.filter((i) => i.quadrant === 'WORKHORSE').slice(0, 4).map((i) => (
-                        <li key={i.menuItemId} className="truncate">{i.name}</li>
-                      ))}
-                    </ul>
-                    <p className="mt-1 text-[10px] text-slate-500">Showing up to 4 example dishes.</p>
-                  </div>
+                  {[
+                    { key: 'PUZZLE', label: 'High Margin, Low Sales', sub: 'High margin, fewer sales', colorLabel: 'text-amber-800', colorCount: 'text-amber-900', colorSub: 'text-amber-700', bg: 'bg-amber-50/80', border: 'border-b border-r' },
+                    { key: 'STAR', label: 'High Margin, High Sales', sub: 'High margin, high sales', colorLabel: 'text-emerald-800', colorCount: 'text-emerald-900', colorSub: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-b' },
+                    { key: 'DOG', label: 'Low Margin, Low Sales', sub: 'Lower margin, fewer sales', colorLabel: 'text-slate-600', colorCount: 'text-slate-700', colorSub: 'text-slate-600', bg: 'bg-slate-100', border: 'border-r' },
+                    { key: 'WORKHORSE', label: 'Low Margin, High Sales', sub: 'High sales, lower margin', colorLabel: 'text-blue-800', colorCount: 'text-blue-900', colorSub: 'text-blue-700', bg: 'bg-blue-50/80', border: '' },
+                  ].map((q) => {
+                    const qItems = quadrantData.items.filter((i) => i.quadrant === q.key)
+                    const isExpanded = expandedQuadrants.has(q.key)
+                    const displayItems = isExpanded ? qItems : qItems.slice(0, 4)
+                    return (
+                      <div key={q.key} className={`min-h-[100px] p-3 border-slate-200 ${q.border} ${q.bg}`}>
+                        <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${q.colorLabel}`}>{q.label}</p>
+                        <p className={`text-2xl font-bold ${q.colorCount}`}>{formatDishCount(quadrantData.counts[q.key] ?? 0)}</p>
+                        <p className={`text-[10px] mt-0.5 ${q.colorSub}`}>{q.sub}</p>
+                        <ul className="mt-2 space-y-0.5 text-xs text-slate-600">
+                          {displayItems.map((i) => (
+                            <li key={i.menuItemId} className="truncate">{i.name}</li>
+                          ))}
+                        </ul>
+                        {qItems.length > 4 && (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedQuadrants((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(q.key)) next.delete(q.key)
+                              else next.add(q.key)
+                              return next
+                            })}
+                            className={`mt-2 text-[10px] font-medium underline underline-offset-2 ${q.colorLabel}`}
+                          >
+                            {isExpanded ? 'Show less' : `See all ${qItems.length} dishes`}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
                 <div className="px-2 py-1.5 border-t border-slate-200 bg-slate-100/80 flex justify-center gap-6 text-[10px] text-slate-500">
                   <span>↑ High margin</span>
                   <span>↓ Low margin</span>
                 </div>
               </div>
-              <p className="text-xs text-slate-500">Matrix: rows = margin (high at top, low at bottom), columns = popularity (low left, high right). The big number is total dishes in that group; the names under it are up to 4 examples.</p>
+              <p className="text-xs text-slate-500">Matrix: rows = margin (high at top, low at bottom), columns = popularity (low left, high right). The big number is total dishes in that group. Click &quot;See all&quot; to view every item in a quadrant.</p>
               <div className="max-h-64 overflow-y-auto rounded border border-slate-200">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 sticky top-0">

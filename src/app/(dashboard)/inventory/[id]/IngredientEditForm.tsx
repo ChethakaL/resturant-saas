@@ -10,6 +10,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
+const UNIT_OPTIONS = [
+  { value: 'g', label: 'Grams (g)' },
+  { value: 'kg', label: 'Kilograms (kg)' },
+  { value: 'ml', label: 'Millilitres (ml)' },
+  { value: 'L', label: 'Litres (L)' },
+]
+
 type IngredientWithSupplier = {
   id: string
   name: string
@@ -48,6 +55,11 @@ export default function IngredientEditForm({
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
+    const cost = parseFloat(formData.costPerUnit)
+    if (!cost || cost <= 0) {
+      alert('Cost per unit must be greater than 0.')
+      return
+    }
     setLoading(true)
 
     try {
@@ -57,7 +69,7 @@ export default function IngredientEditForm({
         body: JSON.stringify({
           name: formData.name,
           unit: formData.unit,
-          costPerUnit: parseFloat(formData.costPerUnit),
+          costPerUnit: cost,
           supplier: formData.supplier || null,
           preferredSupplierId: formData.preferredSupplierId || null,
           notes: formData.notes || null,
@@ -146,28 +158,35 @@ export default function IngredientEditForm({
 
               <div className="space-y-2">
                 <Label htmlFor="unit">
-                  Unit <span className="text-red-500">*</span>
+                  Unit of Measure <span className="text-red-500">*</span>
                 </Label>
-                <Input
+                <select
                   id="unit"
                   required
-                  value={formData.unit}
+                  value={UNIT_OPTIONS.some((o) => o.value === formData.unit) ? formData.unit : 'g'}
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                />
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                >
+                  {UNIT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="costPerUnit">
-                  Cost Per Unit (IQD) <span className="text-red-500">*</span>
+                  Cost Per {formData.unit} (IQD) <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="costPerUnit"
                   type="number"
-                  step="0.01"
+                  step="1"
+                  min="1"
                   required
                   value={formData.costPerUnit}
                   onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
                 />
+                <p className="text-xs text-slate-500">Must be greater than 0.</p>
               </div>
 
               <div className="space-y-2">

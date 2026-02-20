@@ -10,6 +10,8 @@ export const dynamic = 'force-dynamic'
 const themeSchema = z.object({
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  chefPickColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  borderColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   backgroundStyle: z.enum(['dark', 'light', 'gradient']).optional(),
   fontFamily: z.enum(['sans', 'serif', 'display']).optional(),
   logoUrl: z.string().url().nullable().optional(),
@@ -19,6 +21,8 @@ const themeSchema = z.object({
   managementLanguage: z.enum(['en', 'ku', 'ar-fusha']).optional(),
   /** Guest menu: 'sliding' = embla carousel with arrows; 'static' = horizontal row, no sliding */
   menuCarouselStyle: z.enum(['sliding', 'static']).optional(),
+  /** Restaurant name displayed on the guest menu */
+  restaurantName: z.string().min(1).max(100).optional(),
 })
 
 export async function GET() {
@@ -72,19 +76,24 @@ export async function PUT(request: Request) {
     })
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, ...themeData } = parsed.data
+    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, ...themeData } = parsed.data
     const newSettings = {
       ...currentSettings,
-      theme: themeData,
+      theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }) },
       ...(menuTimezone !== undefined && { menuTimezone }),
       ...(themePreset !== undefined && { themePreset }),
       ...(backgroundImageUrl !== undefined && { backgroundImageUrl }),
       ...(managementLanguage !== undefined && { managementLanguage }),
     }
 
+    const updateData: Record<string, unknown> = { settings: newSettings }
+    if (restaurantName !== undefined && restaurantName.trim()) {
+      updateData.name = restaurantName.trim()
+    }
+
     await prisma.restaurant.update({
       where: { id: session.user.restaurantId },
-      data: { settings: newSettings },
+      data: updateData,
     })
 
     revalidatePath('/')

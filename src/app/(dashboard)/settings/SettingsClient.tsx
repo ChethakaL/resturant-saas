@@ -33,11 +33,18 @@ export default function SettingsClient({
   const { toast } = useToast()
 
   // Theme state
+  const [restaurantName, setRestaurantName] = useState(currentTheme.restaurantName || '')
   const [primaryColor, setPrimaryColor] = useState(
     currentTheme.primaryColor || '#10b981'
   )
   const [accentColor, setAccentColor] = useState(
     currentTheme.accentColor || '#f59e0b'
+  )
+  const [chefPickColor, setChefPickColor] = useState(
+    currentTheme.chefPickColor || '#dc2626'
+  )
+  const [borderColor, setBorderColor] = useState(
+    currentTheme.borderColor || '#1e40af'
   )
   const [backgroundStyle, setBackgroundStyle] = useState<string>(
     currentTheme.backgroundStyle || 'dark'
@@ -124,6 +131,8 @@ export default function SettingsClient({
         body: JSON.stringify({
           primaryColor,
           accentColor,
+          chefPickColor,
+          borderColor,
           backgroundStyle,
           fontFamily,
           logoUrl: logoUrl || null,
@@ -131,6 +140,7 @@ export default function SettingsClient({
           themePreset: themePreset || null,
           managementLanguage: managementLanguage || 'en',
           menuCarouselStyle: menuCarouselStyle || 'sliding',
+          ...(restaurantName.trim() && { restaurantName: restaurantName.trim() }),
         }),
       })
 
@@ -287,6 +297,22 @@ export default function SettingsClient({
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Restaurant name */}
+              <div className="space-y-2">
+                <Label htmlFor="restaurantName">Restaurant name</Label>
+                <input
+                  id="restaurantName"
+                  type="text"
+                  value={restaurantName}
+                  onChange={(e) => setRestaurantName(e.target.value)}
+                  placeholder="Your restaurant name"
+                  className="flex h-10 w-full max-w-sm rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+                <p className="text-xs text-slate-500">
+                  Displayed at the top of your guest-facing digital menu.
+                </p>
+              </div>
+
               {/* Preset themes */}
               <div className="space-y-2">
                 <Label>Quick style presets</Label>
@@ -359,7 +385,7 @@ export default function SettingsClient({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="accentColor">Client menu button color</Label>
+                  <Label htmlFor="accentColor">&quot;Add to order&quot; button color</Label>
                   <div className="flex items-center gap-3">
                     <input
                       type="color"
@@ -376,7 +402,51 @@ export default function SettingsClient({
                     />
                   </div>
                   <p className="text-xs text-slate-500">
-                    Used for &quot;Add bundle&quot;, &quot;View order&quot; bar, Save tags, and other buttons on the customer-facing menu.
+                    Color of the &quot;Add to order&quot; button and action bar on the guest menu.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="chefPickColor">Chef&apos;s recommendation badge color</Label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      id="chefPickColor"
+                      value={chefPickColor}
+                      onChange={(e) => setChefPickColor(e.target.value)}
+                      className="h-10 w-14 cursor-pointer rounded border border-slate-200"
+                    />
+                    <Input
+                      value={chefPickColor}
+                      onChange={(e) => setChefPickColor(e.target.value)}
+                      placeholder="#dc2626"
+                      className="flex-1"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Color of the &quot;★ Signature&quot; and chef&apos;s recommendation badges on menu items.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="borderColor">Featured item border / highlight color</Label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      id="borderColor"
+                      value={borderColor}
+                      onChange={(e) => setBorderColor(e.target.value)}
+                      className="h-10 w-14 cursor-pointer rounded border border-slate-200"
+                    />
+                    <Input
+                      value={borderColor}
+                      onChange={(e) => setBorderColor(e.target.value)}
+                      placeholder="#1e40af"
+                      className="flex-1"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Color of the left border / glow on featured and high-margin menu items.
                   </p>
                 </div>
               </div>

@@ -10,12 +10,20 @@ import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
 
+const UNIT_OPTIONS = [
+  { value: 'g', label: 'Grams (g)' },
+  { value: 'kg', label: 'Kilograms (kg)' },
+  { value: 'ml', label: 'Millilitres (ml)' },
+  { value: 'L', label: 'Litres (L)' },
+]
+
 export default function NewIngredientPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: '',
-    unit: '',
+    unit: 'g',
     costPerUnit: '',
     supplier: '',
     notes: '',
@@ -23,6 +31,14 @@ export default function NewIngredientPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+
+    const cost = parseFloat(formData.costPerUnit)
+    if (!cost || cost <= 0) {
+      setError('Cost per unit must be greater than 0.')
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -32,7 +48,7 @@ export default function NewIngredientPage() {
         body: JSON.stringify({
           name: formData.name,
           unit: formData.unit,
-          costPerUnit: parseFloat(formData.costPerUnit),
+          costPerUnit: cost,
           supplier: formData.supplier || null,
           notes: formData.notes || null,
         }),
@@ -42,11 +58,11 @@ export default function NewIngredientPage() {
         throw new Error('Failed to create ingredient')
       }
 
-      router.push('/dashboard/inventory')
+      router.push('/inventory')
       router.refresh()
-    } catch (error) {
-      console.error('Error creating ingredient:', error)
-      alert('Failed to create ingredient. Please try again.')
+    } catch (err) {
+      console.error('Error creating ingredient:', err)
+      setError('Failed to create ingredient. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -55,7 +71,7 @@ export default function NewIngredientPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard/inventory">
+        <Link href="/inventory">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
@@ -73,6 +89,12 @@ export default function NewIngredientPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
             <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="name">
@@ -89,30 +111,39 @@ export default function NewIngredientPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="unit">
-                  Unit <span className="text-red-500">*</span>
+                  Unit of Measure <span className="text-red-500">*</span>
                 </Label>
-                <Input
+                <select
                   id="unit"
                   required
                   value={formData.unit}
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  placeholder="e.g., kg, liter, piece"
-                />
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                >
+                  {UNIT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">
+                  Cost per unit will be in IQD per {formData.unit}.
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="costPerUnit">
-                  Cost Per Unit (IQD) <span className="text-red-500">*</span>
+                  Cost Per {formData.unit} (IQD) <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="costPerUnit"
                   type="number"
-                  step="0.01"
+                  step="1"
+                  min="1"
                   required
                   value={formData.costPerUnit}
                   onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
-                  placeholder="0.00"
+                  placeholder="e.g., 5000"
                 />
+                <p className="text-xs text-slate-500">Must be greater than 0.</p>
               </div>
 
               <div className="space-y-2">
@@ -138,7 +169,7 @@ export default function NewIngredientPage() {
             </div>
 
             <div className="flex gap-3 justify-end">
-              <Link href="/dashboard/inventory">
+              <Link href="/inventory">
                 <Button type="button" variant="outline" disabled={loading}>
                   Cancel
                 </Button>
