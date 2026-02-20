@@ -143,6 +143,14 @@ async function main() {
     })
   }
 
+  const oneYearFromNow = new Date(now)
+  oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1)
+  const demoSubscription = {
+    subscriptionStatus: 'active' as const,
+    subscriptionPriceId: process.env.STRIPE_PRICE_ANNUAL ?? null,
+    currentPeriodEnd: oneYearFromNow,
+  }
+
   const restaurant = existingRestaurant
     ? await prisma.restaurant.update({
         where: { id: existingRestaurant.id },
@@ -162,6 +170,7 @@ async function main() {
             tables: 25,
             seatingCapacity: 100,
           },
+          ...demoSubscription,
         },
       })
     : await prisma.restaurant.create({
@@ -181,6 +190,7 @@ async function main() {
             tables: 25,
             seatingCapacity: 100,
           },
+          ...demoSubscription,
         },
       })
 

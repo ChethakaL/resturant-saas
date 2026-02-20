@@ -18,6 +18,8 @@ async function ensureDemoUser() {
     where: { slug: 'al-rafidain' },
   })
 
+  const oneYearFromNow = new Date()
+  oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1)
   const restaurant =
     existingRestaurant ||
     (await prisma.restaurant.create({
@@ -27,6 +29,9 @@ async function ensureDemoUser() {
         email: 'owner@alrafidain.iq',
         phone: '+964 770 000 0000',
         address: 'Baghdad, Iraq',
+        subscriptionStatus: 'active',
+        subscriptionPriceId: process.env.STRIPE_PRICE_ANNUAL ?? null,
+        currentPeriodEnd: oneYearFromNow,
       },
     }))
 

@@ -1,8 +1,10 @@
 'use client'
 
-import { useSession, signOut } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 // Types
 interface MenuItem {
@@ -60,14 +62,14 @@ interface CartItem {
     quantity: number
 }
 
-// ─── Status Badge ───
+// ─── Status Badge (admin-style light theme) ───
 function StatusBadge({ status }: { status: string }) {
     const config: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-        PENDING: { bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-400', label: 'Pending' },
-        PREPARING: { bg: 'bg-blue-500/10', text: 'text-blue-400', dot: 'bg-blue-400', label: 'Preparing' },
-        READY: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', dot: 'bg-emerald-400', label: 'Ready' },
-        COMPLETED: { bg: 'bg-slate-500/10', text: 'text-slate-400', dot: 'bg-slate-400', label: 'Delivered' },
-        CANCELLED: { bg: 'bg-red-500/10', text: 'text-red-400', dot: 'bg-red-400', label: 'Cancelled' },
+        PENDING: { bg: 'bg-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Pending' },
+        PREPARING: { bg: 'bg-blue-100', text: 'text-blue-800', dot: 'bg-blue-500', label: 'Preparing' },
+        READY: { bg: 'bg-emerald-100', text: 'text-emerald-800', dot: 'bg-emerald-500', label: 'Ready' },
+        COMPLETED: { bg: 'bg-slate-100', text: 'text-slate-800', dot: 'bg-slate-500', label: 'Delivered' },
+        CANCELLED: { bg: 'bg-red-100', text: 'text-red-800', dot: 'bg-red-500', label: 'Cancelled' },
     }
     const c = config[status] || config.PENDING
     return (
@@ -78,7 +80,7 @@ function StatusBadge({ status }: { status: string }) {
     )
 }
 
-// ─── Table Card ───
+// ─── Table Card (admin-style light theme) ───
 function TableCard({
     table,
     isSelected,
@@ -91,10 +93,10 @@ function TableCard({
     const hasActiveOrders = table.sales.length > 0
     const statusColor =
         table.status === 'OCCUPIED'
-            ? 'from-rose-500/20 to-rose-600/10 border-rose-500/30'
+            ? 'bg-rose-50 border-rose-200'
             : table.status === 'RESERVED'
-                ? 'from-amber-500/20 to-amber-600/10 border-amber-500/30'
-                : 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30'
+                ? 'bg-amber-50 border-amber-200'
+                : 'bg-emerald-50 border-emerald-200'
 
     const statusIcon =
         table.status === 'OCCUPIED' ? '🍽️' : table.status === 'RESERVED' ? '📋' : '✅'
@@ -103,17 +105,16 @@ function TableCard({
         <button
             onClick={onClick}
             className={`
-        group relative rounded-2xl border p-4 transition-all duration-200
-        bg-gradient-to-br ${statusColor}
-        ${isSelected ? 'ring-2 ring-amber-400 scale-[1.02] shadow-lg shadow-amber-500/10' : 'hover:scale-[1.01] hover:shadow-md'}
+        group relative rounded-xl border p-4 transition-all duration-200 ${statusColor}
+        ${isSelected ? 'ring-2 ring-emerald-500 scale-[1.02] shadow-lg' : 'hover:shadow-md'}
         active:scale-[0.98]
       `}
         >
             <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl font-bold text-white">T{table.number}</span>
+                <span className="text-2xl font-bold text-slate-900">T{table.number}</span>
                 <span className="text-lg">{statusIcon}</span>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
+            <div className="flex items-center gap-2 text-xs text-slate-600">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                     <circle cx="9" cy="7" r="4" />
@@ -122,7 +123,7 @@ function TableCard({
             </div>
             {hasActiveOrders && (
                 <div className="mt-2 flex items-center gap-1">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-white">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-800">
                         {table.sales.length} order{table.sales.length > 1 ? 's' : ''}
                     </span>
                 </div>
@@ -771,11 +772,13 @@ function OrderDetailPanel({
 export default function WaiterDashboard() {
     const { data: session, status: authStatus } = useSession()
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const tabParam = searchParams.get('tab')
 
     const [tables, setTables] = useState<Table[]>([])
     const [myOrders, setMyOrders] = useState<Order[]>([])
     const [categories, setCategories] = useState<Category[]>([])
-    const [activeTab, setActiveTab] = useState<'tables' | 'orders'>('tables')
+    const [activeTab, setActiveTab] = useState<'tables' | 'orders'>(tabParam === 'orders' ? 'orders' : 'tables')
     const [selectedTable, setSelectedTable] = useState<Table | null>(null)
     const [showNewOrder, setShowNewOrder] = useState(false)
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
@@ -845,6 +848,10 @@ export default function WaiterDashboard() {
         }
     }, [orderFilter, authStatus, fetchOrders])
 
+    useEffect(() => {
+        setActiveTab(tabParam === 'orders' ? 'orders' : 'tables')
+    }, [tabParam])
+
     const handleRefresh = () => {
         fetchTables()
         fetchOrders()
@@ -876,10 +883,10 @@ export default function WaiterDashboard() {
 
     if (authStatus === 'loading' || isLoading) {
         return (
-            <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+            <div className="flex items-center justify-center py-24">
                 <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-                    <p className="text-slate-400 text-sm">Loading waiter dashboard...</p>
+                    <div className="w-12 h-12 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin" />
+                    <p className="text-slate-600 text-sm">Loading waiter dashboard...</p>
                 </div>
             </div>
         )
@@ -888,115 +895,19 @@ export default function WaiterDashboard() {
     const activeOrders = myOrders.filter((o) => ['PENDING', 'PREPARING', 'READY'].includes(o.status))
 
     return (
-        <div className="min-h-screen bg-slate-900 text-white flex flex-col">
-            {/* Top nav */}
-            <nav className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-xl border-b border-white/5">
-                <div className="flex items-center justify-between px-5 py-3">
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                                <circle cx="9" cy="7" r="4" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h1 className="text-sm font-bold text-white">{session?.user?.name}</h1>
-                            <p className="text-[10px] text-slate-500">{session?.user?.restaurantName}</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        {/* Active orders badge */}
-                        {activeOrders.length > 0 && (
-                            <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-semibold">
-                                {activeOrders.length} active
-                            </span>
-                        )}
-                        <button
-                            onClick={handleRefresh}
-                            className="p-2 hover:bg-white/5 rounded-xl transition-colors"
-                            title="Refresh"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <polyline points="23 4 23 10 17 10" />
-                                <polyline points="1 20 1 14 7 14" />
-                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={() => signOut({ callbackUrl: '/waiter/login' })}
-                            className="p-2 hover:bg-white/5 rounded-xl transition-colors"
-                            title="Sign Out"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                                <polyline points="16 17 21 12 16 7" />
-                                <line x1="21" y1="12" x2="9" y2="12" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Tab bar */}
-                <div className="flex px-5 gap-1">
-                    <button
-                        onClick={() => setActiveTab('tables')}
-                        className={`flex-1 py-2.5 text-sm font-medium rounded-t-xl transition-colors relative ${activeTab === 'tables'
-                            ? 'text-amber-400'
-                            : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                    >
-                        <span className="flex items-center justify-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <rect x="3" y="3" width="7" height="7" />
-                                <rect x="14" y="3" width="7" height="7" />
-                                <rect x="14" y="14" width="7" height="7" />
-                                <rect x="3" y="14" width="7" height="7" />
-                            </svg>
-                            Tables
-                        </span>
-                        {activeTab === 'tables' && (
-                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400 rounded-full" />
-                        )}
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('orders')}
-                        className={`flex-1 py-2.5 text-sm font-medium rounded-t-xl transition-colors relative ${activeTab === 'orders'
-                            ? 'text-amber-400'
-                            : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                    >
-                        <span className="flex items-center justify-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                <polyline points="14 2 14 8 20 8" />
-                                <line x1="16" y1="13" x2="8" y2="13" />
-                                <line x1="16" y1="17" x2="8" y2="17" />
-                            </svg>
-                            My Orders
-                            {activeOrders.length > 0 && (
-                                <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">
-                                    {activeOrders.length}
-                                </span>
-                            )}
-                        </span>
-                        {activeTab === 'orders' && (
-                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400 rounded-full" />
-                        )}
-                    </button>
-                </div>
-            </nav>
-
-            {/* Content */}
-            <main className="flex-1 p-5">
+        <>
+            {/* Content - admin-style light theme, sidebar provides nav */}
+            <main className="space-y-6">
                 {activeTab === 'tables' && (
                     <div>
                         <div className="flex items-center justify-between mb-5">
                             <div>
-                                <h2 className="text-lg font-bold text-white">Table Layout</h2>
+                                <h2 className="text-lg font-bold text-slate-900">Table Layout</h2>
                                 <p className="text-sm text-slate-500">{tables.length} tables total</p>
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-slate-500">
+                            <div className="flex items-center gap-4">
+                                <Button variant="outline" size="sm" onClick={handleRefresh}>Refresh</Button>
+                                <div className="flex items-center gap-3 text-xs text-slate-500">
                                 <span className="flex items-center gap-1.5">
                                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                                     Available
@@ -1009,6 +920,7 @@ export default function WaiterDashboard() {
                                     <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
                                     Reserved
                                 </span>
+                                </div>
                             </div>
                         </div>
 
@@ -1031,48 +943,41 @@ export default function WaiterDashboard() {
 
                         {/* Selected table info */}
                         {selectedTable && (
-                            <div className="mt-5 bg-white/[0.03] border border-white/10 rounded-2xl p-5">
-                                <div className="flex items-center justify-between mb-4">
+                            <Card className="mt-5">
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
                                     <div>
-                                        <h3 className="text-lg font-bold text-white">Table {selectedTable.number}</h3>
-                                        <p className="text-sm text-slate-500">
+                                        <CardTitle>Table {selectedTable.number}</CardTitle>
+                                        <p className="text-sm text-slate-500 mt-1">
                                             {selectedTable.capacity} seats · {selectedTable.status.toLowerCase()}
                                         </p>
                                     </div>
-                                    <button
+                                    <Button
                                         onClick={() => setShowNewOrder(true)}
-                                        className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
                                     >
-                                        <span className="flex items-center gap-2">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                <line x1="12" y1="5" x2="12" y2="19" />
-                                                <line x1="5" y1="12" x2="19" y2="12" />
-                                            </svg>
-                                            New Order
-                                        </span>
-                                    </button>
-                                </div>
-
+                                        New Order
+                                    </Button>
+                                </CardHeader>
+                                <CardContent>
                                 {/* Active orders for this table */}
                                 {selectedTable.sales.length > 0 ? (
                                     <div className="space-y-2">
-                                        <h4 className="text-sm font-semibold text-slate-300">Active Orders</h4>
+                                        <h4 className="text-sm font-semibold text-slate-700">Active Orders</h4>
                                         {selectedTable.sales.map((order) => (
                                             <button
                                                 key={order.id}
                                                 onClick={() => setSelectedOrder(order)}
-                                                className="w-full text-left flex items-center justify-between p-3 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 rounded-xl transition-colors"
+                                                className="w-full text-left flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <StatusBadge status={order.status} />
                                                     <div>
-                                                        <p className="text-sm font-medium text-white">{order.orderNumber}</p>
+                                                        <p className="text-sm font-medium text-slate-900">{order.orderNumber}</p>
                                                         <p className="text-xs text-slate-500">
                                                             {order.items.length} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <p className="text-sm font-semibold text-amber-400">
+                                                <p className="text-sm font-semibold text-emerald-600">
                                                     {order.total.toLocaleString()} {currency}
                                                 </p>
                                             </button>
@@ -1081,7 +986,8 @@ export default function WaiterDashboard() {
                                 ) : (
                                     <p className="text-sm text-slate-500">No active orders. Tap &quot;New Order&quot; to start.</p>
                                 )}
-                            </div>
+                                </CardContent>
+                            </Card>
                         )}
                     </div>
                 )}
@@ -1089,8 +995,8 @@ export default function WaiterDashboard() {
                 {activeTab === 'orders' && (
                     <div>
                         <div className="flex items-center justify-between mb-5">
-                            <h2 className="text-lg font-bold text-white">My Orders</h2>
-                            <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1">
+                            <h2 className="text-lg font-bold text-slate-900">My Orders</h2>
+                            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
                                 {[
                                     { key: 'active', label: 'Active' },
                                     { key: 'COMPLETED', label: 'Delivered' },
@@ -1099,9 +1005,9 @@ export default function WaiterDashboard() {
                                     <button
                                         key={f.key}
                                         onClick={() => setOrderFilter(f.key as any)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${orderFilter === f.key
-                                            ? 'bg-amber-500 text-white shadow'
-                                            : 'text-slate-400 hover:text-white'
+                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${orderFilter === f.key
+                                            ? 'bg-white text-slate-900 shadow'
+                                            : 'text-slate-600 hover:text-slate-900'
                                             }`}
                                     >
                                         {f.label}
@@ -1111,28 +1017,30 @@ export default function WaiterDashboard() {
                         </div>
 
                         {myOrders.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                            <Card>
+                                <CardContent className="flex flex-col items-center justify-center py-20 text-slate-500">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4 opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                     <polyline points="14 2 14 8 20 8" />
                                 </svg>
                                 <p className="text-lg font-medium">No orders found</p>
                                 <p className="text-sm mt-1">Go to Tables to create an order</p>
-                            </div>
+                                </CardContent>
+                            </Card>
                         ) : (
                             <div className="space-y-3">
                                 {myOrders.map((order) => (
                                     <button
                                         key={order.id}
                                         onClick={() => setSelectedOrder(order)}
-                                        className="w-full text-left bg-white/[0.03] hover:bg-white/[0.05] border border-white/5 hover:border-white/10 rounded-2xl p-4 transition-all active:scale-[0.99]"
+                                        className="w-full text-left bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl p-4 transition-all active:scale-[0.99]"
                                     >
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-3">
-                                                <span className="text-base font-bold text-white">{order.orderNumber}</span>
+                                                <span className="text-base font-bold text-slate-900">{order.orderNumber}</span>
                                                 <StatusBadge status={order.status} />
                                             </div>
-                                            <span className="text-base font-bold text-amber-400">
+                                            <span className="text-base font-bold text-emerald-600">
                                                 {order.total.toLocaleString()} {currency}
                                             </span>
                                         </div>
@@ -1151,12 +1059,12 @@ export default function WaiterDashboard() {
                                         </div>
                                         <div className="mt-2 flex flex-wrap gap-1">
                                             {order.items.slice(0, 4).map((item) => (
-                                                <span key={item.id} className="text-[10px] px-2 py-0.5 bg-white/5 rounded-full text-slate-400">
+                                                <span key={item.id} className="text-[10px] px-2 py-0.5 bg-slate-100 rounded-full text-slate-600">
                                                     {item.quantity}× {item.menuItem.name}
                                                 </span>
                                             ))}
                                             {order.items.length > 4 && (
-                                                <span className="text-[10px] px-2 py-0.5 bg-white/5 rounded-full text-slate-500">
+                                                <span className="text-[10px] px-2 py-0.5 bg-slate-100 rounded-full text-slate-500">
                                                     +{order.items.length - 4} more
                                                 </span>
                                             )}
@@ -1191,6 +1099,6 @@ export default function WaiterDashboard() {
                     onClose={() => setSelectedOrder(null)}
                 />
             )}
-        </div>
+        </>
     )
 }

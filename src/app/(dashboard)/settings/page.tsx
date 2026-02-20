@@ -9,14 +9,18 @@ export default async function SettingsPage() {
   if (!session?.user?.restaurantId) {
     redirect('/login')
   }
-  if (session.user.role === 'STAFF') {
-    redirect('/orders')
-  }
-
   const [restaurant, user] = await Promise.all([
     prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
-      select: { id: true, name: true, logo: true, settings: true },
+      select: {
+        id: true,
+        name: true,
+        logo: true,
+        settings: true,
+        subscriptionStatus: true,
+        subscriptionPriceId: true,
+        currentPeriodEnd: true,
+      },
     }),
 
     prisma.user.findUnique({
@@ -37,10 +41,29 @@ export default async function SettingsPage() {
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
 
+  const isActive =
+    restaurant?.subscriptionStatus === 'active' || restaurant?.subscriptionStatus === 'trialing'
+  const priceMonthly = process.env.STRIPE_PRICE_MONTHLY
+  const priceAnnual = process.env.STRIPE_PRICE_ANNUAL
+  const currentPlan =
+    restaurant?.subscriptionPriceId === priceAnnual
+      ? 'annual'
+      : restaurant?.subscriptionPriceId === priceMonthly
+        ? 'monthly'
+        : null
+
+  const subscription = {
+    isActive: !!isActive,
+    currentPeriodEnd: restaurant?.currentPeriodEnd?.toISOString() ?? null,
+    currentPlan,
+    pricesConfigured: !!(priceMonthly && priceAnnual),
+  }
+
   return (
     <SettingsClient
       currentTheme={currentTheme}
       defaultBackgroundPrompt={defaultBackgroundPrompt}
+      subscription={subscription}
     />
   )
 }

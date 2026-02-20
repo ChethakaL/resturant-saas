@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -25,18 +26,37 @@ import {
   Check,
   Loader2,
   Upload,
+  CreditCard,
 } from 'lucide-react'
+import SubscriptionTab from '@/components/settings/SubscriptionTab'
 
 interface SettingsClientProps {
   currentTheme: Record<string, string>
   defaultBackgroundPrompt?: string
+  subscription?: {
+    isActive: boolean
+    currentPeriodEnd: string | null
+    currentPlan: 'monthly' | 'annual' | null
+    pricesConfigured: boolean
+  }
 }
 
 export default function SettingsClient({
   currentTheme,
   defaultBackgroundPrompt: initialDefaultBackgroundPrompt = '',
+  subscription,
 }: SettingsClientProps) {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const tabFromUrl = searchParams.get('tab') === 'subscription' ? 'subscription' : 'theme'
+
+  const setTab = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === 'theme') params.delete('tab')
+    else params.set('tab', value)
+    router.replace(`/settings${params.toString() ? `?${params}` : ''}`)
+  }
 
   // Theme state
   const [primaryColor, setPrimaryColor] = useState(
@@ -243,17 +263,21 @@ export default function SettingsClient({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Restaurant theme and design</h1>
+        <h1 className="text-3xl font-bold text-slate-900">Settings</h1>
         <p className="text-slate-500 mt-1">
-          Customize how your digital menu looks: colors, fonts, logo, and dish photo style.
+          Manage your restaurant theme, subscription, and preferences.
         </p>
       </div>
 
-      <Tabs defaultValue="theme" className="space-y-4">
+      <Tabs value={tabFromUrl} onValueChange={setTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="theme" className="gap-2">
             <Palette className="h-4 w-4" />
             Theme & design
+          </TabsTrigger>
+          <TabsTrigger value="subscription" className="gap-2">
+            <CreditCard className="h-4 w-4" />
+            Subscription
           </TabsTrigger>
         </TabsList>
 
@@ -807,6 +831,19 @@ export default function SettingsClient({
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="subscription">
+          {subscription ? (
+            <SubscriptionTab
+              isActive={subscription.isActive}
+              currentPeriodEnd={subscription.currentPeriodEnd}
+              currentPlan={subscription.currentPlan}
+              pricesConfigured={subscription.pricesConfigured}
+            />
+          ) : (
+            <p className="text-slate-500">Loading subscription…</p>
+          )}
         </TabsContent>
       </Tabs>
 

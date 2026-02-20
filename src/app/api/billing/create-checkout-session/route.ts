@@ -3,9 +3,41 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
+import Stripe from 'stripe'
 
 const PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY
 const PRICE_ANNUAL = process.env.STRIPE_PRICE_ANNUAL
+const BILLING_CURRENCY = (process.env.STRIPE_BILLING_CURRENCY || 'usd').toLowerCase()
+
+function buildLineItem(
+  configuredPrice: string,
+  plan: 'monthly' | 'annual'
+): Stripe.Checkout.SessionCreateParams.LineItem {
+  const trimmed = configuredPrice.trim()
+
+  if (/^price_/i.test(trimmed)) {
+    return { price: trimmed, quantity: 1 }
+  }
+
+  const amount = Number(trimmed)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error(
+      `Invalid configured Stripe price "${configuredPrice}". Use a Stripe price ID (price_...) or a positive amount.`
+    )
+  }
+
+  return {
+    quantity: 1,
+    price_data: {
+      currency: BILLING_CURRENCY,
+      unit_amount: Math.round(amount * 100),
+      recurring: { interval: plan === 'annual' ? 'year' : 'month' },
+      product_data: {
+        name: plan === 'annual' ? 'Restaurant SaaS Annual Plan' : 'Restaurant SaaS Monthly Plan',
+      },
+    },
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +55,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const plan = body.plan === 'annual' ? 'annual' : 'monthly'
-    const priceId = plan === 'annual' ? PRICE_ANNUAL : PRICE_MONTHLY
+    const configuredPrice = plan === 'annual' ? PRICE_ANNUAL : PRICE_MONTHLY
+    const lineItem = buildLineItem(configuredPrice, plan)
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
@@ -51,9 +84,9 @@ export async function POST(request: NextRequest) {
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/billing?success=true`,
-      cancel_url: `${origin}/billing?canceled=true`,
+      line_items: [lineItem],
+      success_url: `${origin}/settings?tab=subscription&success=true`,
+      cancel_url: `${origin}/settings?tab=subscription&canceled=true`,
       metadata: { restaurantId: restaurant.id, plan },
       subscription_data: { metadata: { restaurantId: restaurant.id } },
     })
