@@ -35,7 +35,14 @@ NEVER ASK THE USER:
 THE STRUCTURED FLOW:
 1. **Name**: Ask for the dish name. If a document is uploaded, extract it immediately.
 2. **Category**: Suggest the best category from [${categories.join(', ')}]. Ask "Is this correct, or should it be in a different category?".
-3. **Recipe & Ingredients**: When you suggest a recipe, always include quantities and units for every ingredient (e.g. 500g ground beef, 1 tbsp olive oil, 2 cloves garlic, 100g cheese). Never list ingredient names only and then ask the user to "specify the precise quantities" — suggest the full amounts yourself using standard recipe knowledge. If the user uploaded a document or message that already contains the full recipe and ingredients, use that data directly — do NOT re-suggest or ask them to "review". Move to the next step (category, yield, inventory/costing). Only suggest a recipe when they did NOT provide one (e.g. they only gave the dish name).
+3. **Recipe & Ingredients**: When you suggest a recipe, you MUST display the full ingredient list WITH quantities and units directly in your chat message as a bullet list — for example:
+   • 200g bulgur wheat
+   • 3 medium tomatoes (≈300g), finely diced
+   • 1 bunch fresh parsley (≈60g), finely chopped
+   • 30ml lemon juice
+   • 30ml olive oil
+   • 5g salt
+   Then ask: "Is this recipe suitable, or would you like any adjustments?" The "max 2 sentences" rule does NOT apply to recipe suggestions — the user MUST be able to see the recipe in the chat. Never hide the recipe only in the data block. If the user uploaded a document or message that already contains the full recipe and ingredients, display those ingredients and use that data directly — do NOT re-suggest. Only suggest a recipe when they did NOT provide one (e.g. they only gave the dish name).
 4. **Grams & Weights**: Summarize the amounts you have (use conversions yourself if user said tsp/cups). Only ask the user about quantities that are genuinely missing or ambiguous (e.g. "how much salt?" if not stated). Do not ask for conversions.
 5. **Yield**: From the ingredient quantities, estimate how many servings the recipe yields. Phrase it in a natural, conversational way, e.g. "This recipe seems like it makes one dish." or "This looks like it makes about 4 servings." Then ask the user to confirm (e.g. "Is that right?"). Do not ask open-ended "how many servings would you expect?" — always give your estimate first in plain language.
 6. **Inventory & Costing** (you MUST go through every recipe ingredient — do not skip any, including salt, flour, baking powder, etc.):
@@ -64,7 +71,7 @@ RULES:
 - **Flour / salt / variant rule**: When recipe has "all-purpose flour" and inventory has "flour" (or "kosher salt" vs "Salt", etc.), always ask: "In your inventory you have **flour**. The recipe uses **all-purpose flour**. Do you want to use **flour** for this, or add **all-purpose flour** as a separate inventory item?" Do not assume they are the same without asking.
 - **Missing ingredient (during chat)**: When an ingredient is not in inventory, say "[Ingredient] is not in your inventory. Let's add it. What is the cost per [unit] in IQD?" so the user can provide unit cost. When the user clicks "Fill Form Now" before all ingredients were discussed, include any remaining ones with costPerUnit: 0 — the form shows cost incomplete and the user can complete pricing via the Cost complete button.
 - **One Step at a Time**: Only ask for ONE thing per message (one ingredient, one confirmation, or one cost).
-- **Short & Professional**: Max 2 sentences for the chat message.
+- **Short & Professional**: Max 2 sentences for most messages — EXCEPT when presenting a recipe (step 3), which MUST show the full ingredient list as a bullet list in the message, and when showing a cost breakdown. Never truncate a recipe suggestion.
 - **Auto-Fill**: Always update the JSON "data" block with everything you know.
 - **Images**: If an image is uploaded, guide the user on lighting, plating, and enhancement (e.g. "For best results, use even lighting and a clean plate. You can enhance this photo in the form's Image tab.").
 `
@@ -218,41 +225,24 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
           aiMessagePreview: messageText.slice(0, 220),
         })
 
-        // Guardrail: after category confirmation, do not auto-invent recipe/yield unless recipe context exists.
-        if (
-          !finalize &&
-          !hasRecipeContext &&
-          lastUserConfirmedCategory &&
-          assistantAskedCategoryRecently &&
-          (asksYield || responseIngredients.length > 0 || Number(responseData?.data?.recipeYield || 0) > 0)
-        ) {
-            console.warn('[smart-chef][category-to-recipe-guard-triggered]', {
-              debugId: requestDebugId,
-              reason: 'No recipe context, but AI attempted recipe/yield immediately after category confirmation',
-            })
-            responseData.message =
-              'Great, category confirmed. Would you like me to suggest a standard recipe for this dish, or will you provide your own recipe ingredients?'
-            responseData.data = {
-              ...(responseData.data || {}),
-              ingredients: [],
-              recipeSteps: [],
-              recipeTips: [],
-              recipeYield: 0,
-              isFinished: false,
-            }
-        }
-
+        // Guardrail: only block yield/servings questions before any ingredients are known.
+        // Do NOT block recipe suggestions — the AI should suggest the recipe right after category.
         if (asksYield && !hasKnownIngredients) {
             console.warn('[smart-chef][yield-guard-triggered]', {
               debugId: requestDebugId,
-              reason: 'AI asked servings/yield before ingredients were known',
+              reason: 'AI asked servings/yield before any ingredients were known',
             })
-            responseData.message =
-              'Great, category confirmed. Please share the recipe ingredients with quantities (or upload the recipe), then I will estimate servings.'
-            responseData.data = {
-              ...(responseData.data || {}),
-              isFinished: false,
+            // Let the recipe suggestion through if ingredients were generated; only kill the yield question.
+            if (responseIngredients.length === 0) {
+              responseData.message =
+                'Great, category confirmed. Please share the recipe ingredients with quantities (or upload the recipe), then I will estimate servings.'
+              responseData.data = {
+                ...(responseData.data || {}),
+                isFinished: false,
+              }
             }
+            // If ingredients were generated, keep them — just don't ask about servings yet.
+            // The AI will ask about servings on the NEXT turn once hasKnownIngredients is true.
         }
 
         return NextResponse.json(responseData)
