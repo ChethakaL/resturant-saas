@@ -39,7 +39,7 @@ export function WaiterSidebar({ userName, restaurantName }: WaiterSidebarProps) 
 
       <Separator className="bg-slate-700" />
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 overflow-y-auto p-4 space-y-1">
         {navigation.map((item) => {
           const isOrders = item.href.includes('tab=orders')
           const tab = searchParams?.get('tab')

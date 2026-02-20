@@ -65,7 +65,7 @@ export default async function DashboardLayout({
         hasActiveSubscription={!!hasActiveSubscription}
         subscription={subscriptionData}
       >
-        <div className="flex h-screen overflow-hidden">
+        <div className="flex h-screen h-[100dvh] overflow-hidden">
         {/* Sidebar */}
         <Sidebar
           userName={session.user.name}

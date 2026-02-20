@@ -41,7 +41,7 @@ export function SupplierSidebar({ supplierName }: SupplierSidebarProps) {
         <p className="text-xs text-slate-400 mt-1 truncate w-full text-center">{supplierName}</p>
       </div>
       <Separator className="bg-slate-700" />
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 overflow-y-auto p-4 space-y-1">
         {navigation.map((item) => {
           const isActive = pathname === item.href || (item.href !== '/supplier' && pathname.startsWith(item.href))
           return (

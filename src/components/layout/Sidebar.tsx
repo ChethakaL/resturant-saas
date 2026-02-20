@@ -49,12 +49,12 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
   const visibleNavigation =
     userRole === 'STAFF'
       ? navigation.filter((item) =>
-          ['Sales POS', 'Orders', 'Add Menu Items', 'Meal Prep'].includes(item.name)
-        )
+        ['Sales POS', 'Orders', 'Add Menu Items', 'Meal Prep'].includes(item.name)
+      )
       : navigation
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 text-white w-64">
+    <div className="flex h-full min-h-full flex-col bg-slate-900 text-white w-64 shrink-0 self-stretch">
       {/* Header */}
       <div className="p-6 flex flex-col items-center">
         <Image
@@ -71,7 +71,7 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
       <Separator className="bg-slate-700" />
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 overflow-y-auto p-4 space-y-1">
         {visibleNavigation.map((item) => {
           const hrefPath = item.href.split('?')[0]
           const hrefTab = item.href.includes('?tab=') ? item.href.split('?tab=')[1] : null
@@ -111,10 +111,10 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
           variant="outline"
           size="sm"
           className="w-full"
-          style={{color: 'black'}}
+          style={{ color: 'black' }}
           onClick={() => signOut({ callbackUrl: '/login' })}
         >
-          <LogOut className="h-4 w-4 mr-2 text-black"  />
+          <LogOut className="h-4 w-4 mr-2 text-black" />
           Sign Out
         </Button>
       </div>
