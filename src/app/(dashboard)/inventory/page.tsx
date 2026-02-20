@@ -7,6 +7,8 @@ import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import { InventoryTable } from '@/app/(dashboard)/inventory/InventoryTable'
 import { InventorySearch } from '@/app/(dashboard)/inventory/InventorySearch'
+import FixUnitsButton from '@/app/(dashboard)/inventory/FixUnitsButton'
+import { isAllowedUnit, canonicalise } from '@/lib/unit-converter'
 
 const PAGE_SIZE = 25
 
@@ -90,6 +92,13 @@ export default async function InventoryPage({
 
   const data = await getInventoryData(restaurantId, page, query)
 
+  // Count ingredients with non-standard units across the whole restaurant (not just this page)
+  const allUnits = await prisma.ingredient.findMany({
+    where: { restaurantId },
+    select: { unit: true },
+  })
+  const badUnitCount = allUnits.filter((i) => !isAllowedUnit(canonicalise(i.unit))).length
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -108,6 +117,9 @@ export default async function InventoryPage({
           </Link>
         </div>
       </div>
+
+      {/* Bad-unit warning banner */}
+      {badUnitCount > 0 && <FixUnitsButton badUnitCount={badUnitCount} />}
 
       {/* Ingredients Table */}
       <Card>

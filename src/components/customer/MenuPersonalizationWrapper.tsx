@@ -23,6 +23,7 @@ export interface MenuPersonalizationWrapperProps {
   maxInitialItemsPerCategory?: number
   tables?: { id: string; number: string }[]
   forceShowImages?: boolean
+  snowfallSettings?: { enabled: boolean; start: string; end: string } | null
 }
 
 export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProps) {

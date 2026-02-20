@@ -57,6 +57,9 @@ export default function SettingsClient({
   const [themePreset, setThemePreset] = useState<string | null>(currentTheme.themePreset ?? null)
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
   const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
+  const [snowfallEnabled, setSnowfallEnabled] = useState<boolean>(currentTheme.snowfallEnabled === 'true')
+  const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
+  const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
   const [savingTheme, setSavingTheme] = useState(false)
 
   // Consistent background prompt for dish photos (upload image → describe, or type)
@@ -140,6 +143,9 @@ export default function SettingsClient({
           themePreset: themePreset || null,
           managementLanguage: managementLanguage || 'en',
           menuCarouselStyle: menuCarouselStyle || 'sliding',
+          snowfallEnabled: String(snowfallEnabled),
+          snowfallStart: snowfallStart || '12-15',
+          snowfallEnd: snowfallEnd || '01-07',
           ...(restaurantName.trim() && { restaurantName: restaurantName.trim() }),
         }),
       })
@@ -858,6 +864,48 @@ export default function SettingsClient({
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* ❄️ Christmas / seasonal snowfall */}
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">❄️ Christmas snowfall</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Show animated snowfall on the guest menu during the festive period.</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={snowfallEnabled}
+                    onClick={() => setSnowfallEnabled((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${snowfallEnabled ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                  >
+                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${snowfallEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+                {snowfallEnabled && (
+                  <div className="flex flex-wrap gap-4 pt-1">
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs text-slate-500">Start (MM-DD)</Label>
+                      <Input
+                        value={snowfallStart}
+                        onChange={(e) => setSnowfallStart(e.target.value)}
+                        placeholder="12-15"
+                        className="h-8 w-24 text-xs"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs text-slate-500">End (MM-DD)</Label>
+                      <Input
+                        value={snowfallEnd}
+                        onChange={(e) => setSnowfallEnd(e.target.value)}
+                        placeholder="01-07"
+                        className="h-8 w-24 text-xs"
+                      />
+                    </div>
+                    <p className="self-end text-xs text-slate-400 pb-1">Defaults: Dec 15 – Jan 7</p>
+                  </div>
+                )}
               </div>
 
               <Button onClick={saveTheme} disabled={savingTheme}>

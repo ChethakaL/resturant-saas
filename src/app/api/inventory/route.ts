@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { canonicalise, isAllowedUnit, computeConversion } from '@/lib/unit-converter'
 
 export async function POST(request: Request) {
   try {
@@ -12,13 +13,26 @@ export async function POST(request: Request) {
 
     const data = await request.json()
 
+    // Normalise unit to g/kg/ml/L
+    let resolvedUnit: string = canonicalise(data.unit ?? '')
+    let resolvedCostPerUnit: number = data.costPerUnit ?? 0
+    if (!isAllowedUnit(resolvedUnit)) {
+      const conversion = computeConversion(data.unit ?? '', data.name ?? '')
+      if (conversion) {
+        resolvedUnit = conversion.targetUnit
+        resolvedCostPerUnit = resolvedCostPerUnit * conversion.costFactor
+      } else {
+        resolvedUnit = 'g'
+      }
+    }
+
     const ingredient = await prisma.ingredient.create({
       data: {
         name: data.name,
-        unit: data.unit,
-        stockQuantity: 999999, // Default high value - stock tracking disabled
-        costPerUnit: data.costPerUnit,
-        minStockLevel: 0, // Default value - stock tracking disabled
+        unit: resolvedUnit,
+        stockQuantity: 999999,
+        costPerUnit: resolvedCostPerUnit,
+        minStockLevel: 0,
         supplier: data.supplier,
         notes: data.notes,
         restaurantId: session.user.restaurantId,

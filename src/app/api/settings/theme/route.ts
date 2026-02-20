@@ -23,6 +23,16 @@ const themeSchema = z.object({
   menuCarouselStyle: z.enum(['sliding', 'static']).optional(),
   /** Restaurant name displayed on the guest menu */
   restaurantName: z.string().min(1).max(100).optional(),
+  /** Custom time slot boundaries for carousels */
+  slotTimes: z.object({
+    breakfast: z.object({ start: z.number().int().min(0).max(23), end: z.number().int().min(0).max(24) }),
+    day: z.object({ start: z.number().int().min(0).max(23), end: z.number().int().min(0).max(24) }),
+    evening: z.object({ start: z.number().int().min(0).max(23), end: z.number().int().min(0).max(24) }),
+  }).optional(),
+  /** Christmas / seasonal snowfall on guest menu */
+  snowfallEnabled: z.string().optional(),
+  snowfallStart: z.string().optional(),
+  snowfallEnd: z.string().optional(),
 })
 
 export async function GET() {
@@ -76,7 +86,7 @@ export async function PUT(request: Request) {
     })
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, ...themeData } = parsed.data
+    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, ...themeData } = parsed.data
     const newSettings = {
       ...currentSettings,
       theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }) },
@@ -84,6 +94,10 @@ export async function PUT(request: Request) {
       ...(themePreset !== undefined && { themePreset }),
       ...(backgroundImageUrl !== undefined && { backgroundImageUrl }),
       ...(managementLanguage !== undefined && { managementLanguage }),
+      ...(slotTimes !== undefined && { slotTimes }),
+      ...(snowfallEnabled !== undefined && { snowfallEnabled }),
+      ...(snowfallStart !== undefined && { snowfallStart }),
+      ...(snowfallEnd !== undefined && { snowfallEnd }),
     }
 
     const updateData: Record<string, unknown> = { settings: newSettings }

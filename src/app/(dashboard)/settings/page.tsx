@@ -35,6 +35,9 @@ export default async function SettingsPage() {
     backgroundImageUrl: (settings.backgroundImageUrl as string) ?? '',
     managementLanguage: (settings.managementLanguage as string) || 'en',
     restaurantName: restaurant?.name ?? '',
+    snowfallEnabled: (settings.snowfallEnabled as string) || 'false',
+    snowfallStart: (settings.snowfallStart as string) || '12-15',
+    snowfallEnd: (settings.snowfallEnd as string) || '01-07',
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''

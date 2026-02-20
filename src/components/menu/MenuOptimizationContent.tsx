@@ -25,10 +25,13 @@ import {
   X,
   BarChart3,
   LayoutGrid,
+  Sparkles,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import type { MenuEngineSettings } from '@/types/menu-engine'
 import type { EngineMode } from '@/types/menu-engine'
+import { DEFAULT_SLOT_TIMES, buildSlotRangeLabels, formatSlotRange } from '@/lib/time-slots'
+import type { SlotTimes } from '@/lib/time-slots'
 
 interface SimpleMenuItem {
   id: string
@@ -69,6 +72,16 @@ interface TimeSlotSchedule {
   displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'
   /** When set, this carousel is shown during any of these slots (e.g. lunch = day + evening). */
   displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]
+  /** Optional decorative badge label shown on the carousel (e.g. "🎄 Christmas Special") */
+  label?: string
+  /** ISO date string — carousel is only shown on or after this date */
+  seasonalStart?: string
+  /** ISO date string — carousel is hidden after this date */
+  seasonalEnd?: string
+  /** One shared AI-generated CSS background (admin only, used as fallback) */
+  seasonalBackgroundUrl?: string
+  /** Per-dish AI-regenerated photos with Christmas backgrounds. Key = menuItem.id, value = dataUrl */
+  seasonalItemImages?: Record<string, string>
 }
 
 interface CategoryOption {
@@ -92,6 +105,8 @@ export interface MenuOptimizationContentProps {
   showcases: Showcase[]
   menuItems: SimpleMenuItem[]
   menuEngineSettings?: Record<string, unknown> | null
+  /** Custom carousel time slot boundaries from restaurant settings */
+  slotTimes?: SlotTimes | null
 }
 
 export default function MenuOptimizationContent({
@@ -99,6 +114,7 @@ export default function MenuOptimizationContent({
   showcases: initialShowcases,
   menuItems,
   menuEngineSettings: initialMenuEngineSettings,
+  slotTimes: initialSlotTimes,
 }: MenuOptimizationContentProps) {
   const { toast } = useToast()
   const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'profit'
@@ -129,6 +145,57 @@ export default function MenuOptimizationContent({
   const [quadrantData, setQuadrantData] = useState<{ counts: Record<string, number>; items: Array<{ menuItemId: string; name: string; categoryName?: string; quadrant: string; marginPercent: number; unitsSold: number }> } | null>(null)
   const [loadingQuadrants, setLoadingQuadrants] = useState(false)
   const [expandedQuadrants, setExpandedQuadrants] = useState<Set<string>>(new Set())
+
+  // AI-regenerate each dish photo with a consistent Christmas background
+  const [generatingSeasonalBg, setGeneratingSeasonalBg] = useState<string | null>(null)
+
+  const applyChristmasBackgrounds = async (showcaseId: string) => {
+    setGeneratingSeasonalBg(showcaseId)
+    try {
+      const res = await fetch(`/api/menu-showcases/${showcaseId}/apply-seasonal-backgrounds`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      // Re-fetch all showcases to pick up the new seasonalItemImages
+      const refreshRes = await fetch('/api/menu-showcases').catch(() => null)
+      if (refreshRes?.ok) {
+        const refreshed = await refreshRes.json()
+        if (Array.isArray(refreshed)) setShowcases(refreshed)
+      }
+      toast({
+        title: `Christmas backgrounds applied to ${data.count} dish${data.count === 1 ? '' : 'es'}`,
+        description: 'All dishes used the same background prompt — consistent look on the guest menu.',
+      })
+    } catch (err) {
+      toast({ title: 'Could not apply Christmas backgrounds', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
+    } finally {
+      setGeneratingSeasonalBg(null)
+    }
+  }
+
+  const clearSeasonalItemImages = async (showcaseId: string) => {
+    try {
+      await fetch(`/api/menu-showcases/${showcaseId}/apply-seasonal-backgrounds`, { method: 'DELETE' })
+      setShowcases((prev) => prev.map((s) => {
+        if (s.id !== showcaseId) return s
+        const sched = { ...(s.schedule as TimeSlotSchedule || {}) }
+        delete sched.seasonalItemImages
+        return { ...s, schedule: sched }
+      }))
+      toast({ title: 'Seasonal dish photos cleared — original photos restored.' })
+    } catch {
+      toast({ title: 'Could not clear', variant: 'destructive' })
+    }
+  }
+
+  // Carousel time slot configuration
+  const [slotTimes, setSlotTimes] = useState<SlotTimes>(initialSlotTimes ?? DEFAULT_SLOT_TIMES)
+  const [slotTimesDialogOpen, setSlotTimesDialogOpen] = useState(false)
+  const [slotTimesDraft, setSlotTimesDraft] = useState<SlotTimes>(initialSlotTimes ?? DEFAULT_SLOT_TIMES)
+  const [savingSlotTimes, setSavingSlotTimes] = useState(false)
 
   const [showcases, setShowcases] = useState<Showcase[]>(initialShowcases)
   const [savingShowcase, setSavingShowcase] = useState<string | null>(null)
@@ -375,6 +442,25 @@ export default function MenuOptimizationContent({
       toast({ title: 'Failed to save optimization settings', variant: 'destructive' })
     } finally {
       setSavingEngine(false)
+    }
+  }
+
+  const saveSlotTimes = async () => {
+    setSavingSlotTimes(true)
+    try {
+      const res = await fetch('/api/settings/theme', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotTimes: slotTimesDraft }),
+      })
+      if (!res.ok) throw new Error('Failed to save')
+      setSlotTimes(slotTimesDraft)
+      setSlotTimesDialogOpen(false)
+      toast({ title: 'Carousel times saved', description: 'The guest menu will now use your custom time ranges.' })
+    } catch {
+      toast({ title: 'Could not save times', variant: 'destructive' })
+    } finally {
+      setSavingSlotTimes(false)
     }
   }
 
@@ -822,6 +908,16 @@ export default function MenuOptimizationContent({
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { setSlotTimesDraft(slotTimes); setSlotTimesDialogOpen(true) }}
+                className="gap-2"
+                title="Edit the time ranges for each carousel slot"
+              >
+                <Clock className="h-4 w-4" />
+                Carousel times
+              </Button>
               {(engineMode === 'profit' || engineMode === 'adaptive') && (
                 <Button size="sm" variant="outline" onClick={autoFillCarousels} disabled={autoFillingCarousels} className="gap-2">
                   {autoFillingCarousels && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -914,6 +1010,121 @@ export default function MenuOptimizationContent({
                         ))}
                       </select>
                     </div>
+                    {/* Carousel label (badge) */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Label className="text-xs text-slate-500 shrink-0">Badge label:</Label>
+                      <Input
+                        value={(showcase.schedule as TimeSlotSchedule)?.label ?? ''}
+                        onChange={(e) => {
+                          const label = e.target.value
+                          const nextSchedule = { ...(showcase.schedule as TimeSlotSchedule || {}), label: label || undefined }
+                          setShowcases((prev) => prev.map((s) => s.id === showcase.id ? { ...s, schedule: nextSchedule } : s))
+                        }}
+                        onBlur={() => updateShowcase(showcase.id, { schedule: showcase.schedule })}
+                        placeholder='e.g. 🎄 Christmas Special'
+                        className="text-xs h-8 max-w-[280px]"
+                      />
+                      <span className="text-xs text-slate-400">Shown as a badge on this carousel on the guest menu.</span>
+                    </div>
+
+                    {/* Seasonal date range */}
+                    {(() => {
+                      const s = showcase.schedule as TimeSlotSchedule | null | undefined
+                      const isSeasonal = !!(s?.seasonalStart || s?.seasonalEnd)
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`seasonal-${showcase.id}`}
+                              checked={isSeasonal}
+                              onChange={(e) => {
+                                const enabled = e.target.checked
+                                const nextSchedule = {
+                                  ...(s || {}),
+                                  seasonalStart: enabled ? new Date().toISOString().slice(0, 10) : undefined,
+                                  seasonalEnd: enabled
+                                    ? new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10)
+                                    : undefined,
+                                } as TimeSlotSchedule
+                                setShowcases((prev) => prev.map((sc) => sc.id === showcase.id ? { ...sc, schedule: nextSchedule } : sc))
+                                updateShowcase(showcase.id, { schedule: nextSchedule })
+                              }}
+                              className="rounded border-slate-300"
+                            />
+                            <Label htmlFor={`seasonal-${showcase.id}`} className="text-sm font-normal cursor-pointer">
+                              Seasonal (only show between specific dates)
+                            </Label>
+                          </div>
+                          {isSeasonal && (
+                            <div className="ml-5 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex flex-col gap-1">
+                                  <Label className="text-xs text-slate-500">Start date</Label>
+                                  <input
+                                    type="date"
+                                    value={s?.seasonalStart ?? ''}
+                                    onChange={(e) => {
+                                      const nextSchedule = { ...(s || {}), seasonalStart: e.target.value } as TimeSlotSchedule
+                                      setShowcases((prev) => prev.map((sc) => sc.id === showcase.id ? { ...sc, schedule: nextSchedule } : sc))
+                                      updateShowcase(showcase.id, { schedule: nextSchedule })
+                                    }}
+                                    className="rounded border border-slate-200 px-2 py-1 text-xs"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <Label className="text-xs text-slate-500">End date</Label>
+                                  <input
+                                    type="date"
+                                    value={s?.seasonalEnd ?? ''}
+                                    onChange={(e) => {
+                                      const nextSchedule = { ...(s || {}), seasonalEnd: e.target.value } as TimeSlotSchedule
+                                      setShowcases((prev) => prev.map((sc) => sc.id === showcase.id ? { ...sc, schedule: nextSchedule } : sc))
+                                      updateShowcase(showcase.id, { schedule: nextSchedule })
+                                    }}
+                                    className="rounded border border-slate-200 px-2 py-1 text-xs"
+                                  />
+                                </div>
+                              </div>
+                              {/* AI-regenerate each dish photo with a consistent Christmas background */}
+                              <div className="mt-3 border-t border-slate-100 pt-3 space-y-2">
+                                <p className="text-xs font-medium text-slate-600">Christmas dish photos</p>
+                                <p className="text-xs text-slate-400">
+                                  AI regenerates each dish photo using the same Christmas background prompt — food stays unchanged, background becomes festive. All dishes look consistent.
+                                </p>
+                                {s?.seasonalItemImages && Object.keys(s.seasonalItemImages).length > 0 ? (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="flex gap-1">
+                                      {Object.values(s.seasonalItemImages).slice(0, 3).map((url, i) => (
+                                        <img key={i} src={url} alt="" className="h-12 w-16 object-cover rounded-lg border border-slate-200 shadow-sm" />
+                                      ))}
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      <p className="text-xs text-slate-600 font-medium">{Object.keys(s.seasonalItemImages).length} dish{Object.keys(s.seasonalItemImages).length === 1 ? '' : 'es'} regenerated</p>
+                                      <button type="button" onClick={() => clearSeasonalItemImages(showcase.id)} className="text-xs text-red-500 underline underline-offset-2">Restore original photos</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-slate-400">Not applied yet — original dish photos will be shown.</p>
+                                )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => applyChristmasBackgrounds(showcase.id)}
+                                  disabled={generatingSeasonalBg === showcase.id}
+                                  className="gap-1.5"
+                                >
+                                  {generatingSeasonalBg === showcase.id
+                                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating (may take a minute)…</>
+                                    : <><Sparkles className="h-3.5 w-3.5" /> {s?.seasonalItemImages && Object.keys(s.seasonalItemImages).length > 0 ? 'Regenerate Christmas dish photos' : 'Apply Christmas backgrounds to dishes'}</>}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+
                     {/* Time-slot carousels (breakfast/lunch/dinner): no "Use time slots" checkbox – they only show in that time window. */}
                     {!(showcase.schedule as TimeSlotSchedule)?.displayForSlot && !(Array.isArray((showcase.schedule as TimeSlotSchedule)?.displayForSlots) && (showcase.schedule as TimeSlotSchedule)!.displayForSlots!.length > 0) ? (
                       <div className="flex items-center gap-2">
@@ -933,13 +1144,14 @@ export default function MenuOptimizationContent({
                       </div>
                     ) : (() => {
                       const s = showcase.schedule as TimeSlotSchedule | null | undefined
-                      const slotRanges: Record<string, string> = { breakfast: '6am–10am', day: '10am–2pm', evening: '2pm–6pm', night: '6pm–6am' }
+                      const slotRanges = buildSlotRangeLabels(slotTimes)
+                      const lunchRange = `${slotRanges.day.split('–')[0]}–${slotRanges.evening.split('–')[1]}`
                       const slots = s?.displayForSlots
                       const slot = s?.displayForSlot
                       const timeLabel = Array.isArray(slots) && slots.length > 0
-                        ? (slots.includes('day') && slots.includes('evening') ? '10am–6pm' : slots.map((sl) => slotRanges[sl]).join(', '))
-                        : slot && slotRanges[slot]
-                          ? slotRanges[slot]
+                        ? (slots.includes('day') && slots.includes('evening') ? lunchRange : slots.map((sl) => slotRanges[sl as keyof typeof slotRanges]).join(', '))
+                        : slot && slotRanges[slot as keyof typeof slotRanges]
+                          ? slotRanges[slot as keyof typeof slotRanges]
                           : null
                       return (
                         <p className="text-xs text-slate-500">
@@ -1048,7 +1260,7 @@ export default function MenuOptimizationContent({
           <DialogHeader>
             <DialogTitle>Time-based carousel items</DialogTitle>
             <DialogDescription>
-              Choose which items appear for each time of day (menu timezone). Breakfast 6–10am, Day 10am–2pm, Evening 2–6pm, Night 6pm–6am. {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 6 items per slot. '}
+              Choose which items appear for each time of day (menu timezone). {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 6 items per slot. '}
               Leave a slot empty to use AI suggestions or manual picks.
             </DialogDescription>
           </DialogHeader>
@@ -1056,7 +1268,8 @@ export default function MenuOptimizationContent({
             <div className="flex rounded-lg border border-slate-200 p-1 bg-slate-100">
               {(['breakfast', 'day', 'evening', 'night'] as const).map((slot) => {
                 const count = scheduleDraft[slot]?.itemIds?.length ?? 0
-                const label = slot === 'breakfast' ? 'Breakfast (6–10am)' : slot === 'day' ? 'Day (10am–2pm)' : slot === 'evening' ? 'Evening (2–6pm)' : 'Night (6pm–6am)'
+                const ranges = buildSlotRangeLabels(slotTimes)
+                const label = slot === 'breakfast' ? `Breakfast (${ranges.breakfast})` : slot === 'day' ? `Day (${ranges.day})` : slot === 'evening' ? `Evening (${ranges.evening})` : `Night (${ranges.night})`
                 return (
                   <button key={slot} type="button" onClick={() => setScheduleSlotTab(slot)} className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${scheduleSlotTab === slot ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}>
                     {label}{count > 0 && <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700">{count}</span>}
@@ -1114,6 +1327,84 @@ export default function MenuOptimizationContent({
           <DialogFooter>
             <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>Cancel</Button>
             <Button onClick={saveSchedule} disabled={scheduleSaving}>{scheduleSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save schedule</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Carousel time slot configuration dialog */}
+      <Dialog open={slotTimesDialogOpen} onOpenChange={setSlotTimesDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Configure carousel display times</DialogTitle>
+            <DialogDescription>
+              Set the hours (24h) when each time slot is active on the guest menu. &ldquo;Night&rdquo; is automatically everything outside these three slots.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            {(['breakfast', 'day', 'evening'] as const).map((slot) => {
+              const label = slot === 'breakfast' ? 'Breakfast' : slot === 'day' ? 'Day / Lunch' : 'Evening / Dinner'
+              const current = slotTimesDraft[slot]
+              return (
+                <div key={slot} className="space-y-1.5">
+                  <p className="text-sm font-medium text-slate-800">{label}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-1 flex-1">
+                      <Label className="text-xs text-slate-500">Start (hour, 0–23)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={current.start}
+                        onChange={(e) => {
+                          const v = Math.max(0, Math.min(23, parseInt(e.target.value) || 0))
+                          setSlotTimesDraft((d) => ({ ...d, [slot]: { ...d[slot], start: v } }))
+                        }}
+                        className="h-9"
+                      />
+                    </div>
+                    <span className="text-slate-400 mt-5">–</span>
+                    <div className="flex flex-col gap-1 flex-1">
+                      <Label className="text-xs text-slate-500">End (hour, 1–24)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={24}
+                        value={current.end}
+                        onChange={(e) => {
+                          const v = Math.max(1, Math.min(24, parseInt(e.target.value) || 1))
+                          setSlotTimesDraft((d) => ({ ...d, [slot]: { ...d[slot], end: v } }))
+                        }}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 items-end mt-5 shrink-0">
+                      <span className="text-sm text-slate-600 font-medium">{formatSlotRange(slotTimesDraft[slot])}</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-500 space-y-0.5">
+              <p className="font-medium text-slate-700 mb-1">Preview</p>
+              {(['breakfast', 'day', 'evening', 'night'] as const).map((slot) => {
+                const ranges = buildSlotRangeLabels(slotTimesDraft)
+                const names = { breakfast: 'Breakfast', day: 'Day / Lunch', evening: 'Evening / Dinner', night: 'Night' }
+                return <p key={slot}><span className="font-medium">{names[slot]}:</span> {ranges[slot]}</p>
+              })}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setSlotTimesDraft(DEFAULT_SLOT_TIMES) }}
+              type="button"
+            >
+              Reset to defaults
+            </Button>
+            <Button onClick={saveSlotTimes} disabled={savingSlotTimes}>
+              {savingSlotTimes && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Save times
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

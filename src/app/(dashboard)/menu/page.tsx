@@ -13,6 +13,7 @@ import ImportByDigitalMenu from '@/components/menu/ImportByDigitalMenu'
 import CategoriesButtonWithHelp from '@/components/menu/CategoriesButtonWithHelp'
 import MenuItemsTable from '@/components/menu/MenuItemsTable'
 import MenuPageTabs from '@/components/menu/MenuPageTabs'
+import { parseSlotTimes } from '@/lib/time-slots'
 
 const PAGE_SIZE = 20
 
@@ -166,6 +167,7 @@ export default async function MenuPage({
     + (statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : '')
   const settings = (restaurant?.settings as Record<string, unknown>) || {}
   const menuEngineSettings = (settings.menuEngine as Record<string, unknown>) || null
+  const slotTimesRaw = parseSlotTimes(settings.slotTimes)
   const normalizedBaseUrl = (process.env.NEXTAUTH_URL || '').trim().replace(/\/+$/, '')
   const publicMenuPath = restaurant?.slug ? `/${restaurant.slug}` : '/'
   const clientFacingMenuUrl = normalizedBaseUrl ? `${normalizedBaseUrl}${publicMenuPath}` : publicMenuPath
@@ -191,6 +193,7 @@ export default async function MenuPage({
       <MenuPageTabs
         categories={categoryOptions}
         menuEngineSettings={menuEngineSettings}
+        slotTimes={slotTimesRaw}
       >
         <div className="space-y-6">
       <div className="flex items-center justify-between">

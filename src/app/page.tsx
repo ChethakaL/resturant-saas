@@ -10,6 +10,7 @@ import type { EngineMode } from '@/types/menu-engine'
 import { suggestCarouselItems, getTimeSlotLabel } from '@/lib/carousel-ai'
 import type { CarouselMenuItem } from '@/lib/carousel-ai'
 import { generateMenuDescription } from '@/lib/menu-description-ai'
+import { getCurrentTimeSlot as getSlot, getTimeSlotForDate as getSlotForDate, parseSlotTimes, buildSlotRangeLabels } from '@/lib/time-slots'
 
 // Revalidate on every request for DB data; AI carousel suggestions cached 5 min to avoid slow Gemini on every load
 export const revalidate = 0
@@ -30,28 +31,14 @@ async function getCachedCarouselSuggestions(
   )()
 }
 
-/** Breakfast 6–10, Day 10–14, Evening 14–18, Night 18–6 (local time in tz). */
-function getCurrentTimeSlot(tz: string): 'breakfast' | 'day' | 'evening' | 'night' {
-  const hour = parseInt(
-    new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date()),
-    10
-  )
-  if (hour >= 6 && hour < 10) return 'breakfast'
-  if (hour >= 10 && hour < 14) return 'day'
-  if (hour >= 14 && hour < 18) return 'evening'
-  return 'night'
+/** Wrapper — uses custom slot times from settings if available. */
+function getCurrentTimeSlot(tz: string, slotTimes?: ReturnType<typeof parseSlotTimes> | null): 'breakfast' | 'day' | 'evening' | 'night' {
+  return getSlot(tz, slotTimes)
 }
 
 /** Get time slot for a given date in tz (for aggregating sales by slot). */
-function getTimeSlotForDate(date: Date, tz: string): 'breakfast' | 'day' | 'evening' | 'night' {
-  const hour = parseInt(
-    new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(date),
-    10
-  )
-  if (hour >= 6 && hour < 10) return 'breakfast'
-  if (hour >= 10 && hour < 14) return 'day'
-  if (hour >= 14 && hour < 18) return 'evening'
-  return 'night'
+function getTimeSlotForDate(date: Date, tz: string, slotTimes?: ReturnType<typeof parseSlotTimes> | null): 'breakfast' | 'day' | 'evening' | 'night' {
+  return getSlotForDate(date, tz, slotTimes)
 }
 
 async function getMenuData() {
@@ -185,10 +172,22 @@ async function getMenuData() {
 
   const settings = (restaurant.settings as Record<string, unknown>) || {}
   const timezone = (settings.menuTimezone as string) || restaurant.timezone || 'Asia/Baghdad'
-  const currentSlot = getCurrentTimeSlot(timezone)
+  const slotTimes = parseSlotTimes(settings.slotTimes)
+  const currentSlot = getCurrentTimeSlot(timezone, slotTimes)
 
-  type ScheduleShape = { useTimeSlots?: boolean; displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'; displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]; breakfast?: { itemIds?: string[] }; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] } } | null
+  type ScheduleShape = { useTimeSlots?: boolean; displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'; displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]; breakfast?: { itemIds?: string[] }; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] }; label?: string; seasonalStart?: string; seasonalEnd?: string; seasonalBackgroundUrl?: string; seasonalItemImages?: Record<string, string>; } | null
   const scheduleType = (s: typeof showcases[0]) => s.schedule as ScheduleShape
+
+  // Filter out seasonal carousels whose date range doesn't include today
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const showcasesToFilter = showcases.filter((s) => {
+    const sched = scheduleType(s)
+    if (!sched?.seasonalStart && !sched?.seasonalEnd) return true
+    if (sched.seasonalStart && todayStr < sched.seasonalStart) return false
+    if (sched.seasonalEnd && todayStr > sched.seasonalEnd) return false
+    return true
+  })
+
   const slotMatches = (schedule: ScheduleShape) => {
     const slots = schedule?.displayForSlots
     if (Array.isArray(slots) && slots.length > 0) return slots.includes(currentSlot)
@@ -196,7 +195,7 @@ async function getMenuData() {
     if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') return currentSlot === slot
     return true
   }
-  const filtered = showcases.filter((s) => slotMatches(scheduleType(s)))
+  const filtered = showcasesToFilter.filter((s) => slotMatches(scheduleType(s)))
   const showcasesToShow = [...filtered].sort((a, b) => {
     const aSlots = scheduleType(a)?.displayForSlots
     const aSingle = scheduleType(a)?.displayForSlot
@@ -231,13 +230,8 @@ async function getMenuData() {
   const sortByMarginThenCost = (a: { _featuredScore?: number; price: number }, b: { _featuredScore?: number; price: number }) =>
     (b._featuredScore ?? 0) - (a._featuredScore ?? 0) || b.price - a.price
 
-  const SLOT_TIME_RANGES: Record<'breakfast' | 'day' | 'evening' | 'night', string> = {
-    breakfast: '6am–10am',
-    day: '10am–2pm',
-    evening: '2pm–6pm',
-    night: '6pm–6am',
-  }
-  const LUNCH_RANGE = '10am–6pm'
+  const SLOT_TIME_RANGES = buildSlotRangeLabels(slotTimes)
+  const LUNCH_RANGE = `${SLOT_TIME_RANGES.day.split('–')[0]}–${SLOT_TIME_RANGES.evening.split('–')[1]}`
 
   const showcaseData = await Promise.all(
     showcasesToShow.map(async (showcase) => {
@@ -303,6 +297,7 @@ async function getMenuData() {
           ? SLOT_TIME_RANGES[displaySlot]
           : undefined
 
+      const sched = scheduleType(showcase)
       return {
         id: showcase.id,
         title: showcase.title,
@@ -311,6 +306,8 @@ async function getMenuData() {
         position: showcase.position,
         insertAfterCategoryId: showcase.insertAfterCategoryId,
         activeTimeRange,
+        label: sched?.label ?? undefined,
+        seasonalItemImages: sched?.seasonalItemImages ?? undefined,
         items: showcaseMenuItems.map(
           ({ _featuredScore: _fs, ...item }: any) => item
         ),
@@ -365,7 +362,7 @@ async function getMenuData() {
 
   const unitsSoldInCurrentTimeSlot: Record<string, number> = {}
   for (const sale of salesLast30d) {
-    const saleSlot = getTimeSlotForDate(sale.timestamp, timezone)
+    const saleSlot = getTimeSlotForDate(sale.timestamp, timezone, slotTimes)
     if (saleSlot !== currentSlot) continue
     for (const si of sale.items) {
       unitsSoldInCurrentTimeSlot[si.menuItemId] = (unitsSoldInCurrentTimeSlot[si.menuItemId] ?? 0) + si.quantity
@@ -507,6 +504,11 @@ async function getMenuData() {
     categoryAnchorBundle: engineOutput.categoryAnchorBundle,
     maxInitialItemsPerCategory: menuEngineSettings.maxInitialItemsPerCategory ?? 3,
     tables: tables.map((t: { id: string; number: string }) => ({ id: t.id, number: t.number })),
+    snowfallSettings: {
+      enabled: settings.snowfallEnabled === 'true',
+      start: (settings.snowfallStart as string) || '12-15',
+      end: (settings.snowfallEnd as string) || '01-07',
+    },
   }
 }
 
@@ -539,6 +541,7 @@ export default async function Home() {
       categoryAnchorBundle={data.categoryAnchorBundle}
       maxInitialItemsPerCategory={data.maxInitialItemsPerCategory}
       tables={data.tables}
+      snowfallSettings={data.snowfallSettings}
       forceShowImages
     />
     </Suspense>

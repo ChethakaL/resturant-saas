@@ -36,6 +36,14 @@ interface MenuCarouselProps {
   chefRecommendationLabel?: string
   /** When this carousel is shown only in a time slot (e.g. "6am–10am"), show that range under the title */
   activeTimeRange?: string
+  /** Optional decorative badge label (e.g. "🎄 Christmas Special") */
+  label?: string
+  /**
+   * AI-regenerated dish photos where the food background has been replaced with
+   * a Christmas scene. All generated using the same prompt → consistent look.
+   * Key = menuItem.id, value = data URL of the regenerated photo.
+   */
+  seasonalItemImages?: Record<string, string>
 }
 
 const defaultImage =
@@ -56,6 +64,8 @@ export function MenuCarousel({
   isDarkTheme = true,
   displayMode = 'sliding',
   chefRecommendationLabel,
+  label,
+  seasonalItemImages,
 }: MenuCarouselProps) {
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
@@ -179,24 +189,29 @@ export function MenuCarousel({
       ? isChefsHighlights ? undefined : 'text-white/70'
       : isChefsHighlights ? undefined : 'text-slate-500'
     const textPrimary = isDarkTheme ? 'text-white' : 'text-slate-900'
-    const cardBg = isDarkTheme ? 'bg-white/5' : 'bg-slate-100'
     const cardWidth = isHero ? 'min-w-[260px] sm:min-w-[300px]' : 'min-w-[180px] sm:min-w-[200px]'
 
     return (
       <section className="w-full space-y-4">
-        <div className="px-4 sm:px-6">
+        <div className="px-4 sm:px-6 flex flex-wrap items-center gap-2">
           <p
             className={`font-body ${titleClass} ${titleColor}`}
             style={isChefsHighlights ? { color: highlightColor } : undefined}
           >
             {title}
           </p>
+          {label && (
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm" style={{ backgroundColor: highlightColor }}>
+              {label}
+            </span>
+          )}
         </div>
         <div className="overflow-x-auto scrollbar-hide px-4 sm:px-6 -mx-4 sm:-mx-6">
           <div className="flex gap-4 pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {items.map((item) => {
               const displayName = getDisplayName?.(item.id) || item.name
               const categoryName = getCategoryName?.(item.category?.name ?? null) || item.category?.name || ''
+              const photo = seasonalItemImages?.[item.id] || item.imageUrl || defaultImage
               return (
                 <button
                   type="button"
@@ -204,19 +219,15 @@ export function MenuCarousel({
                   className={`${cardWidth} flex-shrink-0 w-[min(200px,70vw)] sm:w-[200px] text-left rounded-2xl overflow-hidden transition-transform active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--menu-accent,#f59e0b)]`}
                   onClick={() => onItemClick?.(item as CarouselItem)}
                 >
-                  <div className={`aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${cardBg}`}>
-                    <img
-                      src={item.imageUrl || defaultImage}
-                      alt={item.name}
-                      className="h-full w-full object-cover"
-                    />
+                  <div className={`aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
+                    <img src={photo} alt={item.name} className="h-full w-full object-cover" />
                   </div>
-                  <div className={`rounded-b-2xl px-3 py-3 ${isDarkTheme ? 'bg-slate-900/90' : 'bg-slate-800'} text-left`}>
-                    <p className={`font-body text-sm font-semibold ${textPrimary} line-clamp-2 ${displayFontClassName ?? ''}`}>
+                  <div className="rounded-b-2xl px-3 py-3 bg-slate-900/90 text-left">
+                    <p className={`font-body text-sm font-semibold text-white line-clamp-2 ${displayFontClassName ?? ''}`}>
                       {displayName}
                     </p>
                     {categoryName && (
-                      <p className={`mt-0.5 text-[10px] uppercase tracking-wider ${isDarkTheme ? 'text-white/60' : 'text-slate-500'}`}>
+                      <p className="mt-0.5 text-[10px] uppercase tracking-wider text-white/60">
                         {categoryName}
                       </p>
                     )}
@@ -244,17 +255,21 @@ export function MenuCarousel({
       ? undefined
       : 'text-slate-500'
   const textPrimary = isDarkTheme ? 'text-white' : 'text-slate-900'
-  const cardBg = isDarkTheme ? 'bg-white/5' : 'bg-slate-100'
 
   return (
     <section className="w-full space-y-4">
-      <div className="px-4 sm:px-6">
+      <div className="px-4 sm:px-6 flex flex-wrap items-center gap-2">
         <p
           className={`font-body ${titleClass} ${titleColor}`}
           style={isChefsHighlights ? { color: highlightColor } : undefined}
         >
           {title}
         </p>
+        {label && (
+          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm" style={{ backgroundColor: highlightColor }}>
+            {label}
+          </span>
+        )}
       </div>
       {/* Full-width track with horizontal padding for first/last card */}
       <div className="relative w-full">
@@ -262,6 +277,7 @@ export function MenuCarousel({
           <div className="flex touch-pan-x gap-4 -mx-4 sm:-mx-6 px-4 sm:px-6">
           {items.map((item) => {
             const displayName = getDisplayName?.(item.id) || item.name
+            const photo = seasonalItemImages?.[item.id] || item.imageUrl || defaultImage
             return (
               <button
                 type="button"
@@ -269,9 +285,9 @@ export function MenuCarousel({
                 className={`${items.length === 1 ? 'flex-[0_0_100%]' : 'flex-[0_0_82%] sm:flex-[0_0_42%] md:flex-[0_0_30%]'} min-w-0 shrink-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--menu-accent,#f59e0b)] rounded-2xl overflow-hidden transition-transform active:scale-[0.98]`}
                 onClick={() => onItemClick?.(item as CarouselItem)}
               >
-                <div className={`relative aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${cardBg}`}>
+                <div className={`relative aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
                   <img
-                    src={item.imageUrl || defaultImage}
+                    src={photo}
                     alt={item.name}
                     className="h-full w-full object-cover transition duration-300 hover:scale-105"
                   />

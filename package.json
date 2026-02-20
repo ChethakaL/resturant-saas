@@ -53,6 +53,7 @@
     "react-dom": "18.3.1",
     "react-hook-form": "7.52.1",
     "react-leaflet": "^5.0.0",
+    "react-snowfall": "^2.4.0",
     "recharts": "2.15.4",
     "sharp": "^0.34.5",
     "stripe": "^14.24.0",

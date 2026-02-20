@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect, useCallback, useRef, useReducer } from 'react'
+import Snowfall from 'react-snowfall'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
@@ -67,6 +68,10 @@ interface ShowcaseSection {
   insertAfterCategoryId: string | null
   /** When this carousel is shown only in a time slot (e.g. "6am–10am"), label shown under the title */
   activeTimeRange?: string
+  /** Optional decorative badge (e.g. "🎄 Christmas Special") */
+  label?: string
+  /** Per-dish AI-regenerated photos (same prompt = consistent scene). Key = menuItem.id */
+  seasonalItemImages?: Record<string, string>
   items: MenuItem[]
 }
 
@@ -106,6 +111,8 @@ interface SmartMenuProps {
   tables?: { id: string; number: string }[]
   categoryAnchorBundle?: Record<string, BundleHint>
   maxInitialItemsPerCategory?: number
+  /** Snowfall / seasonal effects settings */
+  snowfallSettings?: { enabled: boolean; start: string; end: string } | null
   forceShowImages?: boolean
 }
 
@@ -604,6 +611,7 @@ export default function SmartMenu({
   categoryAnchorBundle = {},
   maxInitialItemsPerCategory = 3,
   forceShowImages = false,
+  snowfallSettings,
 }: SmartMenuProps) {
   // Safety check for menuItems
   if (!menuItems || !Array.isArray(menuItems)) {
@@ -661,8 +669,10 @@ export default function SmartMenu({
   const [nextOrderSuggestionLoading, setNextOrderSuggestionLoading] = useState(false)
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set())
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const menuListRef = useRef<HTMLDivElement | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   const [scrollDepth, setScrollDepth] = useState(0)
+  const [menuListFlash, setMenuListFlash] = useState(false)
   const hideImages = !forceShowImages && getVariant('photo_visibility') === 'hide'
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)
@@ -1067,6 +1077,28 @@ export default function SmartMenu({
       query: trimmedSearch,
     })
     : currentCopy.smartSearchDescription
+  const selectedMood = useMemo(
+    () => (selectedMoodId ? moods.find((m) => m.id === selectedMoodId) ?? null : null),
+    [moods, selectedMoodId]
+  )
+  const selectedMoodLabel = selectedMood
+    ? (selectedMood.label[language === 'ar_fusha' ? 'ar' : language] ?? selectedMood.label.en)
+    : ''
+
+  useEffect(() => {
+    if (!selectedMoodId) return
+    let flashTimer: number | undefined
+    const scrollTimer = window.setTimeout(() => {
+      menuListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setMenuListFlash(true)
+      flashTimer = window.setTimeout(() => setMenuListFlash(false), 1200)
+    }, 80)
+
+    return () => {
+      window.clearTimeout(scrollTimer)
+      if (flashTimer) window.clearTimeout(flashTimer)
+    }
+  }, [selectedMoodId, filteredItems.length])
 
 
   const toggleTag = (tag: string) => {
@@ -1309,11 +1341,31 @@ export default function SmartMenu({
 
   const logoSrc = theme?.logoUrl || restaurantLogo || '/logo.png'
 
+  // Snowfall: active when enabled and today is within the configured date range
+  const showSnowfall = useMemo(() => {
+    if (!snowfallSettings?.enabled) return false
+    const now = new Date()
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const dd = String(now.getDate()).padStart(2, '0')
+    const today = `${mm}-${dd}`
+    const start = snowfallSettings.start || '12-15'
+    const end = snowfallSettings.end || '01-07'
+    // Handle wrap-around (e.g. Dec 15 – Jan 7)
+    if (start <= end) return today >= start && today <= end
+    return today >= start || today <= end
+  }, [snowfallSettings])
+
   return (
     <div
       className={`min-h-screen ${bgClass} ${fontClass}`}
       style={{ ...themeStyle, ...bgImageStyle }}
     >
+      {showSnowfall && (
+        <Snowfall
+          snowflakeCount={120}
+          style={{ position: 'fixed', width: '100vw', height: '100vh', zIndex: 9999, pointerEvents: 'none' }}
+        />
+      )}
       {theme?.backgroundImageUrl && (
         <div className="fixed inset-0 bg-black/40 pointer-events-none z-0" aria-hidden />
       )}
@@ -1453,6 +1505,8 @@ export default function SmartMenu({
               displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
               chefRecommendationLabel={currentCopy.chefRecommendationLabel}
               activeTimeRange={topShowcases[0].activeTimeRange}
+              label={topShowcases[0].label}
+              seasonalItemImages={topShowcases[0].seasonalItemImages}
             />
           </div>
         )}
@@ -1483,6 +1537,8 @@ export default function SmartMenu({
               displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
               chefRecommendationLabel={currentCopy.chefRecommendationLabel}
               activeTimeRange={showcase.activeTimeRange}
+              label={showcase.label}
+              seasonalItemImages={showcase.seasonalItemImages}
             />
           ))}
           {/* "What do you feel like eating today?" section (mood options) */}
@@ -1503,6 +1559,11 @@ export default function SmartMenu({
                 showAllLabel={currentEngineCopy.showAll}
                 isDarkTheme={isDarkBg}
               />
+              {selectedMood && (
+                <p className={`text-xs ${isDarkBg ? 'text-white/70' : 'text-slate-600'}`}>
+                  Showing {filteredItems.length} items for <strong>{selectedMoodLabel}</strong>. Scrolling to results...
+                </p>
+              )}
             </section>
           )}
 
@@ -1770,7 +1831,12 @@ export default function SmartMenu({
           })()}
 
           {/* Menu Items — grouped by category with carousels between */}
-          <div className="space-y-8 sm:space-y-6 relative px-3 sm:px-4">
+          <div
+            ref={menuListRef}
+            className={`space-y-8 sm:space-y-6 relative px-3 sm:px-4 scroll-mt-24 transition-all ${
+              menuListFlash ? 'ring-2 ring-[var(--menu-accent,#f59e0b)]/40 rounded-xl p-2' : ''
+            }`}
+          >
             {filteredItems.length === 0 ? (
               <div className="text-center py-12">
                 <p className={isDarkBg ? 'text-white/60' : 'text-slate-500'}>{currentCopy.noItemsMessage}</p>
@@ -1830,6 +1896,10 @@ export default function SmartMenu({
                           : section.items.filter(
                             (item) => !item._hints?.scrollDepthHide || scrollDepth >= 0.6
                           )
+                      const expanded = expandedCategoryIds.has(section.category?.id ?? '')
+                      const extraItemIds = new Set(
+                        visibleItems.slice(maxInitialItemsPerCategory).map((item) => item.id)
+                      )
                       const itemsToShow = expandedCategoryIds.has(section.category?.id ?? '')
                         ? visibleItems
                         : visibleItems.slice(0, maxInitialItemsPerCategory)
@@ -1841,6 +1911,18 @@ export default function SmartMenu({
                         const displayDescription =
                           translation?.description || item.description || ''
                         const macroSegments = buildMacroSegments(item, translation)
+                        const isExtraRevealedItem = expanded && extraItemIds.has(item.id)
+                        const resolvedHints =
+                          isExtraRevealedItem && item._hints
+                            ? ({
+                                ...item._hints,
+                                showImage: true,
+                                displayTier:
+                                  item._hints.displayTier === 'minimal'
+                                    ? 'standard'
+                                    : item._hints.displayTier,
+                              } as ItemDisplayHints)
+                            : item._hints
                         const handleAddToOrder = () => {
                           dispatchCart({ type: 'ADD_ITEM', item })
                           logMenuEvent(restaurantId, 'add_to_cart', { menuItemId: item.id }, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
@@ -1854,7 +1936,7 @@ export default function SmartMenu({
                           <MenuItemCard
                             key={item.id}
                             item={item}
-                            hints={item._hints}
+                            hints={resolvedHints}
                             displayName={displayName}
                             displayDescription={displayDescription}
                             macroSegments={macroSegments}
@@ -1929,6 +2011,8 @@ export default function SmartMenu({
                           displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
                           chefRecommendationLabel={currentCopy.chefRecommendationLabel}
                           activeTimeRange={showcase.activeTimeRange}
+                          label={showcase.label}
+                          seasonalItemImages={showcase.seasonalItemImages}
                         />
                       </div>
                     ))}

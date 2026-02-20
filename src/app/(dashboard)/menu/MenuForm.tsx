@@ -2394,7 +2394,7 @@ export default function MenuForm({
                           <FileText className="h-3.5 w-3 mr-1" />
                           Document
                         </Button>
-                        <Button
+                        {/* <Button
                           type="button"
                           variant="ghost"
                           size="sm"
@@ -2404,7 +2404,7 @@ export default function MenuForm({
                         >
                           <ImagePlus className="h-3.5 w-3 mr-1" />
                           Image
-                        </Button>
+                        </Button> */}
                         <Button
                           type="button"
                           variant="ghost"
@@ -2415,6 +2415,22 @@ export default function MenuForm({
                         >
                           {isListening ? <MicOff className="h-3.5 w-3 mr-1" /> : <Mic className="h-3.5 w-3 mr-1" />}
                           {isListening ? 'Stop' : 'Speak'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-slate-500"
+                          onClick={() => {
+                            setUploadedPhoto(null)
+                            setPreviewImageUrl(null)
+                            setCustomPrompt('')
+                            setShowPromptDialog(true)
+                          }}
+                          disabled={aiParseLoading}
+                        >
+                          <Sparkles className="h-3.5 w-3.5 mr-1" />
+                          Generate Image
                         </Button>
                         <Button type="button" variant="ghost" size="sm" className="h-8 text-slate-500" onClick={() => setActiveTab('details')}>
                           Skip to form
