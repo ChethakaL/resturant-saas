@@ -15,6 +15,7 @@ const UNIT_OPTIONS = [
   { value: 'kg', label: 'Kilograms (kg)' },
   { value: 'ml', label: 'Millilitres (ml)' },
   { value: 'L', label: 'Litres (L)' },
+  { value: 'piece', label: 'Piece / Each' },
 ]
 
 type IngredientWithSupplier = {
@@ -163,7 +164,7 @@ export default function IngredientEditForm({
                 <select
                   id="unit"
                   required
-                  value={UNIT_OPTIONS.some((o) => o.value === formData.unit) ? formData.unit : 'g'}
+                  value={UNIT_OPTIONS.some((o) => o.value === formData.unit) ? formData.unit : formData.unit}
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                   className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
                 >
@@ -180,8 +181,8 @@ export default function IngredientEditForm({
                 <Input
                   id="costPerUnit"
                   type="number"
-                  step="1"
-                  min="1"
+                  step="any"
+                  min="0.001"
                   required
                   value={formData.costPerUnit}
                   onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}

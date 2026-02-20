@@ -15,6 +15,7 @@ const UNIT_OPTIONS = [
   { value: 'kg', label: 'Kilograms (kg)' },
   { value: 'ml', label: 'Millilitres (ml)' },
   { value: 'L', label: 'Litres (L)' },
+  { value: 'piece', label: 'Piece / Each' },
 ]
 
 export default function NewIngredientPage() {
@@ -136,8 +137,8 @@ export default function NewIngredientPage() {
                 <Input
                   id="costPerUnit"
                   type="number"
-                  step="1"
-                  min="1"
+                  step="any"
+                  min="0.001"
                   required
                   value={formData.costPerUnit}
                   onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}

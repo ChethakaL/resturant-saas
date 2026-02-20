@@ -1148,6 +1148,16 @@ export default function MenuForm({
           }) ?? null
         }
         if (match) {
+          // If AI has a cost for this ingredient and inventory still shows 0, update it
+          if (typeof ing.costPerUnit === 'number' && ing.costPerUnit > 0 && match.costPerUnit === 0) {
+            fetch(`/api/inventory/${match.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ costPerUnit: ing.costPerUnit }),
+            }).then((r) => {
+              if (r.ok) match.costPerUnit = ing.costPerUnit
+            }).catch(() => {})
+          }
           const converted = convertRecipeUnitToBaseUnit(
             ing.quantity,
             ing.unit,
@@ -1383,15 +1393,46 @@ export default function MenuForm({
       if (!response.ok) throw new Error('Smart Chef failed to respond')
       const result = await response.json()
 
-      // When the AI returns an ingredient with costPerUnit (user just provided cost), create it in inventory immediately so "has been added" is true
+      // When the AI returns an ingredient with costPerUnit (user just provided cost):
+      // - If it already exists in inventory with cost=0, PATCH to update the cost
+      // - If it's new, CREATE it with the provided cost
       const createdFromChat: Ingredient[] = []
       const dataIngredients = Array.isArray(result.data?.ingredients) ? result.data.ingredients : []
       const existingNames = new Set(allIngredients.map((i) => i.name.toLowerCase().trim()))
       for (const ing of dataIngredients) {
         const name = (ing.name || '').trim()
-        const costPerUnit = typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : null
+        const costPerUnit = typeof ing.costPerUnit === 'number' && ing.costPerUnit > 0 ? ing.costPerUnit : null
         if (!name || costPerUnit == null) continue
-        if (existingNames.has(name.toLowerCase())) continue
+
+        // Check if this ingredient already exists (exact or fuzzy match)
+        const nameLower = name.toLowerCase()
+        const existingMatch = allIngredients.find((i) => {
+          const n = i.name.toLowerCase().trim()
+          return n === nameLower || n.includes(nameLower) || nameLower.includes(n)
+        })
+
+        if (existingMatch) {
+          // Update cost if existing cost is 0 or different
+          if (existingMatch.costPerUnit === 0 || existingMatch.costPerUnit !== costPerUnit) {
+            try {
+              const patchRes = await fetch(`/api/inventory/${existingMatch.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ costPerUnit }),
+              })
+              if (patchRes.ok) {
+                // Update in-memory ingredient so subsequent lookups see the new cost
+                existingMatch.costPerUnit = costPerUnit
+              }
+            } catch {
+              // ignore
+            }
+          }
+          existingNames.add(nameLower)
+          continue
+        }
+
+        // Brand new ingredient — create it
         try {
           const createRes = await fetch('/api/ingredients', {
             method: 'POST',
@@ -1405,7 +1446,7 @@ export default function MenuForm({
           if (!createRes.ok) continue
           const newIng = await createRes.json()
           createdFromChat.push(newIng)
-          existingNames.add(name.toLowerCase())
+          existingNames.add(nameLower)
         } catch {
           // ignore
         }

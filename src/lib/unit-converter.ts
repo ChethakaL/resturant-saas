@@ -1,15 +1,16 @@
 /**
  * Unit conversion utilities for inventory normalization.
  *
- * Only four units are allowed in inventory: g, kg, ml, L.
- * This module converts any legacy/recipe units into one of those four.
+ * Allowed units: g, kg, ml, L (measurable), and piece/pieces (countable items
+ * like eggs, garlic cloves, bay leaves that cannot meaningfully be weighed).
  */
 
-export const ALLOWED_UNITS = ['g', 'kg', 'ml', 'L'] as const
+export const ALLOWED_UNITS = ['g', 'kg', 'ml', 'L', 'piece', 'pieces'] as const
 export type AllowedUnit = typeof ALLOWED_UNITS[number]
 
 export function isAllowedUnit(unit: string): unit is AllowedUnit {
-  return ALLOWED_UNITS.includes(unit.trim() as AllowedUnit)
+  const u = unit.trim().toLowerCase()
+  return u === 'g' || u === 'kg' || u === 'ml' || u === 'l' || u === 'piece' || u === 'pieces'
 }
 
 /** Normalise a unit string to canonical form (e.g. 'KG' → 'kg', 'litre' → 'L'). */
@@ -19,6 +20,7 @@ export function canonicalise(unit: string): string {
   if (u === 'kg' || u === 'kilogram' || u === 'kilograms' || u === 'kilo') return 'kg'
   if (u === 'ml' || u === 'millilitre' || u === 'millilitres' || u === 'milliliter' || u === 'milliliters' || u === 'cc') return 'ml'
   if (u === 'l' || u === 'litre' || u === 'litres' || u === 'liter' || u === 'liters') return 'L'
+  if (u === 'piece' || u === 'pieces' || u === 'pc' || u === 'pcs' || u === 'each') return 'piece'
   return unit.trim() // not recognised → keep as-is
 }
 

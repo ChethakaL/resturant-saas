@@ -35,14 +35,23 @@ NEVER ASK THE USER:
 THE STRUCTURED FLOW:
 1. **Name**: Ask for the dish name. If a document is uploaded, extract it immediately.
 2. **Category**: Suggest the best category from [${categories.join(', ')}]. Ask "Is this correct, or should it be in a different category?".
-3. **Recipe & Ingredients**: When you suggest a recipe, you MUST display the full ingredient list WITH quantities and units directly in your chat message as a bullet list — for example:
+3. **Recipe & Ingredients**: When you suggest a recipe, you MUST display BOTH the ingredient list AND the cooking steps directly in your chat message using this exact format:
+
+   **Ingredients:**
    • 200g bulgur wheat
    • 3 medium tomatoes (≈300g), finely diced
    • 1 bunch fresh parsley (≈60g), finely chopped
    • 30ml lemon juice
    • 30ml olive oil
    • 5g salt
-   Then ask: "Is this recipe suitable, or would you like any adjustments?" The "max 2 sentences" rule does NOT apply to recipe suggestions — the user MUST be able to see the recipe in the chat. Never hide the recipe only in the data block. If the user uploaded a document or message that already contains the full recipe and ingredients, display those ingredients and use that data directly — do NOT re-suggest. Only suggest a recipe when they did NOT provide one (e.g. they only gave the dish name).
+
+   **Steps (SOP):**
+   1. Soak bulgur in cold water for 20 minutes, then drain and squeeze out excess moisture.
+   2. Finely chop parsley, mint, and tomatoes.
+   3. Combine all ingredients and toss with lemon juice and olive oil.
+   4. Season with salt, adjust to taste, and refrigerate for 15 minutes before serving.
+
+   Then ask: "Is this recipe suitable, or would you like any adjustments?" The "max 2 sentences" rule does NOT apply to recipe suggestions — the user MUST see both ingredients AND steps in the chat. Never hide the recipe only in the data block. If the user uploaded a document or message that already contains the full recipe, display those ingredients and steps — do NOT re-suggest. Only suggest a recipe when they did NOT provide one.
 4. **Grams & Weights**: Summarize the amounts you have (use conversions yourself if user said tsp/cups). Only ask the user about quantities that are genuinely missing or ambiguous (e.g. "how much salt?" if not stated). Do not ask for conversions.
 5. **Yield**: From the ingredient quantities, estimate how many servings the recipe yields. Phrase it in a natural, conversational way, e.g. "This recipe seems like it makes one dish." or "This looks like it makes about 4 servings." Then ask the user to confirm (e.g. "Is that right?"). Do not ask open-ended "how many servings would you expect?" — always give your estimate first in plain language.
 6. **Inventory & Costing** (you MUST go through every recipe ingredient — do not skip any, including salt, flour, baking powder, etc.):
@@ -71,7 +80,8 @@ RULES:
 - **Flour / salt / variant rule**: When recipe has "all-purpose flour" and inventory has "flour" (or "kosher salt" vs "Salt", etc.), always ask: "In your inventory you have **flour**. The recipe uses **all-purpose flour**. Do you want to use **flour** for this, or add **all-purpose flour** as a separate inventory item?" Do not assume they are the same without asking.
 - **Missing ingredient (during chat)**: When an ingredient is not in inventory, say "[Ingredient] is not in your inventory. Let's add it. What is the cost per [unit] in IQD?" so the user can provide unit cost. When the user clicks "Fill Form Now" before all ingredients were discussed, include any remaining ones with costPerUnit: 0 — the form shows cost incomplete and the user can complete pricing via the Cost complete button.
 - **One Step at a Time**: Only ask for ONE thing per message (one ingredient, one confirmation, or one cost).
-- **Short & Professional**: Max 2 sentences for most messages — EXCEPT when presenting a recipe (step 3), which MUST show the full ingredient list as a bullet list in the message, and when showing a cost breakdown. Never truncate a recipe suggestion.
+- **Short & Professional**: Max 2 sentences for most messages — EXCEPT when presenting a recipe (step 3), which MUST show the full **Ingredients:** list AND **Steps (SOP):** numbered list in the message, and when showing a cost breakdown. Never truncate a recipe suggestion.
+- **No praise or enthusiasm**: NEVER start a message with phrases like "Great choice!", "Excellent!", "That's a classic!", "Perfect!", "Wonderful!", "Sounds great!", "Nice!" or any similar compliment. This is a professional business tool. Get straight to the point every time.
 - **Auto-Fill**: Always update the JSON "data" block with everything you know.
 - **Images**: If an image is uploaded, guide the user on lighting, plating, and enhancement (e.g. "For best results, use even lighting and a clean plate. You can enhance this photo in the form's Image tab.").
 `
@@ -144,8 +154,23 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
             }
         }
 
-        const result = await model.generateContent(parts)
-        const rawText = result.response.text()
+        // Retry once on network-level failures (fetch failed / ECONNRESET)
+        let result
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            result = await model.generateContent(parts)
+            break
+          } catch (netErr: unknown) {
+            const msg = netErr instanceof Error ? netErr.message : String(netErr)
+            const isNetworkError = msg.includes('fetch failed') || msg.includes('ECONNRESET') || msg.includes('ENOTFOUND')
+            if (isNetworkError && attempt < 2) {
+              await new Promise((r) => setTimeout(r, 1500))
+              continue
+            }
+            throw netErr
+          }
+        }
+        const rawText = result!.response.text()
 
         // Extract JSON from the response
         const jsonMatch = rawText.match(/\{[\s\S]*\}/)
@@ -255,6 +280,15 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
 
     } catch (error) {
         console.error('Smart Chef API error:', error)
-        return NextResponse.json({ error: 'Smart Chef encountered an error' }, { status: 500 })
+        const msg = error instanceof Error ? error.message : String(error)
+        const isNetworkError = msg.includes('fetch failed') || msg.includes('ECONNRESET') || msg.includes('ENOTFOUND')
+        return NextResponse.json(
+          {
+            error: isNetworkError
+              ? 'Could not reach the AI service — please check your internet connection and try again.'
+              : 'Smart Chef encountered an error',
+          },
+          { status: 500 }
+        )
     }
 }
