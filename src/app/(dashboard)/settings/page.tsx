@@ -22,7 +22,7 @@ export default async function SettingsPage() {
 
     prisma.user.findUnique({
       where: { id: session.user.id! },
-      select: { defaultBackgroundPrompt: true },
+      select: { defaultBackgroundPrompt: true, defaultBackgroundImageData: true },
     }),
   ])
 
@@ -41,11 +41,15 @@ export default async function SettingsPage() {
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
+  const hasDefaultBackgroundImage = Boolean(user?.defaultBackgroundImageData)
+  const defaultBackgroundImageData = user?.defaultBackgroundImageData ?? null
 
   return (
     <SettingsClient
       currentTheme={currentTheme}
       defaultBackgroundPrompt={defaultBackgroundPrompt}
+      hasDefaultBackgroundImage={hasDefaultBackgroundImage}
+      defaultBackgroundImageData={defaultBackgroundImageData}
     />
   )
 }

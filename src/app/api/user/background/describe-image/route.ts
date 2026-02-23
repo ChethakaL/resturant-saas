@@ -8,9 +8,10 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 /**
- * Accepts an image upload (form data or base64), uses OpenAI Vision to describe
- * the background/setting, then saves that description to User.defaultBackgroundPrompt
- * so generated dish photos use that style.
+ * Accepts an image upload (form data or base64) and saves it as
+ * User.defaultBackgroundImageData for consistent dish backgrounds.
+ * If OpenAI is configured, also generates a background description and saves it
+ * to User.defaultBackgroundPrompt.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -20,12 +21,6 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'OPENAI_API_KEY is not configured' },
-        { status: 500 }
-      )
-    }
 
     let imageDataUrl: string
 
@@ -67,44 +62,43 @@ export async function POST(request: NextRequest) {
       imageDataUrl = `data:${mime};base64,${b64.replace(/^data:image\/\w+;base64,/, '')}`
     }
 
-    const openai = new OpenAI({ apiKey })
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Describe the background and setting of this image in 1–3 short sentences, suitable for use as a prompt when generating restaurant dish photos. Focus only on: surface (e.g. table, plate, marble), lighting, style, and mood. Do not describe any food or objects in the foreground. Output only the description, no preamble.`,
-            },
-            {
-              type: 'image_url',
-              image_url: { url: imageDataUrl },
-            },
-          ],
-        },
-      ],
-      max_tokens: 150,
-    })
-
-    const description =
-      completion.choices[0]?.message?.content?.trim() || ''
-
-    if (!description) {
-      return NextResponse.json(
-        { error: 'Could not get a description from the image' },
-        { status: 500 }
-      )
+    let description = ''
+    if (apiKey) {
+      const openai = new OpenAI({ apiKey })
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Describe the background and setting of this image in 1–3 short sentences, suitable for use as a prompt when generating restaurant dish photos. Focus only on: surface (e.g. table, plate, marble), lighting, style, and mood. Do not describe any food or objects in the foreground. Output only the description, no preamble.`,
+              },
+              {
+                type: 'image_url',
+                image_url: { url: imageDataUrl },
+              },
+            ],
+          },
+        ],
+        max_tokens: 150,
+      })
+      description = completion.choices[0]?.message?.content?.trim() || ''
     }
 
     const user = await prisma.user.update({
       where: { id: session.user.id },
-      data: { defaultBackgroundPrompt: description },
+      data: {
+        defaultBackgroundImageData: imageDataUrl,
+        ...(description ? { defaultBackgroundPrompt: description } : {}),
+      },
     })
 
     return NextResponse.json({
       defaultBackgroundPrompt: user.defaultBackgroundPrompt,
+      defaultBackgroundImageData: user.defaultBackgroundImageData,
+      hasDefaultBackgroundImage: Boolean(user.defaultBackgroundImageData),
       description,
     })
   } catch (error) {

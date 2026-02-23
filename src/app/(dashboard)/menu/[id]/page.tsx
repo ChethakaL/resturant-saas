@@ -63,6 +63,10 @@ export default async function MenuItemEditPage({
 
   const user = await prisma.user.findUnique({
     where: { id: session!.user.id },
+    select: {
+      defaultBackgroundPrompt: true,
+      defaultBackgroundImageData: true,
+    },
   })
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
 
@@ -74,6 +78,7 @@ export default async function MenuItemEditPage({
       menuItem={data.menuItem}
       mode="edit"
       defaultBackgroundPrompt={defaultBackgroundPrompt}
+      hasDefaultBackgroundImage={Boolean(user?.defaultBackgroundImageData)}
     />
   )
 }

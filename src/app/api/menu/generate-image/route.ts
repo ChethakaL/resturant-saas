@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import {
   ImageOrientation,
   ImageSizePreset,
@@ -18,6 +19,7 @@ export async function POST(request: NextRequest) {
 
     const {
       prompt,
+      useSavedDefaults = false,
       itemName,
       description,
       category,
@@ -25,6 +27,7 @@ export async function POST(request: NextRequest) {
       sizePreset = 'medium',
     }: {
       prompt?: string | null
+      useSavedDefaults?: boolean
       itemName?: string
       description?: string
       category?: string
@@ -38,6 +41,23 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    const savedDefaults =
+      useSavedDefaults && session.user.id
+        ? await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: {
+              defaultBackgroundPrompt: true,
+              defaultBackgroundImageData: true,
+            },
+          })
+        : null
+    const effectivePrompt =
+      useSavedDefaults
+        ? savedDefaults?.defaultBackgroundPrompt?.trim() ?? ''
+        : prompt?.trim() ?? ''
+    const backgroundReferenceImageData =
+      useSavedDefaults ? savedDefaults?.defaultBackgroundImageData ?? '' : ''
 
     // Build orientation / size hints
     const orientationHint = imageOrientationPrompts[orientation] ?? ''
@@ -57,14 +77,33 @@ export async function POST(request: NextRequest) {
     const corePrompt = `Professional food photography of ${dishDescription}. The image must show this specific dish only - do not show other foods, drinks, or unrelated items. IMPORTANT: The dish must be fully visible and centered in the frame - do not crop or cut off any part of the food. Show the complete dish from a slightly elevated angle. High-quality, appetizing presentation on a clean plate with beautiful lighting, garnish, and styling. Leave adequate margin around the food. Restaurant menu quality, photorealistic, full dish visible with nothing cut off.`
 
     const stylePart =
-      prompt?.trim()
-        ? ` Background and styling (apply to the dish above): ${prompt.trim()}.`
+      effectivePrompt
+        ? ` Background and styling (apply to the dish above): ${effectivePrompt}.`
+        : ''
+    const backgroundImagePart = backgroundReferenceImageData.trim()
+      ? ' Match the provided reference background image exactly (surface, lighting direction, style, mood). Do not add extra background objects/props and do not change the reference background look.'
         : ''
 
     const hintParts = [orientationHint, sizeHint].filter(Boolean)
     const imagePrompt = hintParts.length
-      ? `${corePrompt}${stylePart} ${hintParts.join(' ')}`
-      : `${corePrompt}${stylePart}`
+      ? `${corePrompt}${stylePart}${backgroundImagePart} ${hintParts.join(' ')}`
+      : `${corePrompt}${stylePart}${backgroundImagePart}`
+
+    const requestParts: Array<Record<string, unknown>> = [{ text: imagePrompt }]
+    if (backgroundReferenceImageData.trim()) {
+      const bgBase64Data = backgroundReferenceImageData.includes(',')
+        ? backgroundReferenceImageData.split(',')[1]
+        : backgroundReferenceImageData
+      const bgMime = backgroundReferenceImageData.includes(',')
+        ? backgroundReferenceImageData.split(',')[0].split(':')[1].split(';')[0]
+        : 'image/jpeg'
+      requestParts.push({
+        inlineData: {
+          mimeType: bgMime?.startsWith('image/') ? bgMime : 'image/jpeg',
+          data: bgBase64Data,
+        },
+      })
+    }
 
     console.log('Generating image with Gemini 2.5 Flash Image:', imagePrompt)
 
@@ -80,9 +119,7 @@ export async function POST(request: NextRequest) {
           contents: [
             {
               parts: [
-                {
-                  text: imagePrompt,
-                },
+                ...requestParts,
               ],
             },
           ],
@@ -123,12 +160,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const parts = candidates[0].content.parts
+    const responseParts = candidates[0].content.parts as any[]
     let imageBase64: string | null = null
     let imageMimeType: string = 'image/png'
 
     // Find the image in the response parts
-    for (const part of parts) {
+    for (const part of responseParts) {
       if (part.inlineData && part.inlineData.mimeType?.startsWith('image/')) {
         imageBase64 = part.inlineData.data
         imageMimeType = part.inlineData.mimeType
@@ -138,8 +175,8 @@ export async function POST(request: NextRequest) {
 
     if (!imageBase64) {
       // If no inline data, check if there's a text response with error
-      const textResponse = parts.find((p: any) => p.text)?.text
-      console.error('No image data found. Response:', JSON.stringify(parts, null, 2))
+      const textResponse = responseParts.find((p: any) => p.text)?.text
+      console.error('No image data found. Response:', JSON.stringify(responseParts, null, 2))
       return NextResponse.json(
         {
           error: 'No image data found in response',

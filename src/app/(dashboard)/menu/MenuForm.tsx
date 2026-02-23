@@ -92,6 +92,7 @@ interface MenuFormProps {
     translations?: MenuItemTranslation[]
   }
   defaultBackgroundPrompt?: string | null
+  hasDefaultBackgroundImage?: boolean
 }
 
 interface ParsedAIIngredient {
@@ -132,6 +133,7 @@ export default function MenuForm({
   mode,
   menuItem,
   defaultBackgroundPrompt,
+  hasDefaultBackgroundImage = false,
 }: MenuFormProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -749,8 +751,10 @@ export default function MenuForm({
   }
 
   const generateImage = async () => {
+    const customPromptTrimmed = customPrompt.trim()
     const promptForUpload =
-      customPrompt.trim() || trimmedSavedBackgroundPrompt || undefined
+      customPromptTrimmed || trimmedSavedBackgroundPrompt || undefined
+    const useSavedDefaults = customPromptTrimmed.length === 0
 
     // If there's an uploaded photo, enhance it instead of generating from scratch
     if (uploadedPhoto) {
@@ -762,6 +766,7 @@ export default function MenuForm({
           body: JSON.stringify({
             imageData: uploadedPhoto,
             prompt: promptForUpload,
+            useSavedDefaults,
             orientation: imageOrientation,
             sizePreset: imageSizePreset,
           }),
@@ -770,7 +775,7 @@ export default function MenuForm({
         const data = await response.json()
 
         if (!response.ok) {
-          throw new Error(data.error || 'Failed to enhance image')
+          throw new Error(data.details || data.error || 'Failed to enhance image')
         }
 
         setPreviewImageUrl(data.imageUrl)
@@ -807,12 +812,13 @@ export default function MenuForm({
     try {
       const category = categories.find((c) => c.id === formData.categoryId)
       const promptForGeneration =
-        customPrompt.trim() || trimmedSavedBackgroundPrompt
+        customPromptTrimmed || trimmedSavedBackgroundPrompt
       const response = await fetch('/api/menu/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: promptForGeneration || null,
+          useSavedDefaults,
           itemName: formData.name,
           description: formData.description,
           category: category?.name,
@@ -2657,6 +2663,13 @@ export default function MenuForm({
                             />
                           </div>
                         )}
+                        <p className="text-xs text-slate-500">
+                          Want consistent backgrounds across all dishes?{' '}
+                          <Link href="/settings#dish-photo-background" className="font-medium text-emerald-700 hover:underline">
+                            Configure background prompt or upload reference image
+                          </Link>
+                          .
+                        </p>
                       </div>
                     </div>
 
@@ -3761,27 +3774,36 @@ export default function MenuForm({
                     rows={3}
                     disabled={generatingImage}
                   />
-                  {trimmedSavedBackgroundPrompt && (
+                  {(trimmedSavedBackgroundPrompt || hasDefaultBackgroundImage) && (
                     <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                       <p className="leading-relaxed">
-                        Default background prompt ready. Apply it to speed up every menu image.
+                        {trimmedSavedBackgroundPrompt
+                          ? 'Saved consistent background style is ready and used by default when prompt is empty.'
+                          : 'A saved consistent background image is ready and used by default when prompt is empty.'}
                       </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCustomPrompt(trimmedSavedBackgroundPrompt)}
-                        disabled={generatingImage}
-                        className="rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-600"
-                      >
-                        Use default prompt
-                      </Button>
+                      {trimmedSavedBackgroundPrompt && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCustomPrompt(trimmedSavedBackgroundPrompt)}
+                          disabled={generatingImage}
+                          className="rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-600"
+                        >
+                          Use default prompt
+                        </Button>
+                      )}
                     </div>
                   )}
+                  <div className="text-xs text-slate-500">
+                    <Link href="/settings#dish-photo-background" className="font-medium text-emerald-700 hover:underline">
+                      Configure consistent background prompt or upload a reference image
+                    </Link>
+                  </div>
                   <p className="text-xs text-slate-500">
                     {uploadedPhoto
-                      ? 'Tell us how to tweak the uploaded photo (lighting, crop, mood, minor edits).'
-                      : 'Leave blank to auto-generate based on item name, category, and description.'}
+                      ? 'Leave prompt empty to use your saved consistent background settings. Add text only if you want a one-time custom style.'
+                      : 'Leave prompt empty to use your saved consistent background settings (prompt and/or image).'}
                   </p>
                 </div>
                 <div className="space-y-3 border-t border-dashed border-slate-200 pt-3">

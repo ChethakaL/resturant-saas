@@ -37,7 +37,7 @@ export default async function NewMenuItemPage() {
     }),
     prisma.user.findUnique({
       where: { id: session!.user.id },
-      select: { defaultBackgroundPrompt: true },
+      select: { defaultBackgroundPrompt: true, defaultBackgroundImageData: true },
     }),
   ])
 
@@ -48,6 +48,7 @@ export default async function NewMenuItemPage() {
       addOns={addOns as any}
       mode="create"
       defaultBackgroundPrompt={user?.defaultBackgroundPrompt ?? ''}
+      hasDefaultBackgroundImage={Boolean(user?.defaultBackgroundImageData)}
     />
   )
 }

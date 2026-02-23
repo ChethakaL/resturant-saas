@@ -19,13 +19,13 @@ import {
   Trash2,
   Check,
   Loader2,
-  GripVertical,
   Clock,
   Search,
   X,
   BarChart3,
   LayoutGrid,
   Sparkles,
+  Settings2,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import type { MenuEngineSettings } from '@/types/menu-engine'
@@ -88,6 +88,17 @@ interface CategoryOption {
   id: string
   name: string
   displayOrder: number
+}
+
+interface ShowcaseSettingsDraft {
+  type: 'CHEFS_HIGHLIGHTS' | 'RECOMMENDATIONS'
+  displayVariant: 'hero' | 'cards'
+  position: 'top' | `after-${string}`
+  label: string
+  useTimeSlots: boolean
+  isSeasonal: boolean
+  seasonalStart: string
+  seasonalEnd: string
 }
 
 const quadrantLabelMap: Record<string, string> = {
@@ -211,8 +222,64 @@ export default function MenuOptimizationContent({
   const [scheduleSearch, setScheduleSearch] = useState('')
   const [itemPickerSearch, setItemPickerSearch] = useState('')
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(false)
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+  const [settingsShowcaseId, setSettingsShowcaseId] = useState<string | null>(null)
+  const [settingsDraft, setSettingsDraft] = useState<ShowcaseSettingsDraft>({
+    type: 'RECOMMENDATIONS',
+    displayVariant: 'cards',
+    position: 'top',
+    label: '',
+    useTimeSlots: false,
+    isSeasonal: false,
+    seasonalStart: '',
+    seasonalEnd: '',
+  })
+  const [settingsSaving, setSettingsSaving] = useState(false)
   const prevEngineModeRef = useRef<EngineMode>(resolvedMode)
   const maxCarouselItems = (engineMode === 'profit' || engineMode === 'adaptive') ? 6 : 999
+
+  const getShowcasePlacementLabel = (showcase: Showcase): string => {
+    if (showcase.position === 'top') return 'Top of menu'
+    const category = categories.find((cat) => cat.id === showcase.insertAfterCategoryId)
+    return category ? `After "${category.name}"` : 'Between categories'
+  }
+
+  const getShowcaseDisplayLabel = (showcase: Showcase): string =>
+    (showcase.displayVariant ?? 'cards') === 'hero' ? 'Full-width hero' : 'Cards carousel'
+
+  const getShowcaseTimeLabel = (showcase: Showcase): string => {
+    const s = showcase.schedule as TimeSlotSchedule | null | undefined
+    const slotRanges = buildSlotRangeLabels(slotTimes)
+    const lunchRange = `${slotRanges.day.split('–')[0]}–${slotRanges.evening.split('–')[1]}`
+    const slots = s?.displayForSlots
+    const slot = s?.displayForSlot
+    if (Array.isArray(slots) && slots.length > 0) {
+      if (slots.includes('day') && slots.includes('evening')) return `Lunch (${lunchRange})`
+      return slots.map((sl) => slotRanges[sl]).join(', ')
+    }
+    if (slot && slotRanges[slot]) return slotRanges[slot]
+    if (s?.useTimeSlots) return 'Different items by time slot'
+    return 'Always visible'
+  }
+
+  const openShowcaseSettings = (showcase: Showcase) => {
+    const schedule = (showcase.schedule as TimeSlotSchedule | null | undefined) || {}
+    const isSeasonal = !!(schedule.seasonalStart || schedule.seasonalEnd)
+    const positionValue: ShowcaseSettingsDraft['position'] =
+      showcase.position === 'top' || !showcase.insertAfterCategoryId ? 'top' : `after-${showcase.insertAfterCategoryId}`
+    setSettingsShowcaseId(showcase.id)
+    setSettingsDraft({
+      type: showcase.type ?? 'RECOMMENDATIONS',
+      displayVariant: showcase.displayVariant ?? 'cards',
+      position: positionValue,
+      label: schedule.label ?? '',
+      useTimeSlots: schedule.useTimeSlots ?? false,
+      isSeasonal,
+      seasonalStart: schedule.seasonalStart ?? '',
+      seasonalEnd: schedule.seasonalEnd ?? '',
+    })
+    setSettingsDialogOpen(true)
+  }
 
   // When switching to Profit or Smart Profit, default the five suggestion toggles to on (preset).
   useEffect(() => {
@@ -276,13 +343,20 @@ export default function MenuOptimizationContent({
   const updateShowcase = async (id: string, updates: Partial<Pick<Showcase, 'title' | 'position' | 'insertAfterCategoryId' | 'isActive' | 'type' | 'schedule' | 'displayVariant'>>) => {
     setSavingShowcase(id)
     try {
-      // Slot-only carousels: persist only displayForSlot or displayForSlots, never useTimeSlots
       const payload = { ...updates }
       const s = payload.schedule as TimeSlotSchedule | null | undefined
-      if (Array.isArray(s?.displayForSlots) && s.displayForSlots.length > 0) {
-        payload.schedule = { displayForSlots: s.displayForSlots }
-      } else if (s?.displayForSlot) {
-        payload.schedule = { displayForSlot: s.displayForSlot }
+      if (s) {
+        const hasPinnedSlots = (Array.isArray(s.displayForSlots) && s.displayForSlots.length > 0) || !!s.displayForSlot
+        payload.schedule = hasPinnedSlots
+          ? {
+              ...s,
+              useTimeSlots: undefined,
+              breakfast: undefined,
+              day: undefined,
+              evening: undefined,
+              night: undefined,
+            }
+          : s
       }
       const response = await fetch(`/api/menu-showcases/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!response.ok) throw new Error('Failed to update')
@@ -338,6 +412,37 @@ export default function MenuOptimizationContent({
       toast({ title: 'Error', description: 'Failed to update carousel items', variant: 'destructive' })
     } finally {
       setSavingShowcase(null)
+    }
+  }
+
+  const saveShowcaseSettings = async () => {
+    if (!settingsShowcaseId) return
+    const showcase = showcases.find((s) => s.id === settingsShowcaseId)
+    if (!showcase) return
+
+    setSettingsSaving(true)
+    try {
+      const existing = (showcase.schedule as TimeSlotSchedule | null | undefined) || {}
+      const isPinnedToSlot = Boolean(existing.displayForSlot) || (Array.isArray(existing.displayForSlots) && existing.displayForSlots.length > 0)
+      const positionTop = settingsDraft.position === 'top'
+      const scheduleToSave: TimeSlotSchedule = {
+        ...existing,
+        label: settingsDraft.label.trim() || undefined,
+        useTimeSlots: isPinnedToSlot ? undefined : settingsDraft.useTimeSlots,
+        seasonalStart: settingsDraft.isSeasonal ? settingsDraft.seasonalStart || new Date().toISOString().slice(0, 10) : undefined,
+        seasonalEnd: settingsDraft.isSeasonal ? settingsDraft.seasonalEnd || new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10) : undefined,
+      }
+
+      await updateShowcase(settingsShowcaseId, {
+        type: settingsDraft.type,
+        displayVariant: settingsDraft.displayVariant,
+        position: positionTop ? 'top' : 'between-categories',
+        insertAfterCategoryId: positionTop ? null : settingsDraft.position.replace('after-', ''),
+        schedule: scheduleToSave,
+      })
+      setSettingsDialogOpen(false)
+    } finally {
+      setSettingsSaving(false)
     }
   }
 
@@ -952,253 +1057,316 @@ export default function MenuOptimizationContent({
             </div>
           ) : (
             showcases.map((showcase) => (
-              <div key={showcase.id} className="rounded-lg border border-slate-200 p-4 space-y-3">
-                <div className="flex items-start gap-3">
-                  <GripVertical className="h-5 w-5 text-slate-300 mt-1 flex-shrink-0" />
-                  <div className="flex-1 space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Input
-                        value={showcase.title}
-                        onChange={(e) => setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, title: e.target.value } : s)))}
-                        onBlur={() => updateShowcase(showcase.id, { title: showcase.title })}
-                        className="text-sm font-semibold min-w-[280px] max-w-[420px]"
-                      />
-                      <select
-                        value={showcase.type ?? 'RECOMMENDATIONS'}
-                        onChange={(e) => {
-                          const val = e.target.value as 'CHEFS_HIGHLIGHTS' | 'RECOMMENDATIONS'
-                          setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, type: val } : s)))
-                          updateShowcase(showcase.id, { type: val })
-                        }}
-                        className="rounded border border-slate-200 px-2 py-1.5 text-xs"
-                      >
-                        <option value="CHEFS_HIGHLIGHTS">Chef&apos;s Highlights</option>
-                        <option value="RECOMMENDATIONS">Recommendations</option>
-                      </select>
-                      <span className="text-xs text-slate-400">(Style: Chef highlights = green; Recommendations = amber.)</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Label className="text-xs text-slate-500">Display:</Label>
-                      <select
-                        value={showcase.displayVariant ?? 'cards'}
-                        onChange={(e) => {
-                          const val = e.target.value as 'hero' | 'cards'
-                          setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, displayVariant: val } : s)))
-                          updateShowcase(showcase.id, { displayVariant: val })
-                        }}
-                        className="rounded border border-slate-200 px-2 py-1.5 text-xs"
-                      >
-                        <option value="cards">Cards carousel (sliding row of cards)</option>
-                        <option value="hero">Full-width image carousel</option>
-                      </select>
-                      <span className="text-xs text-slate-400">Both are sliding; cards show multiple items, full-width shows one large image at a time.</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Label className="text-xs text-slate-500">Position:</Label>
-                      <select
-                        value={showcase.position === 'top' ? 'top' : `after-${showcase.insertAfterCategoryId}`}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          if (val === 'top') updateShowcase(showcase.id, { position: 'top', insertAfterCategoryId: null })
-                          else updateShowcase(showcase.id, { position: 'between-categories', insertAfterCategoryId: val.replace('after-', '') })
-                        }}
-                        className="rounded border border-slate-200 px-2 py-1 text-xs"
-                      >
-                        <option value="top">Top of menu</option>
-                        {categories.map((cat) => (
-                          <option key={cat.id} value={`after-${cat.id}`}>After &quot;{cat.name}&quot;</option>
-                        ))}
-                      </select>
-                    </div>
-                    {/* Carousel label (badge) */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Label className="text-xs text-slate-500 shrink-0">Badge label:</Label>
-                      <Input
-                        value={(showcase.schedule as TimeSlotSchedule)?.label ?? ''}
-                        onChange={(e) => {
-                          const label = e.target.value
-                          const nextSchedule = { ...(showcase.schedule as TimeSlotSchedule || {}), label: label || undefined }
-                          setShowcases((prev) => prev.map((s) => s.id === showcase.id ? { ...s, schedule: nextSchedule } : s))
-                        }}
-                        onBlur={() => updateShowcase(showcase.id, { schedule: showcase.schedule })}
-                        placeholder='e.g. 🎄 Christmas Special'
-                        className="text-xs h-8 max-w-[280px]"
-                      />
-                      <span className="text-xs text-slate-400">Shown as a badge on this carousel on the guest menu.</span>
-                    </div>
+              <div key={showcase.id} className="rounded-xl border border-slate-200 p-4">
+                {(() => {
+                  const schedule = showcase.schedule as TimeSlotSchedule | null | undefined
+                  const isPinnedToSlot = Boolean(schedule?.displayForSlot) || (Array.isArray(schedule?.displayForSlots) && schedule!.displayForSlots!.length > 0)
+                  const isSeasonal = !!(schedule?.seasonalStart || schedule?.seasonalEnd)
+                  const visibleItems = showcase.items.slice(0, 8)
+                  const hiddenItemCount = Math.max(0, showcase.items.length - visibleItems.length)
 
-                    {/* Seasonal date range */}
-                    {(() => {
-                      const s = showcase.schedule as TimeSlotSchedule | null | undefined
-                      const isSeasonal = !!(s?.seasonalStart || s?.seasonalEnd)
-                      return (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              id={`seasonal-${showcase.id}`}
-                              checked={isSeasonal}
-                              onChange={(e) => {
-                                const enabled = e.target.checked
-                                const nextSchedule = {
-                                  ...(s || {}),
-                                  seasonalStart: enabled ? new Date().toISOString().slice(0, 10) : undefined,
-                                  seasonalEnd: enabled
-                                    ? new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10)
-                                    : undefined,
-                                } as TimeSlotSchedule
-                                setShowcases((prev) => prev.map((sc) => sc.id === showcase.id ? { ...sc, schedule: nextSchedule } : sc))
-                                updateShowcase(showcase.id, { schedule: nextSchedule })
-                              }}
-                              className="rounded border-slate-300"
-                            />
-                            <Label htmlFor={`seasonal-${showcase.id}`} className="text-sm font-normal cursor-pointer">
-                              Seasonal (only show between specific dates)
-                            </Label>
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-[260px] flex-1 space-y-2">
+                          <Input
+                            value={showcase.title}
+                            onChange={(e) => setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, title: e.target.value } : s)))}
+                            onBlur={() => updateShowcase(showcase.id, { title: showcase.title })}
+                            className="text-sm font-semibold max-w-[440px]"
+                          />
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1">{showcase.items.length} item{showcase.items.length === 1 ? '' : 's'}</span>
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1">{getShowcaseDisplayLabel(showcase)}</span>
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1">{getShowcasePlacementLabel(showcase)}</span>
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1">{getShowcaseTimeLabel(showcase)}</span>
+                            {isSeasonal && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">Seasonal</span>}
                           </div>
-                          {isSeasonal && (
-                            <div className="ml-5 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                              <div className="flex flex-wrap items-center gap-3">
-                                <div className="flex flex-col gap-1">
-                                  <Label className="text-xs text-slate-500">Start date</Label>
-                                  <input
-                                    type="date"
-                                    value={s?.seasonalStart ?? ''}
-                                    onChange={(e) => {
-                                      const nextSchedule = { ...(s || {}), seasonalStart: e.target.value } as TimeSlotSchedule
-                                      setShowcases((prev) => prev.map((sc) => sc.id === showcase.id ? { ...sc, schedule: nextSchedule } : sc))
-                                      updateShowcase(showcase.id, { schedule: nextSchedule })
-                                    }}
-                                    className="rounded border border-slate-200 px-2 py-1 text-xs"
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <Label className="text-xs text-slate-500">End date</Label>
-                                  <input
-                                    type="date"
-                                    value={s?.seasonalEnd ?? ''}
-                                    onChange={(e) => {
-                                      const nextSchedule = { ...(s || {}), seasonalEnd: e.target.value } as TimeSlotSchedule
-                                      setShowcases((prev) => prev.map((sc) => sc.id === showcase.id ? { ...sc, schedule: nextSchedule } : sc))
-                                      updateShowcase(showcase.id, { schedule: nextSchedule })
-                                    }}
-                                    className="rounded border border-slate-200 px-2 py-1 text-xs"
-                                  />
-                                </div>
-                              </div>
-                              {/* AI-regenerate each dish photo with a consistent Christmas background */}
-                              <div className="mt-3 border-t border-slate-100 pt-3 space-y-2">
-                                <p className="text-xs font-medium text-slate-600">Christmas dish photos</p>
-                                <p className="text-xs text-slate-400">
-                                  AI regenerates each dish photo using the same Christmas background prompt — food stays unchanged, background becomes festive. All dishes look consistent.
-                                </p>
-                                {s?.seasonalItemImages && Object.keys(s.seasonalItemImages).length > 0 ? (
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <div className="flex gap-1">
-                                      {Object.values(s.seasonalItemImages).slice(0, 3).map((url, i) => (
-                                        <img key={i} src={url} alt="" className="h-12 w-16 object-cover rounded-lg border border-slate-200 shadow-sm" />
-                                      ))}
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      <p className="text-xs text-slate-600 font-medium">{Object.keys(s.seasonalItemImages).length} dish{Object.keys(s.seasonalItemImages).length === 1 ? '' : 'es'} regenerated</p>
-                                      <button type="button" onClick={() => clearSeasonalItemImages(showcase.id)} className="text-xs text-red-500 underline underline-offset-2">Restore original photos</button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <p className="text-xs text-slate-400">Not applied yet — original dish photos will be shown.</p>
-                                )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => applyChristmasBackgrounds(showcase.id)}
-                                  disabled={generatingSeasonalBg === showcase.id}
-                                  className="gap-1.5"
-                                >
-                                  {generatingSeasonalBg === showcase.id
-                                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating (may take a minute)…</>
-                                    : <><Sparkles className="h-3.5 w-3.5" /> {s?.seasonalItemImages && Object.keys(s.seasonalItemImages).length > 0 ? 'Regenerate Christmas dish photos' : 'Apply Christmas backgrounds to dishes'}</>}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
                         </div>
-                      )
-                    })()}
-
-                    {/* Time-slot carousels (breakfast/lunch/dinner): no "Use time slots" checkbox – they only show in that time window. */}
-                    {!(showcase.schedule as TimeSlotSchedule)?.displayForSlot && !(Array.isArray((showcase.schedule as TimeSlotSchedule)?.displayForSlots) && (showcase.schedule as TimeSlotSchedule)!.displayForSlots!.length > 0) ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id={`use-time-slots-${showcase.id}`}
-                          checked={(showcase.schedule as TimeSlotSchedule)?.useTimeSlots ?? false}
-                          onChange={(e) => {
-                            const useTimeSlots = e.target.checked
-                            const nextSchedule = { ...(showcase.schedule || {}), useTimeSlots } as TimeSlotSchedule
-                            setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, schedule: nextSchedule } : s)))
-                            updateShowcase(showcase.id, { schedule: nextSchedule })
-                          }}
-                          className="rounded border-slate-300"
-                        />
-                        <Label htmlFor={`use-time-slots-${showcase.id}`} className="text-sm font-normal cursor-pointer">Use time slots (different items per Breakfast / Day / Evening / Night)</Label>
-                      </div>
-                    ) : (() => {
-                      const s = showcase.schedule as TimeSlotSchedule | null | undefined
-                      const slotRanges = buildSlotRangeLabels(slotTimes)
-                      const lunchRange = `${slotRanges.day.split('–')[0]}–${slotRanges.evening.split('–')[1]}`
-                      const slots = s?.displayForSlots
-                      const slot = s?.displayForSlot
-                      const timeLabel = Array.isArray(slots) && slots.length > 0
-                        ? (slots.includes('day') && slots.includes('evening') ? lunchRange : slots.map((sl) => slotRanges[sl as keyof typeof slotRanges]).join(', '))
-                        : slot && slotRanges[slot as keyof typeof slotRanges]
-                          ? slotRanges[slot as keyof typeof slotRanges]
-                          : null
-                      return (
-                        <p className="text-xs text-slate-500">
-                          {timeLabel ? (
-                            <>Shown <strong>{timeLabel}</strong> on the guest menu (menu timezone).</>
-                          ) : (
-                            'Shown only during this time period on the guest menu (menu timezone).'
-                          )}
-                        </p>
-                      )
-                    })()}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <p className="text-xs text-slate-500">
-                          {(engineMode === 'profit' || engineMode === 'adaptive') ? `Up to ${maxCarouselItems} items. ` : ''}
-                          {showcase.items.length > 0 ? `${showcase.items.length} items selected` : 'Auto-populated (AI or high-margin when no slots)'}
-                        </p>
-                        <div className="flex gap-2">
-                          {(showcase.schedule as TimeSlotSchedule)?.useTimeSlots && !(showcase.schedule as TimeSlotSchedule)?.displayForSlot && !(Array.isArray((showcase.schedule as TimeSlotSchedule)?.displayForSlots) && (showcase.schedule as TimeSlotSchedule)!.displayForSlots!.length > 0) && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {(schedule?.useTimeSlots && !isPinnedToSlot) && (
                             <Button variant="outline" size="sm" onClick={() => openScheduleDialog(showcase)} title="Set different items by time of day">
-                              <Clock className="h-4 w-4 mr-1" />Time slots
+                              <Clock className="h-4 w-4 mr-1" />
+                              Time slots
                             </Button>
                           )}
-                          <Button variant="outline" size="sm" onClick={() => openItemPicker(showcase.id)}>{showcase.items.length > 0 ? 'Edit Items' : 'Pick Items'}</Button>
+                          <Button variant="outline" size="sm" onClick={() => openItemPicker(showcase.id)}>
+                            {showcase.items.length > 0 ? 'Edit items' : 'Pick items'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openShowcaseSettings(showcase)}
+                          >
+                            <Settings2 className="h-4 w-4 mr-1" />
+                            Section settings
+                          </Button>
+                          {savingShowcase === showcase.id && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                          <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteShowcase(showcase.id)} disabled={deletingShowcase === showcase.id}>
+                            {deletingShowcase === showcase.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          </Button>
                         </div>
                       </div>
+
                       {showcase.items.length > 0 && (
                         <div className="flex flex-wrap gap-2">
-                          {showcase.items.map((item) => (
+                          {visibleItems.map((item) => (
                             <span key={item.menuItemId} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{item.menuItem.name}</span>
                           ))}
+                          {hiddenItemCount > 0 && (
+                            <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
+                              +{hiddenItemCount} more
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {savingShowcase === showcase.id && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-                    <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteShowcase(showcase.id)} disabled={deletingShowcase === showcase.id}>
-                      {deletingShowcase === showcase.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
+                  )
+                })()}
               </div>
             ))
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Section settings</DialogTitle>
+            <DialogDescription>
+              Configure layout and behavior for this section. Item selection is handled separately from this screen.
+            </DialogDescription>
+          </DialogHeader>
+          {(() => {
+            const showcase = showcases.find((s) => s.id === settingsShowcaseId)
+            const schedule = (showcase?.schedule as TimeSlotSchedule | null | undefined) || {}
+            const isPinnedToSlot = Boolean(schedule.displayForSlot) || (Array.isArray(schedule.displayForSlots) && schedule.displayForSlots.length > 0)
+            const previewItems = (showcase?.items || []).slice(0, 3)
+            const placementCategoryId = settingsDraft.position.startsWith('after-') ? settingsDraft.position.replace('after-', '') : null
+            const placementCategoryName = placementCategoryId ? categories.find((c) => c.id === placementCategoryId)?.name : null
+            const typeLabel = settingsDraft.type === 'CHEFS_HIGHLIGHTS' ? "Chef's Highlights" : 'Recommendations'
+            const typeColor = settingsDraft.type === 'CHEFS_HIGHLIGHTS' ? '#16a34a' : '#f59e0b'
+            return (
+              <div className="space-y-4 py-2">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-500">Section type</Label>
+                    <select
+                      value={settingsDraft.type}
+                      onChange={(e) => setSettingsDraft((d) => ({ ...d, type: e.target.value as ShowcaseSettingsDraft['type'] }))}
+                      className="w-full rounded border border-slate-200 px-2 py-2 text-sm"
+                    >
+                      <option value="CHEFS_HIGHLIGHTS">Chef&apos;s Highlights</option>
+                      <option value="RECOMMENDATIONS">Recommendations</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-500">Display style</Label>
+                    <select
+                      value={settingsDraft.displayVariant}
+                      onChange={(e) => setSettingsDraft((d) => ({ ...d, displayVariant: e.target.value as ShowcaseSettingsDraft['displayVariant'] }))}
+                      className="w-full rounded border border-slate-200 px-2 py-2 text-sm"
+                    >
+                      <option value="cards">Cards carousel</option>
+                      <option value="hero">Full-width hero</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-500">Position</Label>
+                    <select
+                      value={settingsDraft.position}
+                      onChange={(e) => setSettingsDraft((d) => ({ ...d, position: e.target.value as ShowcaseSettingsDraft['position'] }))}
+                      className="w-full rounded border border-slate-200 px-2 py-2 text-sm"
+                    >
+                      <option value="top">Top of menu</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={`after-${cat.id}`}>After &quot;{cat.name}&quot;</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-slate-900">Preview on guest menu</p>
+                    <span
+                      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white"
+                      style={{ backgroundColor: typeColor }}
+                    >
+                      {typeLabel}
+                    </span>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-medium text-slate-700 mb-2">Placement</p>
+                    {settingsDraft.position === 'top' ? (
+                      <div className="space-y-1.5">
+                        <div className="rounded bg-emerald-100 text-emerald-800 text-[11px] px-2 py-1 font-medium">This carousel appears at the top of the menu</div>
+                        <div className="rounded bg-slate-200 h-5 w-2/3" />
+                        <div className="rounded bg-slate-200 h-5 w-1/2" />
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <div className="rounded bg-slate-200 h-5 w-2/3" />
+                        <div className="rounded bg-emerald-100 text-emerald-800 text-[11px] px-2 py-1 font-medium">
+                          This carousel appears after: {placementCategoryName ? `"${placementCategoryName}"` : 'selected category'}
+                        </div>
+                        <div className="rounded bg-slate-200 h-5 w-1/2" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-900 p-3">
+                    <p className="text-xs font-medium text-white/85 mb-2">Display style</p>
+                    {settingsDraft.displayVariant === 'hero' ? (
+                      <div className="rounded-lg overflow-hidden border border-white/10 bg-black/30">
+                        <div className="relative h-28">
+                          <img
+                            src={previewItems[0]?.menuItem.imageUrl || previewItems[1]?.menuItem.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=60'}
+                            alt=""
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                          <div className="absolute left-2 right-2 bottom-2">
+                            <span
+                              className="inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white"
+                              style={{ backgroundColor: typeColor }}
+                            >
+                              {typeLabel}
+                            </span>
+                            <p className="text-white text-xs font-semibold mt-1 line-clamp-1">
+                              {previewItems[0]?.menuItem.name || 'Featured dish name'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2">
+                        {[0, 1, 2].map((idx) => (
+                          <div key={idx} className="rounded-md overflow-hidden border border-white/10 bg-black/20">
+                            <div className="h-14 bg-black/30">
+                              <img
+                                src={previewItems[idx]?.menuItem.imageUrl || previewItems[0]?.menuItem.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=60'}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                            <div className="p-1.5">
+                              <p className="text-[10px] text-white font-medium truncate">
+                                {previewItems[idx]?.menuItem.name || `Dish ${idx + 1}`}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-500">Badge label (optional)</Label>
+                  <Input
+                    value={settingsDraft.label}
+                    onChange={(e) => setSettingsDraft((d) => ({ ...d, label: e.target.value }))}
+                    placeholder='e.g. 🎄 Christmas Special'
+                    className="h-9 max-w-[360px]"
+                  />
+                </div>
+
+                {!isPinnedToSlot ? (
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.useTimeSlots}
+                      onChange={(e) => setSettingsDraft((d) => ({ ...d, useTimeSlots: e.target.checked }))}
+                      className="rounded border-slate-300"
+                    />
+                    <span className="text-sm">Use different items by Breakfast / Day / Evening / Night</span>
+                  </label>
+                ) : (
+                  <p className="text-xs text-slate-500">This section is pinned to a specific time period. Slot behavior is locked.</p>
+                )}
+
+                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settingsDraft.isSeasonal}
+                      onChange={(e) => setSettingsDraft((d) => ({ ...d, isSeasonal: e.target.checked }))}
+                      className="rounded border-slate-300"
+                    />
+                    <span className="text-sm">Seasonal date range</span>
+                  </label>
+                  {settingsDraft.isSeasonal && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-xs text-slate-500">Start date</Label>
+                          <input
+                            type="date"
+                            value={settingsDraft.seasonalStart}
+                            onChange={(e) => setSettingsDraft((d) => ({ ...d, seasonalStart: e.target.value }))}
+                            className="rounded border border-slate-200 px-2 py-1 text-xs"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-xs text-slate-500">End date</Label>
+                          <input
+                            type="date"
+                            value={settingsDraft.seasonalEnd}
+                            onChange={(e) => setSettingsDraft((d) => ({ ...d, seasonalEnd: e.target.value }))}
+                            className="rounded border border-slate-200 px-2 py-1 text-xs"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2 border-t border-slate-200 pt-3">
+                        {schedule?.seasonalItemImages && Object.keys(schedule.seasonalItemImages).length > 0 ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex gap-1">
+                              {Object.values(schedule.seasonalItemImages).slice(0, 3).map((url, i) => (
+                                <img key={i} src={url} alt="" className="h-12 w-16 object-cover rounded-lg border border-slate-200 shadow-sm" />
+                              ))}
+                            </div>
+                            {showcase && (
+                              <button type="button" onClick={() => clearSeasonalItemImages(showcase.id)} className="text-xs text-red-500 underline underline-offset-2">
+                                Restore original photos
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500">Original photos will be used unless you apply festive backgrounds.</p>
+                        )}
+                        {showcase && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => applyChristmasBackgrounds(showcase.id)}
+                            disabled={generatingSeasonalBg === showcase.id}
+                            className="gap-1.5"
+                          >
+                            {generatingSeasonalBg === showcase.id
+                              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                              : <><Sparkles className="h-3.5 w-3.5" />Apply Christmas backgrounds</>}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSettingsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveShowcaseSettings} disabled={settingsSaving || !settingsShowcaseId}>
+              {settingsSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Save settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={itemPickerOpen} onOpenChange={setItemPickerOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">

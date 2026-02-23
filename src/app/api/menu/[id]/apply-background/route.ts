@@ -5,6 +5,11 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { enhanceDishImage } from '@/lib/enhance-dish-image'
 import { getImageBufferFromS3IfOurs } from '@/lib/s3-get-image'
+import {
+  enhanceDishWithLockedBackground,
+  composeDishOnLockedBackgroundStrict,
+  StrictBackgroundLockError,
+} from '@/lib/locked-background-hybrid'
 
 export async function POST(
   _request: Request,
@@ -36,9 +41,10 @@ export async function POST(
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { defaultBackgroundPrompt: true },
+      select: { defaultBackgroundPrompt: true, defaultBackgroundImageData: true },
     })
     const defaultPrompt = user?.defaultBackgroundPrompt?.trim() ?? ''
+    const defaultBackgroundImageData = user?.defaultBackgroundImageData ?? ''
 
     let imageData: string
     if (imageUrl.startsWith('data:')) {
@@ -63,10 +69,69 @@ export async function POST(
       }
     }
 
-    const { dataUrl } = await enhanceDishImage({
-      imageData,
-      userPrompt: defaultPrompt,
-    })
+    const useHybrid =
+      Boolean(defaultBackgroundImageData.trim()) &&
+      process.env.ENABLE_LOCKED_BACKGROUND_HYBRID !== 'false'
+    const useStrictPaste =
+      Boolean(defaultBackgroundImageData.trim()) &&
+      process.env.STRICT_BACKGROUND_LOCK === 'true' &&
+      !useHybrid
+
+    let dataUrl: string
+    if (useHybrid) {
+      try {
+        const result = await enhanceDishWithLockedBackground({
+          dishImageData: imageData,
+          backgroundImageData: defaultBackgroundImageData,
+          userPrompt: defaultPrompt,
+        })
+        dataUrl = result.dataUrl
+      } catch (hybridError) {
+        console.warn('Hybrid harmonization failed in apply-background, using AI enhancement.', hybridError)
+        const standard = await enhanceDishImage({
+          imageData,
+          userPrompt: defaultPrompt,
+          backgroundReferenceImageData: defaultBackgroundImageData,
+        })
+        dataUrl = standard.dataUrl
+      }
+    } else if (useStrictPaste) {
+      try {
+        const strict = await composeDishOnLockedBackgroundStrict({
+          dishImageData: imageData,
+          backgroundImageData: defaultBackgroundImageData,
+        })
+        dataUrl = strict.dataUrl
+      } catch (strictError) {
+        console.warn('Strict background lock failed in apply-background.', strictError)
+        if (strictError instanceof StrictBackgroundLockError) {
+          return NextResponse.json(
+            {
+              error: 'Could not lock dish into background with this photo',
+              details: strictError.message,
+              strictBackgroundLock: true,
+              code: strictError.code,
+            },
+            { status: 422 }
+          )
+        }
+        return NextResponse.json(
+          {
+            error: 'Strict background lock failed',
+            details: strictError instanceof Error ? strictError.message : 'Unknown error',
+            strictBackgroundLock: true,
+          },
+          { status: 422 }
+        )
+      }
+    } else {
+      const standard = await enhanceDishImage({
+        imageData,
+        userPrompt: defaultPrompt,
+        backgroundReferenceImageData: defaultBackgroundImageData,
+      })
+      dataUrl = standard.dataUrl
+    }
 
     // Always save the Gemini data URL to the menu item (no S3 upload)
     await prisma.menuItem.update({

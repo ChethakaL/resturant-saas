@@ -24,11 +24,15 @@ import {
 interface SettingsClientProps {
   currentTheme: Record<string, string>
   defaultBackgroundPrompt?: string
+  hasDefaultBackgroundImage?: boolean
+  defaultBackgroundImageData?: string | null
 }
 
 export default function SettingsClient({
   currentTheme,
   defaultBackgroundPrompt: initialDefaultBackgroundPrompt = '',
+  hasDefaultBackgroundImage: initialHasDefaultBackgroundImage = false,
+  defaultBackgroundImageData: initialDefaultBackgroundImageData = null,
 }: SettingsClientProps) {
   const { toast } = useToast()
 
@@ -62,9 +66,11 @@ export default function SettingsClient({
   const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
   const [savingTheme, setSavingTheme] = useState(false)
 
-  // Consistent background prompt for dish photos (upload image → describe, or type)
+  // Consistent background style for dish photos (prompt and/or reference image)
   const [defaultBackgroundPrompt, setDefaultBackgroundPrompt] = useState(initialDefaultBackgroundPrompt)
   const [defaultBackgroundDraft, setDefaultBackgroundDraft] = useState(initialDefaultBackgroundPrompt)
+  const [hasDefaultBackgroundImage, setHasDefaultBackgroundImage] = useState(initialHasDefaultBackgroundImage)
+  const [defaultBackgroundImageData, setDefaultBackgroundImageData] = useState<string | null>(initialDefaultBackgroundImageData)
   const [describingImage, setDescribingImage] = useState(false)
   const [savingBackgroundPrompt, setSavingBackgroundPrompt] = useState(false)
   const [applyBackgroundProgress, setApplyBackgroundProgress] = useState<{ total: number; done: number } | null>(null)
@@ -75,7 +81,9 @@ export default function SettingsClient({
   useEffect(() => {
     setDefaultBackgroundPrompt(initialDefaultBackgroundPrompt)
     setDefaultBackgroundDraft(initialDefaultBackgroundPrompt)
-  }, [initialDefaultBackgroundPrompt])
+    setHasDefaultBackgroundImage(initialHasDefaultBackgroundImage)
+    setDefaultBackgroundImageData(initialDefaultBackgroundImageData)
+  }, [initialDefaultBackgroundPrompt, initialHasDefaultBackgroundImage, initialDefaultBackgroundImageData])
 
   const THEME_PRESETS: Record<string, { label: string; primaryColor: string; accentColor: string; backgroundStyle: string; fontFamily: string }> = {
     classy: { label: 'Classy', primaryColor: '#1e293b', accentColor: '#c9a227', backgroundStyle: 'dark', fontFamily: 'serif' },
@@ -207,6 +215,8 @@ export default function SettingsClient({
       if (!res.ok) throw new Error(data.error || 'Failed')
       setDefaultBackgroundPrompt(data.defaultBackgroundPrompt ?? themeSuggestPrompt)
       setDefaultBackgroundDraft(data.defaultBackgroundPrompt ?? themeSuggestPrompt)
+      setDefaultBackgroundImageData(data.defaultBackgroundImageData ?? null)
+      setHasDefaultBackgroundImage(Boolean(data.hasDefaultBackgroundImage ?? data.defaultBackgroundImageData))
 
       const listRes = await fetch('/api/menu/items-with-images')
       const listData = await listRes.json()
@@ -590,10 +600,10 @@ export default function SettingsClient({
               </div>
 
               {/* Consistent background for dish photos: type the prompt or upload image to generate it */}
-              <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+              <div id="dish-photo-background" className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
                 <Label>Dish photo background style</Label>
                 <p className="text-xs text-slate-500">
-                  Set the background style for every generated menu item photo. You can type a description below, or upload a reference image and we’ll generate the prompt from it.
+                  Set the background style for every generated/enhanced menu item photo. Add a prompt, upload a reference image, or both.
                 </p>
                 <div className="space-y-2">
                   <textarea
@@ -606,7 +616,10 @@ export default function SettingsClient({
                   <Button
                     type="button"
                     size="sm"
-                    disabled={savingBackgroundPrompt || defaultBackgroundDraft.trim() === (defaultBackgroundPrompt || '')}
+                    disabled={
+                      savingBackgroundPrompt ||
+                      (defaultBackgroundDraft.trim() === (defaultBackgroundPrompt || '') && hasDefaultBackgroundImage)
+                    }
                     onClick={async () => {
                       setSavingBackgroundPrompt(true)
                       try {
@@ -618,6 +631,10 @@ export default function SettingsClient({
                         const data = await res.json()
                         if (!res.ok) throw new Error(data.error || 'Failed')
                         setDefaultBackgroundPrompt(data.defaultBackgroundPrompt ?? defaultBackgroundDraft.trim())
+                        setDefaultBackgroundImageData(data.defaultBackgroundImageData ?? null)
+                        if (typeof data.hasDefaultBackgroundImage === 'boolean') {
+                          setHasDefaultBackgroundImage(data.hasDefaultBackgroundImage)
+                        }
                         toast({ title: 'Background prompt saved' })
                       } catch {
                         toast({ title: 'Could not save prompt', variant: 'destructive' })
@@ -627,11 +644,11 @@ export default function SettingsClient({
                     }}
                   >
                     {savingBackgroundPrompt ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-                    Save prompt
+                    Save prompt & generate preview
                   </Button>
                 </div>
                 <p className="text-xs text-slate-500 pt-1 border-t border-slate-200">
-                  Or upload a reference image — we’ll describe its background and save it as the prompt:
+                  Or upload a reference image and we will use that exact visual style as the default background:
                 </p>
                 <input
                   ref={imageInputRef}
@@ -654,14 +671,18 @@ export default function SettingsClient({
                       const prompt = data.defaultBackgroundPrompt ?? data.description ?? ''
                       setDefaultBackgroundPrompt(prompt)
                       setDefaultBackgroundDraft(prompt)
+                      setDefaultBackgroundImageData(data.defaultBackgroundImageData ?? null)
+                      setHasDefaultBackgroundImage(Boolean(data.hasDefaultBackgroundImage ?? data.defaultBackgroundImageData))
                       toast({
-                        title: 'Background prompt saved',
-                        description: 'Generated from your image. You can edit the text above and save again.',
+                        title: 'Reference background image saved',
+                        description: prompt
+                          ? 'Image and prompt are now saved as your default style.'
+                          : 'Image is now saved as your default style.',
                       })
                     } catch {
                       toast({
-                        title: 'Could not describe image',
-                        description: 'Check OPENAI_API_KEY and try again.',
+                        title: 'Could not save reference image',
+                        description: 'Please try a different image and try again.',
                         variant: 'destructive',
                       })
                     } finally {
@@ -682,8 +703,51 @@ export default function SettingsClient({
                   ) : (
                     <Upload className="h-4 w-4 mr-2" />
                   )}
-                  {describingImage ? 'Describing…' : 'Choose image from computer'}
+                  {describingImage ? 'Saving image…' : hasDefaultBackgroundImage ? 'Replace reference image' : 'Choose image from computer'}
                 </Button>
+                <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-medium text-slate-700">Current background preview</p>
+                  {defaultBackgroundImageData ? (
+                    <img
+                      src={defaultBackgroundImageData}
+                      alt="Current consistent background preview"
+                      className="h-36 w-full rounded-md border border-slate-200 object-cover"
+                    />
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      No background image preview yet. Save a prompt to auto-generate one, or upload an image.
+                    </p>
+                  )}
+                </div>
+                {hasDefaultBackgroundImage && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={savingBackgroundPrompt || describingImage}
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/user/background', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ imageData: null }),
+                        })
+                        const data = await res.json()
+                        if (!res.ok) throw new Error(data.error || 'Failed')
+                        setHasDefaultBackgroundImage(false)
+                        setDefaultBackgroundImageData(null)
+                        toast({ title: 'Reference image removed' })
+                      } catch {
+                        toast({
+                          title: 'Could not remove reference image',
+                          variant: 'destructive',
+                        })
+                      }
+                    }}
+                  >
+                    Remove reference image
+                  </Button>
+                )}
                 <div className="pt-3 border-t border-slate-200 space-y-2">
                   <p className="text-xs text-slate-500">
                     Apply the saved background style above to all existing dish photos. This re-enhances each photo and may take a minute.
@@ -692,7 +756,7 @@ export default function SettingsClient({
                     type="button"
                     variant="secondary"
                     size="sm"
-                    disabled={!!applyBackgroundProgress || !defaultBackgroundPrompt?.trim()}
+                    disabled={!!applyBackgroundProgress || !(defaultBackgroundPrompt?.trim() || hasDefaultBackgroundImage)}
                     onClick={async () => {
                       setApplyBackgroundProgress({ total: 0, done: 0 })
                       try {
