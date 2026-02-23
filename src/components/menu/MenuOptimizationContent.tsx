@@ -245,7 +245,9 @@ export default function MenuOptimizationContent({
   }
 
   const getShowcaseDisplayLabel = (showcase: Showcase): string =>
-    (showcase.displayVariant ?? 'cards') === 'hero' ? 'Full-width hero' : 'Cards carousel'
+    (showcase.displayVariant ?? 'cards') === 'hero'
+      ? 'Full-width slider (1 dish at a time)'
+      : 'Card slider (shows 3–4 dishes at once)'
 
   const getShowcaseTimeLabel = (showcase: Showcase): string => {
     const s = showcase.schedule as TimeSlotSchedule | null | undefined
@@ -302,14 +304,14 @@ export default function MenuOptimizationContent({
       const response = await fetch('/api/menu-showcases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'New Carousel', type: 'RECOMMENDATIONS', position: 'top' }),
+        body: JSON.stringify({ title: 'New Featured Section', type: 'RECOMMENDATIONS', position: 'top' }),
       })
-      if (!response.ok) throw new Error('Failed to create carousel')
+      if (!response.ok) throw new Error('Failed to create featured section')
       const newShowcase = await response.json()
       setShowcases((prev) => [...prev, { ...newShowcase, items: [] }])
-      toast({ title: 'Carousel created', description: 'You can now customize it.' })
+      toast({ title: 'Featured section created', description: 'You can now customize it.' })
     } catch {
-      toast({ title: 'Error', description: 'Failed to create carousel section', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Failed to create featured section', variant: 'destructive' })
     }
   }
 
@@ -334,9 +336,9 @@ export default function MenuOptimizationContent({
       })
       const showcase2 = await res2.json()
       setShowcases([{ ...showcase1, items: [] }, { ...showcase2, items: [] }])
-      toast({ title: 'Default carousels created', description: 'Two carousel sections have been set up. Items will be auto-populated.' })
+      toast({ title: 'Default featured sections created', description: 'Two featured sections have been set up. Items will be auto-populated.' })
     } catch {
-      toast({ title: 'Error', description: 'Failed to create default carousels', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Failed to create default featured sections', variant: 'destructive' })
     }
   }
 
@@ -361,9 +363,9 @@ export default function MenuOptimizationContent({
       const response = await fetch(`/api/menu-showcases/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!response.ok) throw new Error('Failed to update')
       setShowcases((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)))
-      toast({ title: 'Carousel updated' })
+      toast({ title: 'Featured section updated' })
     } catch {
-      toast({ title: 'Error', description: 'Failed to update carousel', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Failed to update featured section', variant: 'destructive' })
     } finally {
       setSavingShowcase(null)
     }
@@ -375,9 +377,9 @@ export default function MenuOptimizationContent({
       const response = await fetch(`/api/menu-showcases/${id}`, { method: 'DELETE' })
       if (!response.ok) throw new Error('Failed to delete')
       setShowcases((prev) => prev.filter((s) => s.id !== id))
-      toast({ title: 'Carousel deleted' })
+      toast({ title: 'Featured section deleted' })
     } catch {
-      toast({ title: 'Error', description: 'Failed to delete carousel', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Failed to delete featured section', variant: 'destructive' })
     } finally {
       setDeletingShowcase(null)
     }
@@ -409,7 +411,7 @@ export default function MenuOptimizationContent({
       setItemPickerOpen(false)
       toast({ title: 'Items updated' })
     } catch {
-      toast({ title: 'Error', description: 'Failed to update carousel items', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Failed to update section dishes', variant: 'destructive' })
     } finally {
       setSavingShowcase(null)
     }
@@ -561,7 +563,7 @@ export default function MenuOptimizationContent({
       if (!res.ok) throw new Error('Failed to save')
       setSlotTimes(slotTimesDraft)
       setSlotTimesDialogOpen(false)
-      toast({ title: 'Carousel times saved', description: 'The guest menu will now use your custom time ranges.' })
+      toast({ title: 'Display times saved', description: 'The guest menu will now use your custom time ranges.' })
     } catch {
       toast({ title: 'Could not save times', variant: 'destructive' })
     } finally {
@@ -752,16 +754,16 @@ export default function MenuOptimizationContent({
       if (engineMode === 'adaptive' && !suggested.usedSalesData) {
         toast({
           title: 'Smart Profit fallback used',
-          description: 'No sales history yet; used high-margin fallback for all three carousels.',
+          description: 'No sales history yet; used high-margin fallback for all three featured sections.',
         })
       } else {
         toast({
-          title: 'Carousels ready',
-          description: "Three carousels: Chef's recommendation for breakfast, lunch, and dinner. Each shows only in its time period (menu timezone).",
+          title: 'Featured sections ready',
+          description: 'Three featured sections are ready for breakfast, lunch, and dinner. Each shows only in its time period (menu timezone).',
         })
       }
     } catch {
-      toast({ title: 'Failed to auto-fill carousels', variant: 'destructive' })
+      toast({ title: 'Failed to auto-fill featured sections', variant: 'destructive' })
     } finally {
       setAutoFillingCarousels(false)
     }
@@ -1006,10 +1008,10 @@ export default function MenuOptimizationContent({
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <CardTitle>Featured item sections (carousels)</CardTitle>
+              <CardTitle>Featured sections on your menu</CardTitle>
               <p className="text-sm text-slate-500 mt-1">
                 Swipeable rows of items on the menu. {engineMode === 'classic' && 'You choose items or use defaults.'}
-                {(engineMode === 'profit' || engineMode === 'adaptive') && "Profit and Smart Profit modes auto-build three carousels: Chef's recommendation for breakfast, lunch, and dinner. Each shows only in its time period. Up to 6 items per carousel."}
+                {(engineMode === 'profit' || engineMode === 'adaptive') && "Profit and Smart Profit modes auto-build three featured sections: Chef's recommendation for breakfast, lunch, and dinner. Each shows only in its time period. Up to 6 dishes per section."}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1018,20 +1020,20 @@ export default function MenuOptimizationContent({
                 variant="outline"
                 onClick={() => { setSlotTimesDraft(slotTimes); setSlotTimesDialogOpen(true) }}
                 className="gap-2"
-                title="Edit the time ranges for each carousel slot"
+                title="Edit the time ranges for each menu time period"
               >
                 <Clock className="h-4 w-4" />
-                Carousel times
+                Display times
               </Button>
               {(engineMode === 'profit' || engineMode === 'adaptive') && (
                 <Button size="sm" variant="outline" onClick={autoFillCarousels} disabled={autoFillingCarousels} className="gap-2">
                   {autoFillingCarousels && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Auto-fill carousels
+                  Auto-fill sections
                 </Button>
               )}
               <Button size="sm" onClick={createShowcase}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add section
+                Add featured section
               </Button>
             </div>
           </div>
@@ -1043,13 +1045,13 @@ export default function MenuOptimizationContent({
               <p className="text-sm font-medium text-slate-700 mb-1">No featured sections yet</p>
               <p className="text-xs text-slate-500 mb-4">
                 {(engineMode === 'profit' || engineMode === 'adaptive')
-                  ? 'Click &quot;Auto-fill carousels&quot; to create Chef&apos;s Highlights and Recommendations using your high-margin items. You can still edit them.'
+                  ? 'Click &quot;Auto-fill sections&quot; to create featured sections using your high-margin items. You can still edit them.'
                   : 'Featured sections are swipeable rows of items. You can pick items yourself or create default sections.'}
               </p>
               {(engineMode === 'profit' || engineMode === 'adaptive') ? (
                 <Button variant="outline" onClick={autoFillCarousels} disabled={autoFillingCarousels} className="gap-2">
                   {autoFillingCarousels && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Auto-fill carousels
+                  Auto-fill sections
                 </Button>
               ) : (
                 <Button variant="outline" onClick={createDefaultShowcases}>Create default sections</Button>
@@ -1099,7 +1101,7 @@ export default function MenuOptimizationContent({
                             onClick={() => openShowcaseSettings(showcase)}
                           >
                             <Settings2 className="h-4 w-4 mr-1" />
-                            Section settings
+                            Edit layout and timing
                           </Button>
                           {savingShowcase === showcase.id && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
                           <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteShowcase(showcase.id)} disabled={deletingShowcase === showcase.id}>
@@ -1132,9 +1134,9 @@ export default function MenuOptimizationContent({
       <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Section settings</DialogTitle>
+            <DialogTitle>Edit section layout and timing</DialogTitle>
             <DialogDescription>
-              Configure layout and behavior for this section. Item selection is handled separately from this screen.
+              Choose how this section appears to guests. Dish selection is handled separately from this screen.
             </DialogDescription>
           </DialogHeader>
           {(() => {
@@ -1150,14 +1152,14 @@ export default function MenuOptimizationContent({
               <div className="space-y-4 py-2">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1">
-                    <Label className="text-xs text-slate-500">Section type</Label>
+                    <Label className="text-xs text-slate-500">Highlight style</Label>
                     <select
                       value={settingsDraft.type}
                       onChange={(e) => setSettingsDraft((d) => ({ ...d, type: e.target.value as ShowcaseSettingsDraft['type'] }))}
                       className="w-full rounded border border-slate-200 px-2 py-2 text-sm"
                     >
-                      <option value="CHEFS_HIGHLIGHTS">Chef&apos;s Highlights</option>
-                      <option value="RECOMMENDATIONS">Recommendations</option>
+                      <option value="CHEFS_HIGHLIGHTS">Chef&apos;s picks (green badge)</option>
+                      <option value="RECOMMENDATIONS">Recommended (amber badge)</option>
                     </select>
                   </div>
                   <div className="space-y-1">
@@ -1167,12 +1169,12 @@ export default function MenuOptimizationContent({
                       onChange={(e) => setSettingsDraft((d) => ({ ...d, displayVariant: e.target.value as ShowcaseSettingsDraft['displayVariant'] }))}
                       className="w-full rounded border border-slate-200 px-2 py-2 text-sm"
                     >
-                      <option value="cards">Cards carousel</option>
-                      <option value="hero">Full-width hero</option>
+                      <option value="cards">Card slider (shows 3-4 dishes at once)</option>
+                      <option value="hero">Full-width slider (1 dish at a time)</option>
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-slate-500">Position</Label>
+                    <Label className="text-xs text-slate-500">Where it appears</Label>
                     <select
                       value={settingsDraft.position}
                       onChange={(e) => setSettingsDraft((d) => ({ ...d, position: e.target.value as ShowcaseSettingsDraft['position'] }))}
@@ -1201,7 +1203,7 @@ export default function MenuOptimizationContent({
                     <p className="text-xs font-medium text-slate-700 mb-2">Placement</p>
                     {settingsDraft.position === 'top' ? (
                       <div className="space-y-1.5">
-                        <div className="rounded bg-emerald-100 text-emerald-800 text-[11px] px-2 py-1 font-medium">This carousel appears at the top of the menu</div>
+                        <div className="rounded bg-emerald-100 text-emerald-800 text-[11px] px-2 py-1 font-medium">This section appears at the top of the menu</div>
                         <div className="rounded bg-slate-200 h-5 w-2/3" />
                         <div className="rounded bg-slate-200 h-5 w-1/2" />
                       </div>
@@ -1209,7 +1211,7 @@ export default function MenuOptimizationContent({
                       <div className="space-y-1.5">
                         <div className="rounded bg-slate-200 h-5 w-2/3" />
                         <div className="rounded bg-emerald-100 text-emerald-800 text-[11px] px-2 py-1 font-medium">
-                          This carousel appears after: {placementCategoryName ? `"${placementCategoryName}"` : 'selected category'}
+                          This section appears after: {placementCategoryName ? `"${placementCategoryName}"` : 'selected category'}
                         </div>
                         <div className="rounded bg-slate-200 h-5 w-1/2" />
                       </div>
@@ -1371,9 +1373,9 @@ export default function MenuOptimizationContent({
       <Dialog open={itemPickerOpen} onOpenChange={setItemPickerOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Select Carousel Items</DialogTitle>
+            <DialogTitle>Choose dishes for this section</DialogTitle>
             <DialogDescription>
-              Choose which menu items to display in this carousel. {(engineMode === 'profit' || engineMode === 'adaptive') && 'Maximum 6 items. '}
+              Choose which dishes to show in this section. {(engineMode === 'profit' || engineMode === 'adaptive') && 'Maximum 6 dishes. '}
               Leave empty for automatic selection.
             </DialogDescription>
           </DialogHeader>
@@ -1426,9 +1428,9 @@ export default function MenuOptimizationContent({
       <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Time-based carousel items</DialogTitle>
+            <DialogTitle>Choose dishes by time of day</DialogTitle>
             <DialogDescription>
-              Choose which items appear for each time of day (menu timezone). {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 6 items per slot. '}
+              Choose which dishes appear for each time of day (menu timezone). {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 6 dishes per time period. '}
               Leave a slot empty to use AI suggestions or manual picks.
             </DialogDescription>
           </DialogHeader>
@@ -1499,11 +1501,11 @@ export default function MenuOptimizationContent({
         </DialogContent>
       </Dialog>
 
-      {/* Carousel time slot configuration dialog */}
+      {/* Menu time period configuration dialog */}
       <Dialog open={slotTimesDialogOpen} onOpenChange={setSlotTimesDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Configure carousel display times</DialogTitle>
+            <DialogTitle>Set featured section display times</DialogTitle>
             <DialogDescription>
               Set the hours (24h) when each time slot is active on the guest menu. &ldquo;Night&rdquo; is automatically everything outside these three slots.
             </DialogDescription>

@@ -173,7 +173,7 @@ export async function enhanceDishWithLockedBackground(options: {
 
   const dishCutout = await extractDishCutoutPng(dishImageData)
   // Closer framing: dish fills more of the frame (88% x 85% max) so the food is the clear subject, not distant.
-  const targetDish = await sharp(dishCutout)
+  let targetDish = await sharp(dishCutout)
     .resize(Math.round(canvasWidth * 0.88), Math.round(canvasHeight * 0.85), {
       fit: 'inside',
       withoutEnlargement: true,
@@ -181,6 +181,9 @@ export async function enhanceDishWithLockedBackground(options: {
     .ensureAlpha()
     .png()
     .toBuffer()
+
+  // Very slight edge softening so the composite has no razor-sharp cutout line — helps the model blend naturally.
+  targetDish = await sharp(targetDish).blur(0.35).png().toBuffer()
 
   const dishMeta = await sharp(targetDish).metadata()
   const dishWidth = dishMeta.width ?? Math.round(canvasWidth * 0.6)
@@ -198,11 +201,12 @@ export async function enhanceDishWithLockedBackground(options: {
   const bgDataUrl = `data:image/jpeg;base64,${backgroundBuffer.toString('base64')}`
 
   const harmonizePrompt = [
-    'The first image is a composite (dish on background); the second is the reference background. Your output must look like ONE real photograph taken in a single shot — not a composite, not photoshopped, not a cutout on a background.',
-    'CRITICAL: Keep the dish fully visible and the same size and position. Do not remove, shrink, or hide the food.',
-    'Realism requirements: (1) Add a natural, soft contact shadow directly under the bowl/plate where it touches the surface — darker and tighter near the base, softening outward. (2) No hard edge or outline around the dish: blend the dish edges subtly into the background so there is zero visible cutout line. (3) Match the lighting direction and color temperature of the background so the dish looks lit by the same light. (4) If the surface has any texture or reflection, the dish should cast a very subtle reflection or color bleed. (5) The result must be indistinguishable from a real restaurant photo.',
-    'Do not add or remove food. Keep the same framing. Output one photorealistic image with the dish clearly visible.',
-    userPrompt.trim() ? `Extra style: ${userPrompt.trim()}.` : '',
+    'TASK: Blend only. Do not generate or redraw anything.',
+    'Image 1 = dish placed on background. Image 2 = reference background (unchanged).',
+    'DO NOT change the food (ingredients, placement, bowl, arrangement). DO NOT change the background. You are not drawing a new image.',
+    'ONLY do these three things: (1) Relight the food so its lighting and color temperature match the background — the food must look lit by the same light as the background. (2) Add or fix the shadow under the dish so it sits naturally on the surface. (3) Soften the edge where the dish meets the background so there is no cutout line.',
+    'Output must be the same food on the same background with only lighting, shadow, and edge blend changed.',
+    userPrompt.trim() ? `Note: ${userPrompt.trim()}.` : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -217,17 +221,36 @@ export async function enhanceDishWithLockedBackground(options: {
       { inlineData: { mimeType: bgRefParsed.mimeType, data: bgRefParsed.base64 } },
       { text: harmonizePrompt },
     ],
-    { temperature: 0.12, topP: 0.75 }
+    { temperature: 0.08, topP: 0.72 }
   )
-  console.log('[locked-background-hybrid] harmonize: got result base64Length=%d', harmonized.base64.length)
+  console.log('[locked-background-hybrid] harmonize pass 1: got result base64Length=%d', harmonized.base64.length)
 
-  // Use Gemini's harmonized image directly so the dish is never lost to a wrong mask. Resize to match canvas and return.
-  const harmonizedBuffer = await sharp(Buffer.from(harmonized.base64, 'base64'))
+  // Second pass: again only lighting and blend — do not change food or background.
+  const blendPrompt =
+    'Do not redraw the food or the background. Only adjust: (1) lighting on the food to match the background so they look like one scene, (2) shadows under the dish, (3) the edge between dish and background so it is seamless. Same food, same background, same placement — only relight and blend.'
+  let finalBase64 = harmonized.base64
+  let finalMime = harmonized.mimeType
+  try {
+    const harmonized2 = await callGeminiImage(
+      [
+        { inlineData: { mimeType: harmonized.mimeType, data: harmonized.base64 } },
+        { text: blendPrompt },
+      ],
+      { temperature: 0.1, topP: 0.7 }
+    )
+    console.log('[locked-background-hybrid] harmonize pass 2 (blend): got result base64Length=%d', harmonized2.base64.length)
+    finalBase64 = harmonized2.base64
+    finalMime = harmonized2.mimeType
+  } catch (pass2Err) {
+    console.warn('[locked-background-hybrid] second blend pass failed, using first harmonized result', pass2Err)
+  }
+
+  const harmonizedBuffer = await sharp(Buffer.from(finalBase64, 'base64'))
     .resize(canvasWidth, canvasHeight, { fit: 'cover' })
     .jpeg({ quality: 90 })
     .toBuffer()
 
-  console.log('[locked-background-hybrid] returning harmonized image directly (no mask blend)')
+  console.log('[locked-background-hybrid] returning double-harmonized image')
   return {
     dataUrl: `data:image/jpeg;base64,${harmonizedBuffer.toString('base64')}`,
   }
