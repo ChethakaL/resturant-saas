@@ -708,7 +708,7 @@ export default async function DashboardPage() {
                 href="/profit-loss"
                 className="inline-block mt-3 text-sm font-medium text-red-700 hover:text-red-800 underline"
               >
-                View P&L details →
+                View Sales Reports →
               </a>
             </div>
           </div>
@@ -884,7 +884,7 @@ export default async function DashboardPage() {
             href="/profit-loss"
             className="text-sm text-slate-500 hover:text-slate-700"
           >
-            View in P&L →
+            View in Sales Reports →
           </a>
         </CardHeader>
         <CardContent>

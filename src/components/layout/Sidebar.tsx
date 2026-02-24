@@ -29,9 +29,10 @@ const navigation = [
   { name: 'Add Menu Items', href: '/menu', icon: UtensilsCrossed, disabled: false },
   { name: 'Optimize your menu sales', href: '/menu?tab=optimization', icon: Zap, disabled: false },
   { name: 'Restaurant Theme and Design', href: '/settings', icon: Settings, disabled: false },
-  { name: 'P&L and Sales Reports', href: '/profit-loss', icon: TrendingUp, disabled: false },
+  { name: 'Sales Reports', href: '/profit-loss', icon: TrendingUp, disabled: false },
   { name: 'Inventory', href: '/inventory', icon: Package, disabled: false },
-  { name: 'Orders', href: '/orders', icon: Receipt, disabled: false },
+  // Orders page hidden: Tables page has orders on it. To show again, uncomment:
+  // { name: 'Orders', href: '/orders', icon: Receipt, disabled: false },
   { name: 'Tables', href: '/tables', icon: Square, disabled: false },
   { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart, disabled: true, comingSoon: true },
   { name: 'HR', href: '/hr/employees', icon: Users, disabled: true, comingSoon: true },

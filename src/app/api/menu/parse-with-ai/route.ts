@@ -31,30 +31,31 @@ export interface ParseWithAIResponse {
 const JSON_SCHEMA = `
 Return ONLY valid JSON in this exact shape (no markdown, no extra text):
 {
-  "name": "Dish name",
-  "description": "Short menu description",
+  "name": "Dish name (MUST BE IN ENGLISH)",
+  "description": "Short menu description (MUST BE IN ENGLISH)",
   "price": 0,
-  "categoryName": "e.g. Main Course, Appetizer, Dessert, Drinks",
+  "categoryName": "e.g. Main Course, Appetizer, Dessert, Drinks (IN ENGLISH)",
   "calories": 0,
   "protein": 0,
   "carbs": 0,
-  "tags": ["halal", "spicy"],
-  "recipeSteps": ["Step 1", "Step 2"],
-  "recipeTips": ["Tip 1", "Tip 2"],
+  "tags": ["halal", "spicy", "(IN ENGLISH)"],
+  "recipeSteps": ["Step 1 (IN ENGLISH)", "Step 2 (IN ENGLISH)"],
+  "recipeTips": ["Tip 1 (IN ENGLISH)", "Tip 2 (IN ENGLISH)"],
   "prepTime": "10 min",
   "cookTime": "25 min",
   "recipeYield": null,
-  "ingredients": [{"name": "chicken", "quantity": 0.2, "unit": "kg", "pieceCount": null}, {"name": "rice", "quantity": 0.15, "unit": "kg", "pieceCount": null}]
+  "ingredients": [{"name": "chicken (MUST BE IN ENGLISH)", "quantity": 0.2, "unit": "kg", "pieceCount": null}, {"name": "rice (MUST BE IN ENGLISH)", "quantity": 0.15, "unit": "kg", "pieceCount": null}]
 }
 RULES:
-- categoryName: one short label. price in IQD if not specified.
-- calories, protein (g), carbs (g): If the user provides these, use them. If NOT, ESTIMATE from dish name/description/category. Never use null when you have a dish name.
-- tags: Use if given; else suggest (halal, vegetarian, spicy, etc.).
-- recipeSteps: Extract from "Steps:", numbered lines, or recipe text. Each step one string.
-- recipeTips: Extract from "Tips:", "Tip:", or bullet points. Put each tip as a separate string. If the user gives tips, you MUST include them in recipeTips.
-- prepTime, cookTime: extract if present; else null.
-- recipeYield: extract the number of servings/portions this recipe makes (e.g. "Serves 4" -> 4, "Yields 10" -> 10). Return null if not mentioned.
-- ingredients: Extract from the user text (ingredient lists, recipe steps, "marinate with X", "add Y"). Each item: name (string), quantity (number), unit (kg for meats/veg, g for small, cup for rice/lentils, tsp/tbsp for spices, L for liquids), pieceCount (number for countable items like "2 onions", else null). If no ingredients mentioned, use empty array [].`
+0. LANGUAGE: ALL JSON output values MUST be in ENGLISH, even if the user provides the input in Arabic or another language. Translate everything to English during extraction.
+1. categoryName: one short label. price in IQD if not specified.
+2. calories, protein (g), carbs (g): If the user provides these, use them. If NOT, ESTIMATE from dish name/description/category. Never use null when you have a dish name.
+3. tags: Use if given; else suggest (halal, vegetarian, spicy, etc.).
+4. recipeSteps: Extract from "Steps:", numbered lines, or recipe text. Each step one string.
+5. recipeTips: Extract from "Tips:", "Tip:", or bullet points. Put each tip as a separate string. If the user gives tips, you MUST include them in recipeTips.
+6. prepTime, cookTime: extract if present; else null.
+7. recipeYield: extract the number of servings/portions this recipe makes (e.g. "Serves 4" -> 4, "Yields 10" -> 10). Return null if not mentioned.
+8. ingredients: Extract from the user text (ingredient lists, recipe steps, "marinate with X", "add Y"). Each item: name (string), quantity (number), unit (kg for meats/veg, g for small, cup for rice/lentils, tsp/tbsp for spices, L for liquids), pieceCount (number for countable items like "2 onions", else null). If no ingredients mentioned, use empty array [].`
 
 async function parseWithGemini(text: string, categoryNames: string[]): Promise<ParseWithAIResponse> {
   const apiKey = process.env.GOOGLE_AI_KEY

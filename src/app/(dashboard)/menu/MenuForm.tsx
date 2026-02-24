@@ -141,6 +141,8 @@ export default function MenuForm({
   const [generatingImage, setGeneratingImage] = useState(false)
   const [showPromptDialog, setShowPromptDialog] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
+  /** When opening Generate Image from Smart Chef after we already asked for dish name, use name inferred from chat */
+  const [inferredItemNameForImage, setInferredItemNameForImage] = useState<string | null>(null)
   const [imageOrientation, setImageOrientation] = useState<ImageOrientation>('landscape')
   const [imageSizePreset, setImageSizePreset] = useState<ImageSizePreset>('medium')
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
@@ -797,8 +799,9 @@ export default function MenuForm({
       return
     }
 
-    // Generate from scratch
-    if (!formData.name) {
+    // Generate from scratch: use form name or name inferred from Smart Chef chat
+    const itemNameForImage = inferredItemNameForImage?.trim() || formData.name?.trim()
+    if (!itemNameForImage) {
       toast({
         title: 'Missing Information',
         description: 'Please enter a menu item name first',
@@ -819,7 +822,7 @@ export default function MenuForm({
         body: JSON.stringify({
           prompt: promptForGeneration || null,
           useSavedDefaults,
-          itemName: formData.name,
+          itemName: itemNameForImage,
           description: formData.description,
           category: category?.name,
           orientation: imageOrientation,
@@ -835,6 +838,7 @@ export default function MenuForm({
 
       setPreviewImageUrl(data.imageUrl)
       setCustomPrompt('')
+      setInferredItemNameForImage(null)
     } catch (error) {
       console.error('Error generating image:', error)
       toast({
@@ -1162,7 +1166,7 @@ export default function MenuForm({
               body: JSON.stringify({ costPerUnit: ing.costPerUnit }),
             }).then((r) => {
               if (r.ok) match.costPerUnit = ing.costPerUnit
-            }).catch(() => {})
+            }).catch(() => { })
           }
           const converted = convertRecipeUnitToBaseUnit(
             ing.quantity,
@@ -1484,23 +1488,28 @@ export default function MenuForm({
           recipeYield: typeof d.recipeYield === 'number' ? d.recipeYield : undefined,
           ingredients: Array.isArray(d.ingredients)
             ? d.ingredients.map((ing: { name?: string; quantity?: number; unit?: string; pieceCount?: number | null; costPerUnit?: number | null }) => ({
-                name: ing.name ?? '',
-                quantity: Number(ing.quantity) || 0,
-                unit: ing.unit ?? 'g',
-                pieceCount: ing.pieceCount ?? null,
-                costPerUnit: typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : null,
-              }))
+              name: ing.name ?? '',
+              quantity: Number(ing.quantity) || 0,
+              unit: ing.unit ?? 'g',
+              pieceCount: ing.pieceCount ?? null,
+              costPerUnit: typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : null,
+            }))
             : undefined,
         }
         await applyParsedDataToForm(parsed, { autoCreateIngredients: true, quietToast: true }, createdFromChat)
+        setInferredItemNameForImage(null)
         setAssistantMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            text: "I've filled the form with the summary and description. Review the Details and Recipe tabs, then save when ready.",
+            text: "I'm done with our conversation — I've filled the form with the summary, description, recipe, and ingredients. **Next step:** generate an image for your dish. I'm opening the image generator for you now; use it to create or upload a photo, then save your menu item when ready.",
           },
         ])
-        toast({ title: 'Smart Chef finished', description: 'Form filled with recipe, ingredients, and description. Review and save.' })
+        toast({ title: 'Smart Chef finished', description: 'Form filled. Generating image next — the image dialog will open for you.' })
+        setTimeout(() => {
+          setActiveTab('ai')
+          setShowPromptDialog(true)
+        }, 1200)
       }
 
     } catch (err) {
@@ -1652,21 +1661,23 @@ export default function MenuForm({
             recipeYield: typeof d.recipeYield === 'number' ? d.recipeYield : undefined,
             ingredients: Array.isArray(d.ingredients)
               ? d.ingredients.map((ing: any) => ({
-                  name: ing.name ?? '',
-                  quantity: Number(ing.quantity) || 0,
-                  unit: ing.unit ?? 'g',
-                  pieceCount: ing.pieceCount ?? null,
-                  costPerUnit: typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : null,
-                }))
+                name: ing.name ?? '',
+                quantity: Number(ing.quantity) || 0,
+                unit: ing.unit ?? 'g',
+                pieceCount: ing.pieceCount ?? null,
+                costPerUnit: typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : null,
+              }))
               : undefined,
           }
           await applyParsedDataToForm(parsed, { autoCreateIngredients: true, quietToast: true })
+          setInferredItemNameForImage(null)
           setAssistantMessages((prev) => [
             ...prev,
-            { role: 'assistant', text: "I've filled the form with everything we discussed. Review the Manual and Recipe tabs, then save when ready." },
+            { role: 'assistant', text: "I'm done with our conversation — I've filled the form with everything we discussed. **Next step:** generate an image for your dish. I'm opening the image generator for you now; create or upload a photo, then save your menu item when ready." },
           ])
-          toast({ title: 'Form filled', description: 'Recipe and ingredients from our conversation are in the form.' })
-          setActiveTab('details')
+          toast({ title: 'Form filled', description: 'Recipe and ingredients filled. Image dialog opening for you.' })
+          setActiveTab('ai')
+          setTimeout(() => setShowPromptDialog(true), 1200)
         } else {
           // Fallback to research if Smart Chef didn't return finished data
           const researchRes = await fetch('/api/menu/research', {
@@ -1685,9 +1696,14 @@ export default function MenuForm({
           if (!researchRes.ok) throw new Error('Research failed')
           const data = await researchRes.json()
           await applyParsedDataToForm(data, { autoCreateIngredients: true })
-          setAssistantMessages((prev) => [...prev, { role: 'assistant', text: 'I have researched and filled the form. Review the Manual and Recipe tabs.' }])
-          toast({ title: 'Form filled', description: 'Recipe and details gathered.' })
-          setActiveTab('details')
+          setInferredItemNameForImage(null)
+          setAssistantMessages((prev) => [
+            ...prev,
+            { role: 'assistant', text: "I'm done — I've researched and filled the form. **Next step:** generate an image for your dish. I'm opening the image generator for you now; create or upload a photo, then save when ready." },
+          ])
+          toast({ title: 'Form filled', description: 'Recipe and details gathered. Image dialog opening for you.' })
+          setActiveTab('ai')
+          setTimeout(() => setShowPromptDialog(true), 1200)
         }
       } else {
         const response = await fetch('/api/menu/research', {
@@ -1706,12 +1722,14 @@ export default function MenuForm({
         if (!response.ok) throw new Error('Research failed')
         const data = await response.json()
         await applyParsedDataToForm(data, { autoCreateIngredients: true })
+        setInferredItemNameForImage(null)
         setAssistantMessages((prev) => [
           ...prev,
-          { role: 'assistant', text: 'I have researched and gathered the full recipe, ingredients, and SOP steps for you! You can review them in the "Manual" and "Recipe" tabs.' },
+          { role: 'assistant', text: "I'm done — I've researched and filled the full recipe, ingredients, and SOP. **Next step:** generate an image for your dish. I'm opening the image generator for you now; create or upload a photo, then save when ready." },
         ])
-        toast({ title: 'Form Research Complete', description: 'Recipe and details gathered and filled.' })
-        setActiveTab('details')
+        toast({ title: 'Form Research Complete', description: 'Recipe and details filled. Image dialog opening for you.' })
+        setActiveTab('ai')
+        setTimeout(() => setShowPromptDialog(true), 1200)
       }
 
       setAttachedDocs([])
@@ -2394,12 +2412,12 @@ export default function MenuForm({
                             type="file"
                             ref={assistantImageInputRef}
                             className="hidden"
-                            accept="image/*"
+                            accept="image/*,.pdf,application/pdf"
                             multiple
                             onChange={(e) => handleAssistantFileUpload(e, 'image')}
                           />
                           <Textarea
-                            placeholder="Ask about item name, description, how it appears to guests, or upload images/documents..."
+                            placeholder="Ask about item name, description, or upload images, documents, or bills/receipts for price extraction..."
                             value={aiAssistantText}
                             onChange={(e) => setAiAssistantText(e.target.value)}
                             rows={1}
@@ -2438,17 +2456,18 @@ export default function MenuForm({
                           <FileText className="h-3.5 w-3 mr-1" />
                           Document
                         </Button>
-                        {/* <Button
+                        <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           className="h-8 text-slate-500"
                           onClick={() => assistantImageInputRef.current?.click()}
                           disabled={aiParseLoading}
+                          title="Upload photo, dish image, or bill/receipt for price extraction"
                         >
                           <ImagePlus className="h-3.5 w-3 mr-1" />
-                          Image
-                        </Button> */}
+                          Image / Bill
+                        </Button>
                         <Button
                           type="button"
                           variant="ghost"
@@ -2466,6 +2485,41 @@ export default function MenuForm({
                           size="sm"
                           className="h-8 text-slate-500"
                           onClick={() => {
+                            const hasDishNameInForm = !!formData.name?.trim()
+                            const hasStartedChat = assistantMessages.some((m) => m.role === 'user')
+                            // Only count our explicit "ask for dish name" messages, not the welcome (which mentions "Fill Form Now")
+                            const hasAlreadyAskedForDishName = assistantMessages.some(
+                              (m) => m.role === 'assistant' && (
+                                (m.text || '').includes('dish name first') ||
+                                (m.text || '').includes('name of the dish before I can generate')
+                              )
+                            )
+                            if (hasDishNameInForm) {
+                              setInferredItemNameForImage(null)
+                              setUploadedPhoto(null)
+                              setPreviewImageUrl(null)
+                              setCustomPrompt('')
+                              setShowPromptDialog(true)
+                              return
+                            }
+                            // Don't open the dialog until the user has at least said what dish they're adding (in chat or form)
+                            if (!hasStartedChat) {
+                              setAssistantMessages(prev => [...prev, { role: 'assistant', text: 'I need to know the name of the dish before I can generate an image for it. Tell me what dish you want to add (e.g. "Chicken Biryani" or "I want to add Margherita pizza") and I\'ll use that for the image.' }])
+                              return
+                            }
+                            if (!hasAlreadyAskedForDishName) {
+                              setAssistantMessages(prev => [...prev, { role: 'assistant', text: 'Please complete the dish name first (or finish our chat and click "Fill Form Now") so I can create an accurate image for you.' }])
+                              return
+                            }
+                            const firstUserMessage = assistantMessages.find((m) => m.role === 'user')?.text?.trim()
+                            const inferredName = firstUserMessage
+                              ? firstUserMessage.split(/\n/)[0]?.trim().slice(0, 80) || null
+                              : null
+                            if (!inferredName) {
+                              setAssistantMessages(prev => [...prev, { role: 'assistant', text: 'I need the name of the dish to generate an image. Tell me the dish name (e.g. "Chicken Biryani") or click "Fill Form Now" after we\'re done, then try Generate Image again.' }])
+                              return
+                            }
+                            setInferredItemNameForImage(inferredName)
                             setUploadedPhoto(null)
                             setPreviewImageUrl(null)
                             setCustomPrompt('')
@@ -3159,7 +3213,7 @@ export default function MenuForm({
                                   </Button>
                                 </div>
 
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-4 gap-3">
                                   <div className="space-y-2">
                                     <Label>Count (optional)</Label>
                                     <Input
@@ -3201,10 +3255,55 @@ export default function MenuForm({
                                   </div>
 
                                   <div className="space-y-2">
-                                    <Label>Cost</Label>
-                                    <div className="h-10 px-3 py-2 bg-slate-50 rounded-md text-sm font-mono text-slate-700">
-                                      {formatCurrency(itemCost)}
+                                    <Label>Cost per unit (IQD)</Label>
+                                    {ingredient ? (
+                                      <>
+                                        <Input
+                                          type="number"
+                                          step="any"
+                                          min="0"
+                                          className="font-mono h-10"
+                                          value={item.unitCostCached != null ? item.unitCostCached : (ingredient.costPerUnit ?? '')}
+                                          onChange={(e) => {
+                                            const raw = e.target.value
+                                            const num = raw === '' ? null : parseFloat(raw)
+                                            updateIngredient(index, 'unitCostCached', num != null && !Number.isNaN(num) ? num : null)
+                                          }}
+                                          onBlur={async () => {
+                                            const cost = item.unitCostCached ?? ingredient.costPerUnit
+                                            if (ingredient.id && cost != null && cost >= 0) {
+                                              try {
+                                                const r = await fetch(`/api/inventory/${ingredient.id}`, {
+                                                  method: 'PATCH',
+                                                  headers: { 'Content-Type': 'application/json' },
+                                                  body: JSON.stringify({ costPerUnit: cost }),
+                                                })
+                                                if (r.ok) {
+                                                  toast({ title: 'Updated', description: `${ingredient.name} cost saved to inventory.` })
+                                                } else {
+                                                  toast({ title: 'Could not save cost', variant: 'destructive' })
+                                                }
+                                              } catch {
+                                                toast({ title: 'Could not save cost', variant: 'destructive' })
+                                              }
+                                            }
+                                          }}
+                                          placeholder="0"
+                                        />
+                                        <p className="text-xs text-slate-400">Saves to inventory on blur</p>
+                                      </>
+                                    ) : (
+                                      <div className="h-10 px-3 py-2 bg-slate-50 rounded-md text-sm font-mono text-slate-500">
+                                        Select an ingredient
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Direct cost</Label>
+                                    <div className="h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm font-mono font-medium text-slate-800 flex items-center">
+                                      {ingredient ? formatCurrency(itemCost) : '—'}
                                     </div>
+                                    <p className="text-xs text-slate-400">Quantity × cost per unit</p>
                                   </div>
                                 </div>
 
@@ -3539,97 +3638,97 @@ export default function MenuForm({
                 </Card>
 
               </TabsContent>
-              </Tabs>
+            </Tabs>
           </div>
 
           {activeTab !== 'ai' && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Cost Analysis</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center pb-2 border-b">
-                    <span className="text-sm text-slate-500">Selling Price:</span>
-                    <span className="font-mono font-medium">
-                      {formatCurrency(parseFloat(formData.price) || 0)}
-                    </span>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cost Analysis</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center pb-2 border-b">
+                      <span className="text-sm text-slate-500">Selling Price:</span>
+                      <span className="font-mono font-medium">
+                        {formatCurrency(parseFloat(formData.price) || 0)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center pb-2 border-b">
+                      <span className="text-sm text-slate-500">Total Cost:</span>
+                      <span className="font-mono font-medium text-red-600">
+                        {formatCurrency(calculations.cost)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center pb-2 border-b">
+                      <span className="text-sm text-slate-500">Profit:</span>
+                      <span className="font-mono font-bold text-green-600">
+                        {formatCurrency(calculations.profit)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2">
+                      <span className="text-sm font-medium text-slate-700">Margin:</span>
+                      <span
+                        className={`font-mono font-bold text-xl ${getMarginColor(
+                          calculations.margin
+                        )}`}
+                      >
+                        {formatPercentage(calculations.margin)}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex justify-between items-center pb-2 border-b">
-                    <span className="text-sm text-slate-500">Total Cost:</span>
-                    <span className="font-mono font-medium text-red-600">
-                      {formatCurrency(calculations.cost)}
-                    </span>
-                  </div>
+                  {calculations.margin < 20 && formData.price && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-sm text-red-800">
+                        <strong>Warning:</strong> Margin is below 20%. Consider increasing the
+                        price or reducing recipe costs.
+                      </p>
+                    </div>
+                  )}
 
-                  <div className="flex justify-between items-center pb-2 border-b">
-                    <span className="text-sm text-slate-500">Profit:</span>
-                    <span className="font-mono font-bold text-green-600">
-                      {formatCurrency(calculations.profit)}
-                    </span>
-                  </div>
+                  {calculations.margin >= 60 && formData.price && (
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm text-green-800">
+                        <strong>Excellent:</strong> This item has a healthy profit margin.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-                  <div className="flex justify-between items-center pt-2">
-                    <span className="text-sm font-medium text-slate-700">Margin:</span>
-                    <span
-                      className={`font-mono font-bold text-xl ${getMarginColor(
-                        calculations.margin
-                      )}`}
-                    >
-                      {formatPercentage(calculations.margin)}
-                    </span>
-                  </div>
-                </div>
-
-                {calculations.margin < 20 && formData.price && (
-                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-sm text-red-800">
-                      <strong>Warning:</strong> Margin is below 20%. Consider increasing the
-                      price or reducing recipe costs.
-                    </p>
-                  </div>
-                )}
-
-                {calculations.margin >= 60 && formData.price && (
-                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                    <p className="text-sm text-green-800">
-                      <strong>Excellent:</strong> This item has a healthy profit margin.
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <div className="flex flex-col gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={loading}
-                size="lg"
-                className="w-full bg-amber-500 hover:bg-amber-600 text-white border-amber-600 hover:border-amber-700"
-                onClick={() => handleSave('DRAFT')}
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {loading ? 'Saving...' : 'Save as draft'}
-              </Button>
-              <Button
-                type="button"
-                disabled={loading}
-                size="lg"
-                className="w-full bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => handleSave('ACTIVE')}
-              >
-                {loading ? 'Saving...' : mode === 'create' ? 'Create & publish to menu' : 'Publish to menu'}
-              </Button>
-              <Link href="/dashboard/menu" className="w-full">
-                <Button type="button" variant="outline" disabled={loading} className="w-full border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700">
-                  Cancel
+              <div className="flex flex-col gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={loading}
+                  size="lg"
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-white border-amber-600 hover:border-amber-700"
+                  onClick={() => handleSave('DRAFT')}
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {loading ? 'Saving...' : 'Save as draft'}
                 </Button>
-              </Link>
+                <Button
+                  type="button"
+                  disabled={loading}
+                  size="lg"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => handleSave('ACTIVE')}
+                >
+                  {loading ? 'Saving...' : mode === 'create' ? 'Create & publish to menu' : 'Publish to menu'}
+                </Button>
+                <Link href="/dashboard/menu" className="w-full">
+                  <Button type="button" variant="outline" disabled={loading} className="w-full border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700">
+                    Cancel
+                  </Button>
+                </Link>
+              </div>
             </div>
-          </div>
           )}
         </div>
       </form>
@@ -3641,6 +3740,7 @@ export default function MenuForm({
           setUploadedPhoto(null)
           setCustomPrompt('')
           setPreviewImageUrl(null)
+          setInferredItemNameForImage(null)
         }
       }}>
         <DialogContent className="max-w-lg max-h-[80vh]">
@@ -3684,6 +3784,7 @@ export default function MenuForm({
                         setPreviewImageUrl(null)
                         setCustomPrompt('')
                         setUploadedPhoto(null)
+                        setInferredItemNameForImage(null)
                       }}
                     >
                       <Check className="h-4 w-4 mr-2" />

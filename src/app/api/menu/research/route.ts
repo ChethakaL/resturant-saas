@@ -53,8 +53,9 @@ ${categoryHint}
 Your task is to provide a complete, technical restaurant-grade recipe and menu details.
 
 GUIDELINES:
-1. name: Exact dish name.
-2. description: Professional sensory menu description (max 18 words). Focus on key ingredients and taste profile.
+0. LANGUAGE: ALL JSON output values MUST be in ENGLISH, even if the user requests the dish using Arabic or another language.
+1. name: Exact dish name in English.
+2. description: Professional sensory menu description (max 18 words) in English. Focus on key ingredients and taste profile.
 3. price: Calculate a realistic selling price in IQD. 
    - CATEGORIZATION: Decide if this is a "FOOD" item or a "DRINK" item.
    - FOOD LOGIC: Price = (Estimated Direct Cost per serving) / 0.75 (Target: 25% margin on selling price).
