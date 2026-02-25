@@ -153,16 +153,17 @@ export default function ProfitLossPageClient() {
     key: keyof TransactionRow
     direction: 'asc' | 'desc'
   }>({ key: 'date', direction: 'desc' })
-  // Branch filtering
+  // Branch filtering (per-branch only; no "all branches" option)
   const [branches, setBranches] = useState<{ id: string; name: string; address?: string | null }[]>([])
-  const [selectedBranch, setSelectedBranch] = useState<string>('all')
+  const [selectedBranch, setSelectedBranch] = useState<string>('')
 
   const fetchData = async () => {
     setLoading(true)
     try {
       let url = `/api/reports/pnl/data?start=${dateRange.start}&end=${dateRange.end}`
-      if (selectedBranch && selectedBranch !== 'all') {
-        url += `&branchId=${selectedBranch}`
+      const branchId = selectedBranch || (branches.length > 0 ? branches[0].id : null)
+      if (branchId) {
+        url += `&branchId=${branchId}`
       }
       const response = await fetch(url)
       if (!response.ok) throw new Error('Failed to fetch data')
@@ -179,12 +180,17 @@ export default function ProfitLossPageClient() {
     }
   }
 
-  // Fetch branches on mount
+  // Fetch branches on mount; default to first branch (per-branch only, no "all")
   useEffect(() => {
     fetch('/api/branches')
       .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setBranches(data) })
-      .catch(() => { })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setBranches(data)
+          setSelectedBranch((prev) => (prev === '' && data.length > 0 ? data[0].id : prev))
+        }
+      })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -526,11 +532,10 @@ export default function ProfitLossPageClient() {
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-slate-400" />
               <select
-                value={selectedBranch}
+                value={selectedBranch || (branches.length > 0 ? branches[0].id : '')}
                 onChange={(e) => setSelectedBranch(e.target.value)}
                 className="h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               >
-                <option value="all">All Branches</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name} {b.address ? `(${b.address})` : ''}
@@ -542,8 +547,9 @@ export default function ProfitLossPageClient() {
           <Button
             variant="outline"
             onClick={() => {
-              let url = `/api/reports/pnl?start=${dateRange.start}&end=${dateRange.end}`
-              if (selectedBranch && selectedBranch !== 'all') url += `&branchId=${selectedBranch}`
+              const branchId = selectedBranch || (branches.length > 0 ? branches[0].id : null)
+            let url = `/api/reports/pnl?start=${dateRange.start}&end=${dateRange.end}`
+              if (branchId) url += `&branchId=${branchId}`
               window.open(url, '_blank')
             }}
           >
