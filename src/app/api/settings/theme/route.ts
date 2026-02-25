@@ -13,10 +13,10 @@ const themeSchema = z.object({
   chefPickColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   borderColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   backgroundStyle: z.enum(['dark', 'light', 'gradient']).optional(),
-  fontFamily: z.enum(['sans', 'serif', 'display']).optional(),
+  fontFamily: z.enum(['sans', 'serif', 'display', 'mono', 'rounded', 'handwritten', 'condensed', 'slab']).optional(),
   logoUrl: z.string().url().nullable().optional(),
   menuTimezone: z.string().optional(),
-  themePreset: z.enum(['classy', 'fast_food', 'cozy', 'minimal', 'luxe']).nullable().optional(),
+  themePreset: z.enum(['classy', 'fast_food', 'cozy', 'minimal', 'luxe', 'ethnic']).nullable().optional(),
   backgroundImageUrl: z.string().url().nullable().optional(),
   managementLanguage: z.enum(['en', 'ku', 'ar-fusha']).optional(),
   /** Guest menu: 'sliding' = embla carousel with arrows; 'static' = horizontal row, no sliding */

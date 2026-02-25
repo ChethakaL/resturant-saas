@@ -67,31 +67,43 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const startParam = searchParams.get('start')
     const endParam = searchParams.get('end')
+    const branchId = searchParams.get('branchId')
 
     const now = new Date()
     const rangeStart = startParam ? new Date(startParam) : new Date(now.getFullYear(), now.getMonth(), 1)
     const rangeEnd = endParam ? new Date(endParam) : now
 
+    // Build branch filter for sales
+    const branchFilter: Record<string, unknown> = {}
+    if (branchId) {
+      if (branchId === 'unassigned') {
+        branchFilter.branchId = null
+      } else {
+        branchFilter.branchId = branchId
+      }
+    }
+
     // Fetch all data sources
     const [sales, expenses, payrolls, expenseTransactions, wasteRecords, mealPrepSessions] = await Promise.all([
-      // Sales/Revenue
+      // Sales/Revenue (filtered by branch if specified)
       prisma.sale.findMany({
         where: {
           restaurantId: session.user.restaurantId,
           status: 'COMPLETED',
           timestamp: { gte: rangeStart, lte: rangeEnd },
+          ...branchFilter,
         },
-      include: {
-        items: {
-          include: {
-            menuItem: {
-              include: {
-                category: true,
+        include: {
+          items: {
+            include: {
+              menuItem: {
+                include: {
+                  category: true,
+                },
               },
             },
           },
         },
-      },
       }),
       // Recurring expenses
       prisma.expense.findMany({
@@ -230,21 +242,21 @@ export async function GET(request: Request) {
       if (tx.notes?.includes('Waste record:')) {
         return // Skip this transaction - it's already counted in wasteRecords
       }
-      
+
       // Check if this is a COGS entry (from manual stock adjustments)
       const isCOGS = tx.notes?.includes('COGS') || tx.notes?.includes('Manual stock adjustment')
       const isDelivery = tx.category === 'INVENTORY_PURCHASE'
-      const category = isCOGS 
-        ? 'COGS' 
-        : tx.category === 'OTHER' 
-          ? 'Other' 
+      const category = isCOGS
+        ? 'COGS'
+        : tx.category === 'OTHER'
+          ? 'Other'
           : tx.category
       expenseByCategory[category] = (expenseByCategory[category] || 0) + tx.amount
 
       if (isDelivery) {
         deliveryCOGS += tx.amount
       }
-      
+
       // If it's COGS, also add to total COGS
       if (isCOGS) {
         // This will be included in the COGS calculation
@@ -290,7 +302,7 @@ export async function GET(request: Request) {
         prepDate: s.prepDate,
         sessionTime: s.sessionTime,
         preparedBy: s.preparedBy,
-        totalCost: s.inventoryUsages.reduce((sum, usage) => 
+        totalCost: s.inventoryUsages.reduce((sum, usage) =>
           sum + (usage.quantityUsed * usage.ingredient.costPerUnit), 0
         ),
       })),

@@ -11,7 +11,6 @@ import {
   Receipt,
   Package,
   LogOut,
-  Settings,
   TrendingUp,
   Users,
   Clock,
@@ -19,6 +18,7 @@ import {
   Zap,
   Square,
   CreditCard,
+  Dna,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home, disabled: false },
   { name: 'Add Menu Items', href: '/menu', icon: UtensilsCrossed, disabled: false },
   { name: 'Optimize your menu sales', href: '/menu?tab=optimization', icon: Zap, disabled: false },
-  { name: 'Restaurant Theme and Design', href: '/settings', icon: Settings, disabled: false },
+  { name: 'Restaurant DNA', href: '/settings', icon: Dna, disabled: false },
   { name: 'Sales Reports', href: '/profit-loss', icon: TrendingUp, disabled: false },
   { name: 'Inventory', href: '/inventory', icon: Package, disabled: false },
   // Orders page hidden: Tables page has orders on it. To show again, uncomment:
@@ -79,7 +79,7 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
           const hrefTab = item.href.includes('?tab=') ? item.href.split('?tab=')[1] : null
           const isActive =
             !item.disabled &&
-            (pathname === hrefPath || pathname?.startsWith(hrefPath + '/'))
+              (pathname === hrefPath || pathname?.startsWith(hrefPath + '/'))
               ? hrefTab
                 ? searchParams.get('tab') === hrefTab
                 : !searchParams.get('tab')

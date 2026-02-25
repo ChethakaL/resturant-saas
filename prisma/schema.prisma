@@ -51,6 +51,7 @@ model Restaurant {
   menuShowcases       MenuShowcase[]
   supplierLinks       RestaurantSupplierLink[]
   menuEvents          MenuEvent[]
+  branches            Branch[]
 
   @@map("restaurants")
 }
@@ -345,6 +346,7 @@ model Sale {
   notes                 String?
   restaurantId          String
   customerId            String?       @map("customer_id")
+  branchId              String?
   timestamp             DateTime      @default(now())
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
@@ -358,12 +360,14 @@ model Sale {
   customer              Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
   table                 Table?        @relation(fields: [tableId], references: [id])
   waiter                Employee?     @relation("WaiterSales", fields: [waiterId], references: [id])
+  branch                Branch?       @relation(fields: [branchId], references: [id])
 
   @@index([restaurantId])
   @@index([customerId])
   @@index([timestamp])
   @@index([orderNumber])
   @@index([status])
+  @@index([branchId])
   @@map("sales")
 }
 
@@ -549,15 +553,35 @@ model Table {
   capacity     Int
   status       TableStatus @default(AVAILABLE)
   restaurantId String
+  branchId     String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   sales        Sale[]
   restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  branch       Branch?     @relation(fields: [branchId], references: [id])
 
   @@unique([restaurantId, number])
   @@index([restaurantId])
+  @@index([branchId])
   @@index([status])
   @@map("tables")
+}
+
+model Branch {
+  id           String     @id @default(cuid())
+  name         String
+  address      String?
+  phone        String?
+  isActive     Boolean    @default(true)
+  restaurantId String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tables       Table[]
+  sales        Sale[]
+
+  @@index([restaurantId])
+  @@map("branches")
 }
 
 model Employee {

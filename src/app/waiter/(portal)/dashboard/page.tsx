@@ -777,12 +777,14 @@ export default function WaiterDashboard() {
 
     const [tables, setTables] = useState<Table[]>([])
     const [myOrders, setMyOrders] = useState<Order[]>([])
+    const [kitchenOrders, setKitchenOrders] = useState<Order[]>([])
     const [categories, setCategories] = useState<Category[]>([])
-    const [activeTab, setActiveTab] = useState<'tables' | 'orders'>(tabParam === 'orders' ? 'orders' : 'tables')
+    const [activeTab, setActiveTab] = useState<'tables' | 'orders' | 'kitchen'>(tabParam === 'orders' ? 'orders' : tabParam === 'kitchen' ? 'kitchen' : 'tables')
     const [selectedTable, setSelectedTable] = useState<Table | null>(null)
     const [showNewOrder, setShowNewOrder] = useState(false)
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
     const [orderFilter, setOrderFilter] = useState<'active' | 'all' | 'COMPLETED'>('active')
+    const [kitchenFilter, setKitchenFilter] = useState<'active' | 'PENDING' | 'PREPARING' | 'READY'>('active')
     const [isLoading, setIsLoading] = useState(true)
 
     const currency = 'IQD'
@@ -811,6 +813,21 @@ export default function WaiterDashboard() {
         }
     }, [orderFilter])
 
+    const fetchKitchenOrders = useCallback(async () => {
+        try {
+            const statusParam = kitchenFilter === 'active' ? 'active' : kitchenFilter
+            const res = await fetch(`/api/waiter/orders?myOnly=false&status=${statusParam}`)
+            if (res.ok) {
+                const data = await res.json()
+                // Sort oldest to newest for kitchen FIFO
+                data.sort((a: Order, b: Order) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                setKitchenOrders(data)
+            }
+        } catch (err) {
+            console.error('Failed to fetch kitchen orders:', err)
+        }
+    }, [kitchenFilter])
+
     const fetchMenu = useCallback(async () => {
         try {
             const res = await fetch('/api/waiter/menu')
@@ -829,7 +846,7 @@ export default function WaiterDashboard() {
             return
         }
         if (authStatus === 'authenticated') {
-            Promise.all([fetchTables(), fetchOrders(), fetchMenu()]).finally(() =>
+            Promise.all([fetchTables(), fetchOrders(), fetchKitchenOrders(), fetchMenu()]).finally(() =>
                 setIsLoading(false)
             )
 
@@ -837,10 +854,11 @@ export default function WaiterDashboard() {
             const interval = setInterval(() => {
                 fetchTables()
                 fetchOrders()
-            }, 30000)
+                fetchKitchenOrders()
+            }, 15000) // Kitchen needs faster refresh
             return () => clearInterval(interval)
         }
-    }, [authStatus, router, fetchTables, fetchOrders, fetchMenu])
+    }, [authStatus, router, fetchTables, fetchOrders, fetchKitchenOrders, fetchMenu])
 
     useEffect(() => {
         if (authStatus === 'authenticated') {
@@ -849,12 +867,19 @@ export default function WaiterDashboard() {
     }, [orderFilter, authStatus, fetchOrders])
 
     useEffect(() => {
-        setActiveTab(tabParam === 'orders' ? 'orders' : 'tables')
+        if (authStatus === 'authenticated') {
+            fetchKitchenOrders()
+        }
+    }, [kitchenFilter, authStatus, fetchKitchenOrders])
+
+    useEffect(() => {
+        setActiveTab(tabParam === 'orders' ? 'orders' : tabParam === 'kitchen' ? 'kitchen' : 'tables')
     }, [tabParam])
 
     const handleRefresh = () => {
         fetchTables()
         fetchOrders()
+        fetchKitchenOrders()
     }
 
     const handleOrderCreated = () => {
@@ -908,18 +933,18 @@ export default function WaiterDashboard() {
                             <div className="flex items-center gap-4">
                                 <Button variant="outline" size="sm" onClick={handleRefresh}>Refresh</Button>
                                 <div className="flex items-center gap-3 text-xs text-slate-500">
-                                <span className="flex items-center gap-1.5">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                    Available
-                                </span>
-                                <span className="flex items-center gap-1.5">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                                    Occupied
-                                </span>
-                                <span className="flex items-center gap-1.5">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                                    Reserved
-                                </span>
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                        Available
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                                        Occupied
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                        Reserved
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -958,34 +983,34 @@ export default function WaiterDashboard() {
                                     </Button>
                                 </CardHeader>
                                 <CardContent>
-                                {/* Active orders for this table */}
-                                {selectedTable.sales.length > 0 ? (
-                                    <div className="space-y-2">
-                                        <h4 className="text-sm font-semibold text-slate-700">Active Orders</h4>
-                                        {selectedTable.sales.map((order) => (
-                                            <button
-                                                key={order.id}
-                                                onClick={() => setSelectedOrder(order)}
-                                                className="w-full text-left flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <StatusBadge status={order.status} />
-                                                    <div>
-                                                        <p className="text-sm font-medium text-slate-900">{order.orderNumber}</p>
-                                                        <p className="text-xs text-slate-500">
-                                                            {order.items.length} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </p>
+                                    {/* Active orders for this table */}
+                                    {selectedTable.sales.length > 0 ? (
+                                        <div className="space-y-2">
+                                            <h4 className="text-sm font-semibold text-slate-700">Active Orders</h4>
+                                            {selectedTable.sales.map((order) => (
+                                                <button
+                                                    key={order.id}
+                                                    onClick={() => setSelectedOrder(order)}
+                                                    className="w-full text-left flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <StatusBadge status={order.status} />
+                                                        <div>
+                                                            <p className="text-sm font-medium text-slate-900">{order.orderNumber}</p>
+                                                            <p className="text-xs text-slate-500">
+                                                                {order.items.length} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <p className="text-sm font-semibold text-emerald-600">
-                                                    {order.total.toLocaleString()} {currency}
-                                                </p>
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-slate-500">No active orders. Tap &quot;New Order&quot; to start.</p>
-                                )}
+                                                    <p className="text-sm font-semibold text-emerald-600">
+                                                        {order.total.toLocaleString()} {currency}
+                                                    </p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-slate-500">No active orders. Tap &quot;New Order&quot; to start.</p>
+                                    )}
                                 </CardContent>
                             </Card>
                         )}
@@ -1019,12 +1044,12 @@ export default function WaiterDashboard() {
                         {myOrders.length === 0 ? (
                             <Card>
                                 <CardContent className="flex flex-col items-center justify-center py-20 text-slate-500">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4 opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                    <polyline points="14 2 14 8 20 8" />
-                                </svg>
-                                <p className="text-lg font-medium">No orders found</p>
-                                <p className="text-sm mt-1">Go to Tables to create an order</p>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4 opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                        <polyline points="14 2 14 8 20 8" />
+                                    </svg>
+                                    <p className="text-lg font-medium">No orders found</p>
+                                    <p className="text-sm mt-1">Go to Tables to create an order</p>
                                 </CardContent>
                             </Card>
                         ) : (
@@ -1071,6 +1096,151 @@ export default function WaiterDashboard() {
                                         </div>
                                     </button>
                                 ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'kitchen' && (
+                    <div>
+                        <div className="flex items-center justify-between mb-5">
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-900">Chefs — Incoming Orders</h2>
+                                <p className="text-sm text-slate-500">All incoming orders — oldest first</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                                    {[
+                                        { key: 'active', label: 'Active' },
+                                        { key: 'PENDING', label: '🆕 New' },
+                                        { key: 'PREPARING', label: '🔥 Cooking' },
+                                        { key: 'READY', label: '✅ Ready' },
+                                    ].map((f) => (
+                                        <button
+                                            key={f.key}
+                                            onClick={() => setKitchenFilter(f.key as typeof kitchenFilter)}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${kitchenFilter === f.key
+                                                ? 'bg-white text-slate-900 shadow'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                                }`}
+                                        >
+                                            {f.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <Button variant="outline" size="sm" onClick={handleRefresh}>Refresh</Button>
+                            </div>
+                        </div>
+
+                        {kitchenOrders.length === 0 ? (
+                            <Card>
+                                <CardContent className="flex flex-col items-center justify-center py-20 text-slate-500">
+                                    <span className="text-5xl mb-4">👨‍🍳</span>
+                                    <p className="text-lg font-medium">No orders for the kitchen yet</p>
+                                    <p className="text-sm mt-1">New orders will appear here automatically</p>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="space-y-3">
+                                {kitchenOrders.map((order, index) => {
+                                    const minutesAgo = Math.floor((Date.now() - new Date(order.timestamp).getTime()) / 60000)
+                                    const isUrgent = minutesAgo > 15 && order.status !== 'READY'
+                                    const isOld = minutesAgo > 10 && order.status === 'PENDING'
+                                    return (
+                                        <Card
+                                            key={order.id}
+                                            className={`border-2 transition-all ${isUrgent ? 'border-red-300 bg-red-50 shadow-md' :
+                                                    isOld ? 'border-amber-300 bg-amber-50' :
+                                                        order.status === 'READY' ? 'border-emerald-300 bg-emerald-50' :
+                                                            order.status === 'PREPARING' ? 'border-blue-200 bg-blue-50' :
+                                                                'border-slate-200'
+                                                }`}
+                                        >
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start justify-between mb-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`text-2xl font-bold rounded-lg px-3 py-1 ${isUrgent ? 'bg-red-200 text-red-800' :
+                                                                isOld ? 'bg-amber-200 text-amber-800' :
+                                                                    'bg-slate-200 text-slate-700'
+                                                            }`}>
+                                                            #{index + 1}
+                                                        </span>
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-base font-bold text-slate-900">{order.orderNumber}</span>
+                                                                <StatusBadge status={order.status} />
+                                                            </div>
+                                                            <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
+                                                                <span className="font-mono">
+                                                                    {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                                <span className={`font-semibold ${isUrgent ? 'text-red-600' : isOld ? 'text-amber-600' : 'text-slate-500'
+                                                                    }`}>
+                                                                    {minutesAgo < 1 ? 'Just now' : `${minutesAgo}m ago`}
+                                                                </span>
+                                                                {order.table && <span>Table {order.table.number}</span>}
+                                                                {order.waiter && <span>👤 {order.waiter.name}</span>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        {order.status === 'PENDING' && (
+                                                            <button
+                                                                onClick={async () => {
+                                                                    await fetch(`/api/waiter/orders/${order.id}`, {
+                                                                        method: 'PATCH',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ status: 'PREPARING' }),
+                                                                    })
+                                                                    fetchKitchenOrders()
+                                                                }}
+                                                                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors"
+                                                            >
+                                                                🔥 Start Cooking
+                                                            </button>
+                                                        )}
+                                                        {order.status === 'PREPARING' && (
+                                                            <button
+                                                                onClick={async () => {
+                                                                    await fetch(`/api/waiter/orders/${order.id}`, {
+                                                                        method: 'PATCH',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({ status: 'READY' }),
+                                                                    })
+                                                                    fetchKitchenOrders()
+                                                                }}
+                                                                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-lg transition-colors"
+                                                            >
+                                                                ✅ Ready to Serve
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {order.notes && (
+                                                    <div className="mb-3 p-2 rounded-lg bg-amber-100 border border-amber-200 text-sm text-amber-800">
+                                                        📝 {order.notes}
+                                                    </div>
+                                                )}
+                                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                                    {order.items.map((item) => (
+                                                        <div key={item.id} className="flex items-center gap-2 bg-white rounded-lg p-2 border border-slate-200">
+                                                            {item.menuItem.imageUrl && (
+                                                                <img src={item.menuItem.imageUrl} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                                                            )}
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-sm font-semibold text-slate-800 truncate">{item.menuItem.name}</p>
+                                                                <p className="text-xs text-slate-500">× {item.quantity}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {order.customerName && (
+                                                    <p className="text-xs text-slate-500 mt-2">Customer: {order.customerName}</p>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    )
+                                })}
                             </div>
                         )}
                     </div>

@@ -420,7 +420,7 @@ const engineCopyMap: Record<
     jumpToSection: 'Jump to',
     signatureBadge: '★ SIGNATURE',
     mostLovedBadge: '★ MOST LOVED',
-    chefSelectionBadge: "💎 CHEF'S SELECTION",
+    chefSelectionBadge: "CHEF'S SELECTION",
   },
   ar: {
     showAll: 'عرض الكل',
@@ -440,7 +440,7 @@ const engineCopyMap: Record<
     jumpToSection: 'انتقل إلى',
     signatureBadge: '★ مميز',
     mostLovedBadge: '★ الأكثر حباً',
-    chefSelectionBadge: '💎 اختيار الشيف',
+    chefSelectionBadge: 'اختيار الشيف',
   },
   ar_fusha: {
     showAll: 'عرض الكل',
@@ -460,7 +460,7 @@ const engineCopyMap: Record<
     jumpToSection: 'انتقل إلى',
     signatureBadge: '★ مميز',
     mostLovedBadge: '★ الأكثر حباً',
-    chefSelectionBadge: '💎 اختيار الشيف',
+    chefSelectionBadge: 'اختيار الشيف',
   },
   ku: {
     showAll: 'هەموویان',
@@ -480,7 +480,7 @@ const engineCopyMap: Record<
     jumpToSection: 'بڕو بۆ',
     signatureBadge: '★ تایبەت',
     mostLovedBadge: '★ خۆشەویستترین',
-    chefSelectionBadge: '💎 هەڵبژاردنی چێشتلێنەر',
+    chefSelectionBadge: 'هەڵبژاردنی چێشتلێنەر',
   },
 }
 
@@ -1479,8 +1479,8 @@ export default function SmartMenu({
           </header>
         </div>
 
-        {/* Top of menu: always full-width hero (no cards). Elsewhere: card carousel. */}
-        {topShowcases.length > 0 && (
+        {/* Top of menu: hero carousel (hidden in classic mode — basic menu only). */}
+        {topShowcases.length > 0 && engineMode !== 'classic' && (
           <div className="w-full mt-4">
             <MenuCarousel
               key={topShowcases[0].id}
@@ -1512,8 +1512,8 @@ export default function SmartMenu({
         )}
 
         <div className="relative mx-auto max-w-7xl px-3 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6">
-          {/* Remaining top showcases: full-width hero when at top */}
-          {topShowcases.slice(1).map((showcase) => (
+          {/* Remaining top showcases (hidden in classic mode) */}
+          {engineMode !== 'classic' && topShowcases.slice(1).map((showcase) => (
             <MenuCarousel
               key={showcase.id}
               title={showcase.title}
@@ -1567,7 +1567,8 @@ export default function SmartMenu({
             </section>
           )}
 
-          {/* Search row */}
+          {/* Search row (hidden in classic mode — simple menu only) */}
+          {engineMode !== 'classic' && (
           <div
             className={`flex flex-col sm:flex-row w-full gap-3 transition duration-300 ${isSmartSearchActive ? 'opacity-0 pointer-events-none' : ''
               }`}
@@ -1598,6 +1599,7 @@ export default function SmartMenu({
               </Button>
             </div>
           </div>
+          )}
 
           <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
             <DialogContent className="max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
@@ -1698,8 +1700,8 @@ export default function SmartMenu({
             </DialogContent>
           </Dialog>
 
-          {/* Active Filters Display */}
-          {(selectedCategory !== 'all' || selectedTags.length > 0) && (
+          {/* Active Filters Display (hidden in classic mode) */}
+          {engineMode !== 'classic' && (selectedCategory !== 'all' || selectedTags.length > 0) && (
             <div className="flex flex-wrap gap-2 justify-center items-center">
               <span className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>{currentCopy.filtersLabel}</span>
               {selectedCategory !== 'all' && (
@@ -1730,7 +1732,7 @@ export default function SmartMenu({
             </div>
           )}
 
-          {lastOrder && lastOrder.itemIds.length > 0 && (() => {
+          {engineMode !== 'classic' && lastOrder && lastOrder.itemIds.length > 0 && (() => {
             const seen = new Set<string>()
             const lastOrderDisplayNames: string[] = []
             for (let i = 0; i < lastOrder.itemIds.length && lastOrderDisplayNames.length < 3; i++) {
@@ -1856,7 +1858,7 @@ export default function SmartMenu({
                     </div>
                   )}
 
-                  {section.category && categoryAnchorBundle[section.category.id] && (() => {
+                  {engineMode !== 'classic' && section.category && categoryAnchorBundle[section.category.id] && (() => {
                     const anchorBundle = categoryAnchorBundle[section.category!.id]
                     if (!anchorBundle) return null
                     const anchorItemNames = Object.fromEntries(
@@ -1900,9 +1902,12 @@ export default function SmartMenu({
                       const extraItemIds = new Set(
                         visibleItems.slice(maxInitialItemsPerCategory).map((item) => item.id)
                       )
-                      const itemsToShow = expandedCategoryIds.has(section.category?.id ?? '')
-                        ? visibleItems
-                        : visibleItems.slice(0, maxInitialItemsPerCategory)
+                      const itemsToShow =
+                        engineMode === 'classic'
+                          ? visibleItems
+                          : expandedCategoryIds.has(section.category?.id ?? '')
+                            ? visibleItems
+                            : visibleItems.slice(0, maxInitialItemsPerCategory)
                       const priceVariant = getVariant('price_format')
                       return itemsToShow.map((item) => {
                         const translation =
@@ -1963,13 +1968,10 @@ export default function SmartMenu({
                     })()}
                   </div>
 
-                  {section.category && (() => {
-                    const visibleItems =
-                      engineMode === 'classic'
-                        ? section.items
-                        : section.items.filter(
-                          (item) => !item._hints?.scrollDepthHide || scrollDepth >= 0.6
-                        )
+                  {section.category && engineMode !== 'classic' && (() => {
+                    const visibleItems = section.items.filter(
+                      (item) => !item._hints?.scrollDepthHide || scrollDepth >= 0.6
+                    )
                     return visibleItems.length > maxInitialItemsPerCategory && !expandedCategoryIds.has(section.category.id) ? (
                       <button
                         type="button"
@@ -1981,8 +1983,8 @@ export default function SmartMenu({
                     ) : null
                   })()}
 
-                  {/* Insert carousels configured for after this category */}
-                  {betweenShowcases
+                  {/* Insert carousels between categories (hidden in classic mode) */}
+                  {engineMode !== 'classic' && betweenShowcases
                     .filter(
                       (s) =>
                         s.insertAfterCategoryId === section.category?.id

@@ -12,9 +12,18 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const branchId = searchParams.get('branchId')
 
     const where: any = {
       restaurantId: session.user.restaurantId,
+    }
+
+    if (branchId) {
+      if (branchId === 'unassigned') {
+        where.branchId = null
+      } else {
+        where.branchId = branchId
+      }
     }
 
     if (status && status !== 'all') {
@@ -72,6 +81,7 @@ export async function POST(request: Request) {
         number: data.number,
         capacity: data.capacity,
         restaurantId: session.user.restaurantId,
+        ...(data.branchId && { branchId: data.branchId }),
       },
     })
 

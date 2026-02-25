@@ -114,12 +114,15 @@ export async function POST(request: Request) {
                 })
             }
 
-            // Update table status if table is assigned
+            // Update table status if table is assigned and get branchId
+            let tableBranchId: string | null = null
             if (data.tableId) {
-                await tx.table.update({
+                const tableData = await tx.table.update({
                     where: { id: data.tableId },
                     data: { status: 'OCCUPIED' },
+                    select: { branchId: true },
                 })
+                tableBranchId = tableData.branchId
             }
 
             // Create the sale with waiter assigned
@@ -134,6 +137,7 @@ export async function POST(request: Request) {
                     waiterId: session.user.employeeId || data.waiterId,
                     notes: data.notes,
                     restaurantId: session.user.restaurantId!,
+                    branchId: tableBranchId,
                     items: {
                         create: saleItems,
                     },

@@ -33,12 +33,17 @@ export async function POST(request: NextRequest) {
         const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
         const restaurantId = subscription.metadata?.restaurantId || session.metadata?.restaurantId
         if (!restaurantId) break
+        const priceMonthly = process.env.STRIPE_PRICE_MONTHLY
+        const priceAnnual = process.env.STRIPE_PRICE_ANNUAL
+        const mainPlanItem = subscription.items.data.find(
+          (item) => item.price.id === priceMonthly || item.price.id === priceAnnual
+        )
         await prisma.restaurant.update({
           where: { id: restaurantId },
           data: {
             stripeSubscriptionId: subscription.id,
             subscriptionStatus: subscription.status,
-            subscriptionPriceId: subscription.items.data[0]?.price?.id ?? null,
+            subscriptionPriceId: mainPlanItem?.price?.id ?? subscription.items.data[0]?.price?.id ?? null,
             currentPeriodEnd: new Date((subscription.current_period_end ?? 0) * 1000),
           },
         })
@@ -50,12 +55,17 @@ export async function POST(request: NextRequest) {
         const restaurantId = subscription.metadata?.restaurantId
         if (!restaurantId) break
         const status = event.type === 'customer.subscription.deleted' ? 'canceled' : subscription.status
+        const priceMonthly = process.env.STRIPE_PRICE_MONTHLY
+        const priceAnnual = process.env.STRIPE_PRICE_ANNUAL
+        const mainPlanItem = subscription.items.data.find(
+          (item) => item.price.id === priceMonthly || item.price.id === priceAnnual
+        )
         await prisma.restaurant.update({
           where: { id: restaurantId },
           data: {
             stripeSubscriptionId: subscription.id,
             subscriptionStatus: status,
-            subscriptionPriceId: subscription.items.data[0]?.price?.id ?? null,
+            subscriptionPriceId: mainPlanItem?.price?.id ?? subscription.items.data[0]?.price?.id ?? null,
             currentPeriodEnd: new Date((subscription.current_period_end ?? 0) * 1000),
           },
         })

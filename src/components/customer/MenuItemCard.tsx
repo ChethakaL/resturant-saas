@@ -66,7 +66,7 @@ function getBadgeLabel(
   }
   if (tier === 'hero' || isAnchor) return '★ SIGNATURE'
   if (tier === 'featured') return '★ MOST LOVED'
-  if (tier === 'standard') return '💎 CHEF\'S SELECTION'
+  if (tier === 'standard') return 'CHEF\'S SELECTION'
   return null
 }
 

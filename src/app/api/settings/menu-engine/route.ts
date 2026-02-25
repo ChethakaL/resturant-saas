@@ -81,11 +81,12 @@ export async function PUT(request: Request) {
     const currentEngine = (currentSettings.menuEngine as Record<string, unknown>) || {}
     const mode = parsed.data.mode
 
+    // Spread currentEngine first so parsed.data.mode and overrides always win (fixes classic not persisting)
     const menuEngine: Record<string, unknown> =
       mode === 'classic'
         ? {
-            mode,
             ...currentEngine,
+            mode,
             ...(parsed.data.moodFlow !== undefined && { moodFlow: parsed.data.moodFlow }),
             ...(parsed.data.bundles !== undefined && { bundles: parsed.data.bundles }),
             ...(parsed.data.upsells !== undefined && { upsells: parsed.data.upsells }),
@@ -96,8 +97,8 @@ export async function PUT(request: Request) {
             ...(parsed.data.idleUpsellDelaySeconds !== undefined && { idleUpsellDelaySeconds: parsed.data.idleUpsellDelaySeconds }),
           }
         : {
-            mode,
             ...currentEngine,
+            mode,
             ...(parsed.data.moodFlow !== undefined && { moodFlow: parsed.data.moodFlow }),
             ...(parsed.data.bundles !== undefined && { bundles: parsed.data.bundles }),
             ...(parsed.data.upsells !== undefined && { upsells: parsed.data.upsells }),

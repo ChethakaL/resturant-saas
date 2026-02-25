@@ -17,6 +17,7 @@ import {
   ShoppingCart,
   Wallet,
   AlertTriangle,
+  Building2,
 } from 'lucide-react'
 import AddExpenseModal from './AddExpenseModal'
 import AddWasteModal from './AddWasteModal'
@@ -152,13 +153,18 @@ export default function ProfitLossPageClient() {
     key: keyof TransactionRow
     direction: 'asc' | 'desc'
   }>({ key: 'date', direction: 'desc' })
+  // Branch filtering
+  const [branches, setBranches] = useState<{ id: string; name: string; address?: string | null }[]>([])
+  const [selectedBranch, setSelectedBranch] = useState<string>('all')
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const response = await fetch(
-        `/api/reports/pnl/data?start=${dateRange.start}&end=${dateRange.end}`
-      )
+      let url = `/api/reports/pnl/data?start=${dateRange.start}&end=${dateRange.end}`
+      if (selectedBranch && selectedBranch !== 'all') {
+        url += `&branchId=${selectedBranch}`
+      }
+      const response = await fetch(url)
       if (!response.ok) throw new Error('Failed to fetch data')
       const result = await response.json()
       setData(result)
@@ -173,10 +179,18 @@ export default function ProfitLossPageClient() {
     }
   }
 
+  // Fetch branches on mount
+  useEffect(() => {
+    fetch('/api/branches')
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setBranches(data) })
+      .catch(() => { })
+  }, [])
+
   useEffect(() => {
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange.start, dateRange.end])
+  }, [dateRange.start, dateRange.end, selectedBranch])
 
   const handleQuickPeriod = (period: 'today' | 'week' | 'month') => {
     setActivePeriod(period)
@@ -507,14 +521,30 @@ export default function ProfitLossPageClient() {
           <h1 className="text-3xl font-bold text-slate-900">Sales Reports</h1>
           <p className="text-slate-500 mt-1">Period: {dateRangeLabel}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          {branches.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-slate-400" />
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              >
+                <option value="all">All Branches</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} {b.address ? `(${b.address})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <Button
             variant="outline"
             onClick={() => {
-              window.open(
-                `/api/reports/pnl?start=${dateRange.start}&end=${dateRange.end}`,
-                '_blank'
-              )
+              let url = `/api/reports/pnl?start=${dateRange.start}&end=${dateRange.end}`
+              if (selectedBranch && selectedBranch !== 'all') url += `&branchId=${selectedBranch}`
+              window.open(url, '_blank')
             }}
           >
             <Download className="h-4 w-4 mr-2" />
@@ -595,11 +625,10 @@ export default function ProfitLossPageClient() {
                   key={key}
                   type="button"
                   onClick={() => handleQuickPeriod(key)}
-                  className={`rounded-md px-4 py-2 text-sm font-medium transition-colors min-w-[88px] ${
-                    activePeriod === key
+                  className={`rounded-md px-4 py-2 text-sm font-medium transition-colors min-w-[88px] ${activePeriod === key
                       ? 'bg-white text-slate-900 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
-                  }`}
+                    }`}
                 >
                   {label}
                 </button>
@@ -730,11 +759,10 @@ export default function ProfitLossPageClient() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3 min-w-0">
               <div
-                className={`rounded-lg p-2 flex-shrink-0 ${
-                  data.summary.netProfit >= 0
+                className={`rounded-lg p-2 flex-shrink-0 ${data.summary.netProfit >= 0
                     ? 'bg-green-100'
                     : 'bg-red-100'
-                }`}
+                  }`}
               >
                 {data.summary.netProfit >= 0 ? (
                   <TrendingUp className="h-5 w-5 text-green-600" />
@@ -747,11 +775,10 @@ export default function ProfitLossPageClient() {
                   Net Profit
                 </p>
                 <p
-                  className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${
-                    data.summary.netProfit >= 0
+                  className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${data.summary.netProfit >= 0
                       ? 'text-green-600'
                       : 'text-red-600'
-                  }`}
+                    }`}
                 >
                   {formatCurrency(data.summary.netProfit)}
                 </p>
@@ -764,9 +791,8 @@ export default function ProfitLossPageClient() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3 min-w-0">
               <div
-                className={`rounded-lg p-2 flex-shrink-0 ${
-                  profitMargin >= 0 ? 'bg-blue-100' : 'bg-red-100'
-                }`}
+                className={`rounded-lg p-2 flex-shrink-0 ${profitMargin >= 0 ? 'bg-blue-100' : 'bg-red-100'
+                  }`}
               >
                 {profitMargin >= 0 ? (
                   <TrendingUp className="h-5 w-5 text-blue-600" />
@@ -779,9 +805,8 @@ export default function ProfitLossPageClient() {
                   Profit Margin
                 </p>
                 <p
-                  className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${
-                    profitMargin >= 0 ? 'text-blue-600' : 'text-red-600'
-                  }`}
+                  className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${profitMargin >= 0 ? 'text-blue-600' : 'text-red-600'
+                    }`}
                 >
                   {profitMargin.toFixed(1)}%
                 </p>
@@ -837,9 +862,8 @@ export default function ProfitLossPageClient() {
               </tr>
               <tr className="bg-slate-50">
                 <td className="p-4 font-bold text-lg">NET INCOME</td>
-                <td className={`p-4 text-right font-mono font-bold text-lg ${
-                  data.summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
+                <td className={`p-4 text-right font-mono font-bold text-lg ${data.summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
                   {formatCurrency(data.summary.netProfit)}
                 </td>
               </tr>
@@ -986,28 +1010,28 @@ export default function ProfitLossPageClient() {
                       .filter((tx) => tx.category === category)
                       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
                     return (
-                    <tr key={category} className="border-b">
-                      <td className="p-3">{category}</td>
-                      <td className="p-3 text-right font-mono">
-                        {formatCurrency(total)}
-                      </td>
-                      <td className="p-3 text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            handleEditExpense(
-                              latestTransaction
-                                ? { ...latestTransaction, kind: 'transaction' }
-                                : null
-                            )
-                          }
-                          disabled={!latestTransaction}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
+                      <tr key={category} className="border-b">
+                        <td className="p-3">{category}</td>
+                        <td className="p-3 text-right font-mono">
+                          {formatCurrency(total)}
+                        </td>
+                        <td className="p-3 text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleEditExpense(
+                                latestTransaction
+                                  ? { ...latestTransaction, kind: 'transaction' }
+                                  : null
+                              )
+                            }
+                            disabled={!latestTransaction}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
                     )
                   })}
                 {/* Waste section - automatically shown */}
@@ -1184,17 +1208,16 @@ export default function ProfitLossPageClient() {
                     </td>
                     <td className="p-3">
                       <span
-                        className={`px-2 py-1 rounded text-xs ${
-                          row.type === 'REVENUE'
+                        className={`px-2 py-1 rounded text-xs ${row.type === 'REVENUE'
                             ? 'bg-green-100 text-green-800'
                             : row.type === 'COGS'
-                            ? 'bg-amber-100 text-amber-800'
-                            : row.type === 'EXPENSE'
-                            ? 'bg-red-100 text-red-800'
-                            : row.type === 'WASTE'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
+                              ? 'bg-amber-100 text-amber-800'
+                              : row.type === 'EXPENSE'
+                                ? 'bg-red-100 text-red-800'
+                                : row.type === 'WASTE'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-blue-100 text-blue-800'
+                          }`}
                       >
                         {row.type}
                       </span>
@@ -1202,9 +1225,8 @@ export default function ProfitLossPageClient() {
                     <td className="p-3">{row.description}</td>
                     <td className="p-3">{row.category}</td>
                     <td
-                      className={`p-3 text-right font-mono ${
-                        row.amount >= 0 ? 'text-green-600' : 'text-red-600'
-                      }`}
+                      className={`p-3 text-right font-mono ${row.amount >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}
                     >
                       {row.amount >= 0
                         ? formatCurrency(row.amount)

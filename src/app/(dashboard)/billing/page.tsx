@@ -2,7 +2,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
+import { stripe } from '@/lib/stripe'
 import BillingClient from './BillingClient'
+
+const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
 
 export default async function BillingPage() {
   const session = await getServerSession(authOptions)
@@ -16,6 +19,8 @@ export default async function BillingPage() {
       subscriptionStatus: true,
       subscriptionPriceId: true,
       currentPeriodEnd: true,
+      settings: true,
+      stripeSubscriptionId: true,
     },
   })
 
@@ -30,12 +35,29 @@ export default async function BillingPage() {
         ? 'monthly'
         : null
 
+  let maxBranches = 1
+  if (restaurant?.stripeSubscriptionId && STRIPE_PRICE_BRANCH) {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)
+      const branchItem = subscription.items.data.find((item) => item.price.id === STRIPE_PRICE_BRANCH)
+      maxBranches = 1 + (branchItem ? (branchItem.quantity ?? 0) : 0)
+    } catch {
+      const settings = (restaurant?.settings as Record<string, unknown>) || {}
+      maxBranches = (settings.maxBranches as number) || 1
+    }
+  } else {
+    const settings = (restaurant?.settings as Record<string, unknown>) || {}
+    maxBranches = (settings.maxBranches as number) || 1
+  }
+
   return (
     <BillingClient
       isActive={!!isActive}
       currentPeriodEnd={restaurant?.currentPeriodEnd?.toISOString() ?? null}
       currentPlan={currentPlan}
       pricesConfigured={!!(priceMonthly && priceAnnual)}
+      maxBranches={maxBranches}
+      stripePriceBranchConfigured={!!STRIPE_PRICE_BRANCH?.trim()}
     />
   )
 }

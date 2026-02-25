@@ -9,7 +9,7 @@ const OPTIMIZED_NUMBERS = {
   bundleCorrelationThreshold: 0.35,
 } as const
 
-/** Keep My Menu Order: no reordering, no extra suggestions, show more items upfront. */
+/** Basic / classic: normal menu only — categories and all items, no carousels or optimization. */
 const PRESET_CLASSIC: MenuEngineSettings = {
   mode: 'classic',
   moodFlow: false,
@@ -18,8 +18,8 @@ const PRESET_CLASSIC: MenuEngineSettings = {
   scarcityBadges: false,
   priceAnchoring: false,
   bundleCorrelationThreshold: 0.35,
-  maxItemsPerCategory: 15,
-  maxInitialItemsPerCategory: 10,
+  maxItemsPerCategory: 999,
+  maxInitialItemsPerCategory: 999,
   idleUpsellDelaySeconds: 30,
 }
 

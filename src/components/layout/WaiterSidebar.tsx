@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
-import { Square, Receipt, LogOut } from 'lucide-react'
+import { Square, Receipt, LogOut, ChefHat } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator'
 const navigation = [
   { name: 'Tables', href: '/waiter/dashboard', icon: Square },
   { name: 'My Orders', href: '/waiter/dashboard?tab=orders', icon: Receipt },
+  { name: 'Chefs', href: '/waiter/dashboard?tab=kitchen', icon: ChefHat },
 ]
 
 interface WaiterSidebarProps {
@@ -42,10 +43,13 @@ export function WaiterSidebar({ userName, restaurantName }: WaiterSidebarProps) 
       <nav className="flex-1 overflow-y-auto p-4 space-y-1">
         {navigation.map((item) => {
           const isOrders = item.href.includes('tab=orders')
+          const isKitchen = item.href.includes('tab=kitchen')
           const tab = searchParams?.get('tab')
           const isActive = isOrders
             ? pathname === '/waiter/dashboard' && tab === 'orders'
-            : pathname === '/waiter/dashboard' && tab !== 'orders'
+            : isKitchen
+              ? pathname === '/waiter/dashboard' && tab === 'kitchen'
+              : pathname === '/waiter/dashboard' && tab !== 'orders' && tab !== 'kitchen'
           return (
             <Link
               key={item.name}
