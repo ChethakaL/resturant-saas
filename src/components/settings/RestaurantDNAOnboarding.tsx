@@ -55,7 +55,7 @@ export default function RestaurantDNAOnboarding({
     const [messages, setMessages] = useState<Message[]>([
         {
             role: 'assistant',
-            content: `Hey there! Welcome to Restaurant DNA — where we discover your restaurant's unique identity and bring it to life! 🎨\n\nI'm your DNA Designer, and I'm going to help create a stunning look for your digital menu that perfectly matches your restaurant's personality.\n\nLet's start with the basics — what's the name of your restaurant?`,
+            content: `Welcome to Restaurant DNA. I'll help you set up your restaurant's visual identity for your digital menu.\n\nWhat is the name of your restaurant?`,
             timestamp: new Date(),
         },
     ])
@@ -72,7 +72,7 @@ export default function RestaurantDNAOnboarding({
         'Cuisine Type',
         'Restaurant Vibe',
         'Opening Hours',
-        'Your DNA ✨',
+        'Your DNA',
     ]
 
     const scrollToBottom = useCallback(() => {
