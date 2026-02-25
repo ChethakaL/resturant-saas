@@ -83,12 +83,22 @@ export async function PATCH(
     const hasDescriptionInPayload = data.description !== undefined
     const payloadDescription = hasDescriptionInPayload ? String(data.description ?? '').trim() : null
     if (hasDescriptionInPayload && !payloadDescription && !(existing.description && existing.description.trim())) {
-      const categoryName = existing.category?.name ?? (data.categoryId ? (await prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } }))?.name : null) ?? null
+      const [categoryName, restaurant] = await Promise.all([
+        existing.category?.name ?? (data.categoryId ? (await prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } }))?.name : null) ?? null,
+        prisma.restaurant.findUnique({
+          where: { id: session.user.restaurantId! },
+          select: { settings: true },
+        }),
+      ])
+      const settings = (restaurant?.settings as Record<string, unknown>) || {}
+      const theme = (settings.theme as Record<string, unknown>) || {}
+      const descriptionTone = typeof theme.descriptionTone === 'string' ? theme.descriptionTone : null
       const generated = await generateMenuDescription({
         itemName: data.name ?? existing.name,
         categoryName,
         tags: data.tags ?? existing.tags ?? null,
         price: data.price ?? existing.price ?? null,
+        descriptionTone,
       })
       if (generated) data.description = generated
     }

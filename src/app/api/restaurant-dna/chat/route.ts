@@ -86,7 +86,8 @@ After you have ALL 5 answers, generate a complete theme recommendation. Your res
   "fontFamily": "font-key",
   "menuCarouselStyle": "sliding|static",
   "description": "Brief explanation of why you chose these design elements",
-  "openingTimes": "The opening times they mentioned"
+  "openingTimes": "The opening times they mentioned",
+  "descriptionTone": "One short sentence instructing how to write menu dish descriptions, based on their vibe and cuisine. Examples: 'Write concise, punchy descriptions suitable for fast casual.' or 'Write elegant, sensory descriptions suitable for fine dining.' or 'Write warm, inviting descriptions suitable for a cozy family restaurant.' Match the tone to fast food / casual / fine dining / cozy / modern / luxe etc."
 }]
 
 Available font keys: "sans" (DM Sans - modern/clean), "serif" (Playfair Display - elegant), "display" (Cormorant - classic), "mono" (Space Mono - tech/modern), "rounded" (Nunito - friendly/warm), "handwritten" (Caveat - casual/artsy), "condensed" (Barlow Condensed - bold/urban), "slab" (Roboto Slab - strong/reliable)

@@ -15,6 +15,8 @@ export interface GenerateDescriptionInput {
   price?: number | null
   /** Optional existing draft to rewrite (e.g. from paste). */
   existingDraft?: string | null
+  /** Tone for descriptions (from Restaurant DNA). e.g. "Write concise, punchy descriptions for fast casual." */
+  descriptionTone?: string | null
 }
 
 /**
@@ -25,12 +27,13 @@ export async function generateMenuDescription(
 ): Promise<string | null> {
   if (!process.env.GOOGLE_AI_KEY) return null
 
-  const { itemName, categoryName, tags, price, existingDraft } = input
+  const { itemName, categoryName, tags, price, existingDraft, descriptionTone } = input
 
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const prompt = `You are a menu description writer for a restaurant. Write a single, appetizing dish description.
+${descriptionTone?.trim() ? `\nRestaurant description tone (match this style): ${descriptionTone.trim()}\n` : ''}
 
 RULES:
 - Maximum ${MAX_WORDS} words. Count and do not exceed.

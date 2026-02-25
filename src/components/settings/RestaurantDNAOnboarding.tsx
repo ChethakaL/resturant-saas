@@ -28,6 +28,8 @@ interface ThemeRecommendation {
     menuCarouselStyle?: string
     description?: string
     openingTimes?: string
+    /** Tone for AI menu descriptions (e.g. fast casual vs fine dining). */
+    descriptionTone?: string
 }
 
 interface RestaurantDNAOnboardingProps {

@@ -101,6 +101,7 @@ export default function SettingsClient({
   const [themePreset, setThemePreset] = useState<string | null>(currentTheme.themePreset ?? null)
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
   const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
+  const [descriptionTone, setDescriptionTone] = useState<string>((currentTheme as Record<string, unknown>).descriptionTone as string || '')
   const [snowfallEnabled, setSnowfallEnabled] = useState<boolean>(currentTheme.snowfallEnabled === 'true')
   const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
   const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
@@ -182,6 +183,7 @@ export default function SettingsClient({
           snowfallStart: snowfallStart || '12-15',
           snowfallEnd: snowfallEnd || '01-07',
           ...(restaurantName.trim() && { restaurantName: restaurantName.trim() }),
+          descriptionTone: descriptionTone.trim(),
         }),
       })
       if (!response.ok) {
@@ -583,6 +585,23 @@ export default function SettingsClient({
               {menuCarouselStyle === 'static' && <Check className="h-4 w-4 text-slate-900 mt-1" />}
             </button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* AI menu description tone */}
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Menu Description Tone</CardTitle>
+          <p className="text-sm text-slate-500">Set how AI writes dish descriptions (e.g. fast casual vs fine dining). Used when generating or auto-filling menu item descriptions.</p>
+        </CardHeader>
+        <CardContent>
+          <textarea
+            value={descriptionTone}
+            onChange={(e) => setDescriptionTone(e.target.value)}
+            placeholder="e.g. Write concise, punchy descriptions for fast casual. Or: Write elegant, sensory descriptions suitable for fine dining."
+            className="min-h-[80px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400"
+            rows={3}
+          />
         </CardContent>
       </Card>
 

@@ -151,6 +151,9 @@ async function getMenuData(slug: string) {
   })
 
   // If any item has no description (e.g. legacy), generate once and persist so next time it's already there
+  const settingsForTone = (restaurant.settings as Record<string, unknown>) || {}
+  const themeForTone = (settingsForTone.theme as Record<string, unknown>) || {}
+  const descriptionTone = typeof themeForTone.descriptionTone === 'string' ? themeForTone.descriptionTone : null
   const itemsNeedingDescription = enrichedMenuItems.filter(
     (i: any) => !(i.description && String(i.description).trim())
   )
@@ -161,6 +164,7 @@ async function getMenuData(slug: string) {
         categoryName: item.category?.name ?? null,
         tags: item.tags ?? null,
         price: item.price ?? null,
+        descriptionTone,
       })
       if (!desc) continue
       await prisma.menuItem.update({

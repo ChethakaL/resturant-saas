@@ -63,16 +63,26 @@ export async function POST(request: Request) {
 
     const data = await request.json()
 
-    // Generate description once when missing (max 18 words; sensory, texture, heat, origin, scarcity)
+    // Generate description once when missing (max 18 words; sensory, texture, heat, origin, scarcity; tone from DNA)
     if (data.name && !(data.description && String(data.description).trim())) {
-      const category = data.categoryId
-        ? await prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } })
-        : null
+      const [category, restaurant] = await Promise.all([
+        data.categoryId
+          ? prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } })
+          : null,
+        prisma.restaurant.findUnique({
+          where: { id: session.user.restaurantId! },
+          select: { settings: true },
+        }),
+      ])
+      const settings = (restaurant?.settings as Record<string, unknown>) || {}
+      const theme = (settings.theme as Record<string, unknown>) || {}
+      const descriptionTone = typeof theme.descriptionTone === 'string' ? theme.descriptionTone : null
       const generated = await generateMenuDescription({
         itemName: data.name,
         categoryName: category?.name ?? null,
         tags: data.tags ?? null,
         price: data.price ?? null,
+        descriptionTone,
       })
       if (generated) data.description = generated
     }

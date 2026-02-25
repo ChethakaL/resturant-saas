@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import { generateMenuDescription } from '@/lib/menu-description-ai'
 
 export async function POST(request: NextRequest) {
@@ -24,12 +25,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: session.user.restaurantId },
+      select: { settings: true },
+    })
+    const settings = (restaurant?.settings as Record<string, unknown>) || {}
+    const theme = (settings.theme as Record<string, unknown>) || {}
+    const descriptionTone = typeof theme.descriptionTone === 'string' ? theme.descriptionTone : null
+
     const description = await generateMenuDescription({
       itemName,
       categoryName: category ?? null,
       tags: Array.isArray(tags) ? tags : null,
       price: typeof price === 'number' ? price : null,
       existingDraft: typeof existingDraft === 'string' ? existingDraft : null,
+      descriptionTone,
     })
 
     if (description === null) {
