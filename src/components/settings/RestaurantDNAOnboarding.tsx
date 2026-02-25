@@ -32,8 +32,8 @@ interface ThemeRecommendation {
     openingTimes?: string
     /** Tone for AI menu descriptions (e.g. fast casual vs fine dining). */
     descriptionTone?: string
-    /** Optional restaurant photo for vibe (display only; not used by AI). */
-    restaurantVibeImageUrl?: string | null
+    /** S3 key for restaurant vibe image (display via proxy). */
+    restaurantVibeImageKey?: string | null
 }
 
 interface RestaurantDNAOnboardingProps {
@@ -68,7 +68,7 @@ export default function RestaurantDNAOnboarding({
     const [input, setInput] = useState(restaurantName || '')
     const [isLoading, setIsLoading] = useState(false)
     const [themeRecommendation, setThemeRecommendation] = useState<ThemeRecommendation | null>(null)
-    const [restaurantVibeImageUrl, setRestaurantVibeImageUrl] = useState<string | null>(null)
+    const [restaurantVibeImageKey, setRestaurantVibeImageKey] = useState<string | null>(null)
     const [uploadingVibeImage, setUploadingVibeImage] = useState(false)
     const vibeImageInputRef = useRef<HTMLInputElement>(null)
     const [step, setStep] = useState(0)
@@ -163,7 +163,7 @@ export default function RestaurantDNAOnboarding({
 
     const handleApplyTheme = () => {
         if (themeRecommendation) {
-            onComplete({ ...themeRecommendation, restaurantVibeImageUrl: restaurantVibeImageUrl ?? undefined })
+            onComplete({ ...themeRecommendation, restaurantVibeImageKey: restaurantVibeImageKey ?? undefined })
         }
     }
 
@@ -177,14 +177,19 @@ export default function RestaurantDNAOnboarding({
             const res = await fetch('/api/upload/restaurant-vibe', { method: 'POST', body: form })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || 'Upload failed')
-            setRestaurantVibeImageUrl(data.url)
+            const key = (data as { key?: string }).key
+            if (key) setRestaurantVibeImageKey(key)
         } catch {
-            setRestaurantVibeImageUrl(null)
+            setRestaurantVibeImageKey(null)
         } finally {
             setUploadingVibeImage(false)
             e.target.value = ''
         }
     }
+
+    const vibeImageDisplayUrl = restaurantVibeImageKey
+        ? `/api/settings/restaurant-vibe-image?key=${encodeURIComponent(restaurantVibeImageKey)}`
+        : ''
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -404,9 +409,9 @@ export default function RestaurantDNAOnboarding({
                                             {uploadingVibeImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
                                             {uploadingVibeImage ? 'Uploading…' : 'Upload photo'}
                                         </Button>
-                                        {restaurantVibeImageUrl && (
+                                        {vibeImageDisplayUrl && (
                                             <div className="flex items-center gap-2">
-                                                <img src={restaurantVibeImageUrl} alt="Your restaurant" className="h-12 w-16 rounded-lg object-cover border border-white/10" />
+                                                <img src={vibeImageDisplayUrl} alt="Your restaurant" className="h-12 w-16 rounded-lg object-cover border border-white/10" />
                                                 <span className="text-xs text-slate-400">Added</span>
                                             </div>
                                         )}

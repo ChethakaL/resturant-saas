@@ -19,13 +19,6 @@ function getS3Client() {
   })
 }
 
-function getPublicUrl(key: string): string {
-  const bucket = process.env.AWS_S3_BUCKET_NAME
-  const region = process.env.AWS_S3_REGION
-  if (!bucket || !region) throw new Error('AWS_S3_BUCKET_NAME and AWS_S3_REGION are required')
-  return `https://${bucket}.s3.${region}.amazonaws.com/${key}`
-}
-
 /**
  * Upload a restaurant photo for "vibe" (display only; not used by AI).
  * Boss: "If they think their restaurant's image is contributing to the custom design they'll feel cool."
@@ -81,8 +74,8 @@ export async function POST(request: NextRequest) {
         ContentType: file.type,
       })
     )
-    const url = getPublicUrl(key)
-    return NextResponse.json({ url })
+    console.log('[restaurant-vibe] Upload OK:', { bucket, region: process.env.AWS_S3_REGION, key })
+    return NextResponse.json({ url: `/api/settings/restaurant-vibe-image?key=${encodeURIComponent(key)}`, key })
   } catch (error) {
     console.error('Restaurant vibe image upload error:', error)
     return NextResponse.json(

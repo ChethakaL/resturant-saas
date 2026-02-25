@@ -102,10 +102,15 @@ export default function SettingsClient({
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
   const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
   const [descriptionTone, setDescriptionTone] = useState<string>((currentTheme as Record<string, unknown>).descriptionTone as string || '')
-  const [restaurantVibeImageUrl, setRestaurantVibeImageUrl] = useState<string>((currentTheme as Record<string, unknown>).restaurantVibeImageUrl as string || '')
+  const [restaurantVibeImageKey, setRestaurantVibeImageKey] = useState<string>((currentTheme as Record<string, unknown>).restaurantVibeImageKey as string || '')
+  const legacyVibeImageUrl = ((currentTheme as Record<string, unknown>).restaurantVibeImageUrl as string) || ''
+  const [vibeImageRemoved, setVibeImageRemoved] = useState(false)
   const [uploadingVibeImage, setUploadingVibeImage] = useState(false)
   const [vibeImageLoadError, setVibeImageLoadError] = useState(false)
   const vibeImageInputRef = useRef<HTMLInputElement>(null)
+  const restaurantVibeImageDisplayUrl = restaurantVibeImageKey
+    ? `/api/settings/restaurant-vibe-image?key=${encodeURIComponent(restaurantVibeImageKey)}`
+    : vibeImageRemoved ? '' : legacyVibeImageUrl
   const [snowfallEnabled, setSnowfallEnabled] = useState<boolean>(currentTheme.snowfallEnabled === 'true')
   const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
   const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
@@ -188,7 +193,8 @@ export default function SettingsClient({
           snowfallEnd: snowfallEnd || '01-07',
           ...(restaurantName.trim() && { restaurantName: restaurantName.trim() }),
           descriptionTone: descriptionTone.trim(),
-          restaurantVibeImageUrl: restaurantVibeImageUrl.trim() || null,
+          restaurantVibeImageKey: restaurantVibeImageKey.trim() || null,
+          restaurantVibeImageUrl: (restaurantVibeImageKey.trim() && !vibeImageRemoved) ? undefined : null,
         }),
       })
       if (!response.ok) {
@@ -618,9 +624,14 @@ export default function SettingsClient({
                 const res = await fetch('/api/upload/restaurant-vibe', { method: 'POST', body: form })
                 const data = await res.json()
                 if (!res.ok) throw new Error(data.error || 'Upload failed')
-                setRestaurantVibeImageUrl(data.url)
-                setVibeImageLoadError(false)
-                toast({ title: 'Photo uploaded', description: 'Click Save Restaurant DNA to apply.' })
+                const key = (data as { key?: string }).key
+                if (key) {
+                  setRestaurantVibeImageKey(key)
+                  setVibeImageLoadError(false)
+                  toast({ title: 'Photo uploaded', description: 'Click Save Restaurant DNA to apply.' })
+                } else {
+                  toast({ title: 'Upload failed', variant: 'destructive' })
+                }
               } catch {
                 toast({ title: 'Upload failed', variant: 'destructive' })
               } finally {
@@ -633,22 +644,25 @@ export default function SettingsClient({
             {uploadingVibeImage ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
             {uploadingVibeImage ? 'Uploading…' : 'Upload photo'}
           </Button>
-          {restaurantVibeImageUrl && (
+          {(restaurantVibeImageKey || (legacyVibeImageUrl && !vibeImageRemoved)) && restaurantVibeImageDisplayUrl && (
             <div className="flex items-center gap-3">
               <div className="relative h-20 w-28 rounded-lg border border-slate-200 bg-slate-100 overflow-hidden flex items-center justify-center">
                 {vibeImageLoadError ? (
-                  <span className="text-xs text-slate-500 px-2 text-center">Image could not be loaded. URL may be invalid or storage not accessible.</span>
+                  <span className="text-xs text-slate-500 px-2 text-center">Image could not be loaded.</span>
                 ) : (
                   <img
-                    src={restaurantVibeImageUrl}
+                    src={restaurantVibeImageDisplayUrl}
                     alt="Your restaurant"
                     className="h-full w-full object-cover"
                     onLoad={() => setVibeImageLoadError(false)}
-                    onError={() => setVibeImageLoadError(true)}
+                    onError={(e) => {
+                      console.error('[Restaurant DNA] Image failed to load:', restaurantVibeImageDisplayUrl, e)
+                      setVibeImageLoadError(true)
+                    }}
                   />
                 )}
               </div>
-              <Button type="button" variant="ghost" size="sm" className="text-slate-500" onClick={() => { setRestaurantVibeImageUrl(''); setVibeImageLoadError(false); }}>Remove</Button>
+              <Button type="button" variant="ghost" size="sm" className="text-slate-500" onClick={() => { setRestaurantVibeImageKey(''); setVibeImageRemoved(true); setVibeImageLoadError(false); }}>Remove</Button>
             </div>
           )}
         </CardContent>
