@@ -104,6 +104,7 @@ export default function SettingsClient({
   const [descriptionTone, setDescriptionTone] = useState<string>((currentTheme as Record<string, unknown>).descriptionTone as string || '')
   const [restaurantVibeImageUrl, setRestaurantVibeImageUrl] = useState<string>((currentTheme as Record<string, unknown>).restaurantVibeImageUrl as string || '')
   const [uploadingVibeImage, setUploadingVibeImage] = useState(false)
+  const [vibeImageLoadError, setVibeImageLoadError] = useState(false)
   const vibeImageInputRef = useRef<HTMLInputElement>(null)
   const [snowfallEnabled, setSnowfallEnabled] = useState<boolean>(currentTheme.snowfallEnabled === 'true')
   const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
@@ -599,7 +600,7 @@ export default function SettingsClient({
             <Upload className="h-5 w-5 text-slate-600" />
             Restaurant Photo (Optional)
           </CardTitle>
-          <p className="text-sm text-slate-500">Upload a photo of your restaurant to get a sense for your vibe. It&apos;s part of your brand identity—we don&apos;t use it for AI; it just helps you feel your space is part of the design.</p>
+          <p className="text-sm text-slate-500">Upload a photo of your restaurant so we can match your vibe. Your space is part of your brand—this helps your custom design feel like you. Click <strong>Save Restaurant DNA</strong> below after uploading to keep the photo.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <input
@@ -618,6 +619,7 @@ export default function SettingsClient({
                 const data = await res.json()
                 if (!res.ok) throw new Error(data.error || 'Upload failed')
                 setRestaurantVibeImageUrl(data.url)
+                setVibeImageLoadError(false)
                 toast({ title: 'Photo uploaded', description: 'Click Save Restaurant DNA to apply.' })
               } catch {
                 toast({ title: 'Upload failed', variant: 'destructive' })
@@ -633,8 +635,20 @@ export default function SettingsClient({
           </Button>
           {restaurantVibeImageUrl && (
             <div className="flex items-center gap-3">
-              <img src={restaurantVibeImageUrl} alt="Your restaurant" className="h-20 w-28 rounded-lg object-cover border border-slate-200" />
-              <Button type="button" variant="ghost" size="sm" className="text-slate-500" onClick={() => setRestaurantVibeImageUrl('')}>Remove</Button>
+              <div className="relative h-20 w-28 rounded-lg border border-slate-200 bg-slate-100 overflow-hidden flex items-center justify-center">
+                {vibeImageLoadError ? (
+                  <span className="text-xs text-slate-500 px-2 text-center">Image could not be loaded. URL may be invalid or storage not accessible.</span>
+                ) : (
+                  <img
+                    src={restaurantVibeImageUrl}
+                    alt="Your restaurant"
+                    className="h-full w-full object-cover"
+                    onLoad={() => setVibeImageLoadError(false)}
+                    onError={() => setVibeImageLoadError(true)}
+                  />
+                )}
+              </div>
+              <Button type="button" variant="ghost" size="sm" className="text-slate-500" onClick={() => { setRestaurantVibeImageUrl(''); setVibeImageLoadError(false); }}>Remove</Button>
             </div>
           )}
         </CardContent>

@@ -383,7 +383,7 @@ export default function RestaurantDNAOnboarding({
                                         Add a photo of your restaurant (optional)
                                     </p>
                                     <p className="text-[11px] text-slate-500">
-                                        It helps us get a sense for your vibe. Your photo is part of your brand identity.
+                                        So we can match your space and make your design feel like you.
                                     </p>
                                     <input
                                         ref={vibeImageInputRef}
