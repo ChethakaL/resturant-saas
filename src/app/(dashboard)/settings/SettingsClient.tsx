@@ -102,6 +102,9 @@ export default function SettingsClient({
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
   const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
   const [descriptionTone, setDescriptionTone] = useState<string>((currentTheme as Record<string, unknown>).descriptionTone as string || '')
+  const [restaurantVibeImageUrl, setRestaurantVibeImageUrl] = useState<string>((currentTheme as Record<string, unknown>).restaurantVibeImageUrl as string || '')
+  const [uploadingVibeImage, setUploadingVibeImage] = useState(false)
+  const vibeImageInputRef = useRef<HTMLInputElement>(null)
   const [snowfallEnabled, setSnowfallEnabled] = useState<boolean>(currentTheme.snowfallEnabled === 'true')
   const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
   const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
@@ -184,6 +187,7 @@ export default function SettingsClient({
           snowfallEnd: snowfallEnd || '01-07',
           ...(restaurantName.trim() && { restaurantName: restaurantName.trim() }),
           descriptionTone: descriptionTone.trim(),
+          restaurantVibeImageUrl: restaurantVibeImageUrl.trim() || null,
         }),
       })
       if (!response.ok) {
@@ -585,6 +589,54 @@ export default function SettingsClient({
               {menuCarouselStyle === 'static' && <Check className="h-4 w-4 text-slate-900 mt-1" />}
             </button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Restaurant photo for vibe (display only; no AI) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5 text-slate-600" />
+            Restaurant Photo (Optional)
+          </CardTitle>
+          <p className="text-sm text-slate-500">Upload a photo of your restaurant to get a sense for your vibe. It&apos;s part of your brand identity—we don&apos;t use it for AI; it just helps you feel your space is part of the design.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <input
+            ref={vibeImageInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              setUploadingVibeImage(true)
+              try {
+                const form = new FormData()
+                form.append('image', file)
+                const res = await fetch('/api/upload/restaurant-vibe', { method: 'POST', body: form })
+                const data = await res.json()
+                if (!res.ok) throw new Error(data.error || 'Upload failed')
+                setRestaurantVibeImageUrl(data.url)
+                toast({ title: 'Photo uploaded', description: 'Click Save Restaurant DNA to apply.' })
+              } catch {
+                toast({ title: 'Upload failed', variant: 'destructive' })
+              } finally {
+                setUploadingVibeImage(false)
+                e.target.value = ''
+              }
+            }}
+          />
+          <Button type="button" variant="outline" size="sm" disabled={uploadingVibeImage} onClick={() => vibeImageInputRef.current?.click()}>
+            {uploadingVibeImage ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+            {uploadingVibeImage ? 'Uploading…' : 'Upload photo'}
+          </Button>
+          {restaurantVibeImageUrl && (
+            <div className="flex items-center gap-3">
+              <img src={restaurantVibeImageUrl} alt="Your restaurant" className="h-20 w-28 rounded-lg object-cover border border-slate-200" />
+              <Button type="button" variant="ghost" size="sm" className="text-slate-500" onClick={() => setRestaurantVibeImageUrl('')}>Remove</Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

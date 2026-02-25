@@ -9,6 +9,8 @@ import {
     Dna,
     Check,
     ArrowRight,
+    Upload,
+    ImageIcon,
 } from 'lucide-react'
 
 interface Message {
@@ -30,6 +32,8 @@ interface ThemeRecommendation {
     openingTimes?: string
     /** Tone for AI menu descriptions (e.g. fast casual vs fine dining). */
     descriptionTone?: string
+    /** Optional restaurant photo for vibe (display only; not used by AI). */
+    restaurantVibeImageUrl?: string | null
 }
 
 interface RestaurantDNAOnboardingProps {
@@ -64,6 +68,9 @@ export default function RestaurantDNAOnboarding({
     const [input, setInput] = useState(restaurantName || '')
     const [isLoading, setIsLoading] = useState(false)
     const [themeRecommendation, setThemeRecommendation] = useState<ThemeRecommendation | null>(null)
+    const [restaurantVibeImageUrl, setRestaurantVibeImageUrl] = useState<string | null>(null)
+    const [uploadingVibeImage, setUploadingVibeImage] = useState(false)
+    const vibeImageInputRef = useRef<HTMLInputElement>(null)
     const [step, setStep] = useState(0)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
@@ -156,7 +163,26 @@ export default function RestaurantDNAOnboarding({
 
     const handleApplyTheme = () => {
         if (themeRecommendation) {
-            onComplete(themeRecommendation)
+            onComplete({ ...themeRecommendation, restaurantVibeImageUrl: restaurantVibeImageUrl ?? undefined })
+        }
+    }
+
+    const handleVibeImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setUploadingVibeImage(true)
+        try {
+            const form = new FormData()
+            form.append('image', file)
+            const res = await fetch('/api/upload/restaurant-vibe', { method: 'POST', body: form })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Upload failed')
+            setRestaurantVibeImageUrl(data.url)
+        } catch {
+            setRestaurantVibeImageUrl(null)
+        } finally {
+            setUploadingVibeImage(false)
+            e.target.value = ''
         }
     }
 
@@ -347,6 +373,43 @@ export default function RestaurantDNAOnboarding({
                                                 </div>
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Optional: restaurant photo for vibe (display only; no AI) */}
+                                <div className="border border-white/10 rounded-xl p-4 bg-white/5 space-y-2">
+                                    <p className="text-xs font-medium text-slate-300 flex items-center gap-2">
+                                        <ImageIcon className="w-4 h-4" />
+                                        Add a photo of your restaurant (optional)
+                                    </p>
+                                    <p className="text-[11px] text-slate-500">
+                                        It helps us get a sense for your vibe. Your photo is part of your brand identity.
+                                    </p>
+                                    <input
+                                        ref={vibeImageInputRef}
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp,image/gif"
+                                        className="hidden"
+                                        onChange={handleVibeImageUpload}
+                                    />
+                                    <div className="flex items-center gap-3">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={uploadingVibeImage}
+                                            onClick={() => vibeImageInputRef.current?.click()}
+                                            className="border-slate-500/50 text-slate-300 hover:bg-white/10 hover:text-white"
+                                        >
+                                            {uploadingVibeImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                                            {uploadingVibeImage ? 'Uploading…' : 'Upload photo'}
+                                        </Button>
+                                        {restaurantVibeImageUrl && (
+                                            <div className="flex items-center gap-2">
+                                                <img src={restaurantVibeImageUrl} alt="Your restaurant" className="h-12 w-16 rounded-lg object-cover border border-white/10" />
+                                                <span className="text-xs text-slate-400">Added</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

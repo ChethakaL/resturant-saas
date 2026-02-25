@@ -32,6 +32,7 @@ export default function RestaurantDNAGate({
                     menuCarouselStyle: theme.menuCarouselStyle,
                     ...(theme.restaurantName && { restaurantName: theme.restaurantName }),
                     ...(theme.descriptionTone && { descriptionTone: theme.descriptionTone }),
+                    ...(theme.restaurantVibeImageUrl && { restaurantVibeImageUrl: theme.restaurantVibeImageUrl }),
                 }),
             })
             // Mark onboarding as complete

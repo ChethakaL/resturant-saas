@@ -35,6 +35,8 @@ const themeSchema = z.object({
   snowfallEnd: z.string().optional(),
   /** Tone for AI-generated menu dish descriptions (from Restaurant DNA). e.g. "Write concise, punchy descriptions for fast casual." */
   descriptionTone: z.string().max(300).optional(),
+  /** Optional restaurant photo for "vibe" (display only; not used by AI). */
+  restaurantVibeImageUrl: z.string().url().nullable().optional(),
 })
 
 export async function GET() {
@@ -88,10 +90,10 @@ export async function PUT(request: Request) {
     })
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, ...themeData } = parsed.data
+    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageUrl, ...themeData } = parsed.data
     const newSettings = {
       ...currentSettings,
-      theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }), ...(descriptionTone !== undefined && { descriptionTone }) },
+      theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }), ...(descriptionTone !== undefined && { descriptionTone }), ...(restaurantVibeImageUrl !== undefined && { restaurantVibeImageUrl }) },
       ...(menuTimezone !== undefined && { menuTimezone }),
       ...(themePreset !== undefined && { themePreset }),
       ...(backgroundImageUrl !== undefined && { backgroundImageUrl }),

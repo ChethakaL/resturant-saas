@@ -1,12 +1,13 @@
 /**
- * Server-only: generate a menu dish description (max 18 words) using AI.
- * Used when an item is added/saved without a description, and as fallback when displaying the menu.
- * Prompt includes: sensory triggers, texture language, heat descriptors, origin storytelling, scarcity cues.
+ * Server-only: generate a menu dish description using AI.
+ * When descriptionTone is set (Restaurant DNA), it takes precedence over default length and style.
+ * Default: max 18 words. With tone: up to 70 words so 2–3 sentences are possible.
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const MAX_WORDS = 18
+const DEFAULT_MAX_WORDS = 18
+const MAX_WORDS_WHEN_TONE_SET = 70
 
 export interface GenerateDescriptionInput {
   itemName: string
@@ -28,15 +29,18 @@ export async function generateMenuDescription(
   if (!process.env.GOOGLE_AI_KEY) return null
 
   const { itemName, categoryName, tags, price, existingDraft, descriptionTone } = input
+  const hasTone = Boolean(descriptionTone?.trim())
+  const maxWords = hasTone ? MAX_WORDS_WHEN_TONE_SET : DEFAULT_MAX_WORDS
 
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
-  const prompt = `You are a menu description writer for a restaurant. Write a single, appetizing dish description.
-${descriptionTone?.trim() ? `\nRestaurant description tone (match this style): ${descriptionTone.trim()}\n` : ''}
+  const prompt = `You are a menu description writer for a restaurant.
+${hasTone
+    ? `CRITICAL — Restaurant description tone (follow this first; it overrides default length and style):\n${descriptionTone!.trim()}\n\nLength: up to ${maxWords} words so the tone's format (e.g. 2–3 sentences) can be followed.`
+    : `Write a single, appetizing dish description. Maximum ${maxWords} words.`}
 
-RULES:
-- Maximum ${MAX_WORDS} words. Count and do not exceed.
+RULES (apply in a way that respects the restaurant tone above when set):
 - Use sensory triggers (how it looks, smells, tastes).
 - Use texture language (crispy, tender, creamy, flaky, silky, etc.).
 - Use heat descriptors where relevant (warm, steaming, chilled, sizzling, etc.).
@@ -47,11 +51,11 @@ Dish name: "${itemName}"
 ${categoryName ? `Category: ${categoryName}` : ''}
 ${tags?.length ? `Tags: ${tags.join(', ')}` : ''}
 ${price != null ? `Price: ${price}` : ''}
-${existingDraft?.trim() ? `Existing draft to rewrite (keep under ${MAX_WORDS} words): ${existingDraft}` : ''}
+${existingDraft?.trim() ? `Existing draft to rewrite (follow tone and length above): ${existingDraft}` : ''}
 
 Return your response in this exact JSON format only:
 {
-  "description": "Your menu description here, under ${MAX_WORDS} words."
+  "description": "Your menu description here, following the tone and length above (max ${maxWords} words)."
 }
 
 Return ONLY valid JSON, no markdown or extra text.`
@@ -69,9 +73,8 @@ Return ONLY valid JSON, no markdown or extra text.`
     const description = (data.description || '').trim()
     if (!description) return null
 
-    // Enforce max words: take first 18 words if AI overstepped
     const words = description.split(/\s+/)
-    const capped = words.length > MAX_WORDS ? words.slice(0, MAX_WORDS).join(' ') : description
+    const capped = words.length > maxWords ? words.slice(0, maxWords).join(' ') : description
     return capped
   } catch {
     return null

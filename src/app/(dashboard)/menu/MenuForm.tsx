@@ -2644,7 +2644,7 @@ export default function MenuForm({
                           size="sm"
                           onClick={generateDescription}
                           disabled={generatingDescription || !formData.name}
-                          title={!formData.name ? 'Enter item name first' : 'Generate description with AI (max 18 words)'}
+                          title={!formData.name ? 'Enter item name first' : 'Generate description with AI (uses your Restaurant DNA tone if set)'}
                           className="h-7 px-2 text-xs"
                         >
                           {generatingDescription ? (
