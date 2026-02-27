@@ -1,4 +1,5 @@
 export { I18nProvider, useI18n } from './I18nProvider'
+export { useFormatCurrency } from './useFormatCurrency'
 export { useDynamicTranslate } from './useDynamicTranslate'
 export { getTranslations, getMenuTranslationLanguages, getTranslatedCategoryName } from './translations'
 export type { ManagementLocale, TranslationStrings } from './translations'

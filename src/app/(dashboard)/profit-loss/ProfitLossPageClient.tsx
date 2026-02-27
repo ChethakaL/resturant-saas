@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import {
   Plus,
@@ -21,7 +20,7 @@ import {
 } from 'lucide-react'
 import AddExpenseModal from './AddExpenseModal'
 import AddWasteModal from './AddWasteModal'
-import { useI18n, useDynamicTranslate } from '@/lib/i18n'
+import { useI18n, useDynamicTranslate, useFormatCurrency } from '@/lib/i18n'
 import DatePicker from '@/components/ui/date-picker'
 
 function daysBetweenInclusive(start: Date, end: Date) {
@@ -143,6 +142,7 @@ export default function ProfitLossPageClient() {
   const { toast } = useToast()
   const { t } = useI18n()
   const { t: td } = useDynamicTranslate()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   const [activePeriod, setActivePeriod] = useState<string>('month')
   const [dateRange, setDateRange] = useState(() => getQuickPeriod('month'))
   const [data, setData] = useState<PnLData | null>(null)
@@ -586,10 +586,10 @@ export default function ProfitLossPageClient() {
             <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <h3 className="font-semibold text-red-800">
-                {td('Projected net loss this month')}: {formatCurrency(Math.abs(forecast.projectedNetProfit))}
+                {td('Projected net loss this month')}: {formatCurrencyWithRestaurant(Math.abs(forecast.projectedNetProfit))}
               </h3>
               <p className="text-sm text-red-700 mt-1">
-                {td('Based on')} {forecast.daysElapsed} {td('of')} {forecast.daysInMonth} {td('days elapsed, projected revenue is')} {formatCurrency(forecast.projectedRevenue)}.
+                {td('Based on')} {forecast.daysElapsed} {td('of')} {forecast.daysInMonth} {td('days elapsed, projected revenue is')} {formatCurrencyWithRestaurant(forecast.projectedRevenue)}.
               </p>
               {forecast.drivers.length > 0 && (
                 <div className="mt-2">
@@ -604,7 +604,7 @@ export default function ProfitLossPageClient() {
                       >
                         <span>{td(d.label)}</span>
                         <span className="font-mono">
-                          {formatCurrency(d.amount)}
+                          {formatCurrencyWithRestaurant(d.amount)}
                         </span>
                       </li>
                     ))}
@@ -695,7 +695,7 @@ export default function ProfitLossPageClient() {
                   {td('Revenue')}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-green-600 font-mono break-all">
-                  {formatCurrency(data.summary.revenue)}
+                  {formatCurrencyWithRestaurant(data.summary.revenue)}
                 </p>
               </div>
             </div>
@@ -713,7 +713,7 @@ export default function ProfitLossPageClient() {
                   {td('COGS')}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-amber-600 font-mono break-all">
-                  {formatCurrency(data.summary.cogs)}
+                  {formatCurrencyWithRestaurant(data.summary.cogs)}
                 </p>
                 {typeof data.summary.cogsCoveragePercent === 'number' && (
                   <p className="text-[10px] text-slate-500 mt-0.5">
@@ -736,7 +736,7 @@ export default function ProfitLossPageClient() {
                   {td('Gross Profit')}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-emerald-600 font-mono break-all">
-                  {formatCurrency(data.summary.grossProfit)}
+                  {formatCurrencyWithRestaurant(data.summary.grossProfit)}
                 </p>
               </div>
             </div>
@@ -754,7 +754,7 @@ export default function ProfitLossPageClient() {
                   {td('Expenses')}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-red-600 font-mono break-all">
-                  {formatCurrency(data.summary.expenses + data.summary.payroll)}
+                  {formatCurrencyWithRestaurant(data.summary.expenses + data.summary.payroll)}
                 </p>
               </div>
             </div>
@@ -786,7 +786,7 @@ export default function ProfitLossPageClient() {
                     : 'text-red-600'
                     }`}
                 >
-                  {formatCurrency(data.summary.netProfit)}
+                  {formatCurrencyWithRestaurant(data.summary.netProfit)}
                 </p>
               </div>
             </div>
@@ -839,38 +839,38 @@ export default function ProfitLossPageClient() {
               <tr className="border-b">
                 <td className="p-4 font-semibold">{td('SALES')}</td>
                 <td className="p-4 text-right font-mono text-green-600">
-                  {formatCurrency(data.summary.revenue)}
+                  {formatCurrencyWithRestaurant(data.summary.revenue)}
                 </td>
               </tr>
               <tr className="border-b">
                 <td className="p-4 font-semibold">{td('COGS (Cost of Goods Sold)')}</td>
                 <td className="p-4 text-right font-mono text-amber-600">
-                  {formatCurrency(data.summary.cogs)}
+                  {formatCurrencyWithRestaurant(data.summary.cogs)}
                 </td>
               </tr>
               <tr className="border-b bg-slate-50">
                 <td className="p-4 font-semibold">{td('GROSS PROFIT')}</td>
                 <td className="p-4 text-right font-mono font-bold text-green-600">
-                  {formatCurrency(data.summary.grossProfit)}
+                  {formatCurrencyWithRestaurant(data.summary.grossProfit)}
                 </td>
               </tr>
               <tr className="border-b">
                 <td className="p-4 font-semibold">{td('LABOR EXPENSE')}</td>
                 <td className="p-4 text-right font-mono text-red-600">
-                  {formatCurrency(data.summary.payroll)}
+                  {formatCurrencyWithRestaurant(data.summary.payroll)}
                 </td>
               </tr>
               <tr className="border-b">
                 <td className="p-4 font-semibold">{td('OTHER EXPENSE')}</td>
                 <td className="p-4 text-right font-mono text-red-600">
-                  {formatCurrency(data.summary.expenses)}
+                  {formatCurrencyWithRestaurant(data.summary.expenses)}
                 </td>
               </tr>
               <tr className="bg-slate-50">
                 <td className="p-4 font-bold text-lg">{td('NET INCOME')}</td>
                 <td className={`p-4 text-right font-mono font-bold text-lg ${data.summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
-                  {formatCurrency(data.summary.netProfit)}
+                  {formatCurrencyWithRestaurant(data.summary.netProfit)}
                 </td>
               </tr>
               <tr>
@@ -903,14 +903,14 @@ export default function ProfitLossPageClient() {
                   <tr key={category} className="border-b">
                     <td className="p-3">{category}</td>
                     <td className="p-3 text-right font-mono">
-                      {formatCurrency(stats.revenue)}
+                      {formatCurrencyWithRestaurant(stats.revenue)}
                     </td>
                   </tr>
                 ))}
                 <tr className="bg-slate-50 font-semibold">
                   <td className="p-3">{td('TOTAL SALES')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.revenue)}
+                    {formatCurrencyWithRestaurant(data.summary.revenue)}
                   </td>
                 </tr>
               </tbody>
@@ -935,14 +935,14 @@ export default function ProfitLossPageClient() {
                   <tr key={category} className="border-b">
                     <td className="p-3">{category}</td>
                     <td className="p-3 text-right font-mono">
-                      {formatCurrency(stats.cogs)}
+                      {formatCurrencyWithRestaurant(stats.cogs)}
                     </td>
                   </tr>
                 ))}
                 <tr className="bg-slate-50 font-semibold">
                   <td className="p-3">{td('TOTAL COGS')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.cogs)}
+                    {formatCurrencyWithRestaurant(data.summary.cogs)}
                   </td>
                 </tr>
               </tbody>
@@ -969,25 +969,25 @@ export default function ProfitLossPageClient() {
                 <tr className="border-b">
                   <td className="p-3">{td('Salaries and Wages')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.payroll * 0.7)}
+                    {formatCurrencyWithRestaurant(data.summary.payroll * 0.7)}
                   </td>
                 </tr>
                 <tr className="border-b">
                   <td className="p-3">{td('Payroll Taxes')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.payroll * 0.15)}
+                    {formatCurrencyWithRestaurant(data.summary.payroll * 0.15)}
                   </td>
                 </tr>
                 <tr className="border-b">
                   <td className="p-3">{td('Employee Benefits')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.payroll * 0.15)}
+                    {formatCurrencyWithRestaurant(data.summary.payroll * 0.15)}
                   </td>
                 </tr>
                 <tr className="bg-slate-50 font-semibold">
                   <td className="p-3">{td('TOTAL LABOR EXPENSE')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.payroll)}
+                    {formatCurrencyWithRestaurant(data.summary.payroll)}
                   </td>
                 </tr>
               </tbody>
@@ -1019,7 +1019,7 @@ export default function ProfitLossPageClient() {
                       <tr key={category} className="border-b">
                         <td className="p-3">{td(category)}</td>
                         <td className="p-3 text-right font-mono">
-                          {formatCurrency(total)}
+                          {formatCurrencyWithRestaurant(total)}
                         </td>
                         <td className="p-3 text-center">
                           <Button
@@ -1045,7 +1045,7 @@ export default function ProfitLossPageClient() {
                   <tr className="border-b bg-red-50">
                     <td className="p-3 font-semibold text-red-700">{td('Waste / Losses and Damages')}</td>
                     <td className="p-3 text-right font-mono text-red-700">
-                      {formatCurrency(
+                      {formatCurrencyWithRestaurant(
                         data.wasteRecords.reduce((sum, w) => sum + w.cost, 0)
                       )}
                     </td>
@@ -1063,7 +1063,7 @@ export default function ProfitLossPageClient() {
                 <tr className="bg-slate-50 font-semibold">
                   <td className="p-3">{td('TOTAL OTHER EXPENSE')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.expenses)}
+                    {formatCurrencyWithRestaurant(data.summary.expenses)}
                   </td>
                   <td className="p-3"></td>
                 </tr>
@@ -1235,8 +1235,8 @@ export default function ProfitLossPageClient() {
                         }`}
                     >
                       {row.amount >= 0
-                        ? formatCurrency(row.amount)
-                        : `-${formatCurrency(Math.abs(row.amount))}`}
+                        ? formatCurrencyWithRestaurant(row.amount)
+                        : `-${formatCurrencyWithRestaurant(Math.abs(row.amount))}`}
                     </td>
                     <td className="p-3 text-slate-500">{row.details}</td>
                     <td className="p-3 text-center">

@@ -39,6 +39,12 @@ const themeSchema = z.object({
   restaurantVibeImageKey: z.string().min(1).max(512).nullable().optional(),
   /** Legacy: direct URL. Prefer restaurantVibeImageKey + proxy for private buckets. */
   restaurantVibeImageUrl: z.string().url().nullable().optional(),
+  /** Restaurant currency (ISO 4217), e.g. IQD, USD, EUR */
+  currency: z.string().length(3).optional(),
+  /** Menu translation language 1 (ISO 639-1), e.g. ar, ku, en */
+  menuTranslationLanguage1: z.string().max(20).optional(),
+  /** Menu translation language 2 (ISO 639-1) */
+  menuTranslationLanguage2: z.string().max(20).optional(),
 })
 
 export async function GET() {
@@ -50,7 +56,7 @@ export async function GET() {
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
-      select: { settings: true },
+      select: { settings: true, currency: true },
     })
 
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
@@ -60,6 +66,9 @@ export async function GET() {
       themePreset: settings.themePreset ?? null,
       backgroundImageUrl: settings.backgroundImageUrl ?? null,
       managementLanguage: settings.managementLanguage ?? 'en',
+      currency: restaurant?.currency ?? 'IQD',
+      menuTranslationLanguage1: (settings.menuTranslationLanguage1 as string) ?? 'ar',
+      menuTranslationLanguage2: (settings.menuTranslationLanguage2 as string) ?? 'ku',
     })
   } catch (error) {
     console.error('Error fetching theme settings:', error)
@@ -88,11 +97,11 @@ export async function PUT(request: Request) {
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
-      select: { settings: true },
+      select: { settings: true, currency: true },
     })
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageKey, restaurantVibeImageUrl, ...themeData } = parsed.data
+    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageKey, restaurantVibeImageUrl, currency, menuTranslationLanguage1, menuTranslationLanguage2, ...themeData } = parsed.data
     const newSettings = {
       ...currentSettings,
       theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }), ...(descriptionTone !== undefined && { descriptionTone }), ...(restaurantVibeImageKey !== undefined && { restaurantVibeImageKey }), ...(restaurantVibeImageUrl !== undefined && { restaurantVibeImageUrl }) },
@@ -104,9 +113,14 @@ export async function PUT(request: Request) {
       ...(snowfallEnabled !== undefined && { snowfallEnabled }),
       ...(snowfallStart !== undefined && { snowfallStart }),
       ...(snowfallEnd !== undefined && { snowfallEnd }),
+      ...(menuTranslationLanguage1 !== undefined && { menuTranslationLanguage1 }),
+      ...(menuTranslationLanguage2 !== undefined && { menuTranslationLanguage2 }),
     }
 
     const updateData: Record<string, unknown> = { settings: newSettings }
+    if (currency !== undefined) {
+      updateData.currency = currency
+    }
     if (restaurantName !== undefined && restaurantName.trim()) {
       updateData.name = restaurantName.trim()
     }
@@ -124,6 +138,9 @@ export async function PUT(request: Request) {
       themePreset: themePreset ?? currentSettings.themePreset,
       backgroundImageUrl: backgroundImageUrl ?? currentSettings.backgroundImageUrl,
       managementLanguage: managementLanguage ?? currentSettings.managementLanguage ?? 'en',
+      currency: currency ?? restaurant?.currency ?? 'IQD',
+      menuTranslationLanguage1: menuTranslationLanguage1 ?? currentSettings.menuTranslationLanguage1 ?? 'ar',
+      menuTranslationLanguage2: menuTranslationLanguage2 ?? currentSettings.menuTranslationLanguage2 ?? 'ku',
     })
   } catch (error) {
     console.error('Error updating theme settings:', error)

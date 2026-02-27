@@ -1,4 +1,4 @@
-import { Prisma, MenuItemTranslationLanguage } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -18,8 +18,8 @@ import { parseSlotTimes } from '@/lib/time-slots'
 
 const PAGE_SIZE = 20
 
-/** Map management locale to the MenuItemTranslationLanguage enum value */
-function getTranslationLanguage(locale: string): MenuItemTranslationLanguage | null {
+/** Map management locale to menu translation language code */
+function getTranslationLanguage(locale: string): string | null {
   if (locale === 'ku') return 'ku'
   if (locale === 'ar-fusha' || locale === 'ar_fusha') return 'ar_fusha'
   // English is the source language – no translation overlay needed
@@ -29,7 +29,7 @@ function getTranslationLanguage(locale: string): MenuItemTranslationLanguage | n
 async function getMenuData(
   restaurantId: string,
   page: number,
-  translationLang: MenuItemTranslationLanguage | null,
+  translationLang: string | null,
   search?: string,
   statusFilter?: string
 ) {

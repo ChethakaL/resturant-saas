@@ -103,6 +103,9 @@ export default function SettingsClient({
   const [menuTimezone, setMenuTimezone] = useState(currentTheme.menuTimezone || 'Asia/Baghdad')
   const [themePreset, setThemePreset] = useState<string | null>(currentTheme.themePreset ?? null)
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
+  const [currency, setCurrency] = useState<string>((currentTheme as Record<string, unknown>).currency as string || 'IQD')
+  const [menuTranslationLanguage1, setMenuTranslationLanguage1] = useState<string>((currentTheme as Record<string, unknown>).menuTranslationLanguage1 as string || 'ar')
+  const [menuTranslationLanguage2, setMenuTranslationLanguage2] = useState<string>((currentTheme as Record<string, unknown>).menuTranslationLanguage2 as string || 'ku')
   const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
   const [descriptionTone, setDescriptionTone] = useState<string>((currentTheme as Record<string, unknown>).descriptionTone as string || '')
   const [restaurantVibeImageKey, setRestaurantVibeImageKey] = useState<string>((currentTheme as Record<string, unknown>).restaurantVibeImageKey as string || '')
@@ -190,6 +193,9 @@ export default function SettingsClient({
           menuTimezone: menuTimezone || 'Asia/Baghdad',
           themePreset: themePreset || null,
           managementLanguage: managementLanguage || 'en',
+          currency: currency || 'IQD',
+          menuTranslationLanguage1: menuTranslationLanguage1 || 'ar',
+          menuTranslationLanguage2: menuTranslationLanguage2 || 'ku',
           menuCarouselStyle: menuCarouselStyle || 'sliding',
           snowfallEnabled: String(snowfallEnabled),
           snowfallStart: snowfallStart || '12-15',
@@ -376,6 +382,67 @@ export default function SettingsClient({
             <option value="ku">Kurdish (Kurdî)</option>
             <option value="ar-fusha">Arabic</option>
           </select>
+        </CardContent>
+      </Card>
+
+      {/* Region & Localization */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{td('Region & Localization')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('Currency and menu translation languages for the guest menu.')}</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium">{td('Currency')}</Label>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="mt-1 flex h-10 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="IQD">IQD (Iraqi Dinar)</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="AED">AED</option>
+              <option value="SAR">SAR</option>
+              <option value="TRY">TRY</option>
+              <option value="INR">INR</option>
+            </select>
+          </div>
+          <div>
+            <Label className="text-sm font-medium">{td('Menu translation language 1')}</Label>
+            <select
+              value={menuTranslationLanguage1}
+              onChange={(e) => setMenuTranslationLanguage1(e.target.value)}
+              className="mt-1 flex h-10 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="ar">Arabic (ar)</option>
+              <option value="ar_fusha">Arabic Fusha (ar_fusha)</option>
+              <option value="ku">Kurdish (ku)</option>
+              <option value="en">English (en)</option>
+              <option value="ur">Urdu (ur)</option>
+              <option value="ru">Russian (ru)</option>
+              <option value="tr">Turkish (tr)</option>
+              <option value="fr">French (fr)</option>
+            </select>
+          </div>
+          <div>
+            <Label className="text-sm font-medium">{td('Menu translation language 2')}</Label>
+            <select
+              value={menuTranslationLanguage2}
+              onChange={(e) => setMenuTranslationLanguage2(e.target.value)}
+              className="mt-1 flex h-10 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="ku">Kurdish (ku)</option>
+              <option value="ar">Arabic (ar)</option>
+              <option value="ar_fusha">Arabic Fusha (ar_fusha)</option>
+              <option value="en">English (en)</option>
+              <option value="ur">Urdu (ur)</option>
+              <option value="ru">Russian (ru)</option>
+              <option value="tr">Turkish (tr)</option>
+              <option value="fr">French (fr)</option>
+            </select>
+          </div>
         </CardContent>
       </Card>
 

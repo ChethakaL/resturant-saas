@@ -17,10 +17,9 @@ import {
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Pencil, Trash2, Search, Loader2, PlusCircle } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import { AddOn } from '@prisma/client'
-import { useI18n, useDynamicTranslate } from '@/lib/i18n'
+import { useI18n, useDynamicTranslate, useFormatCurrency } from '@/lib/i18n'
 
 interface AddOnWithCount extends AddOn {
   _count: {
@@ -35,6 +34,7 @@ interface AddOnsClientProps {
 export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   const [addOns, setAddOns] = useState(initialAddOns)
   const [searchQuery, setSearchQuery] = useState('')
   const [showDialog, setShowDialog] = useState(false)
@@ -314,7 +314,7 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-lg font-bold font-mono text-slate-900">
-                        {formatCurrency(addOn.price)}
+                        {formatCurrencyWithRestaurant(addOn.price)}
                       </p>
                       <p className="text-xs text-slate-500">
                         {td('Used in')} {addOn._count.menuItems} {addOn._count.menuItems !== 1 ? td('items') : td('item')}

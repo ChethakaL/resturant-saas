@@ -17,6 +17,7 @@ export default async function SettingsPage() {
         name: true,
         logo: true,
         settings: true,
+        currency: true,
       },
     }),
 
@@ -38,6 +39,9 @@ export default async function SettingsPage() {
     snowfallEnabled: (settings.snowfallEnabled as string) || 'false',
     snowfallStart: (settings.snowfallStart as string) || '12-15',
     snowfallEnd: (settings.snowfallEnd as string) || '01-07',
+    currency: restaurant?.currency ?? 'IQD',
+    menuTranslationLanguage1: (settings.menuTranslationLanguage1 as string) ?? 'ar',
+    menuTranslationLanguage2: (settings.menuTranslationLanguage2 as string) ?? 'ku',
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''

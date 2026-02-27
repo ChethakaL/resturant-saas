@@ -8,6 +8,17 @@ import {
     getMenuTranslationLanguages,
 } from '@/lib/i18n/translations'
 
+const MENU_LANG_LABELS: Record<string, string> = {
+    ar: 'Arabic',
+    ar_fusha: 'Arabic Fusha',
+    ku: 'Kurdish',
+    en: 'English',
+    ur: 'Urdu',
+    ru: 'Russian',
+    tr: 'Turkish',
+    fr: 'French',
+}
+
 interface I18nContextValue {
     locale: ManagementLocale
     t: TranslationStrings
@@ -15,6 +26,7 @@ interface I18nContextValue {
     menuTranslationLanguages: { code: string; label: string }[]
     isRtl: boolean
     loaded: boolean
+    currency: string
 }
 
 const I18nContext = createContext<I18nContextValue>({
@@ -24,6 +36,7 @@ const I18nContext = createContext<I18nContextValue>({
     menuTranslationLanguages: getMenuTranslationLanguages('en'),
     isRtl: false,
     loaded: false,
+    currency: 'IQD',
 })
 
 export function useI18n() {
@@ -40,21 +53,26 @@ export function I18nProvider({ children, initialLocale }: I18nProviderProps) {
     const [locale, setLocaleState] = useState<ManagementLocale>(initialLocale ?? 'en')
     const [loaded, setLoaded] = useState(!!initialLocale)
 
-    // On mount, fetch the management language from the settings API
-    useEffect(() => {
-        if (initialLocale) return // skip fetch if we already know
+    const [currency, setCurrency] = useState('IQD')
+    const [menuLang1, setMenuLang1] = useState('ar')
+    const [menuLang2, setMenuLang2] = useState('ku')
 
+    // On mount, fetch theme (management language, currency, menu translation languages)
+    useEffect(() => {
         let cancelled = false
         fetch('/api/settings/theme')
             .then((res) => (res.ok ? res.json() : null))
-            .then((theme: { managementLanguage?: string } | null) => {
+            .then((theme: { managementLanguage?: string; currency?: string; menuTranslationLanguage1?: string; menuTranslationLanguage2?: string } | null) => {
                 if (cancelled || !theme) return
                 const lang = theme.managementLanguage ?? 'en'
-                if (lang === 'ku' || lang === 'ar-fusha' || lang === 'ar_fusha') {
+                if (!initialLocale && (lang === 'ku' || lang === 'ar-fusha' || lang === 'ar_fusha')) {
                     setLocaleState(lang === 'ar_fusha' ? 'ar-fusha' : (lang as ManagementLocale))
-                } else {
+                } else if (!initialLocale) {
                     setLocaleState('en')
                 }
+                setCurrency(theme.currency ?? 'IQD')
+                setMenuLang1(theme.menuTranslationLanguage1 ?? 'ar')
+                setMenuLang2(theme.menuTranslationLanguage2 ?? 'ku')
             })
             .catch(() => { })
             .finally(() => {
@@ -96,12 +114,15 @@ export function I18nProvider({ children, initialLocale }: I18nProviderProps) {
     }, [loaded, locale])
 
     const t = getTranslations(locale)
-    const menuTranslationLanguages = getMenuTranslationLanguages(locale)
+    const menuTranslationLanguages: { code: string; label: string }[] = [
+        { code: menuLang1, label: MENU_LANG_LABELS[menuLang1] ?? menuLang1 },
+        { code: menuLang2, label: MENU_LANG_LABELS[menuLang2] ?? menuLang2 },
+    ]
     const isRtl = locale === 'ar-fusha'
 
     return (
         <I18nContext.Provider
-            value={{ locale, t, setLocale, menuTranslationLanguages, isRtl, loaded }}
+            value={{ locale, t, setLocale, menuTranslationLanguages, isRtl, loaded, currency }}
         >
             {children}
         </I18nContext.Provider>
