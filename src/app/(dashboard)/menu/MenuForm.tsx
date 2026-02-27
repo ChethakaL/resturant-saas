@@ -34,6 +34,7 @@ import {
 import { RefreshCw } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { buildTranslationSeed, TranslationSeedPayload } from '@/lib/menu-translation-seed'
+import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
 import {
   ImageOrientation,
   ImageSizePreset,
@@ -55,10 +56,8 @@ interface RecipeIngredient {
   lastPricedAt?: string | null
 }
 
-const translationLanguages = [
-  { code: 'ar_fusha', label: 'Arabic' },
-  { code: 'ku', label: 'Sorani Kurdish' },
-] as const
+/** All possible translation language codes (the dynamic subset is chosen at runtime based on management language) */
+const ALL_TRANSLATION_LANGUAGE_CODES = ['en', 'ar', 'ar_fusha', 'ku'] as const
 
 const SAMPLE_AI_PROMPT = `Chicken Biryani. Main course. Price 12,000 IQD. Fragrant basmati rice with tender chicken, layered with saffron, fried onions, and mint. Served with raita. Calories about 450 per serving, 28g protein, 42g carbs. Tags: halal, spicy.
 Prep time: 15 minutes. Cook time: 35 minutes.
@@ -67,7 +66,7 @@ Steps: Marinate chicken in yogurt and spices. Soak rice 20 min. Fry onions until
 Tips: Use aged basmati for best fragrance. Let rest 5 min before opening lid.
 Yield: 4 servings`
 
-type LanguageCode = (typeof translationLanguages)[number]['code']
+type LanguageCode = (typeof ALL_TRANSLATION_LANGUAGE_CODES)[number]
 
 interface TranslationDraft {
   name: string
@@ -137,6 +136,11 @@ export default function MenuForm({
 }: MenuFormProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const { t, menuTranslationLanguages } = useI18n()
+
+  /** translationLanguages typed for internal use */
+  const translationLanguages = menuTranslationLanguages as { code: LanguageCode; label: string }[]
+
   const [loading, setLoading] = useState(false)
   const [generatingImage, setGeneratingImage] = useState(false)
   const [showPromptDialog, setShowPromptDialog] = useState(false)
@@ -248,12 +252,14 @@ export default function MenuForm({
   const [translationsState, setTranslationsState] = useState<
     Record<LanguageCode, TranslationDraft>
   >(() => {
-    return translationLanguages.reduce((acc, language) => {
+    // Initialize for ALL possible language codes from existing translations
+    const allCodes: LanguageCode[] = ['en', 'ar', 'ar_fusha', 'ku']
+    return allCodes.reduce((acc, code) => {
       const existing = menuItem?.translations?.find(
-        (translation) => translation.language === language.code
+        (translation) => translation.language === code
       )
 
-      acc[language.code] = {
+      acc[code] = {
         name: existing?.translatedName || '',
         description: existing?.translatedDescription || '',
         aiDescription: existing?.aiDescription || '',
@@ -2149,21 +2155,21 @@ export default function MenuForm({
         <Link href="/dashboard/menu">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+            {t.menu_form_back}
           </Button>
         </Link>
         <div>
           <h1 className="text-3xl font-bold text-slate-900">
-            {mode === 'create' ? 'Add New Menu Item' : 'Edit Menu Item'}
+            {mode === 'create' ? t.menu_form_add_title : t.menu_form_edit_title}
           </h1>
           <p className="text-slate-500 mt-1">
             {mode === 'create'
-              ? 'Create a new menu item with recipe'
-              : 'Update menu item details and recipe'}
+              ? t.menu_form_add_subtitle
+              : t.menu_form_edit_subtitle}
           </p>
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <Badge variant={menuItemStatus === 'ACTIVE' ? 'default' : 'secondary'}>
-              {menuItemStatus === 'ACTIVE' ? 'Published' : 'Draft'}
+              {menuItemStatus === 'ACTIVE' ? t.menu_published : t.menu_draft}
             </Badge>
             <Badge variant={validRecipeLines.length > 0 && validRecipeLines.every((r) => r.unitCostCached != null) ? 'default' : 'secondary'}>
               Costing: {validRecipeLines.length > 0 && validRecipeLines.every((r) => r.unitCostCached != null) ? 'Complete' : 'Incomplete'}
@@ -2187,34 +2193,34 @@ export default function MenuForm({
                 {mode === 'edit' ? (
                   <TabsTrigger value="overview" className="flex items-center gap-2">
                     <LayoutDashboard className="h-4 w-4" />
-                    Overview
+                    {t.menu_form_tab_overview}
                   </TabsTrigger>
                 ) : (
                   <TabsTrigger value="ai" className="flex items-center gap-2">
                     <BotMessageSquare className="h-4 w-4" />
-                    Smart Chef
+                    {t.menu_form_tab_smart_chef}
                   </TabsTrigger>
                 )}
                 <TabsTrigger value="details" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  Manual
+                  {t.menu_form_tab_manual}
                 </TabsTrigger>
                 <TabsTrigger value="recipe" className="flex items-center gap-2">
                   <ChefHat className="h-4 w-4" />
-                  Recipe
+                  {t.menu_form_tab_recipe}
                 </TabsTrigger>
                 <TabsTrigger value="more" className="flex items-center gap-2">
                   <MoreHorizontal className="h-4 w-4" />
-                  Translations
+                  {t.menu_form_tab_translations}
                 </TabsTrigger>
               </TabsList>
               {mode === 'edit' && (
                 <TabsContent value="overview" className="space-y-4 mt-0">
                   <Card>
                     <CardHeader>
-                      <CardTitle>How it looks</CardTitle>
+                      <CardTitle>{t.menu_form_how_it_looks}</CardTitle>
                       <CardDescription>
-                        Preview of this menu item. Use the other tabs to edit, or the Edit assistant below to update from new text.
+                        {t.menu_form_preview_description}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -2232,23 +2238,32 @@ export default function MenuForm({
                           </div>
                         ) : (
                           <div className="aspect-[4/3] bg-slate-200 flex items-center justify-center text-slate-500 text-sm">
-                            No image
+                            {t.menu_form_no_image}
                           </div>
                         )}
                         <div className="p-4 space-y-2">
                           <p className="text-xs uppercase tracking-wider text-slate-500">
-                            {categories.find((c) => c.id === formData.categoryId)?.name || 'Uncategorized'}
+                            {(() => {
+                              const cat = categories.find((c) => c.id === formData.categoryId)
+                              return cat ? getTranslatedCategoryName(cat.name, t) : t.menu_form_uncategorized
+                            })()}
                           </p>
                           <h3 className="text-xl font-semibold text-slate-900">
-                            {formData.name || 'Untitled item'}
+                            {formData.name || t.menu_form_untitled_item}
                           </h3>
                           <p className="text-sm text-slate-600 line-clamp-3">
-                            {formData.description || 'No description.'}
+                            {formData.description || t.menu_form_no_description}
                           </p>
                           <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                            {formData.calories && <span>{formData.calories} cal</span>}
-                            {formData.protein && <span>{formData.protein}g protein</span>}
-                            {formData.carbs && <span>{formData.carbs}g carbs</span>}
+                            {formData.calories != null && formData.calories !== '' && (
+                              <span>{formData.calories} cal</span>
+                            )}
+                            {formData.protein != null && formData.protein !== '' && (
+                              <span>{formData.protein}g {t.menu_translation_protein}</span>
+                            )}
+                            {formData.carbs != null && formData.carbs !== '' && (
+                              <span>{formData.carbs}g {t.menu_translation_carbs}</span>
+                            )}
                             {formData.tags && formData.tags.split(',').map((t) => t.trim()).filter(Boolean).map((tag) => (
                               <span key={tag} className="rounded-full bg-slate-200 px-2 py-0.5">{tag}</span>
                             ))}
@@ -2258,7 +2273,7 @@ export default function MenuForm({
                           </p>
                           {selectedAddOnIds.length > 0 && (
                             <div className="pt-2 border-t border-slate-200">
-                              <p className="text-xs font-medium text-slate-500 mb-1">Add-ons</p>
+                              <p className="text-xs font-medium text-slate-500 mb-1">{t.menu_form_add_ons_label}</p>
                               <div className="flex flex-wrap gap-1">
                                 {addOnsList.filter((a) => selectedAddOnIds.includes(a.id)).map((addOn) => (
                                   <span key={addOn.id} className="text-xs text-slate-600">
@@ -2276,15 +2291,15 @@ export default function MenuForm({
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Sparkles className="h-5 w-5 text-emerald-500" />
-                        Edit assistant
+                        {t.menu_form_edit_assistant}
                       </CardTitle>
                       <CardDescription>
-                        Paste updated info (e.g. new description or price) and we&apos;ll update the form. Then review in Details, Recipe, or More.
+                        {t.menu_form_edit_assistant_description}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <Textarea
-                        placeholder="e.g.: Update price to 14,000 IQD. Mention 'Yield: 10' if updating a batch recipe."
+                        placeholder={t.menu_form_edit_assistant_placeholder}
                         value={aiAssistantText}
                         onChange={(e) => setAiAssistantText(e.target.value)}
                         rows={5}
@@ -2298,12 +2313,12 @@ export default function MenuForm({
                         {aiParseLoading ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Updating...
+                            {t.menu_form_updating}
                           </>
                         ) : (
                           <>
                             <Sparkles className="h-4 w-4 mr-2" />
-                            Update form from text
+                            {t.menu_form_update_form_from_text}
                           </>
                         )}
                       </Button>
@@ -2546,20 +2561,20 @@ export default function MenuForm({
               <TabsContent value="details" className="space-y-6 mt-0">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Menu Item Details</CardTitle>
+                    <CardTitle>{t.menu_form_item_details}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid gap-6 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor="name">
-                          Item Name <span className="text-red-500">*</span>
+                          {t.menu_form_item_name} <span className="text-red-500">*</span>
                         </Label>
                         <Input
                           id="name"
                           required
                           value={formData.name}
                           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                          placeholder="e.g., Chicken Biryani"
+                          placeholder={t.menu_form_placeholder_name}
                         />
                       </div>
 
@@ -2572,12 +2587,12 @@ export default function MenuForm({
                         {nextStepHighlight === 'category' && (
                           <p className="text-sm font-medium text-emerald-700 mb-2 flex items-center gap-2">
                             <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                            Select a category to continue
+                            {t.menu_form_select_category_hint}
                           </p>
                         )}
                         <div className="space-y-2">
                           <Label htmlFor="categoryId">
-                            Category <span className="text-red-500">*</span>
+                            {t.menu_form_category} <span className="text-red-500">*</span>
                           </Label>
                           <Select
                             value={formData.categoryId}
@@ -2588,12 +2603,12 @@ export default function MenuForm({
                             required
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Select category" />
+                              <SelectValue placeholder={t.menu_form_select_category} />
                             </SelectTrigger>
                             <SelectContent>
                               {categories.map((category) => (
                                 <SelectItem key={category.id} value={category.id}>
-                                  {category.name}
+                                  {getTranslatedCategoryName(category.name, t)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -2603,7 +2618,7 @@ export default function MenuForm({
 
                       <div className="space-y-2">
                         <Label htmlFor="price">
-                          Selling Price (IQD) <span className="text-red-500">*</span>
+                          {t.menu_form_selling_price_iqd} <span className="text-red-500">*</span>
                         </Label>
                         <Input
                           id="price"
@@ -2617,7 +2632,7 @@ export default function MenuForm({
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="available">Status</Label>
+                        <Label htmlFor="available">{t.menu_form_status}</Label>
                         <Select
                           value={formData.available.toString()}
                           onValueChange={(value) =>
@@ -2628,8 +2643,8 @@ export default function MenuForm({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="true">Available</SelectItem>
-                            <SelectItem value="false">Unavailable</SelectItem>
+                            <SelectItem value="true">{t.menu_available}</SelectItem>
+                            <SelectItem value="false">{t.menu_unavailable}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -2637,7 +2652,7 @@ export default function MenuForm({
 
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="description">Description</Label>
+                        <Label htmlFor="description">{t.common_description}</Label>
                         <Button
                           type="button"
                           variant="ghost"
@@ -2652,15 +2667,15 @@ export default function MenuForm({
                           ) : (
                             <Sparkles className="h-3 w-3 mr-1" />
                           )}
-                          Generate Description
+                          {t.menu_form_generate_description}
                         </Button>
                       </div>
-                      <p className="text-xs text-slate-500">Max 18 words. Leave blank to auto-generate when you save (sensory, texture, heat, origin, scarcity).</p>
+                      <p className="text-xs text-slate-500">{t.menu_form_description_helper}</p>
                       <Textarea
                         id="description"
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        placeholder="Brief description of the dish..."
+                        placeholder={t.menu_form_placeholder_description}
                         rows={3}
                       />
                     </div>
@@ -2674,11 +2689,11 @@ export default function MenuForm({
                       {nextStepHighlight === 'image' && (
                         <p className="text-sm font-medium text-emerald-700 mb-2 flex items-center gap-2">
                           <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                          Add an image for this item (paste a URL or generate with AI)
+                          {t.menu_form_add_image_hint}
                         </p>
                       )}
                       <div className="space-y-2">
-                        <Label htmlFor="imageUrl">Image URL (optional)</Label>
+                        <Label htmlFor="imageUrl">{t.menu_form_image_url}</Label>
                         <div className="flex gap-2">
                           <Input
                             id="imageUrl"
@@ -2718,9 +2733,9 @@ export default function MenuForm({
                           </div>
                         )}
                         <p className="text-xs text-slate-500">
-                          Want consistent backgrounds across all dishes?{' '}
+                          {t.menu_form_consistent_backgrounds}{' '}
                           <Link href="/settings#dish-photo-background" className="font-medium text-emerald-700 hover:underline">
-                            Configure background prompt or upload reference image
+                            {t.menu_form_configure_background}
                           </Link>
                           .
                         </p>
@@ -2729,7 +2744,7 @@ export default function MenuForm({
 
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label>Nutrition (optional)</Label>
+                        <Label>{t.menu_form_nutrition_optional}</Label>
                         <Button
                           type="button"
                           variant="ghost"
@@ -2744,12 +2759,12 @@ export default function MenuForm({
                           ) : (
                             <Sparkles className="h-3 w-3 mr-1" />
                           )}
-                          Estimate Nutrition
+                          {t.menu_form_estimate_nutrition}
                         </Button>
                       </div>
                       <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-2">
-                          <Label htmlFor="calories" className="text-xs text-slate-500">Calories</Label>
+                          <Label htmlFor="calories" className="text-xs text-slate-500">{t.menu_form_calories}</Label>
                           <Input
                             id="calories"
                             type="number"
@@ -2759,7 +2774,7 @@ export default function MenuForm({
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="protein" className="text-xs text-slate-500">Protein (g)</Label>
+                          <Label htmlFor="protein" className="text-xs text-slate-500">{t.menu_form_protein_g}</Label>
                           <Input
                             id="protein"
                             type="number"
@@ -2769,7 +2784,7 @@ export default function MenuForm({
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="carbs" className="text-xs text-slate-500">Carbs (g)</Label>
+                          <Label htmlFor="carbs" className="text-xs text-slate-500">{t.menu_form_carbs_g}</Label>
                           <Input
                             id="carbs"
                             type="number"
@@ -2781,14 +2796,14 @@ export default function MenuForm({
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="tags">Dietary Tags (optional)</Label>
+                      <Label htmlFor="tags">{t.menu_form_dietary_tags}</Label>
                       <Input
                         id="tags"
                         value={formData.tags}
                         onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                        placeholder="e.g., vegan, gluten-free, spicy"
+                        placeholder={t.menu_form_placeholder_tags}
                       />
-                      <p className="text-xs text-slate-500">Comma-separated tags</p>
+                      <p className="text-xs text-slate-500">{t.menu_form_comma_separated}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -2796,10 +2811,9 @@ export default function MenuForm({
               <TabsContent value="more" className="space-y-6 mt-0">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Menu Translations</CardTitle>
+                    <CardTitle>{t.menu_translations_title}</CardTitle>
                     <CardDescription>
-                      Auto-generate Iraqi Arabic and Sorani Kurdish names and descriptions.
-                      You can always edit them before saving.
+                      {t.menu_translations_description}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -2819,7 +2833,7 @@ export default function MenuForm({
                               </p>
                               {translation.dirty && (
                                 <Badge variant="destructive" className="text-[10px] uppercase">
-                                  Edited
+                                  {t.menu_translation_edited}
                                 </Badge>
                               )}
                             </div>
@@ -2833,14 +2847,14 @@ export default function MenuForm({
                               {translation.loading ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                'Refresh'
+                                t.menu_translation_refresh
                               )}
                             </Button>
                           </div>
 
                           <div className="grid gap-3 md:grid-cols-2">
                             <div className="space-y-2">
-                              <Label htmlFor={`translation-name-${language.code}`}>Name</Label>
+                              <Label htmlFor={`translation-name-${language.code}`}>{t.menu_translation_name}</Label>
                               <Input
                                 id={`translation-name-${language.code}`}
                                 value={translation.name}
@@ -2856,7 +2870,7 @@ export default function MenuForm({
                             </div>
                             <div className="md:col-span-2 space-y-2">
                               <Label htmlFor={`translation-description-${language.code}`}>
-                                Description
+                                {t.menu_translation_description_label}
                               </Label>
                               <Textarea
                                 id={`translation-description-${language.code}`}
@@ -2882,13 +2896,13 @@ export default function MenuForm({
 
                           <div className="flex flex-wrap gap-4 text-xs text-slate-500">
                             <span>
-                              Protein:{' '}
+                              {t.menu_translation_protein}:{' '}
                               {translation.protein !== null
                                 ? `${translation.protein}g`
                                 : '—'}
                             </span>
                             <span>
-                              Carbs:{' '}
+                              {t.menu_translation_carbs}:{' '}
                               {translation.carbs !== null ? `${translation.carbs}g` : '—'}
                             </span>
                           </div>
@@ -3531,10 +3545,9 @@ export default function MenuForm({
               <TabsContent value="more" className="space-y-6 mt-0">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Menu Translations</CardTitle>
+                    <CardTitle>{t.menu_translations_title}</CardTitle>
                     <CardDescription>
-                      Auto-generate Iraqi Arabic and Sorani Kurdish names and descriptions.
-                      You can always edit them before saving.
+                      {t.menu_translations_description}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -3554,7 +3567,7 @@ export default function MenuForm({
                               </p>
                               {translation.dirty && (
                                 <Badge variant="destructive" className="text-[10px] uppercase">
-                                  Edited
+                                  {t.menu_translation_edited}
                                 </Badge>
                               )}
                             </div>
@@ -3568,14 +3581,14 @@ export default function MenuForm({
                               {translation.loading ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                'Refresh'
+                                t.menu_translation_refresh
                               )}
                             </Button>
                           </div>
 
                           <div className="grid gap-3 md:grid-cols-2">
                             <div className="space-y-2">
-                              <Label htmlFor={`edit-translation-name-${language.code}`}>Name</Label>
+                              <Label htmlFor={`edit-translation-name-${language.code}`}>{t.menu_translation_name}</Label>
                               <Input
                                 id={`edit-translation-name-${language.code}`}
                                 value={translation.name}
@@ -3591,7 +3604,7 @@ export default function MenuForm({
                             </div>
                             <div className="md:col-span-2 space-y-2">
                               <Label htmlFor={`edit-translation-description-${language.code}`}>
-                                Description
+                                {t.menu_translation_description_label}
                               </Label>
                               <Textarea
                                 id={`edit-translation-description-${language.code}`}
@@ -3617,13 +3630,13 @@ export default function MenuForm({
 
                           <div className="flex flex-wrap gap-4 text-xs text-slate-500">
                             <span>
-                              Protein:{' '}
+                              {t.menu_translation_protein}:{' '}
                               {translation.protein !== null
                                 ? `${translation.protein}g`
                                 : '—'}
                             </span>
                             <span>
-                              Carbs:{' '}
+                              {t.menu_translation_carbs}:{' '}
                               {translation.carbs !== null ? `${translation.carbs}g` : '—'}
                             </span>
                           </div>
@@ -3645,33 +3658,33 @@ export default function MenuForm({
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Cost Analysis</CardTitle>
+                  <CardTitle>{t.menu_form_cost_analysis}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-3">
                     <div className="flex justify-between items-center pb-2 border-b">
-                      <span className="text-sm text-slate-500">Selling Price:</span>
+                      <span className="text-sm text-slate-500">{t.menu_form_selling_price}</span>
                       <span className="font-mono font-medium">
                         {formatCurrency(parseFloat(formData.price) || 0)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center pb-2 border-b">
-                      <span className="text-sm text-slate-500">Total Cost:</span>
+                      <span className="text-sm text-slate-500">{t.menu_form_total_cost}</span>
                       <span className="font-mono font-medium text-red-600">
                         {formatCurrency(calculations.cost)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center pb-2 border-b">
-                      <span className="text-sm text-slate-500">Profit:</span>
+                      <span className="text-sm text-slate-500">{t.menu_form_profit}</span>
                       <span className="font-mono font-bold text-green-600">
                         {formatCurrency(calculations.profit)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center pt-2">
-                      <span className="text-sm font-medium text-slate-700">Margin:</span>
+                      <span className="text-sm font-medium text-slate-700">{t.menu_form_margin}</span>
                       <span
                         className={`font-mono font-bold text-xl ${getMarginColor(
                           calculations.margin
@@ -3685,8 +3698,7 @@ export default function MenuForm({
                   {calculations.margin < 20 && formData.price && (
                     <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
                       <p className="text-sm text-red-800">
-                        <strong>Warning:</strong> Margin is below 20%. Consider increasing the
-                        price or reducing recipe costs.
+                        {t.menu_form_margin_warning}
                       </p>
                     </div>
                   )}
@@ -3694,7 +3706,7 @@ export default function MenuForm({
                   {calculations.margin >= 60 && formData.price && (
                     <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
                       <p className="text-sm text-green-800">
-                        <strong>Excellent:</strong> This item has a healthy profit margin.
+                        {t.menu_form_margin_excellent}
                       </p>
                     </div>
                   )}
@@ -3711,7 +3723,7 @@ export default function MenuForm({
                   onClick={() => handleSave('DRAFT')}
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save as draft'}
+                  {loading ? t.menu_saving : t.menu_form_save_draft}
                 </Button>
                 <Button
                   type="button"
@@ -3720,11 +3732,11 @@ export default function MenuForm({
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
                   onClick={() => handleSave('ACTIVE')}
                 >
-                  {loading ? 'Saving...' : mode === 'create' ? 'Create & publish to menu' : 'Publish to menu'}
+                  {loading ? t.menu_saving : mode === 'create' ? t.menu_form_create_publish : t.menu_form_publish}
                 </Button>
                 <Link href="/dashboard/menu" className="w-full">
                   <Button type="button" variant="outline" disabled={loading} className="w-full border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700">
-                    Cancel
+                    {t.common_cancel}
                   </Button>
                 </Link>
               </div>

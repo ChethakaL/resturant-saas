@@ -28,6 +28,7 @@ import {
   Settings2,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { useDynamicTranslate } from '@/lib/i18n'
 import type { MenuEngineSettings } from '@/types/menu-engine'
 import type { EngineMode } from '@/types/menu-engine'
 import { DEFAULT_SLOT_TIMES, buildSlotRangeLabels, formatSlotRange } from '@/lib/time-slots'
@@ -109,7 +110,6 @@ const quadrantLabelMap: Record<string, string> = {
 }
 
 const getQuadrantLabel = (quadrant: string): string => quadrantLabelMap[quadrant] ?? quadrant
-const formatDishCount = (count: number): string => `${count} ${count === 1 ? 'dish' : 'dishes'}`
 
 export interface MenuOptimizationContentProps {
   categories: CategoryOption[]
@@ -128,6 +128,7 @@ export default function MenuOptimizationContent({
   slotTimes: initialSlotTimes,
 }: MenuOptimizationContentProps) {
   const { toast } = useToast()
+  const { t: td } = useDynamicTranslate()
   const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'profit'
   const resolvedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'profit'
   const [engineMode, setEngineMode] = useState<MenuEngineSettings['mode']>(resolvedMode)
@@ -753,17 +754,17 @@ export default function MenuOptimizationContent({
 
       if (engineMode === 'adaptive' && !suggested.usedSalesData) {
         toast({
-          title: 'Smart Profit fallback used',
-          description: 'No sales history yet; used high-margin fallback for all three featured sections.',
+          title: td('Smart Profit fallback used'),
+          description: td('No sales history yet; used high-margin fallback for all three featured sections.'),
         })
       } else {
         toast({
-          title: 'Featured sections ready',
-          description: 'Three featured sections are ready for breakfast, lunch, and dinner. Each shows only in its time period (menu timezone).',
+          title: td('Featured sections ready'),
+          description: td('Three featured sections are ready for breakfast, lunch, and dinner. Each shows only in its time period (menu timezone).'),
         })
       }
     } catch {
-      toast({ title: 'Failed to auto-fill featured sections', variant: 'destructive' })
+      toast({ title: td('Failed to auto-fill featured sections'), variant: 'destructive' })
     } finally {
       setAutoFillingCarousels(false)
     }
@@ -779,10 +780,10 @@ export default function MenuOptimizationContent({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            Optimize your menu to increase profit and sales
+            {td('Optimize your menu to increase profit and sales')}
           </CardTitle>
           <p className="text-sm text-slate-500">
-            We offer three options to optimize your menu: <strong>1. Classic Mode</strong> — do it yourself. <strong>2. Profit Mode</strong> — highlight high-margin items. <strong>3. Smart Profit Mode</strong> — use sales and profit data to order and suggest. Only you see this data; guests never do.
+            {td('We offer three options to optimize your menu:')} <strong>{td('1. Classic Mode')}</strong> — {td('do it yourself')}. <strong>{td('2. Profit Mode')}</strong> — {td('highlight high-margin items')}. <strong>{td('3. Smart Profit Mode')}</strong> — {td('use sales and profit data to order and suggest. Only you see this data; guests never do.')}
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -796,14 +797,14 @@ export default function MenuOptimizationContent({
                   className={`rounded-xl border-2 p-4 text-left transition ${engineMode === mode ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
                 >
                   <span className="font-semibold">
-                    {mode === 'classic' && '1. Classic Mode: do it yourself'}
-                    {mode === 'profit' && '2. Profit Mode'}
-                    {mode === 'adaptive' && '3. Smart Profit Mode'}
+                    {mode === 'classic' && td('1. Classic Mode: do it yourself')}
+                    {mode === 'profit' && td('2. Profit Mode')}
+                    {mode === 'adaptive' && td('3. Smart Profit Mode')}
                   </span>
                   <p className="text-xs text-slate-500 mt-1">
-                    {mode === 'classic' && 'Display your menu exactly as you organize it. No automatic reordering or suggestions.'}
-                    {mode === 'profit' && 'Highlights high-margin items and suggests profitable combinations to guests.'}
-                    {mode === 'adaptive' && 'Uses your sales and profit data to optimize what guests see and suggest add-ons that increase revenue.'}
+                    {mode === 'classic' && td('Display your menu exactly as you organize it. No automatic reordering or suggestions.')}
+                    {mode === 'profit' && td('Highlights high-margin items and suggests profitable combinations to guests.')}
+                    {mode === 'adaptive' && td('Uses your sales and profit data to optimize what guests see and suggest add-ons that increase revenue.')}
                   </p>
                 </button>
               ))}
@@ -813,35 +814,35 @@ export default function MenuOptimizationContent({
           {engineMode === 'classic' && (
             <>
               <div className="space-y-2">
-                <Label>Suggestions and highlights</Label>
-                <p className="text-xs text-slate-500 mb-2">Enable or disable menu suggestion features.</p>
+                <Label>{td('Suggestions and highlights')}</Label>
+                <p className="text-xs text-slate-500 mb-2">{td('Enable or disable menu suggestion features.')}</p>
                 <div className="flex flex-wrap gap-4">
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={moodFlow} onChange={(e) => setMoodFlow(e.target.checked)} className="rounded" />
-                    <span className="text-sm">Mood-based suggestions (e.g. &quot;something light&quot;, &quot;something filling&quot;)</span>
+                    <span className="text-sm">{td('Mood-based suggestions')} (e.g. &quot;{td('something light')}&quot;, &quot;{td('something filling')}&quot;)</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={bundles} onChange={(e) => setBundles(e.target.checked)} className="rounded" />
-                    <span className="text-sm">&quot;Often bought together&quot; combos (top 5 by purchase count)</span>
+                    <span className="text-sm">{td('Often bought together')} {td('combos')} ({td('top 5 by purchase count')})</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={upsells} onChange={(e) => setUpsells(e.target.checked)} className="rounded" />
-                    <span className="text-sm">Add-on suggestions while browsing</span>
+                    <span className="text-sm">{td('Add-on suggestions while browsing')}</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={scarcityBadges} onChange={(e) => setScarcityBadges(e.target.checked)} className="rounded" />
-                    <span className="text-sm">&quot;Popular&quot; or &quot;Limited&quot; badges on items</span>
+                    <span className="text-sm">&quot;{td('Popular')}&quot; {td('or')} &quot;{td('Limited')}&quot; {td('badges on items')}</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={priceAnchoring} onChange={(e) => setPriceAnchoring(e.target.checked)} className="rounded" />
-                    <span className="text-sm">Show a higher-priced item first to make others feel reasonably priced</span>
+                    <span className="text-sm">{td('Show a higher-priced item first to make others feel reasonably priced')}</span>
                   </label>
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <div className="h-14 flex items-center">
-                    <Label className="leading-tight">Max items to show per category (3–15)</Label>
+                    <Label className="leading-tight">{td('Max items to show per category')} (3–15)</Label>
                   </div>
                   <Input
                     type="number"
@@ -854,7 +855,7 @@ export default function MenuOptimizationContent({
                 </div>
                 <div className="space-y-2">
                   <div className="h-14 flex items-center">
-                    <Label className="leading-tight">Items shown before &quot;See more&quot; per category (1–10)</Label>
+                    <Label className="leading-tight">{td('Items shown before "See more" per category')} (1–10)</Label>
                   </div>
                   <Input
                     type="number"
@@ -867,7 +868,7 @@ export default function MenuOptimizationContent({
                 </div>
                 <div className="space-y-2">
                   <div className="h-14 flex items-start">
-                    <Label className="leading-tight">When to show add-on suggestions (seconds after guest stops scrolling, 2–30)</Label>
+                    <Label className="leading-tight">{td('When to show add-on suggestions')} ({td('seconds after guest stops scrolling')}, 2–30)</Label>
                   </div>
                   <Input
                     type="number"
@@ -889,55 +890,55 @@ export default function MenuOptimizationContent({
                 onClick={() => setSuggestionsExpanded((e) => !e)}
                 className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
               >
-                {suggestionsExpanded ? '▼' : '▶'} Customize which suggestions appear
+                {suggestionsExpanded ? '▼' : '▶'} {td('Customize which suggestions appear')}
               </button>
               {suggestionsExpanded && (
                 <div className="mt-2 pl-4 space-y-1.5 text-sm text-slate-600">
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={moodFlow} onChange={(e) => setMoodFlow(e.target.checked)} className="rounded border-slate-300" />
-                    <span>Mood-based suggestions (e.g. &quot;something light&quot;, &quot;something filling&quot;)</span>
+                    <span>{td('Mood-based suggestions')} (e.g. &quot;{td('something light')}&quot;, &quot;{td('something filling')}&quot;)</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={bundles} onChange={(e) => setBundles(e.target.checked)} className="rounded border-slate-300" />
-                    <span>&quot;Often bought together&quot; combos</span>
+                    <span>{td('Often bought together')} {td('combos')}</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={upsells} onChange={(e) => setUpsells(e.target.checked)} className="rounded border-slate-300" />
-                    <span>Add-on suggestions while browsing</span>
+                    <span>{td('Add-on suggestions while browsing')}</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={scarcityBadges} onChange={(e) => setScarcityBadges(e.target.checked)} className="rounded border-slate-300" />
-                    <span>&quot;Popular&quot; or &quot;Limited&quot; badges on items</span>
+                    <span>&quot;{td('Popular')}&quot; {td('or')} &quot;{td('Limited')}&quot; {td('badges on items')}</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={priceAnchoring} onChange={(e) => setPriceAnchoring(e.target.checked)} className="rounded border-slate-300" />
-                    <span>Show a higher-priced item first to make others feel reasonably priced</span>
+                    <span>{td('Show a higher-priced item first to make others feel reasonably priced')}</span>
                   </label>
                 </div>
               )}
             </div>
           )}
 
-          <Button onClick={saveMenuEngine} disabled={savingEngine} className="gap-2">{savingEngine && <Loader2 className="h-4 w-4 animate-spin" />}Save optimization settings</Button>
+          <Button onClick={saveMenuEngine} disabled={savingEngine} className="gap-2">{savingEngine && <Loader2 className="h-4 w-4 animate-spin" />}{td('Save optimization settings')}</Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Menu Engineering Quadrant</CardTitle>
-          <p className="text-sm text-slate-500">See how items compare by profit margin and popularity. Load the view to see the matrix and which items sit in each quadrant. Only you see this; guests do not.</p>
+          <CardTitle>{td('Menu Engineering Quadrant')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('See how items compare by profit margin and popularity. Load the view to see the matrix and which items sit in each quadrant. Only you see this; guests do not.')}</p>
         </CardHeader>
         <CardContent>
-          <Button variant="outline" onClick={fetchQuadrants} disabled={loadingQuadrants} className="mb-4 gap-2">{loadingQuadrants && <Loader2 className="h-4 w-4 animate-spin" />}Load performance view</Button>
+          <Button variant="outline" onClick={fetchQuadrants} disabled={loadingQuadrants} className="mb-4 gap-2">{loadingQuadrants && <Loader2 className="h-4 w-4 animate-spin" />}{td('Load performance view')}</Button>
           {quadrantData && (
             <div className="space-y-4">
               {/* 2x2 matrix: rows = Margin (High top, Low bottom), cols = Popularity (Low left, High right) */}
               <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50">
                 <div className="p-2 border-b border-slate-200 bg-slate-100/80">
-                  <p className="text-center text-xs font-medium text-slate-600">Popularity →</p>
+                  <p className="text-center text-xs font-medium text-slate-600">{td('Popularity')} →</p>
                   <div className="flex mt-1">
-                    <span className="flex-1 text-center text-[10px] font-medium text-slate-500">Low</span>
-                    <span className="flex-1 text-center text-[10px] font-medium text-slate-500">High</span>
+                    <span className="flex-1 text-center text-[10px] font-medium text-slate-500">{td('Low')}</span>
+                    <span className="flex-1 text-center text-[10px] font-medium text-slate-500">{td('High')}</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-0">
@@ -953,9 +954,9 @@ export default function MenuOptimizationContent({
                     const displayItems = isExpanded ? qItems : qItems.slice(0, 4)
                     return (
                       <div key={q.key} className={`min-h-[100px] p-3 border-slate-200 ${q.border} ${q.bg}`}>
-                        <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${q.colorLabel}`}>{q.label}</p>
-                        <p className={`text-2xl font-bold ${q.colorCount}`}>{formatDishCount(quadrantData.counts[q.key] ?? 0)}</p>
-                        <p className={`text-[10px] mt-0.5 ${q.colorSub}`}>{q.sub}</p>
+                        <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${q.colorLabel}`}>{td(q.label)}</p>
+                        <p className={`text-2xl font-bold ${q.colorCount}`}>{(quadrantData.counts[q.key] ?? 0)} {((quadrantData.counts[q.key] ?? 0) === 1 ? td('dish') : td('dishes'))}</p>
+                        <p className={`text-[10px] mt-0.5 ${q.colorSub}`}>{td(q.sub)}</p>
                         <ul className="mt-2 space-y-0.5 text-xs text-slate-600">
                           {displayItems.map((i) => (
                             <li key={i.menuItemId} className="truncate">{i.name}</li>
@@ -972,7 +973,7 @@ export default function MenuOptimizationContent({
                             })}
                             className={`mt-2 text-[10px] font-medium underline underline-offset-2 ${q.colorLabel}`}
                           >
-                            {isExpanded ? 'Show less' : `See all ${qItems.length} dishes`}
+                            {isExpanded ? td('Show less') : td('See all') + ` ${qItems.length} ` + td('dishes')}
                           </button>
                         )}
                       </div>
@@ -980,20 +981,20 @@ export default function MenuOptimizationContent({
                   })}
                 </div>
                 <div className="px-2 py-1.5 border-t border-slate-200 bg-slate-100/80 flex justify-center gap-6 text-[10px] text-slate-500">
-                  <span>↑ High margin</span>
-                  <span>↓ Low margin</span>
+                  <span>↑ {td('High margin')}</span>
+                  <span>↓ {td('Low margin')}</span>
                 </div>
               </div>
-              <p className="text-xs text-slate-500">Matrix: rows = margin (high at top, low at bottom), columns = popularity (low left, high right). The big number is total dishes in that group. Click &quot;See all&quot; to view every item in a quadrant.</p>
+              <p className="text-xs text-slate-500">{td('Matrix: rows = margin (high at top, low at bottom), columns = popularity (low left, high right). The big number is total dishes in that group. Click "See all" to view every item in a quadrant.')}</p>
               <div className="max-h-64 overflow-y-auto rounded border border-slate-200">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 sticky top-0">
-                    <tr><th className="text-left p-2">Item</th><th className="text-left p-2">Category</th><th className="text-left p-2">Quadrant</th><th className="text-right p-2">Margin %</th><th className="text-right p-2">Units sold</th></tr>
+                    <tr><th className="text-left p-2">{td('Item')}</th><th className="text-left p-2">{td('Category')}</th><th className="text-left p-2">{td('Quadrant')}</th><th className="text-right p-2">{td('Margin %')}</th><th className="text-right p-2">{td('Units sold')}</th></tr>
                   </thead>
                   <tbody>
                     {quadrantData.items.map((row) => (
                       <tr key={row.menuItemId} className="border-t border-slate-100">
-                        <td className="p-2">{row.name}</td><td className="p-2 text-slate-500">{row.categoryName ?? '—'}</td><td className="p-2">{getQuadrantLabel(row.quadrant)}</td><td className="p-2 text-right">{row.marginPercent}</td><td className="p-2 text-right">{row.unitsSold}</td>
+                        <td className="p-2">{row.name}</td><td className="p-2 text-slate-500">{row.categoryName ?? '—'}</td><td className="p-2">{td(getQuadrantLabel(row.quadrant))}</td><td className="p-2 text-right">{row.marginPercent}</td><td className="p-2 text-right">{row.unitsSold}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1008,10 +1009,10 @@ export default function MenuOptimizationContent({
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <CardTitle>Featured sections on your menu</CardTitle>
+              <CardTitle>{td('Featured sections on your menu')}</CardTitle>
               <p className="text-sm text-slate-500 mt-1">
-                Swipeable rows of items on the menu. {engineMode === 'classic' && 'You choose items or use defaults.'}
-                {(engineMode === 'profit' || engineMode === 'adaptive') && "Profit and Smart Profit modes auto-build three featured sections: Chef's recommendation for breakfast, lunch, and dinner. Each shows only in its time period. Up to 6 dishes per section."}
+                {td('Swipeable rows of items on the menu.')} {engineMode === 'classic' && td('You choose items or use defaults.')}
+                {(engineMode === 'profit' || engineMode === 'adaptive') && td("Profit and Smart Profit modes auto-build three featured sections: Chef's recommendation for breakfast, lunch, and dinner. Each shows only in its time period. Up to 6 dishes per section.")}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1023,17 +1024,17 @@ export default function MenuOptimizationContent({
                 title="Edit the time ranges for each menu time period"
               >
                 <Clock className="h-4 w-4" />
-                Display times
+                {td('Display times')}
               </Button>
               {(engineMode === 'profit' || engineMode === 'adaptive') && (
                 <Button size="sm" variant="outline" onClick={autoFillCarousels} disabled={autoFillingCarousels} className="gap-2">
                   {autoFillingCarousels && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Auto-fill sections
+                  {td('Auto-fill sections')}
                 </Button>
               )}
               <Button size="sm" onClick={createShowcase}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add featured section
+                {td('Add featured section')}
               </Button>
             </div>
           </div>
@@ -1042,19 +1043,19 @@ export default function MenuOptimizationContent({
           {showcases.length === 0 ? (
             <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl">
               <LayoutGrid className="h-10 w-10 mx-auto text-slate-300 mb-3" />
-              <p className="text-sm font-medium text-slate-700 mb-1">No featured sections yet</p>
+              <p className="text-sm font-medium text-slate-700 mb-1">{td('No featured sections yet')}</p>
               <p className="text-xs text-slate-500 mb-4">
                 {(engineMode === 'profit' || engineMode === 'adaptive')
-                  ? 'Click &quot;Auto-fill sections&quot; to create featured sections using your high-margin items. You can still edit them.'
-                  : 'Featured sections are swipeable rows of items. You can pick items yourself or create default sections.'}
+                  ? td('Click "Auto-fill sections" to create featured sections using your high-margin items. You can still edit them.')
+                  : td('Featured sections are swipeable rows of items. You can pick items yourself or create default sections.')}
               </p>
-              {(engineMode === 'profit' || engineMode === 'adaptive') ? (
+              {(engineMode === 'profit' || engineMode === 'adaptive')                   ? (
                 <Button variant="outline" onClick={autoFillCarousels} disabled={autoFillingCarousels} className="gap-2">
                   {autoFillingCarousels && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Auto-fill sections
+                  {td('Auto-fill sections')}
                 </Button>
               ) : (
-                <Button variant="outline" onClick={createDefaultShowcases}>Create default sections</Button>
+                <Button variant="outline" onClick={createDefaultShowcases}>{td('Create default sections')}</Button>
               )}
             </div>
           ) : (
@@ -1078,7 +1079,7 @@ export default function MenuOptimizationContent({
                             className="text-sm font-semibold max-w-[440px]"
                           />
                           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                            <span className="rounded-full bg-slate-100 px-2.5 py-1">{showcase.items.length} item{showcase.items.length === 1 ? '' : 's'}</span>
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1">{showcase.items.length} {showcase.items.length === 1 ? td('item') : td('items')}</span>
                             <span className="rounded-full bg-slate-100 px-2.5 py-1">{getShowcaseDisplayLabel(showcase)}</span>
                             <span className="rounded-full bg-slate-100 px-2.5 py-1">{getShowcasePlacementLabel(showcase)}</span>
                             <span className="rounded-full bg-slate-100 px-2.5 py-1">{getShowcaseTimeLabel(showcase)}</span>
@@ -1089,11 +1090,11 @@ export default function MenuOptimizationContent({
                           {(schedule?.useTimeSlots && !isPinnedToSlot) && (
                             <Button variant="outline" size="sm" onClick={() => openScheduleDialog(showcase)} title="Set different items by time of day">
                               <Clock className="h-4 w-4 mr-1" />
-                              Time slots
+                              {td('Time slots')}
                             </Button>
                           )}
                           <Button variant="outline" size="sm" onClick={() => openItemPicker(showcase.id)}>
-                            {showcase.items.length > 0 ? 'Edit items' : 'Pick items'}
+                            {showcase.items.length > 0 ? td('Edit items') : td('Pick items')}
                           </Button>
                           <Button
                             variant="outline"
@@ -1101,7 +1102,7 @@ export default function MenuOptimizationContent({
                             onClick={() => openShowcaseSettings(showcase)}
                           >
                             <Settings2 className="h-4 w-4 mr-1" />
-                            Edit layout and timing
+                            {td('Edit layout and timing')}
                           </Button>
                           {savingShowcase === showcase.id && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
                           <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteShowcase(showcase.id)} disabled={deletingShowcase === showcase.id}>
@@ -1117,7 +1118,7 @@ export default function MenuOptimizationContent({
                           ))}
                           {hiddenItemCount > 0 && (
                             <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
-                              +{hiddenItemCount} more
+                              +{hiddenItemCount} {td('more')}
                             </span>
                           )}
                         </div>
@@ -1134,9 +1135,9 @@ export default function MenuOptimizationContent({
       <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit section layout and timing</DialogTitle>
+            <DialogTitle>{td('Edit section layout and timing')}</DialogTitle>
             <DialogDescription>
-              Choose how this section appears to guests. Dish selection is handled separately from this screen.
+              {td('Choose how this section appears to guests. Dish selection is handled separately from this screen.')}
             </DialogDescription>
           </DialogHeader>
           {(() => {
@@ -1152,37 +1153,37 @@ export default function MenuOptimizationContent({
               <div className="space-y-4 py-2">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1">
-                    <Label className="text-xs text-slate-500">Highlight style</Label>
+                    <Label className="text-xs text-slate-500">{td('Highlight style')}</Label>
                     <select
                       value={settingsDraft.type}
                       onChange={(e) => setSettingsDraft((d) => ({ ...d, type: e.target.value as ShowcaseSettingsDraft['type'] }))}
                       className="w-full rounded border border-slate-200 px-2 py-2 text-sm"
                     >
-                      <option value="CHEFS_HIGHLIGHTS">Chef&apos;s picks (green badge)</option>
-                      <option value="RECOMMENDATIONS">Recommended (amber badge)</option>
+                      <option value="CHEFS_HIGHLIGHTS">{td("Chef's picks")} ({td('green badge')})</option>
+                      <option value="RECOMMENDATIONS">{td('Recommended')} ({td('amber badge')})</option>
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-slate-500">Display style</Label>
+                    <Label className="text-xs text-slate-500">{td('Display style')}</Label>
                     <select
                       value={settingsDraft.displayVariant}
                       onChange={(e) => setSettingsDraft((d) => ({ ...d, displayVariant: e.target.value as ShowcaseSettingsDraft['displayVariant'] }))}
                       className="w-full rounded border border-slate-200 px-2 py-2 text-sm"
                     >
-                      <option value="cards">Card slider (shows 3-4 dishes at once)</option>
-                      <option value="hero">Full-width slider (1 dish at a time)</option>
+                      <option value="cards">{td('Card slider')} ({td('shows 3-4 dishes at once')})</option>
+                      <option value="hero">{td('Full-width slider')} ({td('1 dish at a time')})</option>
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-slate-500">Where it appears</Label>
+                    <Label className="text-xs text-slate-500">{td('Where it appears')}</Label>
                     <select
                       value={settingsDraft.position}
                       onChange={(e) => setSettingsDraft((d) => ({ ...d, position: e.target.value as ShowcaseSettingsDraft['position'] }))}
                       className="w-full rounded border border-slate-200 px-2 py-2 text-sm"
                     >
-                      <option value="top">Top of menu</option>
+                      <option value="top">{td('Top of menu')}</option>
                       {categories.map((cat) => (
-                        <option key={cat.id} value={`after-${cat.id}`}>After &quot;{cat.name}&quot;</option>
+                        <option key={cat.id} value={`after-${cat.id}`}>{td('After')} &quot;{cat.name}&quot;</option>
                       ))}
                     </select>
                   </div>
@@ -1190,7 +1191,7 @@ export default function MenuOptimizationContent({
 
                 <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-slate-900">Preview on guest menu</p>
+                    <p className="text-sm font-medium text-slate-900">{td('Preview on guest menu')}</p>
                     <span
                       className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white"
                       style={{ backgroundColor: typeColor }}
@@ -1200,10 +1201,10 @@ export default function MenuOptimizationContent({
                   </div>
 
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs font-medium text-slate-700 mb-2">Placement</p>
+                    <p className="text-xs font-medium text-slate-700 mb-2">{td('Placement')}</p>
                     {settingsDraft.position === 'top' ? (
                       <div className="space-y-1.5">
-                        <div className="rounded bg-emerald-100 text-emerald-800 text-[11px] px-2 py-1 font-medium">This section appears at the top of the menu</div>
+                        <div className="rounded bg-emerald-100 text-emerald-800 text-[11px] px-2 py-1 font-medium">{td('This section appears at the top of the menu')}</div>
                         <div className="rounded bg-slate-200 h-5 w-2/3" />
                         <div className="rounded bg-slate-200 h-5 w-1/2" />
                       </div>
@@ -1211,7 +1212,7 @@ export default function MenuOptimizationContent({
                       <div className="space-y-1.5">
                         <div className="rounded bg-slate-200 h-5 w-2/3" />
                         <div className="rounded bg-emerald-100 text-emerald-800 text-[11px] px-2 py-1 font-medium">
-                          This section appears after: {placementCategoryName ? `"${placementCategoryName}"` : 'selected category'}
+                          {td('This section appears after')}: {placementCategoryName ? `"${placementCategoryName}"` : td('selected category')}
                         </div>
                         <div className="rounded bg-slate-200 h-5 w-1/2" />
                       </div>

@@ -26,6 +26,7 @@ import {
   Eye,
   MessageCircle,
 } from 'lucide-react'
+import { useI18n, useDynamicTranslate } from '@/lib/i18n'
 
 /* ============================================
  *  FONT OPTIONS (expanded list)
@@ -87,6 +88,8 @@ export default function SettingsClient({
   defaultBackgroundImageData: initialDefaultBackgroundImageData = null,
 }: SettingsClientProps) {
   const { toast } = useToast()
+  const { t: i18n } = useI18n()
+  const { t: td } = useDynamicTranslate()
 
   // Theme state
   const [restaurantName, setRestaurantName] = useState(currentTheme.restaurantName || '')
@@ -330,10 +333,10 @@ export default function SettingsClient({
             <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
               <Dna className="w-5 h-5" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Restaurant DNA</h1>
+            <h1 className="text-3xl font-bold tracking-tight">{i18n.settings_title}</h1>
           </div>
           <p className="text-white/80 ml-[52px]">
-            Your restaurant&apos;s unique identity — colors, fonts, and everything that makes your brand yours.
+            {i18n.settings_subtitle}
           </p>
         </div>
       </div>
@@ -348,9 +351,9 @@ export default function SettingsClient({
             <Sparkles className="w-6 h-6 text-white" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-slate-800">Smart Designer</h3>
+            <h3 className="text-lg font-semibold text-slate-800">{i18n.settings_smart_designer}</h3>
             <p className="text-sm text-slate-500">
-              AI-powered design assistant — get color recommendations, font suggestions, and carousel advice
+              {i18n.settings_smart_designer_description}
             </p>
           </div>
           <MessageCircle className="w-5 h-5 text-slate-700 group-hover:text-slate-900 transition-colors" />
@@ -360,8 +363,8 @@ export default function SettingsClient({
       {/* Management Language */}
       <Card>
         <CardHeader>
-          <CardTitle>Management Language</CardTitle>
-          <p className="text-sm text-slate-500">Choose the language for this dashboard.</p>
+          <CardTitle>{i18n.settings_management_language}</CardTitle>
+          <p className="text-sm text-slate-500">{i18n.settings_management_language_description}</p>
         </CardHeader>
         <CardContent>
           <select
@@ -381,9 +384,9 @@ export default function SettingsClient({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Palette className="h-5 w-5 text-slate-900" />
-            Style Presets
+            {td('Style Presets')}
           </CardTitle>
-          <p className="text-sm text-slate-500">Pick a starting point, then customize everything below.</p>
+          <p className="text-sm text-slate-500">{td('Pick a starting point, then customize everything below.')}</p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -409,14 +412,14 @@ export default function SettingsClient({
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xl">{preset.emoji}</span>
-                  <span className="font-semibold text-sm text-slate-800">{preset.label}</span>
+                  <span className="font-semibold text-sm text-slate-800">{td(preset.label)}</span>
                   {themePreset === key && <Check className="w-4 h-4 text-slate-900 ml-auto" />}
                 </div>
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="h-4 w-4 rounded-full border border-slate-200" style={{ backgroundColor: preset.primaryColor }} />
                   <span className="h-3 w-3 rounded-full border border-slate-200" style={{ backgroundColor: preset.accentColor }} />
                 </div>
-                <p className="text-[10px] text-slate-500">{preset.desc}</p>
+                <p className="text-[10px] text-slate-500">{td(preset.desc)}</p>
               </button>
             ))}
             <button
@@ -426,10 +429,10 @@ export default function SettingsClient({
             >
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xl">🎨</span>
-                <span className="font-semibold text-sm text-slate-800">Custom</span>
+                <span className="font-semibold text-sm text-slate-800">{td('Custom')}</span>
                 {!themePreset && <Check className="w-4 h-4 text-slate-900 ml-auto" />}
               </div>
-              <p className="text-[10px] text-slate-500">Build your own from scratch</p>
+              <p className="text-[10px] text-slate-500">{td('Build your own from scratch')}</p>
             </button>
           </div>
         </CardContent>
@@ -440,9 +443,9 @@ export default function SettingsClient({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Palette className="h-5 w-5 text-slate-600" />
-            Brand Colors
+            {td('Brand Colors')}
           </CardTitle>
-          <p className="text-sm text-slate-500">Click the color circles to change them — pick what feels right for your brand.</p>
+          <p className="text-sm text-slate-500">{td('Click the color circles to change them — pick what feels right for your brand.')}</p>
         </CardHeader>
         <CardContent>
           <div className="grid gap-6 sm:grid-cols-2">
@@ -469,8 +472,8 @@ export default function SettingsClient({
                   </div>
                 </label>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-700">{color.label}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{color.desc}</p>
+                  <p className="text-sm font-medium text-slate-700">{td(color.label)}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{td(color.desc)}</p>
                 </div>
               </div>
             ))}
@@ -481,7 +484,7 @@ export default function SettingsClient({
       {/* Menu Background */}
       <Card>
         <CardHeader>
-          <CardTitle>Menu Background</CardTitle>
+          <CardTitle>{td('Menu Background')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
@@ -498,8 +501,8 @@ export default function SettingsClient({
               >
                 <div className={`h-8 w-12 rounded-lg ${option.preview}`} />
                 <div className="text-left">
-                  <p className="text-sm font-medium text-slate-700">{option.label}</p>
-                  <p className="text-[10px] text-slate-400">{option.desc}</p>
+                  <p className="text-sm font-medium text-slate-700">{td(option.label)}</p>
+                  <p className="text-[10px] text-slate-400">{td(option.desc)}</p>
                 </div>
                 {backgroundStyle === option.value && <Check className="h-4 w-4 text-slate-900" />}
               </button>
@@ -511,8 +514,8 @@ export default function SettingsClient({
       {/* Font Family Dropdown */}
       <Card className="overflow-visible">
         <CardHeader>
-          <CardTitle>Typography</CardTitle>
-          <p className="text-sm text-slate-500">Choose how text appears on your menu.</p>
+          <CardTitle>{td('Typography')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('Choose how text appears on your menu.')}</p>
         </CardHeader>
         <CardContent>
           <div className="relative max-w-md">
@@ -522,8 +525,8 @@ export default function SettingsClient({
               className="w-full flex items-center justify-between rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-left hover:border-slate-300 transition-colors"
             >
               <div>
-                <p className="text-sm font-medium text-slate-800">{selectedFont?.label || 'Select font'}</p>
-                <p className="text-xs text-slate-400">{selectedFont?.family} — {selectedFont?.desc}</p>
+                <p className="text-sm font-medium text-slate-800">{selectedFont ? td(selectedFont.label) : td('Select font')}</p>
+                <p className="text-xs text-slate-400">{selectedFont?.family} — {selectedFont ? td(selectedFont.desc) : ''}</p>
               </div>
               <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${fontDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -538,8 +541,8 @@ export default function SettingsClient({
                   >
                     <span className="text-xl font-bold text-slate-600 w-8">Aa</span>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-slate-700">{font.label}</p>
-                      <p className="text-[10px] text-slate-400">{font.family} — {font.desc}</p>
+                      <p className="text-sm font-medium text-slate-700">{td(font.label)}</p>
+                      <p className="text-[10px] text-slate-400">{font.family} — {td(font.desc)}</p>
                     </div>
                     {fontFamily === font.value && <Check className="w-4 h-4 text-slate-900" />}
                   </button>
@@ -553,15 +556,15 @@ export default function SettingsClient({
       {/* Restaurant Name */}
       <Card>
         <CardHeader>
-          <CardTitle>Restaurant Name</CardTitle>
-          <p className="text-sm text-slate-500">Displayed at the top of your guest-facing menu.</p>
+          <CardTitle>{td('Restaurant Name')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('Displayed at the top of your guest-facing menu.')}</p>
         </CardHeader>
         <CardContent>
           <input
             type="text"
             value={restaurantName}
             onChange={(e) => setRestaurantName(e.target.value)}
-            placeholder="Your restaurant name"
+            placeholder={td('Your restaurant name')}
             className="flex h-10 w-full max-w-sm rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
           />
         </CardContent>
@@ -570,8 +573,8 @@ export default function SettingsClient({
       {/* Carousel Style */}
       <Card>
         <CardHeader>
-          <CardTitle>Carousel Style</CardTitle>
-          <p className="text-sm text-slate-500">How featured items appear on the guest menu.</p>
+          <CardTitle>{td('Carousel Style')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('How featured items appear on the guest menu.')}</p>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
@@ -581,8 +584,8 @@ export default function SettingsClient({
               className={`rounded-xl border-2 px-5 py-4 transition-all text-left hover:shadow-md ${menuCarouselStyle === 'sliding' ? 'border-slate-900 bg-slate-50 shadow-md' : 'border-slate-200 hover:border-slate-300'
                 }`}
             >
-              <p className="text-sm font-semibold text-slate-800">🎠 Sliding Carousel</p>
-              <p className="text-xs text-slate-500 mt-1">One/few items at a time, arrows to scroll</p>
+              <p className="text-sm font-semibold text-slate-800">🎠 {td('Sliding Carousel')}</p>
+              <p className="text-xs text-slate-500 mt-1">{td('One/few items at a time, arrows to scroll')}</p>
               {menuCarouselStyle === 'sliding' && <Check className="h-4 w-4 text-slate-900 mt-1" />}
             </button>
             <button
@@ -591,8 +594,8 @@ export default function SettingsClient({
               className={`rounded-xl border-2 px-5 py-4 transition-all text-left hover:shadow-md ${menuCarouselStyle === 'static' ? 'border-slate-900 bg-slate-50 shadow-md' : 'border-slate-200 hover:border-slate-300'
                 }`}
             >
-              <p className="text-sm font-semibold text-slate-800">📐 Static Row</p>
-              <p className="text-xs text-slate-500 mt-1">All items visible in a horizontal row</p>
+              <p className="text-sm font-semibold text-slate-800">📐 {td('Static Row')}</p>
+              <p className="text-xs text-slate-500 mt-1">{td('All items visible in a horizontal row')}</p>
               {menuCarouselStyle === 'static' && <Check className="h-4 w-4 text-slate-900 mt-1" />}
             </button>
           </div>
@@ -604,9 +607,9 @@ export default function SettingsClient({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5 text-slate-600" />
-            Restaurant Photo (Optional)
+            {td('Restaurant Photo (Optional)')}
           </CardTitle>
-          <p className="text-sm text-slate-500">Upload a photo of your restaurant so we can match your vibe. Your space is part of your brand—this helps your custom design feel like you. Click <strong>Save Restaurant DNA</strong> below after uploading to keep the photo.</p>
+          <p className="text-sm text-slate-500">{td('Upload a photo of your restaurant so we can match your vibe. Your space is part of your brand—this helps your custom design feel like you. Click Save Restaurant DNA below after uploading to keep the photo.')}</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <input
@@ -642,7 +645,7 @@ export default function SettingsClient({
           />
           <Button type="button" variant="outline" size="sm" disabled={uploadingVibeImage} onClick={() => vibeImageInputRef.current?.click()}>
             {uploadingVibeImage ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-            {uploadingVibeImage ? 'Uploading…' : 'Upload photo'}
+            {uploadingVibeImage ? td('Uploading…') : td('Upload photo')}
           </Button>
           {(restaurantVibeImageKey || (legacyVibeImageUrl && !vibeImageRemoved)) && restaurantVibeImageDisplayUrl && (
             <div className="flex items-center gap-3">
@@ -671,14 +674,14 @@ export default function SettingsClient({
       {/* AI menu description tone */}
       <Card>
         <CardHeader>
-          <CardTitle>AI Menu Description Tone</CardTitle>
-          <p className="text-sm text-slate-500">Set how AI writes dish descriptions (e.g. fast casual vs fine dining). Used when generating or auto-filling menu item descriptions.</p>
+          <CardTitle>{td('AI Menu Description Tone')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('Set how AI writes dish descriptions (e.g. fast casual vs fine dining). Used when generating or auto-filling menu item descriptions.')}</p>
         </CardHeader>
         <CardContent>
           <textarea
             value={descriptionTone}
             onChange={(e) => setDescriptionTone(e.target.value)}
-            placeholder="e.g. Write concise, punchy descriptions for fast casual. Or: Write elegant, sensory descriptions suitable for fine dining."
+            placeholder={td('e.g. Write concise, punchy descriptions for fast casual. Or: Write elegant, sensory descriptions suitable for fine dining.')}
             className="min-h-[80px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400"
             rows={3}
           />
@@ -688,8 +691,8 @@ export default function SettingsClient({
       {/* Timezone */}
       <Card>
         <CardHeader>
-          <CardTitle>Timezone</CardTitle>
-          <p className="text-sm text-slate-500">Used for time-based featured sections.</p>
+          <CardTitle>{td('Timezone')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('Used for time-based featured sections.')}</p>
         </CardHeader>
         <CardContent>
           <select
@@ -709,14 +712,14 @@ export default function SettingsClient({
       {/* Dish Photo Background */}
       <Card>
         <CardHeader>
-          <CardTitle>Dish Photo Background</CardTitle>
-          <p className="text-sm text-slate-500">Set the background style for all your menu item photos.</p>
+          <CardTitle>{td('Dish Photo Background')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('Set the background style for all your menu item photos.')}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <textarea
             value={defaultBackgroundDraft}
             onChange={(e) => setDefaultBackgroundDraft(e.target.value)}
-            placeholder="e.g. Clean light-gray tabletop, soft diffuse lighting, minimal studio style"
+            placeholder={td('e.g. Clean light-gray tabletop, soft diffuse lighting, minimal studio style')}
             className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
             rows={3}
           />
@@ -738,10 +741,10 @@ export default function SettingsClient({
             }}
           >
             {savingBackgroundPrompt ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-            Save & generate preview
+            {td('Save & generate preview')}
           </Button>
           <div className="pt-3 border-t border-slate-200 space-y-2">
-            <p className="text-xs text-slate-500">Or upload a reference image:</p>
+            <p className="text-xs text-slate-500">{td('Or upload a reference image:')}</p>
             <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden"
               onChange={async (e) => {
                 const file = e.target.files?.[0]; if (!file) return; setDescribingImage(true)
@@ -760,12 +763,12 @@ export default function SettingsClient({
             />
             <Button type="button" variant="outline" size="sm" disabled={describingImage} onClick={() => imageInputRef.current?.click()}>
               {describingImage ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-              {describingImage ? 'Saving…' : hasDefaultBackgroundImage ? 'Replace reference' : 'Choose image'}
+              {describingImage ? td('Saving…') : hasDefaultBackgroundImage ? td('Replace reference') : td('Choose image')}
             </Button>
           </div>
           {defaultBackgroundImageData && (
             <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
-              <p className="text-xs font-medium text-slate-700">Current preview</p>
+              <p className="text-xs font-medium text-slate-700">{td('Current preview')}</p>
               <img src={defaultBackgroundImageData} alt="Background preview" className="h-36 w-full rounded-md border border-slate-200 object-cover" />
             </div>
           )}
@@ -774,10 +777,10 @@ export default function SettingsClient({
               onClick={async () => {
                 try { const res = await fetch('/api/user/background', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageData: null }) }); const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Failed'); setHasDefaultBackgroundImage(false); setDefaultBackgroundImageData(null); toast({ title: 'Image removed' }) } catch { toast({ title: 'Could not remove image', variant: 'destructive' }) }
               }}
-            >Remove reference image</Button>
+            >{td('Remove reference image')}</Button>
           )}
           <div className="pt-3 border-t border-slate-200 space-y-2">
-            <p className="text-xs text-slate-500">Apply the background to all existing dish photos.</p>
+            <p className="text-xs text-slate-500">{td('Apply the background to all existing dish photos.')}</p>
             <Button type="button" variant="secondary" size="sm"
               disabled={!!applyBackgroundProgress || !(defaultBackgroundPrompt?.trim() || hasDefaultBackgroundImage)}
               onClick={async () => {
@@ -798,7 +801,7 @@ export default function SettingsClient({
                 finally { setApplyBackgroundProgress(null) }
               }}
             >
-              {applyBackgroundProgress ? (<><Loader2 className="h-4 w-4 animate-spin mr-2" />{applyBackgroundProgress.total > 0 ? `Updating ${applyBackgroundProgress.done}/${applyBackgroundProgress.total}…` : 'Loading…'}</>) : 'Apply to all dish photos'}
+              {applyBackgroundProgress ? (<><Loader2 className="h-4 w-4 animate-spin mr-2" />{applyBackgroundProgress.total > 0 ? td(`Updating ${applyBackgroundProgress.done}/${applyBackgroundProgress.total}…`) : td('Loading…')}</>) : td('Apply to all dish photos')}
             </Button>
           </div>
         </CardContent>
@@ -807,8 +810,8 @@ export default function SettingsClient({
       {/* Logo */}
       <Card>
         <CardHeader>
-          <CardTitle>Restaurant Logo</CardTitle>
-          <p className="text-sm text-slate-500">Upload or paste a logo URL. Appears at the top of your digital menu.</p>
+          <CardTitle>{td('Restaurant Logo')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('Upload or paste a logo URL. Appears at the top of your digital menu.')}</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <input ref={logoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml,image/gif" className="hidden"
@@ -825,10 +828,10 @@ export default function SettingsClient({
           />
           <Button type="button" variant="outline" size="sm" disabled={logoUploading} onClick={() => logoInputRef.current?.click()}>
             {logoUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-            {logoUploading ? 'Uploading…' : 'Upload from computer'}
+            {logoUploading ? td('Uploading…') : td('Upload from computer')}
           </Button>
           <div>
-            <Label htmlFor="logoUrl" className="text-xs text-slate-500">Or paste URL</Label>
+            <Label htmlFor="logoUrl" className="text-xs text-slate-500">{td('Or paste URL')}</Label>
             <Input id="logoUrl" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" className="mt-1 max-w-sm" />
           </div>
           {logoUrl && (
@@ -843,7 +846,7 @@ export default function SettingsClient({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Eye className="w-5 h-5 text-slate-900" />
-            Live Preview
+            {td('Live Preview')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -854,8 +857,8 @@ export default function SettingsClient({
             <div className="flex items-center gap-3 mb-3">
               <div className="h-10 w-10 rounded-full" style={{ backgroundColor: primaryColor }} />
               <div>
-                <p className="font-bold text-lg">{restaurantName || 'Your Restaurant'}</p>
-                <p className="text-xs opacity-60">Menu Preview</p>
+                <p className="font-bold text-lg">{restaurantName || td('Your Restaurant')}</p>
+                <p className="text-xs opacity-60">{td('Menu Preview')}</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -872,8 +875,8 @@ export default function SettingsClient({
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>❄️ Seasonal Snowfall</CardTitle>
-              <p className="text-sm text-slate-500 mt-1">Animated snowfall on the guest menu during winter.</p>
+              <CardTitle>❄️ {td('Seasonal Snowfall')}</CardTitle>
+              <p className="text-sm text-slate-500 mt-1">{td('Animated snowfall on the guest menu during winter.')}</p>
             </div>
             <button type="button" role="switch" aria-checked={snowfallEnabled} onClick={() => setSnowfallEnabled((v) => !v)}
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${snowfallEnabled ? 'bg-slate-500' : 'bg-slate-200'}`}
@@ -886,11 +889,11 @@ export default function SettingsClient({
           <CardContent>
             <div className="flex flex-wrap gap-4">
               <div className="flex flex-col gap-1">
-                <Label className="text-xs text-slate-500">Start (MM-DD)</Label>
+                <Label className="text-xs text-slate-500">{td('Start (MM-DD)')}</Label>
                 <Input value={snowfallStart} onChange={(e) => setSnowfallStart(e.target.value)} placeholder="12-15" className="h-8 w-24 text-xs" />
               </div>
               <div className="flex flex-col gap-1">
-                <Label className="text-xs text-slate-500">End (MM-DD)</Label>
+                <Label className="text-xs text-slate-500">{td('End (MM-DD)')}</Label>
                 <Input value={snowfallEnd} onChange={(e) => setSnowfallEnd(e.target.value)} placeholder="01-07" className="h-8 w-24 text-xs" />
               </div>
             </div>
@@ -904,7 +907,7 @@ export default function SettingsClient({
           className="w-full h-12 bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white rounded-xl shadow-lg shadow-slate-900/10 text-base font-semibold"
         >
           {savingTheme ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Check className="h-5 w-5 mr-2" />}
-          Save Restaurant DNA
+          {i18n.settings_save_button}
         </Button>
       </div>
 
@@ -952,7 +955,7 @@ export default function SettingsClient({
                 <Sparkles className="w-5 h-5" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold">Smart Designer</h3>
+                <h3 className="font-semibold">{i18n.settings_smart_designer}</h3>
                 <p className="text-xs text-white/70">AI design assistant</p>
               </div>
               <button onClick={() => setDesignerOpen(false)} className="text-white/70 hover:text-white text-xl px-2">✕</button>

@@ -59,7 +59,11 @@ export async function POST(request: NextRequest) {
     const protein = toNullableNumber(body.protein)
     const carbs = toNullableNumber(body.carbs)
 
-    if (languageValue === 'en') {
+    // When target language is English, we still need AI translation
+    // because the source text may be in Arabic or Kurdish (if the management language is not English).
+    // Only skip AI if the text is already obviously English (ASCII-only).
+    const isSourceAscii = /^[\x00-\x7F]*$/.test(name + (description || ''))
+    if (languageValue === 'en' && isSourceAscii) {
       return NextResponse.json({
         name,
         description,
@@ -78,11 +82,13 @@ export async function POST(request: NextRequest) {
     ].join(' | ')
 
     const languageInstruction =
-      languageValue === 'ar_fusha'
-        ? 'Translate into Fusha Arabic (Modern Standard Arabic). Do not translate word for word: translate the feeling and intent so the Arabic sounds natural and appetizing to a local diner. Use idiomatic, warm language suitable for a restaurant menu.'
-        : languageValue === 'ar'
-          ? 'Translate into Iraqi Arabic. Do not translate word for word: translate the feeling and intent so the Arabic sounds natural and appetizing. Use idiomatic Iraqi Arabic suitable for a restaurant menu.'
-          : `Translate into ${LANGUAGE_LABELS[languageValue]}. Keep the tone and intent of the original; natural, appetizing menu language.`
+      languageValue === 'en'
+        ? 'Translate into English. The source text may be in Arabic or Kurdish. Produce natural, appetizing English menu language.'
+        : languageValue === 'ar_fusha'
+          ? 'Translate into Fusha Arabic (Modern Standard Arabic). Do not translate word for word: translate the feeling and intent so the Arabic sounds natural and appetizing to a local diner. Use idiomatic, warm language suitable for a restaurant menu.'
+          : languageValue === 'ar'
+            ? 'Translate into Iraqi Arabic. Do not translate word for word: translate the feeling and intent so the Arabic sounds natural and appetizing. Use idiomatic Iraqi Arabic suitable for a restaurant menu.'
+            : `Translate into ${LANGUAGE_LABELS[languageValue]}. Keep the tone and intent of the original; natural, appetizing menu language.`
 
     const prompt = `You are an imaginative chef rewriting menu content for local diners. ${languageInstruction}
 Keep digits as ASCII. Return ONLY the JSON structure below with no extra text:

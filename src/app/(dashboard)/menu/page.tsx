@@ -1,8 +1,9 @@
-import { Prisma } from '@prisma/client'
+import { Prisma, MenuItemTranslationLanguage } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { getServerTranslations } from '@/lib/i18n/server'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatPercentage } from '@/lib/utils'
@@ -17,9 +18,18 @@ import { parseSlotTimes } from '@/lib/time-slots'
 
 const PAGE_SIZE = 20
 
+/** Map management locale to the MenuItemTranslationLanguage enum value */
+function getTranslationLanguage(locale: string): MenuItemTranslationLanguage | null {
+  if (locale === 'ku') return 'ku'
+  if (locale === 'ar-fusha' || locale === 'ar_fusha') return 'ar_fusha'
+  // English is the source language – no translation overlay needed
+  return null
+}
+
 async function getMenuData(
   restaurantId: string,
   page: number,
+  translationLang: MenuItemTranslationLanguage | null,
   search?: string,
   statusFilter?: string
 ) {
@@ -29,11 +39,22 @@ async function getMenuData(
   const where: Prisma.MenuItemWhereInput = {
     restaurantId,
     ...(normalizedSearch
-      ? {
-          name: {
-            contains: normalizedSearch,
-            mode: 'insensitive',
-          },
+      ? translationLang
+        ? {
+          OR: [
+            { name: { contains: normalizedSearch, mode: 'insensitive' as const } },
+            {
+              translations: {
+                some: {
+                  language: translationLang,
+                  translatedName: { contains: normalizedSearch, mode: 'insensitive' as const },
+                },
+              },
+            },
+          ],
+        }
+        : {
+          name: { contains: normalizedSearch, mode: 'insensitive' as const },
         }
       : {}),
     ...(statusFilter === 'DRAFT' ? { status: 'DRAFT' } : {}),
@@ -54,6 +75,9 @@ async function getMenuData(
               ingredient: true,
             },
           },
+          translations: translationLang
+            ? { where: { language: translationLang } }
+            : false,
         },
         orderBy: { name: 'asc' },
         skip,
@@ -100,8 +124,15 @@ async function getMenuData(
     )
     const margin = item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0
 
+    // Overlay translated name/description when management language isn't English
+    const tx = translationLang && (item as any).translations?.[0]
+    const displayName = tx?.translatedName || item.name
+    const displayDescription = tx?.translatedDescription || item.description
+
     return {
       ...item,
+      name: displayName,
+      description: displayDescription,
       cost,
       margin,
       profit: item.price - cost,
@@ -146,13 +177,16 @@ export default async function MenuPage({
     typeof rawSearch === 'string'
       ? rawSearch.trim()
       : Array.isArray(rawSearch)
-      ? rawSearch[0]?.trim() ?? ''
-      : ''
+        ? rawSearch[0]?.trim() ?? ''
+        : ''
   const statusFilter = searchParams?.status ?? ''
 
   // Defer showcases + all menu items to optimization tab (loaded client-side when user opens that tab)
+  const { locale, t } = await getServerTranslations()
+  const translationLang = getTranslationLanguage(locale)
+
   const [data, user, restaurant] = await Promise.all([
-    getMenuData(restaurantId, page, normalizedSearch, statusFilter),
+    getMenuData(restaurantId, page, translationLang, normalizedSearch, statusFilter),
     prisma.user.findUnique({
       where: { id: session!.user.id },
       select: { defaultBackgroundPrompt: true },
@@ -176,10 +210,10 @@ export default async function MenuPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Menu</h1>
-        <p className="text-slate-500 mt-1">Menu items, categories, add-ons, and how the digital menu suggests items to guests.</p>
+        <h1 className="text-3xl font-bold text-slate-900">{t.menu_title}</h1>
+        <p className="text-slate-500 mt-1">{t.menu_subtitle}</p>
         <div className="mt-3 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-          <span className="font-medium text-slate-700">Client menu URL:</span>
+          <span className="font-medium text-slate-700">{t.menu_client_url}</span>
           <a
             href={clientFacingMenuUrl}
             target="_blank"
@@ -196,123 +230,123 @@ export default async function MenuPage({
         slotTimes={slotTimesRaw}
       >
         <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div />
-        <div className="flex flex-wrap gap-2">
-          <CategoriesButtonWithHelp />
-          <BulkMenuImport categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
-          <ImportByDigitalMenu categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
-          <Link href="/menu/new">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Menu Item
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Total Menu Items</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.totalCount}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Average Margin</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatPercentage(data.avgMargin)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Categories</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.categories.length}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>All Menu Items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            method="get"
-            className="mb-4 flex flex-wrap items-end gap-2"
-          >
-            <input type="hidden" name="page" value="1" />
-            <div className="flex flex-1 gap-2 min-w-0">
-              <Input
-                name="search"
-                placeholder="Search menu items"
-                defaultValue={normalizedSearch}
-                className="min-w-0"
-              />
-              <select
-                name="status"
-                defaultValue={statusFilter}
-                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="">All statuses</option>
-                <option value="DRAFT">Draft</option>
-                <option value="ACTIVE">Published</option>
-                <option value="COSTING_INCOMPLETE">Costing incomplete</option>
-              </select>
-              <Button size="sm" type="submit">
-                Search
-              </Button>
-            </div>
-            {(normalizedSearch || statusFilter) && (
-              <Link href="/dashboard/menu?page=1">
-                <Button variant="outline" size="sm">
-                  Clear
+          <div className="flex items-center justify-between">
+            <div />
+            <div className="flex flex-wrap gap-2">
+              <CategoriesButtonWithHelp />
+              <BulkMenuImport categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
+              <ImportByDigitalMenu categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
+              <Link href="/menu/new">
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t.menu_add_item}
                 </Button>
               </Link>
-            )}
-          </form>
-
-          <MenuItemsTable menuItems={data.menuItems} />
-
-          {/* Pagination */}
-          {data.totalPages > 1 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 mt-4">
-              <p className="text-sm text-slate-500">
-                Page {page} of {data.totalPages} ({data.totalCount} items)
-              </p>
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/dashboard/menu?page=${Math.max(page - 1, 1)}${searchQuery}`}
-                >
-                  <Button variant="outline" size="sm" disabled={page <= 1}>
-                    Previous
-                  </Button>
-                </Link>
-                <Link
-                  href={`/dashboard/menu?page=${Math.min(
-                    page + 1,
-                    data.totalPages
-                  )}${searchQuery}`}
-                >
-                  <Button variant="outline" size="sm" disabled={page >= data.totalPages}>
-                    Next
-                  </Button>
-                </Link>
-              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">{t.menu_total_items}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{data.totalCount}</div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">{t.menu_average_margin}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  {formatPercentage(data.avgMargin)}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">{t.menu_categories}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{data.categories.length}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t.menu_all_items}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form
+                method="get"
+                className="mb-4 flex flex-wrap items-end gap-2"
+              >
+                <input type="hidden" name="page" value="1" />
+                <div className="flex flex-1 gap-2 min-w-0">
+                  <Input
+                    name="search"
+                    placeholder={t.menu_search_placeholder}
+                    defaultValue={normalizedSearch}
+                    className="min-w-0"
+                  />
+                  <select
+                    name="status"
+                    defaultValue={statusFilter}
+                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    <option value="">{t.menu_all_statuses}</option>
+                    <option value="DRAFT">{t.menu_draft}</option>
+                    <option value="ACTIVE">{t.menu_published}</option>
+                    <option value="COSTING_INCOMPLETE">{t.menu_costing_incomplete}</option>
+                  </select>
+                  <Button size="sm" type="submit">
+                    {t.menu_search}
+                  </Button>
+                </div>
+                {(normalizedSearch || statusFilter) && (
+                  <Link href="/dashboard/menu?page=1">
+                    <Button variant="outline" size="sm">
+                      {t.menu_clear}
+                    </Button>
+                  </Link>
+                )}
+              </form>
+
+              <MenuItemsTable menuItems={data.menuItems} />
+
+              {/* Pagination */}
+              {data.totalPages > 1 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 mt-4">
+                  <p className="text-sm text-slate-500">
+                    {t.menu_page_of.replace('{0}', String(page)).replace('{1}', String(data.totalPages)).replace('{2}', String(data.totalCount))}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/dashboard/menu?page=${Math.max(page - 1, 1)}${searchQuery}`}
+                    >
+                      <Button variant="outline" size="sm" disabled={page <= 1}>
+                        {t.menu_previous}
+                      </Button>
+                    </Link>
+                    <Link
+                      href={`/dashboard/menu?page=${Math.min(
+                        page + 1,
+                        data.totalPages
+                      )}${searchQuery}`}
+                    >
+                      <Button variant="outline" size="sm" disabled={page >= data.totalPages}>
+                        {t.menu_next}
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </MenuPageTabs>
     </div>

@@ -23,22 +23,7 @@ import {
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home, disabled: false },
-  { name: 'Add Menu Items', href: '/menu', icon: UtensilsCrossed, disabled: false },
-  { name: 'Optimize your menu sales', href: '/menu?tab=optimization', icon: Zap, disabled: false },
-  { name: 'Restaurant DNA', href: '/settings', icon: Dna, disabled: false },
-  { name: 'Sales Reports', href: '/profit-loss', icon: TrendingUp, disabled: false },
-  { name: 'Inventory', href: '/inventory', icon: Package, disabled: false },
-  // Orders page hidden: Tables page has orders on it. To show again, uncomment:
-  // { name: 'Orders', href: '/orders', icon: Receipt, disabled: false },
-  { name: 'Tables', href: '/tables', icon: Square, disabled: false },
-  { name: 'Sales POS', href: '/orders/new', icon: ShoppingCart, disabled: true, comingSoon: true },
-  { name: 'HR', href: '/hr/employees', icon: Users, disabled: true, comingSoon: true },
-  { name: 'Shifts', href: '/hr/shifts', icon: Clock, disabled: true, comingSoon: true },
-  { name: 'Payroll', href: '/hr/payroll', icon: Wallet, disabled: true, comingSoon: true },
-]
+import { useI18n } from '@/lib/i18n'
 
 interface SidebarProps {
   userName: string
@@ -48,10 +33,26 @@ interface SidebarProps {
 export function Sidebar({ userName, userRole }: SidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { t } = useI18n()
+
+  const navigation = [
+    { name: t.sidebar_dashboard, href: '/dashboard', icon: Home, disabled: false },
+    { name: t.sidebar_add_menu_items, href: '/menu', icon: UtensilsCrossed, disabled: false },
+    { name: t.sidebar_optimize_menu, href: '/menu?tab=optimization', icon: Zap, disabled: false },
+    { name: t.sidebar_restaurant_dna, href: '/settings', icon: Dna, disabled: false },
+    { name: t.sidebar_sales_reports, href: '/profit-loss', icon: TrendingUp, disabled: false },
+    { name: t.sidebar_inventory, href: '/inventory', icon: Package, disabled: false },
+    { name: t.sidebar_tables, href: '/tables', icon: Square, disabled: false },
+    { name: t.sidebar_sales_pos, href: '/orders/new', icon: ShoppingCart, disabled: true, comingSoon: true },
+    { name: t.sidebar_hr, href: '/hr/employees', icon: Users, disabled: true, comingSoon: true },
+    { name: t.sidebar_shifts, href: '/hr/shifts', icon: Clock, disabled: true, comingSoon: true },
+    { name: t.sidebar_payroll, href: '/hr/payroll', icon: Wallet, disabled: true, comingSoon: true },
+  ]
+
   const visibleNavigation =
     userRole === 'STAFF'
       ? navigation.filter((item) =>
-        ['Sales POS', 'Orders', 'Add Menu Items', 'Meal Prep'].includes(item.name)
+        [t.sidebar_sales_pos, t.sidebar_add_menu_items].includes(item.name)
       )
       : navigation
 
@@ -95,7 +96,7 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
                 <item.icon className="h-5 w-5 text-slate-500" />
                 <span className="font-medium text-slate-500">{item.name}</span>
                 {item.comingSoon && (
-                  <span className="ml-auto text-[10px] font-semibold bg-slate-700 text-slate-400 rounded px-1.5 py-0.5">SOON</span>
+                  <span className="ml-auto text-[10px] font-semibold bg-slate-700 text-slate-400 rounded px-1.5 py-0.5">{t.sidebar_soon}</span>
                 )}
               </div>
             )
@@ -136,10 +137,10 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
                 ? 'bg-slate-800 text-white'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             )}
-            title="Subscription"
+            title={t.sidebar_subscription}
           >
             <CreditCard className="h-3.5 w-3.5" />
-            <span>Subscription</span>
+            <span>{t.sidebar_subscription}</span>
           </Link>
         </div>
         <Button
@@ -150,7 +151,7 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
           onClick={() => signOut({ callbackUrl: '/login' })}
         >
           <LogOut className="h-4 w-4 mr-2 text-black" />
-          Sign Out
+          {t.sidebar_sign_out}
         </Button>
       </div>
     </div>

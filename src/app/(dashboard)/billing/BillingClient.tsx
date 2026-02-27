@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Building2, Plus, Trash2, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import AddBranchModal, { AddBranchFormData } from '@/components/branches/AddBranchModal'
+import { useI18n } from '@/lib/i18n'
 
 interface BillingClientProps {
   isActive: boolean
@@ -123,11 +124,13 @@ export default function BillingClient({
   const additionalBranchCost = 10 // $10/month per extra branch
   const extraBranches = Math.max(0, maxBranches - 1)
 
+  const { t } = useI18n()
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Membership</h1>
-        <p className="text-slate-500 mt-1">Manage your membership and billing details.</p>
+        <h1 className="text-3xl font-bold text-slate-900">{t.billing_title}</h1>
+        <p className="text-slate-500 mt-1">{t.billing_subtitle}</p>
       </div>
       <SubscriptionTab
         isActive={isActive}

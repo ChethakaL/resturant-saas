@@ -10,6 +10,7 @@ export interface TranslationInputPayload {
 }
 
 const SUPPORTED_LANGUAGES: MenuItemTranslationLanguage[] = [
+  'en',
   'ar',
   'ar_fusha',
   'ku',

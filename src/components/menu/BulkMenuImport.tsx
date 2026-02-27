@@ -43,6 +43,7 @@ import { Category, Ingredient } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
 import { classifyItemType, type DefaultCategoryKey } from '@/lib/category-suggest'
+import { useI18n } from '@/lib/i18n'
 
 interface ParsedIngredient {
   name: string
@@ -194,6 +195,7 @@ function autoAssignCategoryId(item: ExtractedMenuItem, categories: Category[]): 
 
 export default function BulkMenuImport({ categories, ingredients, defaultBackgroundPrompt }: BulkMenuImportProps) {
   const { toast } = useToast()
+  const { t } = useI18n()
   const [availableCategories, setAvailableCategories] = useState<Category[]>(categories)
   const [availableIngredients, setAvailableIngredients] = useState<Ingredient[]>(ingredients)
   const [isOpen, setIsOpen] = useState(false)
@@ -641,7 +643,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     <>
       <Button variant="outline" onClick={() => { setIsOpen(true); resetModal() }}>
         <ImagePlus className="h-4 w-4 mr-2" />
-        Add Menu Items by Image
+        {t.menu_add_by_image}
       </Button>
 
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetModal(); setIsOpen(open) }}>

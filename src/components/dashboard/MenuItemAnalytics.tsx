@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import { Award, TrendingDown, TrendingUp, ShoppingCart } from 'lucide-react'
+import { useI18n } from '@/lib/i18n'
 
 interface MenuItemStat {
   id: string
@@ -30,6 +31,8 @@ interface MenuItemAnalyticsProps {
   topCombos: ComboStat[]
 }
 
+const TIME_BUCKET_KEYS = { Morning: 'dashboard_time_morning', Afternoon: 'dashboard_time_afternoon', Evening: 'dashboard_time_evening' } as const
+
 export default function MenuItemAnalytics({
   topSellingItems,
   worstSellingItems,
@@ -37,6 +40,13 @@ export default function MenuItemAnalytics({
   lowestMarginItems,
   topCombos,
 }: MenuItemAnalyticsProps) {
+  const { t } = useI18n()
+
+  const translateTimeBucket = (bucket: string) => {
+    const key = TIME_BUCKET_KEYS[bucket as keyof typeof TIME_BUCKET_KEYS]
+    return key ? t[key] : bucket
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* Top Selling Items */}
@@ -44,7 +54,7 @@ export default function MenuItemAnalytics({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Award className="h-5 w-5 text-amber-500" />
-            Top Selling Items (This Month)
+            {t.dashboard_top_selling}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -52,11 +62,11 @@ export default function MenuItemAnalytics({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left p-2 font-semibold">ITEM</th>
-                  <th className="text-right p-2 font-semibold">QTY</th>
-                  <th className="text-right p-2 font-semibold">PROFIT</th>
-                  <th className="text-right p-2 font-semibold">MARGIN</th>
-                  <th className="text-center p-2 font-semibold">PEAK</th>
+                  <th className="text-left p-2 font-semibold">{t.dashboard_col_item}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_qty}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_profit}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_margin}</th>
+                  <th className="text-center p-2 font-semibold">{t.dashboard_col_peak}</th>
                 </tr>
               </thead>
               <tbody>
@@ -71,7 +81,7 @@ export default function MenuItemAnalytics({
                       {formatPercentage(item.margin, 1)}
                     </td>
                     <td className="p-2 text-center text-xs text-slate-500">
-                      {item.topTimeOfDay}
+                      {translateTimeBucket(item.topTimeOfDay)}
                     </td>
                   </tr>
                 ))}
@@ -86,7 +96,7 @@ export default function MenuItemAnalytics({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingDown className="h-5 w-5 text-red-500" />
-            Worst Selling Items (This Month)
+            {t.dashboard_worst_selling}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -94,10 +104,10 @@ export default function MenuItemAnalytics({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left p-2 font-semibold">ITEM</th>
-                  <th className="text-right p-2 font-semibold">QTY</th>
-                  <th className="text-right p-2 font-semibold">REVENUE</th>
-                  <th className="text-right p-2 font-semibold">MARGIN</th>
+                  <th className="text-left p-2 font-semibold">{t.dashboard_col_item}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_qty}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_revenue}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_margin}</th>
                 </tr>
               </thead>
               <tbody>
@@ -124,7 +134,7 @@ export default function MenuItemAnalytics({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-green-500" />
-            Highest Margin Items
+            {t.dashboard_highest_margin}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -132,11 +142,11 @@ export default function MenuItemAnalytics({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left p-2 font-semibold">ITEM</th>
-                  <th className="text-right p-2 font-semibold">QTY</th>
-                  <th className="text-right p-2 font-semibold">MARGIN</th>
-                  <th className="text-center p-2 font-semibold">PEAK</th>
-                  <th className="text-left p-2 font-semibold">WITH</th>
+                  <th className="text-left p-2 font-semibold">{t.dashboard_col_item}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_qty}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_margin}</th>
+                  <th className="text-center p-2 font-semibold">{t.dashboard_col_peak}</th>
+                  <th className="text-left p-2 font-semibold">{t.dashboard_col_with}</th>
                 </tr>
               </thead>
               <tbody>
@@ -148,10 +158,10 @@ export default function MenuItemAnalytics({
                       {formatPercentage(item.margin, 1)}
                     </td>
                     <td className="p-2 text-center text-xs text-slate-500">
-                      {item.topTimeOfDay}
+                      {translateTimeBucket(item.topTimeOfDay)}
                     </td>
                     <td className="p-2 text-xs text-slate-500">
-                      {item.commonlyWith || '-'}
+                      {item.commonlyWith || '—'}
                     </td>
                   </tr>
                 ))}
@@ -166,7 +176,7 @@ export default function MenuItemAnalytics({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingDown className="h-5 w-5 text-red-500" />
-            Lowest Margin Items
+            {t.dashboard_lowest_margin}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -174,10 +184,10 @@ export default function MenuItemAnalytics({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left p-2 font-semibold">ITEM</th>
-                  <th className="text-right p-2 font-semibold">QTY</th>
-                  <th className="text-right p-2 font-semibold">MARGIN</th>
-                  <th className="text-right p-2 font-semibold">REVENUE</th>
+                  <th className="text-left p-2 font-semibold">{t.dashboard_col_item}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_qty}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_margin}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_revenue}</th>
                 </tr>
               </thead>
               <tbody>
@@ -204,7 +214,7 @@ export default function MenuItemAnalytics({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5 text-blue-500" />
-            Items Commonly Purchased Together
+            {t.dashboard_commonly_together}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -212,10 +222,10 @@ export default function MenuItemAnalytics({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left p-2 font-semibold">ITEM COMBINATION</th>
-                  <th className="text-right p-2 font-semibold">COUNT</th>
-                  <th className="text-right p-2 font-semibold">TOTAL MARGIN</th>
-                  <th className="text-center p-2 font-semibold">PEAK TIME</th>
+                  <th className="text-left p-2 font-semibold">{t.dashboard_col_item_combination}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_count}</th>
+                  <th className="text-right p-2 font-semibold">{t.dashboard_col_total_margin}</th>
+                  <th className="text-center p-2 font-semibold">{t.dashboard_col_peak_time}</th>
                 </tr>
               </thead>
               <tbody>
@@ -229,7 +239,7 @@ export default function MenuItemAnalytics({
                       {formatPercentage(combo.margin, 1)}
                     </td>
                     <td className="p-2 text-center text-xs text-slate-500">
-                      {combo.topTimeOfDay}
+                      {translateTimeBucket(combo.topTimeOfDay)}
                     </td>
                   </tr>
                 ))}

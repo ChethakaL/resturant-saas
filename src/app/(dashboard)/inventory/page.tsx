@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getServerTranslations } from '@/lib/i18n/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
@@ -99,20 +100,22 @@ export default async function InventoryPage({
   })
   const badUnitCount = allUnits.filter((i) => !isAllowedUnit(canonicalise(i.unit))).length
 
+  const { t } = await getServerTranslations()
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Inventory Management</h1>
-          <p className="text-slate-500 mt-1">Manage your ingredients</p>
+          <h1 className="text-3xl font-bold text-slate-900">{t.inventory_title}</h1>
+          <p className="text-slate-500 mt-1">{t.inventory_subtitle}</p>
         </div>
         <div className="flex items-center gap-3">
           <InventorySearch />
           <Link href="/inventory/new">
             <Button className="shrink-0">
               <Plus className="h-4 w-4 mr-2" />
-              Add Ingredient
+              {t.inventory_add_ingredient}
             </Button>
           </Link>
         </div>
@@ -124,9 +127,9 @@ export default async function InventoryPage({
       {/* Ingredients Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Ingredients</CardTitle>
+          <CardTitle>{t.inventory_all_ingredients}</CardTitle>
           <p className="text-sm text-slate-500 font-normal mt-1">
-            Cost per unit is updated automatically when you record a delivery or an expense in P&L linked to an ingredient (quantity + unit cost). You don&apos;t need to change it here unless you want to correct a value.
+            {t.inventory_cost_note}
           </p>
         </CardHeader>
         <CardContent>

@@ -8,12 +8,7 @@ import { Square, Receipt, LogOut, ChefHat } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-
-const navigation = [
-  { name: 'Tables', href: '/waiter/dashboard', icon: Square },
-  { name: 'My Orders', href: '/waiter/dashboard?tab=orders', icon: Receipt },
-  { name: 'Chefs', href: '/waiter/dashboard?tab=kitchen', icon: ChefHat },
-]
+import { useI18n } from '@/lib/i18n'
 
 interface WaiterSidebarProps {
   userName: string
@@ -23,6 +18,13 @@ interface WaiterSidebarProps {
 export function WaiterSidebar({ userName, restaurantName }: WaiterSidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { t } = useI18n()
+
+  const navigation = [
+    { name: t.waiter_tables, href: '/waiter/dashboard', icon: Square },
+    { name: t.waiter_my_orders, href: '/waiter/dashboard?tab=orders', icon: Receipt },
+    { name: t.waiter_chefs, href: '/waiter/dashboard?tab=kitchen', icon: ChefHat },
+  ]
 
   return (
     <div className="flex flex-col h-full bg-slate-900 text-white w-64">
@@ -35,7 +37,7 @@ export function WaiterSidebar({ userName, restaurantName }: WaiterSidebarProps) 
           className="h-12 w-auto rounded-full"
           priority
         />
-        <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">WAITER</p>
+        <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">{t.waiter_role_label}</p>
       </div>
 
       <Separator className="bg-slate-700" />
@@ -81,7 +83,7 @@ export function WaiterSidebar({ userName, restaurantName }: WaiterSidebarProps) 
           onClick={() => signOut({ callbackUrl: '/waiter/login' })}
         >
           <LogOut className="h-4 w-4 mr-2 text-black" />
-          Sign Out
+          {t.waiter_sign_out}
         </Button>
       </div>
     </div>

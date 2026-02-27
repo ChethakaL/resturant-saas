@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Pencil, Plus, Trash2, ChefHat } from 'lucide-react'
 import CreatePrepSessionModal from './CreatePrepSessionModal'
 import RecordUsageModal from './RecordUsageModal'
+import { useI18n } from '@/lib/i18n'
 
 interface PreppedStock {
   id: string
@@ -124,13 +125,15 @@ export default function MealPrepPageClient() {
     )
   }
 
+  const { t } = useI18n()
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Meal Prep</h1>
-          <p className="text-slate-500 mt-1">Manage batch production and prepped dishes</p>
+          <h1 className="text-3xl font-bold text-slate-900">{t.meal_prep_title}</h1>
+          <p className="text-slate-500 mt-1">{t.meal_prep_subtitle}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowUsageModal(true)}>
@@ -171,11 +174,10 @@ export default function MealPrepPageClient() {
               {preppedStock.map((stock) => (
                 <div
                   key={stock.id}
-                  className={`p-4 rounded-lg border ${
-                    stock.availableQuantity > 0
+                  className={`p-4 rounded-lg border ${stock.availableQuantity > 0
                       ? 'bg-green-50 border-green-200'
                       : 'bg-slate-50 border-slate-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -187,9 +189,8 @@ export default function MealPrepPageClient() {
                       </p>
                     </div>
                     <ChefHat
-                      className={`h-8 w-8 ${
-                        stock.availableQuantity > 0 ? 'text-green-600' : 'text-slate-400'
-                      }`}
+                      className={`h-8 w-8 ${stock.availableQuantity > 0 ? 'text-green-600' : 'text-slate-400'
+                        }`}
                     />
                   </div>
                 </div>

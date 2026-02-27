@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { HelpCircle, ChevronRight, ChevronLeft, X } from 'lucide-react'
 import CategoriesManager, { type CategoryWithItems } from '@/components/dashboard/CategoriesManager'
+import { useI18n } from '@/lib/i18n'
 
 const TOUR_STEPS = [
   {
@@ -84,13 +85,15 @@ export default function CategoriesPageClient({ initialCategories }: CategoriesPa
     if (!isFirst) setTourStep((s) => s - 1)
   }
 
+  const { t } = useI18n()
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Category Manager</h1>
+          <h1 className="text-3xl font-bold text-slate-900">{t.categories_title}</h1>
           <p className="text-slate-500 mt-1">
-            Create and clean up the sections that organize your menu. See which dishes are in each category and move them or edit names.
+            {t.categories_subtitle}
           </p>
         </div>
         <Button

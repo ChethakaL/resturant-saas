@@ -29,7 +29,7 @@ export default function SuperAdminLoginPage() {
         setError('Invalid credentials')
         return
       }
-      router.push('/admin/restaurants')
+      router.push('/admin/dashboard')
       router.refresh()
     } catch {
       setError('Something went wrong.')

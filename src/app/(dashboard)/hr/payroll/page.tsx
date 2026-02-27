@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getServerTranslations } from '@/lib/i18n/server'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -67,12 +68,14 @@ export default async function PayrollPage() {
 
   const currentMonth = new Date().toISOString().slice(0, 7)
 
+  const { t } = await getServerTranslations()
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Payroll Management</h1>
-          <p className="text-slate-500 mt-1">Manage employee salaries and payments</p>
+          <h1 className="text-3xl font-bold text-slate-900">{t.hr_payroll_title}</h1>
+          <p className="text-slate-500 mt-1">{t.hr_payroll_subtitle}</p>
         </div>
         <Button asChild>
           <Link href="/hr/payroll/generate">
@@ -133,11 +136,10 @@ export default async function PayrollPage() {
                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex items-center gap-4 flex-1">
-                    <StatusIcon className={`h-5 w-5 ${
-                      payroll.status === 'PAID' ? 'text-green-600' :
-                      payroll.status === 'PENDING' ? 'text-yellow-600' :
-                      'text-red-600'
-                    }`} />
+                    <StatusIcon className={`h-5 w-5 ${payroll.status === 'PAID' ? 'text-green-600' :
+                        payroll.status === 'PENDING' ? 'text-yellow-600' :
+                          'text-red-600'
+                      }`} />
                     <div>
                       <div className="font-medium">{payroll.employee.name}</div>
                       <div className="text-sm text-slate-500">

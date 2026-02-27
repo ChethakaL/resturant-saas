@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import AddExpenseModal from './AddExpenseModal'
 import AddWasteModal from './AddWasteModal'
+import { useI18n, useDynamicTranslate } from '@/lib/i18n'
 import DatePicker from '@/components/ui/date-picker'
 
 function daysBetweenInclusive(start: Date, end: Date) {
@@ -140,6 +141,8 @@ function getQuickPeriod(period: 'today' | 'week' | 'month') {
 
 export default function ProfitLossPageClient() {
   const { toast } = useToast()
+  const { t } = useI18n()
+  const { t: td } = useDynamicTranslate()
   const [activePeriod, setActivePeriod] = useState<string>('month')
   const [dateRange, setDateRange] = useState(() => getQuickPeriod('month'))
   const [data, setData] = useState<PnLData | null>(null)
@@ -190,7 +193,7 @@ export default function ProfitLossPageClient() {
           setSelectedBranch((prev) => (prev === '' && data.length > 0 ? data[0].id : prev))
         }
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   useEffect(() => {
@@ -337,7 +340,7 @@ export default function ProfitLossPageClient() {
   if (loading || !data) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-500">Loading...</div>
+        <div className="text-slate-500">{td('Loading...')}</div>
       </div>
     )
   }
@@ -524,8 +527,8 @@ export default function ProfitLossPageClient() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Sales Reports</h1>
-          <p className="text-slate-500 mt-1">Period: {dateRangeLabel}</p>
+          <h1 className="text-3xl font-bold text-slate-900">{t.sales_title}</h1>
+          <p className="text-slate-500 mt-1">{td('Period')}: {dateRangeLabel}</p>
         </div>
         <div className="flex items-center gap-3">
           {branches.length > 0 && (
@@ -548,13 +551,13 @@ export default function ProfitLossPageClient() {
             variant="outline"
             onClick={() => {
               const branchId = selectedBranch || (branches.length > 0 ? branches[0].id : null)
-            let url = `/api/reports/pnl?start=${dateRange.start}&end=${dateRange.end}`
+              let url = `/api/reports/pnl?start=${dateRange.start}&end=${dateRange.end}`
               if (branchId) url += `&branchId=${branchId}`
               window.open(url, '_blank')
             }}
           >
             <Download className="h-4 w-4 mr-2" />
-            Download PDF
+            {td('Download PDF')}
           </Button>
         </div>
       </div>
@@ -567,11 +570,9 @@ export default function ProfitLossPageClient() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-amber-800">COGS is incomplete</h3>
+                <h3 className="font-semibold text-amber-800">{td('COGS is incomplete')}</h3>
                 <p className="text-sm text-amber-700 mt-1">
-                  Only {data.summary.cogsCoveragePercent}% of sales are covered by items with
-                  complete costing. Add recipe costs to menu items for accurate COGS and gross
-                  profit.
+                  {td('Only')} {data.summary.cogsCoveragePercent}% {td('of sales are covered by items with complete costing. Add recipe costs to menu items for accurate COGS and gross profit.')}
                 </p>
               </div>
             </div>
@@ -585,16 +586,15 @@ export default function ProfitLossPageClient() {
             <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <h3 className="font-semibold text-red-800">
-                Projected net loss this month: {formatCurrency(Math.abs(forecast.projectedNetProfit))}
+                {td('Projected net loss this month')}: {formatCurrency(Math.abs(forecast.projectedNetProfit))}
               </h3>
               <p className="text-sm text-red-700 mt-1">
-                Based on {forecast.daysElapsed} of {forecast.daysInMonth} days elapsed,
-                projected revenue is {formatCurrency(forecast.projectedRevenue)}.
+                {td('Based on')} {forecast.daysElapsed} {td('of')} {forecast.daysInMonth} {td('days elapsed, projected revenue is')} {formatCurrency(forecast.projectedRevenue)}.
               </p>
               {forecast.drivers.length > 0 && (
                 <div className="mt-2">
                   <p className="text-xs font-medium text-red-700 uppercase tracking-wide">
-                    Top cost drivers:
+                    {td('Top cost drivers')}:
                   </p>
                   <ul className="mt-1 space-y-0.5">
                     {forecast.drivers.map((d) => (
@@ -602,7 +602,7 @@ export default function ProfitLossPageClient() {
                         key={d.label}
                         className="text-sm text-red-700 flex items-center justify-between max-w-xs"
                       >
-                        <span>{d.label}</span>
+                        <span>{td(d.label)}</span>
                         <span className="font-mono">
                           {formatCurrency(d.amount)}
                         </span>
@@ -623,17 +623,17 @@ export default function ProfitLossPageClient() {
             {/* Presets: horizontal segmented control */}
             <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit">
               {[
-                { key: 'today', label: 'Today' },
-                { key: 'week', label: 'This week' },
-                { key: 'month', label: 'This month' },
+                { key: 'today', label: td('Today') },
+                { key: 'week', label: td('This week') },
+                { key: 'month', label: td('This month') },
               ].map(({ key, label }) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => handleQuickPeriod(key)}
                   className={`rounded-md px-4 py-2 text-sm font-medium transition-colors min-w-[88px] ${activePeriod === key
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
                     }`}
                 >
                   {label}
@@ -643,7 +643,7 @@ export default function ProfitLossPageClient() {
             {/* Custom range: From / To with clear spacing */}
             <div className="flex flex-wrap items-end gap-6">
               <div className="flex items-end gap-2">
-                <Label htmlFor="pnl-start-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">From</Label>
+                <Label htmlFor="pnl-start-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">{td('From')}</Label>
                 <div className="w-[160px]">
                   <DatePicker
                     value={dateRange.start}
@@ -655,7 +655,7 @@ export default function ProfitLossPageClient() {
                 </div>
               </div>
               <div className="flex items-end gap-2">
-                <Label htmlFor="pnl-end-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">To</Label>
+                <Label htmlFor="pnl-end-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">{td('To')}</Label>
                 <div className="w-[160px]">
                   <DatePicker
                     value={dateRange.end}
@@ -675,7 +675,7 @@ export default function ProfitLossPageClient() {
                 }}
                 className="shrink-0 mb-0.5"
               >
-                Apply
+                {td('Apply')}
               </Button>
             </div>
           </div>
@@ -692,7 +692,7 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  Revenue
+                  {td('Revenue')}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-green-600 font-mono break-all">
                   {formatCurrency(data.summary.revenue)}
@@ -710,14 +710,14 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  COGS
+                  {td('COGS')}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-amber-600 font-mono break-all">
                   {formatCurrency(data.summary.cogs)}
                 </p>
                 {typeof data.summary.cogsCoveragePercent === 'number' && (
                   <p className="text-[10px] text-slate-500 mt-0.5">
-                    Coverage: {data.summary.cogsCoveragePercent}%
+                    {td('Coverage')}: {data.summary.cogsCoveragePercent}%
                   </p>
                 )}
               </div>
@@ -733,7 +733,7 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  Gross Profit
+                  {td('Gross Profit')}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-emerald-600 font-mono break-all">
                   {formatCurrency(data.summary.grossProfit)}
@@ -751,7 +751,7 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  Expenses
+                  {td('Expenses')}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-red-600 font-mono break-all">
                   {formatCurrency(data.summary.expenses + data.summary.payroll)}
@@ -766,8 +766,8 @@ export default function ProfitLossPageClient() {
             <div className="flex items-center gap-3 min-w-0">
               <div
                 className={`rounded-lg p-2 flex-shrink-0 ${data.summary.netProfit >= 0
-                    ? 'bg-green-100'
-                    : 'bg-red-100'
+                  ? 'bg-green-100'
+                  : 'bg-red-100'
                   }`}
               >
                 {data.summary.netProfit >= 0 ? (
@@ -778,12 +778,12 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  Net Profit
+                  {td('Net Profit')}
                 </p>
                 <p
                   className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${data.summary.netProfit >= 0
-                      ? 'text-green-600'
-                      : 'text-red-600'
+                    ? 'text-green-600'
+                    : 'text-red-600'
                     }`}
                 >
                   {formatCurrency(data.summary.netProfit)}
@@ -808,7 +808,7 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  Profit Margin
+                  {td('Profit Margin')}
                 </p>
                 <p
                   className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${profitMargin >= 0 ? 'text-blue-600' : 'text-red-600'
@@ -825,56 +825,56 @@ export default function ProfitLossPageClient() {
       {/* P&L Summary Table */}
       <Card>
         <CardHeader className="bg-slate-800 text-white">
-          <CardTitle className="text-white">PROFIT AND LOSS SUMMARY</CardTitle>
+          <CardTitle className="text-white">{td('PROFIT AND LOSS SUMMARY')}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <table className="w-full">
             <thead className="bg-slate-100">
               <tr>
-                <th className="text-left p-4 font-semibold">Item</th>
-                <th className="text-right p-4 font-semibold">Amount</th>
+                <th className="text-left p-4 font-semibold">{td('Item')}</th>
+                <th className="text-right p-4 font-semibold">{td('Amount')}</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b">
-                <td className="p-4 font-semibold">SALES</td>
+                <td className="p-4 font-semibold">{td('SALES')}</td>
                 <td className="p-4 text-right font-mono text-green-600">
                   {formatCurrency(data.summary.revenue)}
                 </td>
               </tr>
               <tr className="border-b">
-                <td className="p-4 font-semibold">COGS (Cost of Goods Sold)</td>
+                <td className="p-4 font-semibold">{td('COGS (Cost of Goods Sold)')}</td>
                 <td className="p-4 text-right font-mono text-amber-600">
                   {formatCurrency(data.summary.cogs)}
                 </td>
               </tr>
               <tr className="border-b bg-slate-50">
-                <td className="p-4 font-semibold">GROSS PROFIT</td>
+                <td className="p-4 font-semibold">{td('GROSS PROFIT')}</td>
                 <td className="p-4 text-right font-mono font-bold text-green-600">
                   {formatCurrency(data.summary.grossProfit)}
                 </td>
               </tr>
               <tr className="border-b">
-                <td className="p-4 font-semibold">LABOR EXPENSE</td>
+                <td className="p-4 font-semibold">{td('LABOR EXPENSE')}</td>
                 <td className="p-4 text-right font-mono text-red-600">
                   {formatCurrency(data.summary.payroll)}
                 </td>
               </tr>
               <tr className="border-b">
-                <td className="p-4 font-semibold">OTHER EXPENSE</td>
+                <td className="p-4 font-semibold">{td('OTHER EXPENSE')}</td>
                 <td className="p-4 text-right font-mono text-red-600">
                   {formatCurrency(data.summary.expenses)}
                 </td>
               </tr>
               <tr className="bg-slate-50">
-                <td className="p-4 font-bold text-lg">NET INCOME</td>
+                <td className="p-4 font-bold text-lg">{td('NET INCOME')}</td>
                 <td className={`p-4 text-right font-mono font-bold text-lg ${data.summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
                   {formatCurrency(data.summary.netProfit)}
                 </td>
               </tr>
               <tr>
-                <td className="p-4 font-semibold">PROFIT MARGIN</td>
+                <td className="p-4 font-semibold">{td('PROFIT MARGIN')}</td>
                 <td className="p-4 text-right font-mono">
                   {profitMargin.toFixed(2)}%
                 </td>
@@ -888,14 +888,14 @@ export default function ProfitLossPageClient() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="bg-blue-600 text-white">
-            <CardTitle className="text-white">SALES</CardTitle>
+            <CardTitle className="text-white">{td('SALES')}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <table className="w-full">
               <thead className="bg-slate-100">
                 <tr>
-                  <th className="text-left p-3 text-sm font-semibold">Category</th>
-                  <th className="text-right p-3 text-sm font-semibold">Amount</th>
+                  <th className="text-left p-3 text-sm font-semibold">{td('Category')}</th>
+                  <th className="text-right p-3 text-sm font-semibold">{td('Amount')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -908,7 +908,7 @@ export default function ProfitLossPageClient() {
                   </tr>
                 ))}
                 <tr className="bg-slate-50 font-semibold">
-                  <td className="p-3">TOTAL SALES</td>
+                  <td className="p-3">{td('TOTAL SALES')}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.revenue)}
                   </td>
@@ -920,14 +920,14 @@ export default function ProfitLossPageClient() {
 
         <Card>
           <CardHeader className="bg-blue-600 text-white">
-            <CardTitle className="text-white">COST OF GOODS SOLD</CardTitle>
+            <CardTitle className="text-white">{td('COST OF GOODS SOLD')}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <table className="w-full">
               <thead className="bg-slate-100">
                 <tr>
-                  <th className="text-left p-3 text-sm font-semibold">Category</th>
-                  <th className="text-right p-3 text-sm font-semibold">Amount</th>
+                  <th className="text-left p-3 text-sm font-semibold">{td('Category')}</th>
+                  <th className="text-right p-3 text-sm font-semibold">{td('Amount')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -940,7 +940,7 @@ export default function ProfitLossPageClient() {
                   </tr>
                 ))}
                 <tr className="bg-slate-50 font-semibold">
-                  <td className="p-3">TOTAL COGS</td>
+                  <td className="p-3">{td('TOTAL COGS')}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.cogs)}
                   </td>
@@ -955,37 +955,37 @@ export default function ProfitLossPageClient() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="bg-blue-600 text-white">
-            <CardTitle className="text-white">LABOR EXPENSE</CardTitle>
+            <CardTitle className="text-white">{td('LABOR EXPENSE')}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <table className="w-full">
               <thead className="bg-slate-100">
                 <tr>
-                  <th className="text-left p-3 text-sm font-semibold">Item</th>
-                  <th className="text-right p-3 text-sm font-semibold">Amount</th>
+                  <th className="text-left p-3 text-sm font-semibold">{td('Item')}</th>
+                  <th className="text-right p-3 text-sm font-semibold">{td('Amount')}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr className="border-b">
-                  <td className="p-3">Salaries and Wages</td>
+                  <td className="p-3">{td('Salaries and Wages')}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.payroll * 0.7)}
                   </td>
                 </tr>
                 <tr className="border-b">
-                  <td className="p-3">Payroll Taxes</td>
+                  <td className="p-3">{td('Payroll Taxes')}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.payroll * 0.15)}
                   </td>
                 </tr>
                 <tr className="border-b">
-                  <td className="p-3">Employee Benefits</td>
+                  <td className="p-3">{td('Employee Benefits')}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.payroll * 0.15)}
                   </td>
                 </tr>
                 <tr className="bg-slate-50 font-semibold">
-                  <td className="p-3">TOTAL LABOR EXPENSE</td>
+                  <td className="p-3">{td('TOTAL LABOR EXPENSE')}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.payroll)}
                   </td>
@@ -997,15 +997,15 @@ export default function ProfitLossPageClient() {
 
         <Card>
           <CardHeader className="bg-blue-600 text-white">
-            <CardTitle className="text-white">OTHER EXPENSE</CardTitle>
+            <CardTitle className="text-white">{td('OTHER EXPENSE')}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <table className="w-full">
               <thead className="bg-slate-100">
                 <tr>
-                  <th className="text-left p-3 text-sm font-semibold">Category</th>
-                  <th className="text-right p-3 text-sm font-semibold">Amount</th>
-                  <th className="text-center p-3 text-sm font-semibold">Actions</th>
+                  <th className="text-left p-3 text-sm font-semibold">{td('Category')}</th>
+                  <th className="text-right p-3 text-sm font-semibold">{td('Amount')}</th>
+                  <th className="text-center p-3 text-sm font-semibold">{td('Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1017,7 +1017,7 @@ export default function ProfitLossPageClient() {
                       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
                     return (
                       <tr key={category} className="border-b">
-                        <td className="p-3">{category}</td>
+                        <td className="p-3">{td(category)}</td>
                         <td className="p-3 text-right font-mono">
                           {formatCurrency(total)}
                         </td>
@@ -1043,7 +1043,7 @@ export default function ProfitLossPageClient() {
                 {/* Waste section - automatically shown */}
                 {data.wasteRecords.length > 0 && (
                   <tr className="border-b bg-red-50">
-                    <td className="p-3 font-semibold text-red-700">Waste / Losses and Damages</td>
+                    <td className="p-3 font-semibold text-red-700">{td('Waste / Losses and Damages')}</td>
                     <td className="p-3 text-right font-mono text-red-700">
                       {formatCurrency(
                         data.wasteRecords.reduce((sum, w) => sum + w.cost, 0)
@@ -1061,7 +1061,7 @@ export default function ProfitLossPageClient() {
                   </tr>
                 )}
                 <tr className="bg-slate-50 font-semibold">
-                  <td className="p-3">TOTAL OTHER EXPENSE</td>
+                  <td className="p-3">{td('TOTAL OTHER EXPENSE')}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.expenses)}
                   </td>
@@ -1080,18 +1080,18 @@ export default function ProfitLossPageClient() {
           setShowExpenseModal(true)
         }}>
           <Plus className="h-4 w-4 mr-2" />
-          Add Expense
+          {td('Add Expense')}
         </Button>
         <Button variant="outline" onClick={() => setShowWasteModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
-          Record Waste
+          {td('Record Waste')}
         </Button>
       </div>
 
       {/* Detailed Transaction Records - Spreadsheet Style */}
       <Card>
         <CardHeader className="bg-slate-800 text-white">
-          <CardTitle className="text-white">DETAILED TRANSACTION RECORDS</CardTitle>
+          <CardTitle className="text-white">{td('DETAILED TRANSACTION RECORDS')}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="border-b bg-white px-4 py-3">
@@ -1111,7 +1111,7 @@ export default function ProfitLossPageClient() {
                   className="rounded-full"
                   onClick={() => setTransactionTypeFilter(type)}
                 >
-                  {type === 'ALL' ? 'All' : type}
+                  {type === 'ALL' ? td('All') : type}
                 </Button>
               ))}
             </div>
@@ -1122,7 +1122,7 @@ export default function ProfitLossPageClient() {
                 className="rounded-full"
                 onClick={() => setTransactionCategoryFilter('ALL')}
               >
-                All Categories
+                {td('All Categories')}
               </Button>
               {transactionCategories.map((category) => (
                 <Button
@@ -1159,7 +1159,7 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('type')}
                       className="flex items-center gap-2"
                     >
-                      Type
+                      {td('Type')}
                       <span className="text-xs text-slate-400">{sortIndicator('type')}</span>
                     </button>
                   </th>
@@ -1169,7 +1169,7 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('description')}
                       className="flex items-center gap-2"
                     >
-                      Description
+                      {td('Description')}
                       <span className="text-xs text-slate-400">{sortIndicator('description')}</span>
                     </button>
                   </th>
@@ -1179,7 +1179,7 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('category')}
                       className="flex items-center gap-2"
                     >
-                      Category
+                      {td('Category')}
                       <span className="text-xs text-slate-400">{sortIndicator('category')}</span>
                     </button>
                   </th>
@@ -1189,7 +1189,7 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('amount')}
                       className="ml-auto flex items-center gap-2"
                     >
-                      Amount
+                      {td('Amount')}
                       <span className="text-xs text-slate-400">{sortIndicator('amount')}</span>
                     </button>
                   </th>
@@ -1199,11 +1199,11 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('details')}
                       className="flex items-center gap-2"
                     >
-                      Details
+                      {td('Details')}
                       <span className="text-xs text-slate-400">{sortIndicator('details')}</span>
                     </button>
                   </th>
-                  <th className="text-center p-3 font-semibold">Actions</th>
+                  <th className="text-center p-3 font-semibold">{td('Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1215,14 +1215,14 @@ export default function ProfitLossPageClient() {
                     <td className="p-3">
                       <span
                         className={`px-2 py-1 rounded text-xs ${row.type === 'REVENUE'
-                            ? 'bg-green-100 text-green-800'
-                            : row.type === 'COGS'
-                              ? 'bg-amber-100 text-amber-800'
-                              : row.type === 'EXPENSE'
-                                ? 'bg-red-100 text-red-800'
-                                : row.type === 'WASTE'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-blue-100 text-blue-800'
+                          ? 'bg-green-100 text-green-800'
+                          : row.type === 'COGS'
+                            ? 'bg-amber-100 text-amber-800'
+                            : row.type === 'EXPENSE'
+                              ? 'bg-red-100 text-red-800'
+                              : row.type === 'WASTE'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-blue-100 text-blue-800'
                           }`}
                       >
                         {row.type}

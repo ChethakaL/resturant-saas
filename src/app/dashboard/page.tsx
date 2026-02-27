@@ -1,5 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getServerTranslations } from '@/lib/i18n/server'
 import { prisma } from '@/lib/prisma'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
@@ -510,10 +511,10 @@ async function getDashboardData(restaurantId: string) {
   const projectedExpenses = (totalOperatingExpenses / daysElapsed) * daysInMonth
   const projectedPayroll = (payrollTotal / daysElapsed) * daysInMonth
   const projectedNetProfit = projectedRevenue - projectedCOGS - projectedExpenses - projectedPayroll
-  const forecastDrivers: Array<{ label: string; amount: number }> = []
-  if (projectedCOGS > 0) forecastDrivers.push({ label: 'COGS', amount: projectedCOGS })
-  if (projectedPayroll > 0) forecastDrivers.push({ label: 'Labor', amount: projectedPayroll })
-  if (projectedExpenses > 0) forecastDrivers.push({ label: 'Operating Expenses', amount: projectedExpenses })
+  const forecastDrivers: Array<{ labelKey: string; amount: number }> = []
+  if (projectedCOGS > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_cogs', amount: projectedCOGS })
+  if (projectedPayroll > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_labor', amount: projectedPayroll })
+  if (projectedExpenses > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_operating', amount: projectedExpenses })
   forecastDrivers.sort((a, b) => b.amount - a.amount)
   const projectedLossForecast = {
     projectedNetProfit,
@@ -550,11 +551,11 @@ async function getDashboardData(restaurantId: string) {
   const topItemIds = topItems.map((item) => item.menuItemId)
   const menuItemsMap = topItemIds.length > 0
     ? new Map(
-        (await prisma.menuItem.findMany({
-          where: { id: { in: topItemIds } },
-          select: { id: true, name: true },
-        })).map((item) => [item.id, item.name])
-      )
+      (await prisma.menuItem.findMany({
+        where: { id: { in: topItemIds } },
+        select: { id: true, name: true },
+      })).map((item) => [item.id, item.name])
+    )
     : new Map<string, string>()
 
   const topItemsData = topItems.map((item) => ({
@@ -676,6 +677,8 @@ export default async function DashboardPage() {
   // Get analytics data for menu items
   const analyticsData = await getAnalyticsData(restaurantId)
 
+  const { t } = await getServerTranslations()
+
   return (
     <div className="space-y-8">
       <PnLReminder />
@@ -685,19 +688,18 @@ export default async function DashboardPage() {
             <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <h3 className="font-semibold text-red-800">
-                Projected net loss this month: {formatCurrency(Math.abs(data.projectedLossForecast.projectedNetProfit))}
+                {t.dashboard_projected_loss}: {formatCurrency(Math.abs(data.projectedLossForecast.projectedNetProfit))}
               </h3>
               <p className="text-sm text-red-700 mt-1">
-                Based on {data.projectedLossForecast.daysElapsed} of {data.projectedLossForecast.daysInMonth} days,
-                projected revenue is {formatCurrency(data.projectedLossForecast.projectedRevenue)}.
+                {data.projectedLossForecast.daysElapsed}/{data.projectedLossForecast.daysInMonth}, {t.dashboard_projected_revenue}: {formatCurrency(data.projectedLossForecast.projectedRevenue)}
               </p>
               {data.projectedLossForecast.drivers.length > 0 && (
                 <div className="mt-2">
-                  <p className="text-xs font-medium text-red-700 uppercase tracking-wide">Top cost drivers</p>
+                  <p className="text-xs font-medium text-red-700 uppercase tracking-wide">{t.dashboard_top_cost_drivers}</p>
                   <ul className="mt-1 space-y-0.5">
                     {data.projectedLossForecast.drivers.map((d) => (
-                      <li key={d.label} className="text-sm text-red-700 flex justify-between max-w-xs">
-                        <span>{d.label}</span>
+                      <li key={d.labelKey} className="text-sm text-red-700 flex justify-between max-w-xs">
+                        <span>{(t as unknown as Record<string, string>)[d.labelKey] ?? d.labelKey}</span>
                         <span className="font-mono">{formatCurrency(d.amount)}</span>
                       </li>
                     ))}
@@ -708,24 +710,24 @@ export default async function DashboardPage() {
                 href="/profit-loss"
                 className="inline-block mt-3 text-sm font-medium text-red-700 hover:text-red-800 underline"
               >
-                View Sales Reports →
+                {t.dashboard_view_sales_reports}
               </a>
             </div>
           </div>
         </div>
       )}
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 mt-1">Welcome back, {session!.user.name}</p>
+        <h1 className="text-3xl font-bold text-slate-900">{t.dashboard_title}</h1>
+        <p className="text-slate-500 mt-1">{t.dashboard_welcome}, {session!.user.name}</p>
       </div>
 
       {/* TODAY Metrics */}
       <div>
-        <h2 className="text-xl font-bold text-slate-900 mb-4">Today</h2>
+        <h2 className="text-xl font-bold text-slate-900 mb-4">{t.dashboard_today}</h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Revenue</CardTitle>
+              <CardTitle className="text-sm font-medium">{t.dashboard_revenue}</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -734,42 +736,42 @@ export default async function DashboardPage() {
                 <span className={data.today.growth >= 0 ? 'text-green-600' : 'text-red-600'}>
                   {data.today.growth >= 0 ? '+' : ''}{formatPercentage(data.today.growth, 1)}
                 </span>
-                {' '}vs yesterday
+                {' '}{t.dashboard_vs_yesterday}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Orders</CardTitle>
+              <CardTitle className="text-sm font-medium">{t.dashboard_orders}</CardTitle>
               <ShoppingCart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{data.today.orders}</div>
-              <p className="text-xs text-muted-foreground mt-1">Completed today</p>
+              <p className="text-xs text-muted-foreground mt-1">{t.dashboard_completed_today}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Customers Served</CardTitle>
+              <CardTitle className="text-sm font-medium">{t.dashboard_customers_served}</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{data.today.orders}</div>
-              <p className="text-xs text-muted-foreground mt-1">Based on orders</p>
+              <p className="text-xs text-muted-foreground mt-1">{t.dashboard_based_on_orders}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Tables in Use</CardTitle>
+              <CardTitle className="text-sm font-medium">{t.dashboard_tables_in_use}</CardTitle>
               <Utensils className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{data.today.tablesInUse}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                of {data.today.totalTables} total
+                {t.dashboard_of_total.replace('{0}', String(data.today.totalTables))}
               </p>
             </CardContent>
           </Card>
@@ -779,18 +781,18 @@ export default async function DashboardPage() {
       {/* WEEKLY & MONTHLY Metrics */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 mb-4">This Week</h2>
+          <h2 className="text-xl font-bold text-slate-900 mb-4">{t.dashboard_this_week}</h2>
           <Card>
             <CardContent className="pt-6">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-600">Revenue</span>
+                  <span className="text-slate-600">{t.dashboard_revenue}</span>
                   <span className="text-2xl font-bold text-green-600">
                     {formatCurrency(data.week.revenue)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-600">Total Orders</span>
+                  <span className="text-slate-600">{t.dashboard_total_orders}</span>
                   <span className="text-xl font-bold">{data.week.orders}</span>
                 </div>
                 {data.busiestHour && (
@@ -798,14 +800,14 @@ export default async function DashboardPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-amber-600" />
-                        <span className="text-sm text-slate-600">Busiest Hour</span>
+                        <span className="text-sm text-slate-600">{t.dashboard_busiest_hour}</span>
                       </div>
                       <div className="text-right">
                         <div className="font-bold">
                           {data.busiestHour.hour}:00 - {data.busiestHour.hour + 1}:00
                         </div>
                         <div className="text-xs text-slate-500">
-                          {data.busiestHour.orders} orders avg
+                          {t.dashboard_orders_avg.replace('{0}', String(data.busiestHour.orders))}
                         </div>
                       </div>
                     </div>
@@ -817,31 +819,31 @@ export default async function DashboardPage() {
         </div>
 
         <div>
-          <h2 className="text-xl font-bold text-slate-900 mb-4">This Month</h2>
+          <h2 className="text-xl font-bold text-slate-900 mb-4">{t.dashboard_this_month}</h2>
           <Card>
             <CardContent className="pt-6">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-600">Total Revenue</span>
+                  <span className="text-slate-600">{t.dashboard_total_revenue}</span>
                   <span className="text-2xl font-bold text-green-600">
                     {formatCurrency(data.month.revenue)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-600">Net Profit</span>
+                  <span className="text-slate-600">{t.dashboard_net_profit}</span>
                   <span className="text-xl font-bold text-blue-600">
                     {formatCurrency(data.month.profit)}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t">
                   <div>
-                    <div className="text-xs text-slate-600">Net Margin</div>
+                    <div className="text-xs text-slate-600">{t.dashboard_net_margin}</div>
                     <div className={`text-lg font-bold ${data.month.margin >= 60 ? 'text-green-600' : 'text-amber-600'}`}>
                       {formatPercentage(data.month.margin, 1)}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-slate-600">Food Cost %</div>
+                    <div className="text-xs text-slate-600">{t.dashboard_food_cost}</div>
                     <div className={`text-lg font-bold ${data.month.foodCostPercent <= 35 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatPercentage(data.month.foodCostPercent, 1)}
                     </div>
@@ -865,8 +867,8 @@ export default async function DashboardPage() {
       {/* Daily Revenue and Margin Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Revenue and Margin Trend</CardTitle>
-          <p className="text-sm text-slate-500 mt-1">Daily revenue and margin for the past month</p>
+          <CardTitle>{t.dashboard_revenue_margin_trend}</CardTitle>
+          <p className="text-sm text-slate-500 mt-1">{t.dashboard_daily_revenue_margin}</p>
         </CardHeader>
         <CardContent>
           <DailyRevenueMarginChart />
@@ -878,35 +880,35 @@ export default async function DashboardPage() {
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5 text-amber-500" />
-            Wastage (This Month)
+            {t.dashboard_wastage_title}
           </CardTitle>
           <a
             href="/profit-loss"
             className="text-sm text-slate-500 hover:text-slate-700"
           >
-            View in Sales Reports →
+            {t.dashboard_view_sales_reports}
           </a>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-slate-600">Total wastage cost</span>
+              <span className="text-slate-600">{t.dashboard_total_wastage_cost}</span>
               <span className="text-2xl font-bold text-amber-700">
                 {formatCurrency(data.wastage.totalCost)}
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              {data.wastage.recordCount} waste record{data.wastage.recordCount !== 1 ? 's' : ''} this month
+              {t.dashboard_waste_records.replace('{0}', String(data.wastage.recordCount))}
             </p>
             {data.wastage.records.length > 0 ? (
               <div className="rounded-md border border-slate-200 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="text-left py-2 px-3 font-medium text-slate-600">Ingredient</th>
-                      <th className="text-right py-2 px-3 font-medium text-slate-600">Qty</th>
-                      <th className="text-right py-2 px-3 font-medium text-slate-600">Cost</th>
-                      <th className="text-left py-2 px-3 font-medium text-slate-600">Reason</th>
+                      <th className="text-left py-2 px-3 font-medium text-slate-600">{t.dashboard_ingredient}</th>
+                      <th className="text-right py-2 px-3 font-medium text-slate-600">{t.dashboard_qty}</th>
+                      <th className="text-right py-2 px-3 font-medium text-slate-600">{t.dashboard_cost}</th>
+                      <th className="text-left py-2 px-3 font-medium text-slate-600">{t.dashboard_reason}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -926,13 +928,13 @@ export default async function DashboardPage() {
                 </table>
               </div>
             ) : (
-              <p className="text-center text-slate-500 py-4">No wastage recorded this month</p>
+              <p className="text-center text-slate-500 py-4">{t.dashboard_no_wastage}</p>
             )}
           </div>
         </CardContent>
       </Card>
 
-      
+
     </div>
   )
 }

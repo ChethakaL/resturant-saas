@@ -56,6 +56,19 @@ model Restaurant {
   @@map("restaurants")
 }
 
+model UiTranslation {
+  id             String   @id @default(cuid())
+  sourceText     String   @map("source_text")
+  locale         String
+  translatedText String   @map("translated_text")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([sourceText, locale])
+  @@index([sourceText])
+  @@index([locale])
+  @@map("ui_translations")
+}
+
 model MenuEvent {
   id           String   @id @default(cuid())
   restaurantId String   @map("restaurant_id")

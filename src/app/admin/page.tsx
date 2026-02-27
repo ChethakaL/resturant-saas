@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 export default async function AdminPage() {
   const session = await getServerSession(authOptions)
   if (session?.user?.type === 'superadmin') {
-    redirect('/admin/restaurants')
+    redirect('/admin/dashboard')
   }
   redirect('/admin/login')
 }

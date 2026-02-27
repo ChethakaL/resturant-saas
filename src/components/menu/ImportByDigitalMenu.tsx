@@ -30,6 +30,7 @@ import {
 import { Category, Ingredient } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
+import { useI18n } from '@/lib/i18n'
 
 interface ExtractedMenuItem {
   name: string
@@ -71,6 +72,7 @@ function normalizeCategoryName(value?: string | null): string {
 
 export default function ImportByDigitalMenu({ categories, ingredients, defaultBackgroundPrompt }: ImportByDigitalMenuProps) {
   const { toast } = useToast()
+  const { t } = useI18n()
   const [availableCategories, setAvailableCategories] = useState<Category[]>(categories)
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<'url' | 'extracting' | 'verifying' | 'complete'>('url')
@@ -451,7 +453,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
     <>
       <Button variant="outline" onClick={() => { setIsOpen(true); resetModal(); }}>
         <Link2 className="h-4 w-4 mr-2" />
-        Import by Digital Menu
+        {t.menu_import_digital}
       </Button>
 
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetModal(); setIsOpen(open); }}>
@@ -531,11 +533,10 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                   return (
                     <div
                       key={index}
-                      className={`border rounded-lg transition-all ${
-                        hasIssues
+                      className={`border rounded-lg transition-all ${hasIssues
                           ? 'border-amber-300 bg-amber-50/30'
                           : 'border-slate-200 bg-white'
-                      }`}
+                        }`}
                     >
                       {/* Compact row */}
                       <div className="flex items-start gap-3 p-3">
@@ -978,11 +979,10 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                             key={option.value}
                             type="button"
                             onClick={() => setImageOrientation(option.value)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
-                              isActive
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
                                 ? 'border-emerald-500 bg-emerald-100 text-slate-900'
                                 : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
-                            }`}
+                              }`}
                           >
                             <span className="block text-sm">{option.label}</span>
                             <span className="text-[10px] text-slate-400">{option.aspect}</span>
@@ -1006,11 +1006,10 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                             key={option.value}
                             type="button"
                             onClick={() => setImageSizePreset(option.value)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
-                              isActive
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
                                 ? 'border-emerald-500 bg-emerald-100 text-slate-900'
                                 : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
-                            }`}
+                              }`}
                           >
                             <span className="block text-sm">{option.label}</span>
                             <span className="text-[10px] text-slate-400">{`${option.pixels}px`}</span>

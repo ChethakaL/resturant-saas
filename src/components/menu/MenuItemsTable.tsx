@@ -18,6 +18,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import { Edit, Loader2, Trash, Check, X, DollarSign } from 'lucide-react'
+import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
 
 export interface MenuItemWithMetrics {
   id: string
@@ -67,6 +68,7 @@ export default function MenuItemsTable({
     useState<MenuItemWithMetrics | null>(null)
   const itemsRef = useRef(items)
   const { toast } = useToast()
+  const { t } = useI18n()
 
   // Inline price editing state
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
@@ -416,7 +418,7 @@ export default function MenuItemsTable({
       {items.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-slate-500">
-            No menu items found. Add your first menu item to get started.
+            {t.menu_no_items}
           </p>
         </div>
       ) : (
@@ -425,28 +427,28 @@ export default function MenuItemsTable({
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  Item Name
+                  {t.menu_col_item_name}
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  Category
+                  {t.menu_col_category}
                 </th>
                 <th className="text-center py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  Availability
+                  {t.menu_col_availability}
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  Direct Cost
+                  {t.menu_col_direct_cost}
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  Gross Profit
+                  {t.menu_col_gross_profit}
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  Suggested Price
+                  {t.menu_col_suggested_price}
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  Price
+                  {t.menu_col_price}
                 </th>
                 <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  Actions
+                  {t.menu_col_actions}
                 </th>
               </tr>
             </thead>
@@ -484,15 +486,15 @@ export default function MenuItemsTable({
                           <div className="font-medium text-slate-900 truncate flex items-center gap-2">
                             {item.name}
                             {item.status === 'DRAFT' && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Draft</Badge>
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{t.menu_draft}</Badge>
                             )}
                             {item.costingStatus === 'INCOMPLETE' && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600">Costing incomplete</Badge>
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600">{t.menu_costing_incomplete}</Badge>
                             )}
                           </div>
                           {item.chefPickOrder != null && (
                             <span className="text-[10px] uppercase tracking-wide text-amber-600">
-                              Chef pick #{item.chefPickOrder}
+                              {t.menu_chef_pick} #{item.chefPickOrder}
                             </span>
                           )}
                         </div>
@@ -501,7 +503,7 @@ export default function MenuItemsTable({
 
                     {/* Category */}
                     <td className="py-3 px-4 text-slate-600">
-                      {item.category.name}
+                      {getTranslatedCategoryName(item.category.name, t)}
                     </td>
 
                     {/* Availability */}
@@ -516,10 +518,10 @@ export default function MenuItemsTable({
                           } ${isUpdating ? 'opacity-70 cursor-wait' : ''}`}
                       >
                         {isUpdating
-                          ? 'Saving...'
+                          ? t.menu_saving
                           : item.available
-                            ? 'Available'
-                            : 'Sold Out'}
+                            ? t.menu_available
+                            : t.menu_sold_out}
                       </button>
                     </td>
 
@@ -634,7 +636,7 @@ export default function MenuItemsTable({
                             onClick={() => openCostingModal(item)}
                           >
                             <DollarSign className="h-4 w-4 mr-1" />
-                            Complete Costing
+                            {t.menu_complete_costing}
                           </Button>
                         )}
                         <Link href={`/menu/${item.id}`}>
@@ -667,13 +669,9 @@ export default function MenuItemsTable({
           >
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Delete menu item</DialogTitle>
+                <DialogTitle>{t.menu_delete_title}</DialogTitle>
                 <DialogDescription>
-                  Are you sure you want to remove{' '}
-                  <span className="font-medium">
-                    {menuItemToDelete?.name ?? 'this item'}
-                  </span>{' '}
-                  from your menu? This action cannot be undone.
+                  {t.menu_delete_confirm.replace('{0}', menuItemToDelete?.name ?? '')}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -682,7 +680,7 @@ export default function MenuItemsTable({
                   size="sm"
                   onClick={() => setMenuItemToDelete(null)}
                 >
-                  Cancel
+                  {t.common_cancel}
                 </Button>
                 <Button
                   variant="destructive"
@@ -694,8 +692,8 @@ export default function MenuItemsTable({
                   onClick={confirmDelete}
                 >
                   {menuItemToDelete && deletingIds.includes(menuItemToDelete.id)
-                    ? 'Deleting...'
-                    : 'Delete'}
+                    ? t.menu_deleting
+                    : t.common_delete}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -707,7 +705,7 @@ export default function MenuItemsTable({
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <DollarSign className="h-5 w-5 text-amber-500" />
-                  Complete Costing: {costingMenuItem?.name}
+                  {t.menu_complete_costing}: {costingMenuItem?.name}
                 </DialogTitle>
                 <DialogDescription>
                   <strong>Required:</strong> Enter cost per unit for <strong>ALL</strong> ingredients below. Costing will only be marked complete when every ingredient has a price greater than 0.

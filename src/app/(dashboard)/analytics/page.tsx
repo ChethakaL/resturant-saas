@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getServerTranslations } from '@/lib/i18n/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import AnalyticsCharts from './AnalyticsCharts'
@@ -352,11 +353,13 @@ export default async function AnalyticsPage() {
 
   const data = await getAnalyticsData(restaurantId)
 
+  const { t } = await getServerTranslations()
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Analytics</h1>
-        <p className="text-slate-500 mt-1">Sales insights for the last 30 days</p>
+        <h1 className="text-3xl font-bold text-slate-900">{t.analytics_title}</h1>
+        <p className="text-slate-500 mt-1">{t.analytics_subtitle}</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

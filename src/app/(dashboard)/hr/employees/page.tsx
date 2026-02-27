@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getServerTranslations } from '@/lib/i18n/server'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -61,17 +62,19 @@ export default async function EmployeesPage() {
     chefs: activeEmployees.filter((e) => e.position === 'CHEF').length,
   }
 
+  const { t } = await getServerTranslations()
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Employees</h1>
-          <p className="text-slate-500 mt-1">Manage your restaurant staff</p>
+          <h1 className="text-3xl font-bold text-slate-900">{t.hr_employees_title}</h1>
+          <p className="text-slate-500 mt-1">{t.hr_employees_subtitle}</p>
         </div>
         <Button asChild>
           <Link href="/hr/employees/new">
             <Plus className="mr-2 h-4 w-4" />
-            Add Employee
+            {t.hr_add_employee}
           </Link>
         </Button>
       </div>

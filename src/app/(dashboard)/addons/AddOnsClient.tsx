@@ -20,6 +20,7 @@ import { Plus, Pencil, Trash2, Search, Loader2, PlusCircle } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import { AddOn } from '@prisma/client'
+import { useI18n, useDynamicTranslate } from '@/lib/i18n'
 
 interface AddOnWithCount extends AddOn {
   _count: {
@@ -199,19 +200,22 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
     }
   }
 
+  const { t } = useI18n()
+  const { t: td } = useDynamicTranslate()
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Add-ons</h1>
+          <h1 className="text-3xl font-bold text-slate-900">{t.addons_title}</h1>
           <p className="text-slate-500 mt-1">
-            Manage optional extras that customers can add to menu items
+            {t.addons_subtitle}
           </p>
         </div>
         <Button onClick={openCreateDialog}>
           <Plus className="h-4 w-4 mr-2" />
-          New Add-on
+          {td('New Add-on')}
         </Button>
       </div>
 
@@ -219,7 +223,7 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Total Add-ons</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">{td('Total Add-ons')}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{addOns.length}</p>
@@ -227,7 +231,7 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Available</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">{td('Available')}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-green-600">
@@ -237,7 +241,7 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Unavailable</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">{td('Unavailable')}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-slate-400">
@@ -251,11 +255,11 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>All Add-ons</CardTitle>
+            <CardTitle>{td('All Add-ons')}</CardTitle>
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Search add-ons..."
+                placeholder={td('Search add-ons...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -268,11 +272,11 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
             <div className="text-center py-12">
               <PlusCircle className="h-12 w-12 mx-auto text-slate-300 mb-4" />
               <p className="text-slate-500 mb-2">
-                {searchQuery ? 'No add-ons match your search' : 'No add-ons yet'}
+                {searchQuery ? td('No add-ons match your search') : td('No add-ons yet')}
               </p>
               {!searchQuery && (
                 <Button variant="outline" onClick={openCreateDialog}>
-                  Create your first add-on
+                  {td('Create your first add-on')}
                 </Button>
               )}
             </div>
@@ -281,11 +285,10 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
               {filteredAddOns.map((addOn) => (
                 <div
                   key={addOn.id}
-                  className={`border rounded-lg p-4 transition-colors ${
-                    addOn.available
+                  className={`border rounded-lg p-4 transition-colors ${addOn.available
                       ? 'bg-white border-slate-200'
                       : 'bg-slate-50 border-slate-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1 min-w-0">
@@ -298,14 +301,13 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
                     </div>
                     <Badge
                       variant={addOn.available ? 'default' : 'secondary'}
-                      className={`ml-2 cursor-pointer shrink-0 ${
-                        addOn.available
+                      className={`ml-2 cursor-pointer shrink-0 ${addOn.available
                           ? 'bg-green-100 text-green-700 hover:bg-green-200'
                           : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                      }`}
+                        }`}
                       onClick={() => toggleAvailability(addOn)}
                     >
-                      {addOn.available ? 'Available' : 'Unavailable'}
+                      {addOn.available ? td('Available') : td('Unavailable')}
                     </Badge>
                   </div>
 
@@ -315,7 +317,7 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
                         {formatCurrency(addOn.price)}
                       </p>
                       <p className="text-xs text-slate-500">
-                        Used in {addOn._count.menuItems} item{addOn._count.menuItems !== 1 ? 's' : ''}
+                        {td('Used in')} {addOn._count.menuItems} {addOn._count.menuItems !== 1 ? td('items') : td('item')}
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
@@ -348,28 +350,28 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingAddOn ? 'Edit Add-on' : 'Create New Add-on'}</DialogTitle>
+            <DialogTitle>{editingAddOn ? td('Edit Add-on') : td('Create New Add-on')}</DialogTitle>
             <DialogDescription>
               {editingAddOn
-                ? 'Update the details for this add-on'
-                : 'Add a new optional extra that customers can choose'}
+                ? td('Update the details for this add-on')
+                : td('Add a new optional extra that customers can choose')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="name">
-                Name <span className="text-red-500">*</span>
+                {td('Name')} <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Extra Cheese"
+                placeholder={td('e.g., Extra Cheese')}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="price">
-                Price (IQD) <span className="text-red-500">*</span>
+                {td('Price (IQD)')} <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="price"
@@ -381,30 +383,30 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Description (optional)</Label>
+              <Label htmlFor="description">{td('Description (optional)')}</Label>
               <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Brief description of the add-on..."
+                placeholder={td('Brief description of the add-on...')}
                 rows={2}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)} disabled={loading}>
-              Cancel
+              {td('Cancel')}
             </Button>
             <Button onClick={handleSubmit} disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
+                  {td('Saving...')}
                 </>
               ) : editingAddOn ? (
-                'Save Changes'
+                td('Save Changes')
               ) : (
-                'Create Add-on'
+                td('Create Add-on')
               )}
             </Button>
           </DialogFooter>
@@ -415,13 +417,12 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Add-on</DialogTitle>
+            <DialogTitle>{td('Delete Add-on')}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete &quot;{deletingAddOn?.name}&quot;? This action cannot be undone.
+              {td('Are you sure you want to delete this add-on? This action cannot be undone.')} &quot;{deletingAddOn?.name}&quot;
               {deletingAddOn && deletingAddOn._count.menuItems > 0 && (
                 <span className="block mt-2 text-amber-600">
-                  Warning: This add-on is currently assigned to {deletingAddOn._count.menuItems} menu
-                  item{deletingAddOn._count.menuItems !== 1 ? 's' : ''}.
+                  {td('Warning: This add-on is currently assigned to menu items.')}
                 </span>
               )}
             </DialogDescription>
@@ -432,16 +433,16 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
               onClick={() => setShowDeleteDialog(false)}
               disabled={loading}
             >
-              Cancel
+              {td('Cancel')}
             </Button>
             <Button variant="destructive" onClick={handleDelete} disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
+                  {td('Deleting...')}
                 </>
               ) : (
-                'Delete Add-on'
+                td('Delete Add-on')
               )}
             </Button>
           </DialogFooter>
