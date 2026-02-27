@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import type {
-  MenuItemTranslation,
-  MenuItemTranslationLanguage,
-} from '@prisma/client'
+import type { MenuItemTranslation } from '@prisma/client'
 import { callGemini, parseGeminiJson } from '@/lib/generative'
 import { buildSourceFingerprint } from '@/lib/menu-translations'
 import { DEFAULT_CATEGORY_NAME } from '@/lib/menu-translation-seed'
@@ -141,14 +138,12 @@ export async function POST(request: NextRequest) {
     }
 
     const languageLabel = LANGUAGE_LABELS[languageValue]
-    // DB enum may not include ar_fusha (legacy); map to ar so queries succeed. Schema has ar_fusha; run migration or ALTER TYPE to add it for distinct storage.
-    const languageEnum: MenuItemTranslationLanguage =
-      languageValue === 'ar_fusha' ? 'ar' : (languageValue as MenuItemTranslationLanguage)
+    const languageCode = languageValue
 
     const existingTranslations = await prisma.menuItemTranslation.findMany({
       where: {
         menuItemId: { in: sanitizedItems.map((item) => item.id) },
-        language: languageEnum,
+        language: languageCode,
       },
     })
 
@@ -240,7 +235,7 @@ export async function POST(request: NextRequest) {
               where: {
                 menuItemId_language: {
                   menuItemId: item.id,
-                  language: languageEnum,
+                  language: languageCode,
                 },
               },
               update: {
@@ -260,7 +255,7 @@ export async function POST(request: NextRequest) {
               },
               create: {
                 menuItemId: item.id,
-                language: languageEnum,
+                language: languageCode,
                 translatedName: payload.name,
                 translatedDescription: payload.description,
                 aiDescription: payload.aiDescription,

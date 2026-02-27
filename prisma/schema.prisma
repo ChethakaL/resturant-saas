@@ -292,7 +292,7 @@ model MenuItemTranslation {
   carbs                 Int?
   aiDescription         String
   createdAt             DateTime                    @default(now())
-  language              MenuItemTranslationLanguage
+  language              String   // ISO 639-1 code: en, ar, ar_fusha, ku, ur, ru, etc.
   menuItemId            String
   sourceHash            String
   sourceUpdatedAt       DateTime
@@ -875,13 +875,6 @@ enum PaymentMethod {
   CARD
   OTHER
   APPLE_PAY
-}
-
-enum MenuItemTranslationLanguage {
-  en
-  ar
-  ar_fusha
-  ku
 }
 
 enum OrderStatus {

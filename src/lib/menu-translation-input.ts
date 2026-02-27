@@ -1,7 +1,7 @@
-import type { MenuItemTranslationLanguage } from '@prisma/client'
+export type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
 
 export interface TranslationInputPayload {
-  language: MenuItemTranslationLanguage
+  language: LanguageCode
   name: string
   description: string
   aiDescription: string
@@ -9,12 +9,7 @@ export interface TranslationInputPayload {
   carbs: number | null
 }
 
-const SUPPORTED_LANGUAGES: MenuItemTranslationLanguage[] = [
-  'en',
-  'ar',
-  'ar_fusha',
-  'ku',
-] as MenuItemTranslationLanguage[]
+const SUPPORTED_LANGUAGES: LanguageCode[] = ['en', 'ar', 'ar_fusha', 'ku']
 
 export function normalizeTranslationInputs(items: unknown): TranslationInputPayload[] {
   if (!Array.isArray(items)) {
@@ -27,7 +22,7 @@ export function normalizeTranslationInputs(items: unknown): TranslationInputPayl
         return null
       }
 
-      const language = (raw as any).language as MenuItemTranslationLanguage | undefined
+      const language = (raw as any).language as LanguageCode | undefined
       if (!language || !SUPPORTED_LANGUAGES.includes(language)) {
         return null
       }
