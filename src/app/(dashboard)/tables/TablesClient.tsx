@@ -202,19 +202,19 @@ export default function TablesClient() {
                                 onChange={(e) => setSelectedBranch(e.target.value)}
                                 className="h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             >
-                                <option value="all">All Branches</option>
+                                <option value="all">{t.tables_all_branches}</option>
                                 {branches.map((b) => (
                                     <option key={b.id} value={b.id}>
                                         {b.name} {b.address ? `(${b.address})` : ''}
                                     </option>
                                 ))}
-                                <option value="unassigned">Unassigned</option>
+                                <option value="unassigned">{t.tables_unassigned}</option>
                             </select>
                         </div>
                     )}
                     <Button variant="outline" size="sm" onClick={() => setShowAddBranch(true)}>
                         <MapPin className="h-4 w-4 mr-1" />
-                        {branches.length === 0 ? 'Add Branch' : 'New Branch'}
+                        {branches.length === 0 ? t.tables_add_branch : t.tables_new_branch}
                     </Button>
                     <Button asChild>
                         <Link href="/tables/new">
@@ -248,24 +248,24 @@ export default function TablesClient() {
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <div className="flex items-center gap-2">
                         <Users className="h-5 w-5 text-emerald-500" />
-                        <CardTitle className="text-lg">Waiters</CardTitle>
+                        <CardTitle className="text-lg">{t.tables_waiters}</CardTitle>
                     </div>
                     <Button size="sm" onClick={() => setShowAddWaiter(true)}>
                         <UserPlus className="h-4 w-4 mr-1" />
-                        Add Waiter
+                        {t.tables_add_waiter}
                     </Button>
                 </CardHeader>
                 <CardContent>
                     <p className="text-sm text-slate-500 mb-4">
-                        Add waiters so they can sign in at <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">/waiter/login</code> and manage tables and orders with your restaurant&apos;s menu.
+                        {t.tables_waiters_description}
                     </p>
                     {waiters.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center border border-dashed border-slate-200 rounded-lg">
                             <Users className="h-10 w-10 text-slate-300 mb-2" />
-                            <p className="text-sm text-slate-500 mb-2">No waiters yet</p>
+                            <p className="text-sm text-slate-500 mb-2">{t.tables_no_waiters}</p>
                             <Button variant="outline" size="sm" onClick={() => setShowAddWaiter(true)}>
                                 <UserPlus className="h-4 w-4 mr-1" />
-                                Add your first waiter
+                                {t.tables_add_first_waiter}
                             </Button>
                         </div>
                     ) : (
@@ -277,10 +277,10 @@ export default function TablesClient() {
                                 >
                                     <div>
                                         <p className="font-medium text-slate-900">{w.name}</p>
-                                        <p className="text-xs text-slate-500">{w.email || 'No email'}</p>
+                                        <p className="text-xs text-slate-500">{w.email || t.tables_no_email}</p>
                                     </div>
                                     <span className={`text-xs px-2 py-1 rounded-full ${w.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                                        {w.isActive ? 'Active' : 'Inactive'}
+                                        {w.isActive ? t.tables_active : t.tables_inactive}
                                     </span>
                                 </li>
                             ))}
@@ -293,7 +293,7 @@ export default function TablesClient() {
             <div className="grid gap-4 md:grid-cols-4">
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-500">Total Tables</CardTitle>
+                        <CardTitle className="text-sm font-medium text-slate-500">{t.tables_total_tables}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{stats.total}</div>
@@ -328,7 +328,7 @@ export default function TablesClient() {
             {/* Tables Grid */}
             {loading ? (
                 <div className="flex items-center justify-center py-12">
-                    <div className="text-slate-500">Loading tables...</div>
+                    <div className="text-slate-500">{t.tables_loading}</div>
                 </div>
             ) : (
                 <>
@@ -343,8 +343,8 @@ export default function TablesClient() {
                                         <CardHeader className="pb-3">
                                             <div className="flex justify-between items-start">
                                                 <div>
-                                                    <CardTitle className="text-lg">Table {table.number}</CardTitle>
-                                                    <p className="text-sm text-slate-600 mt-1">{table.capacity} seats</p>
+                                                    <CardTitle className="text-lg">{t.tables_table_label} {table.number}</CardTitle>
+                                                    <p className="text-sm text-slate-600 mt-1">{table.capacity} {t.tables_seats}</p>
                                                 </div>
                                                 <span className="text-xs font-semibold px-2 py-1 rounded">
                                                     {table.status}
@@ -355,15 +355,15 @@ export default function TablesClient() {
                                             {activeOrder ? (
                                                 <div className="space-y-2">
                                                     <div className="flex justify-between text-sm">
-                                                        <span className="text-slate-600">Order:</span>
+                                                        <span className="text-slate-600">{t.tables_order}:</span>
                                                         <span className="font-medium">{activeOrder.orderNumber}</span>
                                                     </div>
                                                     <div className="flex justify-between text-sm">
-                                                        <span className="text-slate-600">Waiter:</span>
-                                                        <span className="font-medium">{activeOrder.waiter?.name || 'N/A'}</span>
+                                                        <span className="text-slate-600">{t.tables_waiter}:</span>
+                                                        <span className="font-medium">{activeOrder.waiter?.name || t.tables_na}</span>
                                                     </div>
                                                     <div className="flex justify-between text-sm">
-                                                        <span className="text-slate-600">Total:</span>
+                                                        <span className="text-slate-600">{t.tables_total}:</span>
                                                         <span className="font-bold text-green-600">{formatCurrency(orderTotal)}</span>
                                                     </div>
                                                     <div className="mt-2 pt-2 border-t">
@@ -372,13 +372,16 @@ export default function TablesClient() {
                                                                 activeOrder.status === 'READY' ? 'bg-green-100 text-green-800' :
                                                                     'bg-slate-100 text-slate-800'
                                                             }`}>
-                                                            {activeOrder.status}
+                                                            {activeOrder.status === 'PENDING' ? t.tables_status_pending :
+                                                                activeOrder.status === 'PREPARING' ? t.tables_status_preparing :
+                                                                    activeOrder.status === 'READY' ? t.tables_status_ready :
+                                                                        t.tables_status_completed}
                                                         </span>
                                                     </div>
                                                 </div>
                                             ) : (
                                                 <div className="text-center text-slate-400 py-4">
-                                                    No active orders
+                                                    {t.tables_no_active_orders}
                                                 </div>
                                             )}
                                         </CardContent>
@@ -393,13 +396,13 @@ export default function TablesClient() {
                             <CardContent className="flex flex-col items-center justify-center py-12">
                                 <p className="text-slate-500 mb-4">
                                     {selectedBranch !== 'all'
-                                        ? 'No tables found for this branch.'
-                                        : 'No tables found. Add your first table to get started.'}
+                                        ? t.tables_no_tables_branch
+                                        : t.tables_no_tables}
                                 </p>
                                 <Button asChild>
                                     <Link href="/tables/new">
                                         <Plus className="mr-2 h-4 w-4" />
-                                        Add Table
+                                        {t.tables_add_table}
                                     </Link>
                                 </Button>
                             </CardContent>

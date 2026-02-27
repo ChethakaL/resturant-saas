@@ -2,19 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Loader2, Check, Sparkles, Zap, Crown, Clock } from 'lucide-react'
-
-const FEATURES = [
-  'Menu management & digital menu builder',
-  'AI-powered menu optimization',
-  'P&L analytics & sales reports',
-  'Table & inventory tracking',
-  'Restaurant theme customization',
-]
-
-const COMING_SOON_FEATURES = [
-  'POS & order management',
-  'HR, shifts & payroll',
-]
+import { useI18n } from '@/lib/i18n'
 
 interface SubscriptionPlansProps {
   pricesConfigured: boolean
@@ -31,26 +19,30 @@ export function SubscriptionPlans({
   loadingPlan,
   onSubscribe,
 }: SubscriptionPlansProps) {
+  const { t } = useI18n()
+  const features = [t.sub_feature_menu, t.sub_feature_ai, t.sub_feature_analytics, t.sub_feature_tables, t.sub_feature_theme]
+  const comingSoonFeatures = [t.sub_feature_pos, t.sub_feature_hr]
+
   if (!pricesConfigured) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-800">
-        Billing is not fully configured. Set STRIPE_PRICE_MONTHLY and STRIPE_PRICE_ANNUAL.
+        {t.sub_billing_not_configured}
       </div>
     )
   }
 
   const featureList = (
     <ul className="mb-4 flex-1 space-y-2 text-sm">
-      {FEATURES.map((f) => (
+      {features.map((f) => (
         <li key={f} className="flex items-center gap-2 text-slate-700">
           <Check className="h-4 w-4 shrink-0 text-slate-600" />
           {f}
         </li>
       ))}
       <li className="pt-2 border-t border-slate-100">
-        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Coming soon</p>
+        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">{t.sub_coming_soon}</p>
         <ul className="space-y-1.5">
-          {COMING_SOON_FEATURES.map((f) => (
+          {comingSoonFeatures.map((f) => (
             <li key={f} className="flex items-center gap-2 text-slate-400">
               <Clock className="h-3.5 w-3.5 shrink-0" />
               {f}
@@ -75,18 +67,18 @@ export function SubscriptionPlans({
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
             <Zap className="h-5 w-5" />
           </div>
-          <span className="text-sm font-medium text-slate-500">Monthly</span>
+          <span className="text-sm font-medium text-slate-500">{t.sub_monthly}</span>
         </div>
         <div className="mb-5">
           <span className="text-3xl font-bold text-slate-900">$40</span>
-          <span className="text-slate-500">/month</span>
-          <p className="mt-2 text-sm text-slate-500">Cancel anytime. No long-term commitment.</p>
+          <span className="text-slate-500">{t.sub_per_month}</span>
+          <p className="mt-2 text-sm text-slate-500">{t.sub_cancel_anytime}</p>
         </div>
         {featureList}
         {isActive && currentPlan === 'monthly' ? (
           <Button disabled className="mt-auto w-full" variant="secondary">
             <Check className="mr-2 h-4 w-4" />
-            Current plan
+            {t.sub_current_plan}
           </Button>
         ) : (
           <Button
@@ -97,7 +89,7 @@ export function SubscriptionPlans({
             {loadingPlan === 'monthly' ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
-            Subscribe now
+            {t.sub_subscribe_now}
           </Button>
         )}
       </div>
@@ -111,26 +103,26 @@ export function SubscriptionPlans({
         }`}
       >
         <div className="absolute -top-3 right-4 rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-white shadow">
-          Save $80
+          {t.sub_save_amount}
         </div>
         <div className="mb-4 flex items-center gap-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
             <Crown className="h-5 w-5" />
           </div>
-          <span className="text-sm font-medium text-slate-600">Annual</span>
+          <span className="text-sm font-medium text-slate-600">{t.sub_annual}</span>
         </div>
         <div className="mb-5">
           <span className="text-3xl font-bold text-slate-900">$400</span>
-          <span className="text-slate-500">/year</span>
+          <span className="text-slate-500">{t.sub_per_year}</span>
           <p className="mt-2 text-sm text-slate-500">
-            Best value. Save $80 compared to monthly billing.
+            {t.sub_best_value}
           </p>
         </div>
         {featureList}
         {isActive && currentPlan === 'annual' ? (
           <Button disabled className="mt-auto w-full" variant="secondary">
             <Check className="mr-2 h-4 w-4" />
-            Current plan
+            {t.sub_current_plan}
           </Button>
         ) : (
           <Button
@@ -143,7 +135,7 @@ export function SubscriptionPlans({
             ) : (
               <Sparkles className="mr-2 h-4 w-4" />
             )}
-            Subscribe now
+            {t.sub_subscribe_now}
           </Button>
         )}
       </div>

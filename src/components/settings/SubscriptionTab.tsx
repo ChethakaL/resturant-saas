@@ -6,6 +6,7 @@ import { Check, ExternalLink, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { Button } from '@/components/ui/button'
 import { SubscriptionPlans } from '@/components/settings/SubscriptionPlans'
+import { useI18n } from '@/lib/i18n'
 
 interface SubscriptionTabProps {
   isActive: boolean
@@ -22,6 +23,7 @@ export default function SubscriptionTab({
 }: SubscriptionTabProps) {
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const { t } = useI18n()
   const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'annual' | null>(null)
   const [managingSubscription, setManagingSubscription] = useState(false)
 
@@ -29,12 +31,12 @@ export default function SubscriptionTab({
     const success = searchParams.get('success') === 'true'
     const canceled = searchParams.get('canceled') === 'true'
     if (success) {
-      toast({ title: 'Thank you', description: 'Your subscription is now active.' })
+      toast({ title: t.sub_thank_you, description: t.sub_now_active })
     }
     if (canceled) {
-      toast({ title: 'Canceled', description: 'Checkout was canceled.', variant: 'destructive' })
+      toast({ title: t.sub_canceled, description: t.sub_checkout_canceled, variant: 'destructive' })
     }
-  }, [searchParams, toast])
+  }, [searchParams, toast, t.sub_thank_you, t.sub_now_active, t.sub_canceled, t.sub_checkout_canceled])
 
   const handleSubscribe = async (plan: 'monthly' | 'annual') => {
     setLoadingPlan(plan)
@@ -97,15 +99,15 @@ export default function SubscriptionTab({
                 <Check className="h-6 w-6" strokeWidth={2.5} />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Active subscription</h3>
+                <h3 className="text-lg font-semibold text-slate-900">{t.sub_active_subscription}</h3>
                 <p className="mt-0.5 text-sm text-slate-500">
                   {currentPlan === 'annual'
-                    ? 'Annual plan · $400/year'
+                    ? t.sub_annual_plan
                     : currentPlan === 'monthly'
-                      ? 'Monthly plan · $40/month'
-                      : 'Your subscription is active'}
+                      ? t.sub_monthly_plan
+                      : t.sub_subscription_active}
                   {periodEndLabel && (
-                    <span className="block mt-0.5 text-xs text-slate-400">Renews on {periodEndLabel}</span>
+                    <span className="block mt-0.5 text-xs text-slate-400">{t.sub_renews_on.replace('{{date}}', periodEndLabel)}</span>
                   )}
                 </p>
               </div>
@@ -121,17 +123,17 @@ export default function SubscriptionTab({
               ) : (
                 <ExternalLink className="mr-2 h-4 w-4" />
               )}
-              Manage subscription
+              {t.sub_manage_subscription}
             </Button>
           </div>
           <p className="mt-3 text-xs text-slate-400 border-t border-slate-100 pt-3">
-            Update payment method, view invoices, or cancel — in your secure Stripe portal.
+            {t.sub_portal_description}
           </p>
         </div>
       )}
 
       <div>
-        <h3 className="text-lg font-semibold text-slate-800 mb-4">Choose your plan</h3>
+        <h3 className="text-lg font-semibold text-slate-800 mb-4">{t.sub_choose_plan}</h3>
         <SubscriptionPlans
           pricesConfigured={pricesConfigured}
           isActive={isActive}

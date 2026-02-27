@@ -240,6 +240,33 @@ export interface TranslationStrings {
     tables_available: string
     tables_occupied: string
     tables_reserved: string
+    tables_all_branches: string
+    tables_unassigned: string
+    tables_add_branch: string
+    tables_new_branch: string
+    tables_waiters: string
+    tables_add_waiter: string
+    tables_waiters_description: string
+    tables_no_waiters: string
+    tables_add_first_waiter: string
+    tables_no_email: string
+    tables_active: string
+    tables_inactive: string
+    tables_total_tables: string
+    tables_loading: string
+    tables_table_label: string
+    tables_seats: string
+    tables_order: string
+    tables_waiter: string
+    tables_total: string
+    tables_na: string
+    tables_no_active_orders: string
+    tables_no_tables_branch: string
+    tables_no_tables: string
+    tables_status_pending: string
+    tables_status_preparing: string
+    tables_status_ready: string
+    tables_status_completed: string
 
     /* ── Orders Page ── */
     orders_title: string
@@ -279,6 +306,53 @@ export interface TranslationStrings {
     /* ── Billing / Subscription ── */
     billing_title: string
     billing_subtitle: string
+    billing_branches: string
+    billing_plan_includes: string
+    billing_using_branches: string
+    billing_extra_branches_cost: string
+    billing_no_branches: string
+    billing_add_first_branch_desc: string
+    billing_add_first_branch: string
+    billing_tables_count: string
+    billing_orders_count: string
+    billing_remove_branch: string
+    billing_delete_branch: string
+    billing_add_branch: string
+    billing_need_more_branches: string
+    billing_extra_branch_cost_desc: string
+    billing_extra_branch_cost_desc_invoice: string
+    /* Subscription tab */
+    sub_active_subscription: string
+    sub_annual_plan: string
+    sub_monthly_plan: string
+    sub_subscription_active: string
+    sub_renews_on: string
+    sub_manage_subscription: string
+    sub_portal_description: string
+    sub_choose_plan: string
+    sub_thank_you: string
+    sub_now_active: string
+    sub_checkout_canceled: string
+    sub_canceled: string
+    /* Subscription plans */
+    sub_billing_not_configured: string
+    sub_monthly: string
+    sub_per_month: string
+    sub_cancel_anytime: string
+    sub_coming_soon: string
+    sub_feature_menu: string
+    sub_feature_ai: string
+    sub_feature_analytics: string
+    sub_feature_tables: string
+    sub_feature_theme: string
+    sub_feature_pos: string
+    sub_feature_hr: string
+    sub_current_plan: string
+    sub_subscribe_now: string
+    sub_annual: string
+    sub_per_year: string
+    sub_save_amount: string
+    sub_best_value: string
 
     /* ── Settings page ── */
     settings_title: string
@@ -556,6 +630,33 @@ const en: TranslationStrings = {
     tables_available: 'Available',
     tables_occupied: 'Occupied',
     tables_reserved: 'Reserved',
+    tables_all_branches: 'All Branches',
+    tables_unassigned: 'Unassigned',
+    tables_add_branch: 'Add Branch',
+    tables_new_branch: 'New Branch',
+    tables_waiters: 'Waiters',
+    tables_add_waiter: 'Add Waiter',
+    tables_waiters_description: 'Add waiters so they can sign in at /waiter/login and manage tables and orders with your restaurant\'s menu.',
+    tables_no_waiters: 'No waiters yet',
+    tables_add_first_waiter: 'Add your first waiter',
+    tables_no_email: 'No email',
+    tables_active: 'Active',
+    tables_inactive: 'Inactive',
+    tables_total_tables: 'Total Tables',
+    tables_loading: 'Loading tables...',
+    tables_table_label: 'Table',
+    tables_seats: 'seats',
+    tables_order: 'Order',
+    tables_waiter: 'Waiter',
+    tables_total: 'Total',
+    tables_na: 'N/A',
+    tables_no_active_orders: 'No active orders',
+    tables_no_tables_branch: 'No tables found for this branch.',
+    tables_no_tables: 'No tables found. Add your first table to get started.',
+    tables_status_pending: 'Pending',
+    tables_status_preparing: 'Preparing',
+    tables_status_ready: 'Ready',
+    tables_status_completed: 'Completed',
 
     /* Orders */
     orders_title: 'Orders',
@@ -595,6 +696,51 @@ const en: TranslationStrings = {
     /* Billing */
     billing_title: 'Membership',
     billing_subtitle: 'Manage your subscription plan',
+    billing_branches: 'Branches',
+    billing_plan_includes: 'Your plan includes {{count}} branch. Additional branches cost ${{price}}/month each.',
+    billing_using_branches: 'Using {{used}} of {{total}} branches',
+    billing_extra_branches_cost: '+${{price}}/month for {{count}} extra branch(es)',
+    billing_no_branches: 'No branches yet',
+    billing_add_first_branch_desc: 'Add your first branch to organize tables and sales by location.',
+    billing_add_first_branch: 'Add Your First Branch',
+    billing_tables_count: 'tables',
+    billing_orders_count: 'orders',
+    billing_remove_branch: 'Remove branch (subscription will be updated)',
+    billing_delete_branch: 'Delete branch',
+    billing_add_branch: 'Add Branch',
+    billing_need_more_branches: 'Need more branches?',
+    billing_extra_branch_cost_desc: 'Each additional branch is ${{price}}/month. Contact us to upgrade.',
+    billing_extra_branch_cost_desc_invoice: 'Each additional branch is ${{price}}/month. Add one below and it will be reflected on your next invoice.',
+    sub_active_subscription: 'Active subscription',
+    sub_annual_plan: 'Annual plan · $400/year',
+    sub_monthly_plan: 'Monthly plan · $40/month',
+    sub_subscription_active: 'Your subscription is active',
+    sub_renews_on: 'Renews on {{date}}',
+    sub_manage_subscription: 'Manage subscription',
+    sub_portal_description: 'Update payment method, view invoices, or cancel — in your secure Stripe portal.',
+    sub_choose_plan: 'Choose your plan',
+    sub_thank_you: 'Thank you',
+    sub_now_active: 'Your subscription is now active.',
+    sub_checkout_canceled: 'Checkout was canceled.',
+    sub_canceled: 'Canceled',
+    sub_billing_not_configured: 'Billing is not fully configured. Set STRIPE_PRICE_MONTHLY and STRIPE_PRICE_ANNUAL.',
+    sub_monthly: 'Monthly',
+    sub_per_month: '/month',
+    sub_cancel_anytime: 'Cancel anytime. No long-term commitment.',
+    sub_coming_soon: 'Coming soon',
+    sub_feature_menu: 'Menu management & digital menu builder',
+    sub_feature_ai: 'AI-powered menu optimization',
+    sub_feature_analytics: 'P&L analytics & sales reports',
+    sub_feature_tables: 'Table & inventory tracking',
+    sub_feature_theme: 'Restaurant theme customization',
+    sub_feature_pos: 'POS & order management',
+    sub_feature_hr: 'HR, shifts & payroll',
+    sub_current_plan: 'Current plan',
+    sub_subscribe_now: 'Subscribe now',
+    sub_annual: 'Annual',
+    sub_per_year: '/year',
+    sub_save_amount: 'Save $80',
+    sub_best_value: 'Best value. Save $80 compared to monthly billing.',
 
     /* Settings */
     settings_title: 'Restaurant DNA',
@@ -872,6 +1018,33 @@ const ku: TranslationStrings = {
     tables_available: 'بەردەست',
     tables_occupied: 'داگیرکراو',
     tables_reserved: 'ڕیزەرڤکراو',
+    tables_all_branches: 'هەموو لقەکان',
+    tables_unassigned: 'ناپەیوەندکراو',
+    tables_add_branch: 'زیادکردنی لق',
+    tables_new_branch: 'لقە نوێیە',
+    tables_waiters: 'خزمەتکاران',
+    tables_add_waiter: 'زیادکردنی خزمەتکار',
+    tables_waiters_description: 'خزمەتکار زیاد بکە بۆ ئەوەی بتوانن لە /waiter/login داخڵ بن و مێزەکان و داواکاریەکان بە مێنیوی چێشتخانەکەت بەڕێوەببەن.',
+    tables_no_waiters: 'هێشتا خزمەتکار نییە',
+    tables_add_first_waiter: 'یەکەم خزمەتکارت زیاد بکە',
+    tables_no_email: 'ئیمەیڵ نییە',
+    tables_active: 'چالاک',
+    tables_inactive: 'ناچالاک',
+    tables_total_tables: 'کۆی مێزەکان',
+    tables_loading: 'مێزەکان بار دەکرێن...',
+    tables_table_label: 'مێز',
+    tables_seats: 'کورسی',
+    tables_order: 'داواکاری',
+    tables_waiter: 'خزمەتکار',
+    tables_total: 'کۆ',
+    tables_na: 'نییە',
+    tables_no_active_orders: 'هیچ داواکاری چالاک نییە',
+    tables_no_tables_branch: 'هیچ مێزێک بۆ ئەم لقە نەدۆزرایەوە.',
+    tables_no_tables: 'هیچ مێزێک نەدۆزرایەوە. یەکەم مێزت زیاد بکە.',
+    tables_status_pending: 'چاوەڕوان',
+    tables_status_preparing: 'ئامادەکردن',
+    tables_status_ready: 'ئامادە',
+    tables_status_completed: 'تەواو',
 
     /* Orders */
     orders_title: 'داواکاریەکان',
@@ -911,6 +1084,51 @@ const ku: TranslationStrings = {
     /* Billing */
     billing_title: 'ئەندامێتی',
     billing_subtitle: 'بەڕێوەبردنی پلانی بەشداری',
+    billing_branches: 'لقەکان',
+    billing_plan_includes: 'پلانەکەت {{count}} لق لەخۆدەگرێت. لقە زیادەکان {{price}}$/مانگ هەر یەک.',
+    billing_using_branches: '{{used}} لە {{total}} لق بەکاردەهێنرێت',
+    billing_extra_branches_cost: '+{{price}}$/مانگ بۆ {{count}} لقی زیادە',
+    billing_no_branches: 'هێشتا لق نییە',
+    billing_add_first_branch_desc: 'یەکەم لقت زیاد بکە بۆ ڕێکخستنی مێزەکان و فرۆشتن بە شوێن.',
+    billing_add_first_branch: 'یەکەم لقت زیاد بکە',
+    billing_tables_count: 'مێز',
+    billing_orders_count: 'داواکاری',
+    billing_remove_branch: 'لابردنی لق (بەشداری نوێ دەکرێتەوە)',
+    billing_delete_branch: 'سڕینەوەی لق',
+    billing_add_branch: 'زیادکردنی لق',
+    billing_need_more_branches: 'لقە زیاترت دەوێت؟',
+    billing_extra_branch_cost_desc: 'هەر لقی زیادە {{price}}$/مانگە. پەیوەندیمان پێوە بکە بۆ بەرزبونەوە.',
+    billing_extra_branch_cost_desc_invoice: 'هەر لقی زیادە {{price}}$/مانگە. یەکێک زیاد بکە و لە قەستەکەتەوە دەردەکەوێت.',
+    sub_active_subscription: 'بەشداری چالاک',
+    sub_annual_plan: 'پلانی ساڵانە · ٤٠٠$/ساڵ',
+    sub_monthly_plan: 'پلانی مانگانە · ٤٠$/مانگ',
+    sub_subscription_active: 'بەشدارییەکەت چالاکە',
+    sub_renews_on: 'نوێدەکرێتەوە لە {{date}}',
+    sub_manage_subscription: 'بەڕێوەبردنی بەشداری',
+    sub_portal_description: 'شێوازی پارەدان نوێ بکە، وتارەکان ببینە، یان هەڵوەشێنەوە — لە پۆرتاڵی ئاسوودەی Stripe.',
+    sub_choose_plan: 'پلانەکەت هەڵبژێرە',
+    sub_thank_you: 'سوپاس',
+    sub_now_active: 'بەشدارییەکەت ئێستا چالاکە.',
+    sub_checkout_canceled: 'کڕین هەڵوەشێندرایەوە.',
+    sub_canceled: 'هەڵوەشێندرایەوە',
+    sub_billing_not_configured: 'پارەدان تەواو ڕێکخراو نییە. STRIPE_PRICE_MONTHLY و STRIPE_PRICE_ANNUAL دابنێ.',
+    sub_monthly: 'مانگانە',
+    sub_per_month: '/مانگ',
+    sub_cancel_anytime: 'هەر کات دەتوانیت هەڵوەشێنیتەوە. هیچ پابەندێکی درێژخایەن نییە.',
+    sub_coming_soon: 'بەم زووانە',
+    sub_feature_menu: 'بەڕێوەبردنی مێنیو و دروستکەری مێنیوی دیجیتاڵ',
+    sub_feature_ai: 'باشترکردنی مێنیو بە AI',
+    sub_feature_analytics: 'شیکاری P&L و ڕاپۆرتی فرۆشتن',
+    sub_feature_tables: 'چاودێری مێز و ئامادەکردن',
+    sub_feature_theme: 'تایبەتمەندی ڕووکاری چێشتخانە',
+    sub_feature_pos: 'بەڕێوەبردنی POS و داواکاری',
+    sub_feature_hr: 'سەرچاوەی مرۆڤ، شفتی کار و مووچە',
+    sub_current_plan: 'پلانی ئێستا',
+    sub_subscribe_now: 'ئێستا بەشداری بکە',
+    sub_annual: 'ساڵانە',
+    sub_per_year: '/ساڵ',
+    sub_save_amount: '٨٠$ واشە',
+    sub_best_value: 'باشترین بەها. ٨٠$ واشە بەراورد بە پارەدانی مانگانە.',
 
     /* Settings */
     settings_title: 'ناسنامەی چێشتخانە',
@@ -1188,6 +1406,33 @@ const arFusha: TranslationStrings = {
     tables_available: 'متاحة',
     tables_occupied: 'مشغولة',
     tables_reserved: 'محجوزة',
+    tables_all_branches: 'جميع الفروع',
+    tables_unassigned: 'غير معيّن',
+    tables_add_branch: 'إضافة فرع',
+    tables_new_branch: 'فرع جديد',
+    tables_waiters: 'الطاقم',
+    tables_add_waiter: 'إضافة موظف',
+    tables_waiters_description: 'أضف الموظفين ليتمكنوا من تسجيل الدخول عبر /waiter/login وإدارة الطاولات والطلبات بقائمة مطعمك.',
+    tables_no_waiters: 'لا يوجد موظفون بعد',
+    tables_add_first_waiter: 'أضف أول موظف',
+    tables_no_email: 'لا يوجد بريد',
+    tables_active: 'نشط',
+    tables_inactive: 'غير نشط',
+    tables_total_tables: 'إجمالي الطاولات',
+    tables_loading: 'جاري تحميل الطاولات...',
+    tables_table_label: 'طاولة',
+    tables_seats: 'مقاعد',
+    tables_order: 'طلب',
+    tables_waiter: 'موظف',
+    tables_total: 'الإجمالي',
+    tables_na: 'غير متاح',
+    tables_no_active_orders: 'لا توجد طلبات نشطة',
+    tables_no_tables_branch: 'لم تُعثر على طاولات لهذا الفرع.',
+    tables_no_tables: 'لم تُعثر على طاولات. أضف أول طاولة للبدء.',
+    tables_status_pending: 'قيد الانتظار',
+    tables_status_preparing: 'قيد التحضير',
+    tables_status_ready: 'جاهز',
+    tables_status_completed: 'مكتمل',
 
     /* Orders */
     orders_title: 'الطلبات',
@@ -1227,6 +1472,51 @@ const arFusha: TranslationStrings = {
     /* Billing */
     billing_title: 'العضوية',
     billing_subtitle: 'إدارة خطة اشتراكك',
+    billing_branches: 'الفروع',
+    billing_plan_includes: 'تتضمن خطتك فرعاً واحداً. كل فرع إضافي يكلف {{price}}$/شهر.',
+    billing_using_branches: 'استخدام {{used}} من {{total}} فرعاً',
+    billing_extra_branches_cost: '+{{price}}$/شهر لـ {{count}} فرع إضافي',
+    billing_no_branches: 'لا توجد فروع بعد',
+    billing_add_first_branch_desc: 'أضف فرعك الأول لتنظيم الطاولات والمبيعات حسب الموقع.',
+    billing_add_first_branch: 'أضف فرعك الأول',
+    billing_tables_count: 'طاولات',
+    billing_orders_count: 'طلبات',
+    billing_remove_branch: 'إزالة الفرع (سيتم تحديث الاشتراك)',
+    billing_delete_branch: 'حذف الفرع',
+    billing_add_branch: 'إضافة فرع',
+    billing_need_more_branches: 'تحتاج فروعاً أكثر؟',
+    billing_extra_branch_cost_desc: 'كل فرع إضافي يكلف {{price}}$/شهر. تواصل معنا للترقية.',
+    billing_extra_branch_cost_desc_invoice: 'كل فرع إضافي يكلف {{price}}$/شهر. أضف واحداً أدناه وسيظهر في فاتورتك القادمة.',
+    sub_active_subscription: 'اشتراك نشط',
+    sub_annual_plan: 'الخطة السنوية · 400$/سنة',
+    sub_monthly_plan: 'الخطة الشهرية · 40$/شهر',
+    sub_subscription_active: 'اشتراكك نشط',
+    sub_renews_on: 'يتجدد في {{date}}',
+    sub_manage_subscription: 'إدارة الاشتراك',
+    sub_portal_description: 'تحديث طريقة الدفع، عرض الفواتير، أو الإلغاء — في بوابة Stripe الآمنة.',
+    sub_choose_plan: 'اختر خطتك',
+    sub_thank_you: 'شكراً',
+    sub_now_active: 'اشتراكك نشط الآن.',
+    sub_checkout_canceled: 'تم إلغاء الدفع.',
+    sub_canceled: 'ملغى',
+    sub_billing_not_configured: 'الفواتير غير مكوّنة بالكامل. ضع STRIPE_PRICE_MONTHLY و STRIPE_PRICE_ANNUAL.',
+    sub_monthly: 'شهري',
+    sub_per_month: '/شهر',
+    sub_cancel_anytime: 'يمكنك الإلغاء في أي وقت. بدون التزام طويل الأمد.',
+    sub_coming_soon: 'قريباً',
+    sub_feature_menu: 'إدارة القائمة وبناء القائمة الرقمية',
+    sub_feature_ai: 'تحسين القائمة بالذكاء الاصطناعي',
+    sub_feature_analytics: 'تحليلات الربح والخسارة وتقارير المبيعات',
+    sub_feature_tables: 'تتبع الطاولات والمخزون',
+    sub_feature_theme: 'تخصيص مظهر المطعم',
+    sub_feature_pos: 'إدارة نقاط البيع والطلبات',
+    sub_feature_hr: 'الموارد البشرية والورديات والرواتب',
+    sub_current_plan: 'الخطة الحالية',
+    sub_subscribe_now: 'اشترك الآن',
+    sub_annual: 'سنوي',
+    sub_per_year: '/سنة',
+    sub_save_amount: 'وفر 80$',
+    sub_best_value: 'أفضل قيمة. وفر 80$ مقارنة بالدفع الشهري.',
 
     /* Settings */
     settings_title: 'هوية المطعم',
