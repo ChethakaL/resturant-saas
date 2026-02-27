@@ -4,20 +4,10 @@ import type { MenuItemTranslation } from '@prisma/client'
 import { callGemini, parseGeminiJson } from '@/lib/generative'
 import { buildSourceFingerprint } from '@/lib/menu-translations'
 import { DEFAULT_CATEGORY_NAME } from '@/lib/menu-translation-seed'
+import { MENU_LANGUAGES } from '@/lib/menu-languages'
 
-const SUPPORTED_LANGUAGES = ['en', 'ar', 'ar_fusha', 'ku', 'ur', 'ru', 'tr', 'fr'] as const
-type LanguageCode = (typeof SUPPORTED_LANGUAGES)[number]
-
-const LANGUAGE_LABELS: Record<LanguageCode, string> = {
-  en: 'English',
-  ar: 'Iraqi Arabic',
-  ar_fusha: 'Arabic',
-  ku: 'Sorani Kurdish',
-  ur: 'Urdu',
-  ru: 'Russian',
-  tr: 'Turkish',
-  fr: 'French',
-}
+const LANGUAGE_LABELS = Object.fromEntries(MENU_LANGUAGES.map((l) => [l.code, l.name])) as Record<string, string>
+LANGUAGE_LABELS.en = 'English'
 
 const CHUNK_SIZE = 10
 
@@ -55,7 +45,7 @@ function buildSnippetLine(item: TranslationRequestItem) {
 }
 
 async function translateChunk(
-  lang: LanguageCode,
+  lang: string,
   languageLabel: string,
   chunk: TranslationRequestItem[]
 ) {
@@ -92,8 +82,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { language, items } = body
-    const languageValue = String(language || '').toLowerCase()
-    if (!languageValue || !SUPPORTED_LANGUAGES.includes(languageValue as LanguageCode)) {
+    const languageValue = String(language || '').toLowerCase().replace(/-/g, '_')
+    const validCodes = new Set(MENU_LANGUAGES.map((l) => l.code.toLowerCase()))
+    validCodes.add('en')
+    if (!languageValue || !validCodes.has(languageValue)) {
       return NextResponse.json(
         { error: 'Invalid language selection' },
         { status: 400 }
@@ -102,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
-        { language: LANGUAGE_LABELS[language as LanguageCode], items: [] }
+        { language: LANGUAGE_LABELS[languageValue] ?? languageValue, items: [] }
       )
     }
 
@@ -124,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     if (sanitizedItems.length === 0) {
       return NextResponse.json(
-        { language: LANGUAGE_LABELS[language as LanguageCode], items: [] }
+        { language: LANGUAGE_LABELS[languageValue] ?? languageValue, items: [] }
       )
     }
 
@@ -142,7 +134,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const languageLabel = LANGUAGE_LABELS[languageValue as LanguageCode] ?? languageValue
+    const languageLabel = LANGUAGE_LABELS[languageValue] ?? languageValue
     const languageCode = String(languageValue)
 
     const existingTranslations = await prisma.menuItemTranslation.findMany({

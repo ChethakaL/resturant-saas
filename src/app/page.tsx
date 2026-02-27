@@ -548,6 +548,8 @@ export default async function Home() {
       snowfallSettings={data.snowfallSettings}
       forceShowImages
       currency={data.restaurant.currency}
+      menuTranslationLanguage1={data.theme?.menuTranslationLanguage1 as string | undefined}
+      menuTranslationLanguage2={data.theme?.menuTranslationLanguage2 as string | undefined}
     />
     </Suspense>
   )

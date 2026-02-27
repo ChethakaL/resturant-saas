@@ -27,6 +27,9 @@ import {
   MessageCircle,
 } from 'lucide-react'
 import { useI18n, useDynamicTranslate } from '@/lib/i18n'
+import { SearchableSelect } from '@/components/ui/searchable-select'
+import { CURRENCIES } from '@/lib/currencies'
+import { MENU_LANGUAGES } from '@/lib/menu-languages'
 
 /* ============================================
  *  FONT OPTIONS (expanded list)
@@ -394,54 +397,40 @@ export default function SettingsClient({
         <CardContent className="space-y-4">
           <div>
             <Label className="text-sm font-medium">{td('Currency')}</Label>
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="mt-1 flex h-10 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="IQD">IQD (Iraqi Dinar)</option>
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-              <option value="GBP">GBP</option>
-              <option value="AED">AED</option>
-              <option value="SAR">SAR</option>
-              <option value="TRY">TRY</option>
-              <option value="INR">INR</option>
-            </select>
+            <div className="mt-1">
+              <SearchableSelect
+                options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.code} (${c.name})` }))}
+                value={currency}
+                onChange={setCurrency}
+                placeholder="Select currency"
+                searchPlaceholder="Search currency..."
+              />
+            </div>
           </div>
           <div>
             <Label className="text-sm font-medium">{td('Menu translation language 1')}</Label>
-            <select
-              value={menuTranslationLanguage1}
-              onChange={(e) => setMenuTranslationLanguage1(e.target.value)}
-              className="mt-1 flex h-10 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="ar">Arabic (ar)</option>
-              <option value="ar_fusha">Arabic Fusha (ar_fusha)</option>
-              <option value="ku">Kurdish (ku)</option>
-              <option value="en">English (en)</option>
-              <option value="ur">Urdu (ur)</option>
-              <option value="ru">Russian (ru)</option>
-              <option value="tr">Turkish (tr)</option>
-              <option value="fr">French (fr)</option>
-            </select>
+            <p className="text-xs text-slate-500 mt-0.5">{td('Shown to guests when they tap the globe icon')}</p>
+            <div className="mt-1">
+              <SearchableSelect
+                options={MENU_LANGUAGES.map((l) => ({ value: l.code, label: l.name }))}
+                value={menuTranslationLanguage1}
+                onChange={setMenuTranslationLanguage1}
+                placeholder="Select language"
+                searchPlaceholder="Search language..."
+              />
+            </div>
           </div>
           <div>
             <Label className="text-sm font-medium">{td('Menu translation language 2')}</Label>
-            <select
-              value={menuTranslationLanguage2}
-              onChange={(e) => setMenuTranslationLanguage2(e.target.value)}
-              className="mt-1 flex h-10 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="ku">Kurdish (ku)</option>
-              <option value="ar">Arabic (ar)</option>
-              <option value="ar_fusha">Arabic Fusha (ar_fusha)</option>
-              <option value="en">English (en)</option>
-              <option value="ur">Urdu (ur)</option>
-              <option value="ru">Russian (ru)</option>
-              <option value="tr">Turkish (tr)</option>
-              <option value="fr">French (fr)</option>
-            </select>
+            <div className="mt-1">
+              <SearchableSelect
+                options={MENU_LANGUAGES.map((l) => ({ value: l.code, label: l.name }))}
+                value={menuTranslationLanguage2}
+                onChange={setMenuTranslationLanguage2}
+                placeholder="Select language"
+                searchPlaceholder="Search language..."
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

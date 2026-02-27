@@ -25,6 +25,8 @@ export interface MenuPersonalizationWrapperProps {
   forceShowImages?: boolean
   snowfallSettings?: { enabled: boolean; start: string; end: string } | null
   currency?: string
+  menuTranslationLanguage1?: string
+  menuTranslationLanguage2?: string
 }
 
 export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProps) {

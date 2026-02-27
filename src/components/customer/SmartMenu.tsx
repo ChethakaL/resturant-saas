@@ -115,9 +115,12 @@ interface SmartMenuProps {
   snowfallSettings?: { enabled: boolean; start: string; end: string } | null
   forceShowImages?: boolean
   currency?: string
+  /** Languages shown in the globe picker (admin-selected). Default: en, ar_fusha, ku */
+  menuTranslationLanguage1?: string
+  menuTranslationLanguage2?: string
 }
 
-type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
+type LanguageCode = string
 
 interface MenuItemTranslation {
   name: string
@@ -129,11 +132,28 @@ interface MenuItemTranslation {
 
 type TranslationCache = Partial<Record<LanguageCode, Record<string, MenuItemTranslation>>>
 
-const languageOptions: { value: LanguageCode; label: string }[] = [
-  { value: 'en', label: 'English' },
-  { value: 'ku', label: 'كوردي' },
-  { value: 'ar_fusha', label: 'Arabic' },
-]
+/** Built from admin-selected menuTranslationLanguage1/2 + English */
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: 'English',
+  ar: 'Arabic (Iraqi)',
+  ar_fusha: 'Arabic',
+  ku: 'Kurdish',
+  ur: 'Urdu',
+  ru: 'Russian',
+  tr: 'Turkish',
+  fr: 'French',
+  de: 'German',
+  es: 'Spanish',
+  it: 'Italian',
+  pt: 'Portuguese',
+  zh: 'Chinese',
+  ja: 'Japanese',
+  ko: 'Korean',
+  hi: 'Hindi',
+  th: 'Thai',
+  vi: 'Vietnamese',
+  id: 'Indonesian',
+}
 
 const sortOptions: {
   value:
@@ -614,7 +634,25 @@ export default function SmartMenu({
   forceShowImages = false,
   snowfallSettings,
   currency = 'IQD',
+  menuTranslationLanguage1: lang1 = 'ar',
+  menuTranslationLanguage2: lang2 = 'ku',
 }: SmartMenuProps) {
+  const languageOptions = useMemo(() => {
+    const seen = new Set<string>(['en'])
+    const opts: { value: string; label: string }[] = [
+      { value: 'en', label: LANGUAGE_LABELS.en || 'English' },
+    ]
+    for (const code of [lang1, lang2]) {
+      if (code && !seen.has(code)) {
+        seen.add(code)
+        opts.push({
+          value: code,
+          label: LANGUAGE_LABELS[code] || code,
+        })
+      }
+    }
+    return opts
+  }, [lang1, lang2])
   // Safety check for menuItems
   if (!menuItems || !Array.isArray(menuItems)) {
     return (
@@ -650,12 +688,7 @@ export default function SmartMenu({
   const translationCacheRef = useRef<TranslationCache>({})
   const [isTranslating, setIsTranslating] = useState(false)
   const [translationError, setTranslationError] = useState<string | null>(null)
-  const [translatedCount, setTranslatedCount] = useState<Record<LanguageCode, number>>({
-    en: 0,
-    ar: 0,
-    ar_fusha: 0,
-    ku: 0,
-  })
+  const [translatedCount, setTranslatedCount] = useState<Record<string, number>>({})
   const [selectedItemForDetail, setSelectedItemForDetail] =
     useState<MenuItem | null>(null)
   const { toast } = useToast()
@@ -900,8 +933,8 @@ export default function SmartMenu({
     }
   }, [isSmartSearchActive])
 
-  const currentCopy = uiCopyMap[language]
-  const currentEngineCopy = engineCopyMap[language]
+  const currentCopy = uiCopyMap[language] ?? uiCopyMap.en
+  const currentEngineCopy = engineCopyMap[language] ?? engineCopyMap.en
   const currentLanguageLabel =
     languageOptions.find((option) => option.value === language)?.label || ''
   const buildMacroSegments = (
