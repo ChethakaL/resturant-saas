@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
+import { useFormatCurrency, useI18n } from '@/lib/i18n'
 import DatePicker from '@/components/ui/date-picker'
 
 interface Ingredient {
@@ -67,6 +68,8 @@ export default function AddExpenseModal({
   onSaved?: () => void
 }) {
   const { toast } = useToast()
+  const { currency } = useI18n()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   const [loading, setLoading] = useState(false)
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [formData, setFormData] = useState({
@@ -379,12 +382,12 @@ export default function AddExpenseModal({
                         parseFloat(formData.quantity) *
                         parseFloat(formData.unitCost)
                       ).toLocaleString()}{' '}
-                      IQD
+                      {currency}
                     </span>
                   </p>
                   {selectedIngredient && (
                     <p className="text-xs text-slate-500 mt-1">
-                      Current stock: {selectedIngredient.costPerUnit.toLocaleString()} IQD per{' '}
+                      Current stock: {formatCurrencyWithRestaurant(selectedIngredient.costPerUnit)} per{' '}
                       {selectedIngredient.unit}
                     </p>
                   )}
@@ -471,7 +474,7 @@ export default function AddExpenseModal({
                       />
                     </div>
                     <div>
-                      <Label htmlFor="opt-unitCost">Unit cost (IQD)</Label>
+                      <Label htmlFor="opt-unitCost">Unit cost ({currency})</Label>
                       <Input
                         id="opt-unitCost"
                         type="number"

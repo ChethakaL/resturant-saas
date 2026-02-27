@@ -550,6 +550,7 @@ export default async function SlugMenuPage({
       tables={data.tables}
       snowfallSettings={data.snowfallSettings}
       forceShowImages
+      currency={data.restaurant.currency}
     />
     </Suspense>
   )

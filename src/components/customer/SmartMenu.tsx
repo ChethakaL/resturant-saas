@@ -114,6 +114,7 @@ interface SmartMenuProps {
   /** Snowfall / seasonal effects settings */
   snowfallSettings?: { enabled: boolean; start: string; end: string } | null
   forceShowImages?: boolean
+  currency?: string
 }
 
 type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
@@ -612,6 +613,7 @@ export default function SmartMenu({
   maxInitialItemsPerCategory = 3,
   forceShowImages = false,
   snowfallSettings,
+  currency = 'IQD',
 }: SmartMenuProps) {
   // Safety check for menuItems
   if (!menuItems || !Array.isArray(menuItems)) {
@@ -2145,7 +2147,7 @@ export default function SmartMenu({
                                 {displayName}
                               </h4>
                               <span className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">
-                                {formatCurrency(item.price)}
+                                {formatCurrency(item.price, currency)}
                               </span>
                             </div>
                             <p className="text-[0.65rem] uppercase tracking-[0.4em] text-white/60">
@@ -2233,7 +2235,7 @@ export default function SmartMenu({
                           </p>
                         </div>
                         <span className="text-sm font-bold text-emerald-700">
-                          {formatCurrency(item.price)}
+                          {formatCurrency(item.price, currency)}
                         </span>
                       </div>
                       {suggestionDescription && (
@@ -2282,7 +2284,7 @@ export default function SmartMenu({
                   {currentCopy.costLabel}
                 </p>
                 <p className="text-2xl font-bold text-emerald-700">
-                  {formatCurrency(selectedItemForDetail.price)}
+                  {formatCurrency(selectedItemForDetail.price, currency)}
                 </p>
               </div>
               {detailMacroSegments.length > 0 && (
@@ -2329,7 +2331,7 @@ export default function SmartMenu({
                         </div>
                         <div className="flex-shrink-0">
                           <p className="text-sm font-bold text-emerald-700 whitespace-nowrap">
-                            +{formatCurrency(addOn.price)}
+                            +{formatCurrency(addOn.price, currency)}
                           </p>
                         </div>
                       </div>

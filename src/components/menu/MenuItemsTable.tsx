@@ -16,9 +16,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
-import { formatCurrency, formatPercentage } from '@/lib/utils'
+import { formatPercentage } from '@/lib/utils'
 import { Edit, Loader2, Trash, Check, X, DollarSign } from 'lucide-react'
-import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
+import { useI18n, getTranslatedCategoryName, useFormatCurrency } from '@/lib/i18n'
 
 export interface MenuItemWithMetrics {
   id: string
@@ -69,6 +69,7 @@ export default function MenuItemsTable({
   const itemsRef = useRef(items)
   const { toast } = useToast()
   const { t } = useI18n()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
 
   // Inline price editing state
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
@@ -528,7 +529,7 @@ export default function MenuItemsTable({
                     {/* Direct Cost (number + %) */}
                     <td className="py-3 px-4 text-right">
                       <div className="font-mono text-sm">
-                        {formatCurrency(item.cost)}
+                        {formatCurrencyWithRestaurant(item.cost)}
                       </div>
                       <div className="text-xs text-slate-500">
                         {formatPercentage(costPercent)}
@@ -540,7 +541,7 @@ export default function MenuItemsTable({
                       <div
                         className={`font-mono text-sm font-medium ${getMarginColor(profitPercent)}`}
                       >
-                        {formatCurrency(item.profit)}
+                        {formatCurrencyWithRestaurant(item.profit)}
                       </div>
                       <div
                         className={`text-xs font-bold ${getMarginColor(profitPercent)}`}
@@ -554,7 +555,7 @@ export default function MenuItemsTable({
                       {suggestedPrice > 0 ? (
                         <div>
                           <div className="font-mono text-sm text-slate-700">
-                            {formatCurrency(suggestedPrice)}
+                            {formatCurrencyWithRestaurant(suggestedPrice)}
                           </div>
                           {priceDiff !== 0 && (
                             <div
@@ -564,7 +565,7 @@ export default function MenuItemsTable({
                                 }`}
                             >
                               {priceDiff > 0 ? '+' : ''}
-                              {formatCurrency(priceDiff)}
+                              {formatCurrencyWithRestaurant(priceDiff)}
                             </div>
                           )}
                         </div>
@@ -620,7 +621,7 @@ export default function MenuItemsTable({
                           className="font-mono font-bold text-sm text-slate-900 hover:text-emerald-700 hover:underline cursor-pointer transition"
                           title="Click to edit price"
                         >
-                          {formatCurrency(item.price)}
+                          {formatCurrencyWithRestaurant(item.price)}
                         </button>
                       )}
                     </td>

@@ -55,7 +55,11 @@ export default async function PayrollPage() {
     redirect('/dashboard/orders')
   }
 
-  const payrolls = await getPayrolls(restaurantId)
+  const [payrolls, restaurant] = await Promise.all([
+    getPayrolls(restaurantId),
+    prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { currency: true } }),
+  ])
+  const currency = restaurant?.currency ?? 'IQD'
 
   const stats = {
     total: payrolls.length,
@@ -116,7 +120,7 @@ export default async function PayrollPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(stats.totalPending)}
+              {formatCurrency(stats.totalPending, currency)}
             </div>
           </CardContent>
         </Card>
@@ -158,14 +162,14 @@ export default async function PayrollPage() {
 
                     <div className="text-right">
                       <div className="text-sm text-slate-600">Base Salary</div>
-                      <div className="font-medium">{formatCurrency(payroll.baseSalary)}</div>
+                      <div className="font-medium">{formatCurrency(payroll.baseSalary, currency)}</div>
                     </div>
 
                     {payroll.bonuses > 0 && (
                       <div className="text-right">
                         <div className="text-sm text-slate-600">Bonuses</div>
                         <div className="font-medium text-green-600">
-                          +{formatCurrency(payroll.bonuses)}
+                          +{formatCurrency(payroll.bonuses, currency)}
                         </div>
                       </div>
                     )}
@@ -174,7 +178,7 @@ export default async function PayrollPage() {
                       <div className="text-right">
                         <div className="text-sm text-slate-600">Deductions</div>
                         <div className="font-medium text-red-600">
-                          -{formatCurrency(payroll.deductions)}
+                          -{formatCurrency(payroll.deductions, currency)}
                         </div>
                       </div>
                     )}
@@ -182,7 +186,7 @@ export default async function PayrollPage() {
                     <div className="text-right min-w-[120px]">
                       <div className="text-sm text-slate-600">Total Paid</div>
                       <div className="text-lg font-bold text-green-600">
-                        {formatCurrency(payroll.totalPaid)}
+                        {formatCurrency(payroll.totalPaid, currency)}
                       </div>
                     </div>
 

@@ -24,6 +24,7 @@ export interface MenuPersonalizationWrapperProps {
   tables?: { id: string; number: string }[]
   forceShowImages?: boolean
   snowfallSettings?: { enabled: boolean; start: string; end: string } | null
+  currency?: string
 }
 
 export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProps) {

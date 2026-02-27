@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useFormatCurrency } from '@/lib/i18n'
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,7 @@ export default function AddWasteModal({
   onClose: () => void
 }) {
   const { toast } = useToast()
+  const formatCurrency = useFormatCurrency()
   const [loading, setLoading] = useState(false)
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [formData, setFormData] = useState({
@@ -158,7 +160,7 @@ export default function AddWasteModal({
                 {selectedIngredient.unit}
               </p>
               <p className="text-xs text-amber-600 mt-1">
-                Cost per unit: {selectedIngredient.costPerUnit.toLocaleString()} IQD
+                Cost per unit: {formatCurrency(selectedIngredient.costPerUnit)}
               </p>
             </div>
           )}
@@ -180,10 +182,9 @@ export default function AddWasteModal({
             {selectedIngredient && formData.quantity && (
               <p className="text-xs text-slate-500 mt-1">
                 Cost impact:{' '}
-                {(
+                {formatCurrency(
                   parseFloat(formData.quantity) * selectedIngredient.costPerUnit
-                ).toLocaleString()}{' '}
-                IQD
+                )}
               </p>
             )}
           </div>

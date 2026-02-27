@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { formatCurrency } from '@/lib/utils'
+import { useFormatCurrency } from '@/lib/i18n'
 import {
   Dialog,
   DialogContent,
@@ -59,6 +59,7 @@ export function InventoryTable({
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
 
   const openRequestModal = async (ingredient: IngredientRow) => {
     setSelectedIngredient(ingredient)
@@ -221,7 +222,7 @@ export function InventoryTable({
                 </Button>
               </td>
               <td className="py-3 px-4 text-right font-mono">
-                {formatCurrency(ingredient.costPerUnit)}
+                {formatCurrencyWithRestaurant(ingredient.costPerUnit)}
               </td>
               <td className="py-3 px-4 text-right">
                 <div className="flex items-center justify-end gap-2">

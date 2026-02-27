@@ -28,7 +28,8 @@ export default async function OrderDetailsPage({
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
 
-  const order = await prisma.sale.findFirst({
+  const [order, restaurant] = await Promise.all([
+    prisma.sale.findFirst({
     where: {
       id: params.id,
       restaurantId,
@@ -46,7 +47,10 @@ export default async function OrderDetailsPage({
       table: true,
       waiter: true,
     },
-  })
+  }),
+    prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { currency: true } }),
+  ])
+  const currency = restaurant?.currency ?? 'IQD'
 
   if (!order) {
     notFound()
@@ -91,7 +95,7 @@ export default async function OrderDetailsPage({
             <CardTitle className="text-sm font-medium">Order Total</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(order.total)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(order.total, currency)}</div>
             <p className="text-xs text-slate-500 mt-1">Payment: {order.paymentMethod}</p>
           </CardContent>
         </Card>
@@ -101,7 +105,7 @@ export default async function OrderDetailsPage({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(profit)}
+              {formatCurrency(profit, currency)}
             </div>
             <p className="text-xs text-slate-500 mt-1">
               Margin {formatPercentage(margin)}
@@ -167,10 +171,10 @@ export default async function OrderDetailsPage({
                     </td>
                     <td className="py-3 px-4 text-right font-mono">{item.quantity}</td>
                     <td className="py-3 px-4 text-right font-mono">
-                      {formatCurrency(item.price)}
+                      {formatCurrency(item.price, currency)}
                     </td>
                     <td className="py-3 px-4 text-right font-mono font-medium">
-                      {formatCurrency(item.price * item.quantity)}
+                      {formatCurrency(item.price * item.quantity, currency)}
                     </td>
                   </tr>
                 ))}

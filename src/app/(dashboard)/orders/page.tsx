@@ -164,6 +164,8 @@ export default async function OrdersPage({
     })
     : []
   const menuItemsMap = new Map(menuItemsForTop.map((item) => [item.id, item.name]))
+  const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { currency: true } })
+  const currency = restaurant?.currency ?? 'IQD'
 
   const topItemsWithNames = topItems.map((item) => ({
     id: item.menuItemId,
@@ -213,7 +215,7 @@ export default async function OrdersPage({
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalRevenue, currency)}</div>
             <p className="text-xs text-slate-500 mt-1">Completed orders only</p>
           </CardContent>
         </Card>
@@ -233,7 +235,7 @@ export default async function OrdersPage({
             <CardTitle className="text-sm font-medium">Average Order Value</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(averageOrderValue)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(averageOrderValue, currency)}</div>
             <p className="text-xs text-slate-500 mt-1">Based on completed orders</p>
           </CardContent>
         </Card>
@@ -253,7 +255,7 @@ export default async function OrdersPage({
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-slate-900">
-                  {formatCurrency(dayRevenue)}
+                  {formatCurrency(dayRevenue, currency)}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">Completed orders only</p>
               </CardContent>
@@ -266,7 +268,7 @@ export default async function OrdersPage({
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-slate-900">
-                  {formatCurrency(weekRevenue)}
+                  {formatCurrency(weekRevenue, currency)}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">Rolling 7-day total</p>
               </CardContent>
@@ -279,7 +281,7 @@ export default async function OrdersPage({
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-slate-900">
-                  {formatCurrency(monthRevenue)}
+                  {formatCurrency(monthRevenue, currency)}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">Month-to-date total</p>
               </CardContent>
@@ -297,7 +299,7 @@ export default async function OrdersPage({
                     <div className="text-xs text-slate-500">{item.quantity} sold</div>
                   </div>
                   <div className="text-sm font-semibold text-slate-900">
-                    {formatCurrency(item.revenue)}
+                    {formatCurrency(item.revenue, currency)}
                   </div>
                 </div>
               ))}
@@ -362,7 +364,7 @@ export default async function OrdersPage({
                         {order.items.reduce((sum, item) => sum + item.quantity, 0)}
                       </td>
                       <td className="py-3 px-4 text-right font-mono font-medium">
-                        {formatCurrency(order.total)}
+                        {formatCurrency(order.total, currency)}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <CompleteOrderButton order={order} />
@@ -432,7 +434,7 @@ export default async function OrdersPage({
                       {order.items.reduce((sum, item) => sum + item.quantity, 0)}
                     </td>
                     <td className="py-3 px-4 text-right font-mono font-medium">
-                      {formatCurrency(order.total)}
+                      {formatCurrency(order.total, currency)}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span

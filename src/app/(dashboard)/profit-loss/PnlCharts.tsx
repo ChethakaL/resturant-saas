@@ -9,7 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { formatCurrency } from '@/lib/utils'
+import { useFormatCurrency } from '@/lib/i18n'
 
 interface ChartPoint {
   date: string
@@ -19,15 +19,16 @@ interface ChartPoint {
 }
 
 export default function PnlCharts({ data }: { data: ChartPoint[] }) {
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   return (
     <div className="h-[320px]">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis dataKey="date" stroke="#64748b" />
-          <YAxis stroke="#64748b" tickFormatter={(value) => formatCurrency(value)} />
+          <YAxis stroke="#64748b" tickFormatter={(value) => formatCurrencyWithRestaurant(value)} />
           <Tooltip
-            formatter={(value: number) => formatCurrency(value)}
+            formatter={(value: number) => formatCurrencyWithRestaurant(value)}
             labelClassName="text-slate-600"
           />
           <Line type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={2} />

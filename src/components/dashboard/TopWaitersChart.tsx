@@ -10,7 +10,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
-import { formatCurrency } from '@/lib/utils'
+import { useFormatCurrency } from '@/lib/i18n'
 
 interface WaiterData {
   name: string
@@ -24,6 +24,7 @@ interface TopWaitersChartProps {
 }
 
 export default function TopWaitersChart({ waiters }: TopWaitersChartProps) {
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   const chartData = waiters.map((waiter) => ({
     name: waiter.name,
     sales: waiter.sales,
@@ -46,22 +47,19 @@ export default function TopWaitersChart({ waiters }: TopWaitersChartProps) {
           />
           <YAxis
             stroke="#64748b"
-            tickFormatter={(value) => {
-              const formatted = formatCurrency(value)
-              return formatted.replace('IQD', '').trim()
-            }}
+            tickFormatter={(value) => formatCurrencyWithRestaurant(value)}
             width={90}
           />
           <Tooltip
             formatter={(value: number, name: string) => {
               if (name === 'sales') {
-                return [formatCurrency(value), 'Total Sales']
+                return [formatCurrencyWithRestaurant(value), 'Total Sales']
               }
               if (name === 'orders') {
                 return [value, 'Orders']
               }
               if (name === 'avgOrder') {
-                return [formatCurrency(value), 'Avg Order']
+                return [formatCurrencyWithRestaurant(value), 'Avg Order']
               }
               return [value, name]
             }}

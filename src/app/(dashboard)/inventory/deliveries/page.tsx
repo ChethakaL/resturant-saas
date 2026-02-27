@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import DatePicker from '@/components/ui/date-picker'
-import { formatCurrency } from '@/lib/utils'
+import { useFormatCurrency } from '@/lib/i18n'
 import { useToast } from '@/components/ui/use-toast'
 import AddDeliveryModal from './AddDeliveryModal'
 
@@ -38,6 +38,7 @@ interface Delivery {
 
 export default function DeliveriesPage() {
   const { toast } = useToast()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   const [loading, setLoading] = useState(true)
   const [deliveries, setDeliveries] = useState<Delivery[]>([])
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
@@ -168,7 +169,7 @@ export default function DeliveriesPage() {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Delivery History</CardTitle>
           <div className="text-sm text-slate-500">
-            Total: {formatCurrency(totalDelivered)}
+            Total: {formatCurrencyWithRestaurant(totalDelivered)}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -198,13 +199,13 @@ export default function DeliveriesPage() {
                       {delivery.quantity} {delivery.ingredient.unit}
                     </td>
                     <td className="p-3 text-right font-mono">
-                      {formatCurrency(delivery.unitCost)}
+                      {formatCurrencyWithRestaurant(delivery.unitCost)}
                     </td>
                     <td className="p-3 text-right font-mono">
-                      {formatCurrency(delivery.totalCost)}
+                      {formatCurrencyWithRestaurant(delivery.totalCost)}
                     </td>
                     <td className="p-3 text-right font-mono">
-                      {formatCurrency(delivery.transportCost)}
+                      {formatCurrencyWithRestaurant(delivery.transportCost)}
                     </td>
                     <td className="p-3">{delivery.invoiceNumber || '-'}</td>
                   </tr>

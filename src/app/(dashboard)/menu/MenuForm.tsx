@@ -21,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard, Mic, MicOff, Send } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
+import { formatPercentage, cn } from '@/lib/utils'
 import {
   Category,
   Ingredient,
@@ -34,7 +34,7 @@ import {
 import { RefreshCw } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { buildTranslationSeed, TranslationSeedPayload } from '@/lib/menu-translation-seed'
-import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
+import { useI18n, getTranslatedCategoryName, useFormatCurrency } from '@/lib/i18n'
 import {
   ImageOrientation,
   ImageSizePreset,
@@ -136,7 +136,8 @@ export default function MenuForm({
 }: MenuFormProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const { t, menuTranslationLanguages } = useI18n()
+  const { t, menuTranslationLanguages, currency } = useI18n()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
 
   /** translationLanguages typed for internal use */
   const translationLanguages = menuTranslationLanguages as { code: LanguageCode; label: string }[]
@@ -2269,7 +2270,7 @@ export default function MenuForm({
                             ))}
                           </div>
                           <p className="text-lg font-bold text-emerald-700">
-                            {formatCurrency(parseFloat(formData.price) || 0)}
+                            {formatCurrencyWithRestaurant(parseFloat(formData.price) || 0)}
                           </p>
                           {selectedAddOnIds.length > 0 && (
                             <div className="pt-2 border-t border-slate-200">
@@ -2277,7 +2278,7 @@ export default function MenuForm({
                               <div className="flex flex-wrap gap-1">
                                 {addOnsList.filter((a) => selectedAddOnIds.includes(a.id)).map((addOn) => (
                                   <span key={addOn.id} className="text-xs text-slate-600">
-                                    +{addOn.name} ({formatCurrency(addOn.price)})
+                                    +{addOn.name} ({formatCurrencyWithRestaurant(addOn.price)})
                                   </span>
                                 ))}
                               </div>
@@ -2618,7 +2619,7 @@ export default function MenuForm({
 
                       <div className="space-y-2">
                         <Label htmlFor="price">
-                          {t.menu_form_selling_price_iqd} <span className="text-red-500">*</span>
+                          {t.menu_form_selling_price} ({currency}) <span className="text-red-500">*</span>
                         </Label>
                         <Input
                           id="price"
@@ -3269,7 +3270,7 @@ export default function MenuForm({
                                   </div>
 
                                   <div className="space-y-2">
-                                    <Label>Cost per unit (IQD)</Label>
+                                    <Label>Cost per unit ({currency})</Label>
                                     {ingredient ? (
                                       <>
                                         <Input
@@ -3315,7 +3316,7 @@ export default function MenuForm({
                                   <div className="space-y-2">
                                     <Label>Direct cost</Label>
                                     <div className="h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm font-mono font-medium text-slate-800 flex items-center">
-                                      {ingredient ? formatCurrency(itemCost) : '—'}
+                                      {ingredient ? formatCurrencyWithRestaurant(itemCost) : '—'}
                                     </div>
                                     <p className="text-xs text-slate-400">Quantity × cost per unit</p>
                                   </div>
@@ -3497,7 +3498,7 @@ export default function MenuForm({
                                               )}
                                             </div>
                                             <div className="text-sm font-semibold text-emerald-700 shrink-0">
-                                              {formatCurrency(addOn.price)}
+                                              {formatCurrencyWithRestaurant(addOn.price)}
                                             </div>
                                           </div>
                                         )
@@ -3665,21 +3666,21 @@ export default function MenuForm({
                     <div className="flex justify-between items-center pb-2 border-b">
                       <span className="text-sm text-slate-500">{t.menu_form_selling_price}</span>
                       <span className="font-mono font-medium">
-                        {formatCurrency(parseFloat(formData.price) || 0)}
+                        {formatCurrencyWithRestaurant(parseFloat(formData.price) || 0)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center pb-2 border-b">
                       <span className="text-sm text-slate-500">{t.menu_form_total_cost}</span>
                       <span className="font-mono font-medium text-red-600">
-                        {formatCurrency(calculations.cost)}
+                        {formatCurrencyWithRestaurant(calculations.cost)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center pb-2 border-b">
                       <span className="text-sm text-slate-500">{t.menu_form_profit}</span>
                       <span className="font-mono font-bold text-green-600">
-                        {formatCurrency(calculations.profit)}
+                        {formatCurrencyWithRestaurant(calculations.profit)}
                       </span>
                     </div>
 

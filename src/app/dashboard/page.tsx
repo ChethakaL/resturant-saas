@@ -672,10 +672,12 @@ export default async function DashboardPage() {
     redirect('/dashboard/orders')
   }
 
-  const data = await getDashboardData(restaurantId)
-
-  // Get analytics data for menu items
-  const analyticsData = await getAnalyticsData(restaurantId)
+  const [data, analyticsData, restaurant] = await Promise.all([
+    getDashboardData(restaurantId),
+    getAnalyticsData(restaurantId),
+    prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { currency: true } }),
+  ])
+  const currency = restaurant?.currency ?? 'IQD'
 
   const { t } = await getServerTranslations()
 
@@ -688,10 +690,10 @@ export default async function DashboardPage() {
             <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <h3 className="font-semibold text-red-800">
-                {t.dashboard_projected_loss}: {formatCurrency(Math.abs(data.projectedLossForecast.projectedNetProfit))}
+                {t.dashboard_projected_loss}: {formatCurrency(Math.abs(data.projectedLossForecast.projectedNetProfit), currency)}
               </h3>
               <p className="text-sm text-red-700 mt-1">
-                {data.projectedLossForecast.daysElapsed}/{data.projectedLossForecast.daysInMonth}, {t.dashboard_projected_revenue}: {formatCurrency(data.projectedLossForecast.projectedRevenue)}
+                {data.projectedLossForecast.daysElapsed}/{data.projectedLossForecast.daysInMonth}, {t.dashboard_projected_revenue}: {formatCurrency(data.projectedLossForecast.projectedRevenue, currency)}
               </p>
               {data.projectedLossForecast.drivers.length > 0 && (
                 <div className="mt-2">
@@ -700,7 +702,7 @@ export default async function DashboardPage() {
                     {data.projectedLossForecast.drivers.map((d) => (
                       <li key={d.labelKey} className="text-sm text-red-700 flex justify-between max-w-xs">
                         <span>{(t as unknown as Record<string, string>)[d.labelKey] ?? d.labelKey}</span>
-                        <span className="font-mono">{formatCurrency(d.amount)}</span>
+                        <span className="font-mono">{formatCurrency(d.amount, currency)}</span>
                       </li>
                     ))}
                   </ul>
@@ -731,7 +733,7 @@ export default async function DashboardPage() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(data.today.revenue)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(data.today.revenue, currency)}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 <span className={data.today.growth >= 0 ? 'text-green-600' : 'text-red-600'}>
                   {data.today.growth >= 0 ? '+' : ''}{formatPercentage(data.today.growth, 1)}
@@ -788,7 +790,7 @@ export default async function DashboardPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">{t.dashboard_revenue}</span>
                   <span className="text-2xl font-bold text-green-600">
-                    {formatCurrency(data.week.revenue)}
+                    {formatCurrency(data.week.revenue, currency)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -826,13 +828,13 @@ export default async function DashboardPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">{t.dashboard_total_revenue}</span>
                   <span className="text-2xl font-bold text-green-600">
-                    {formatCurrency(data.month.revenue)}
+                    {formatCurrency(data.month.revenue, currency)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">{t.dashboard_net_profit}</span>
                   <span className="text-xl font-bold text-blue-600">
-                    {formatCurrency(data.month.profit)}
+                    {formatCurrency(data.month.profit, currency)}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t">
@@ -894,7 +896,7 @@ export default async function DashboardPage() {
             <div className="flex items-baseline justify-between gap-4">
               <span className="text-slate-600">{t.dashboard_total_wastage_cost}</span>
               <span className="text-2xl font-bold text-amber-700">
-                {formatCurrency(data.wastage.totalCost)}
+                {formatCurrency(data.wastage.totalCost, currency)}
               </span>
             </div>
             <p className="text-xs text-slate-500">
@@ -919,7 +921,7 @@ export default async function DashboardPage() {
                           {w.quantity} {w.ingredient.unit}
                         </td>
                         <td className="py-2 px-3 text-right font-medium text-amber-700">
-                          {formatCurrency(w.cost)}
+                          {formatCurrency(w.cost, currency)}
                         </td>
                         <td className="py-2 px-3 text-slate-500">{w.reason || '—'}</td>
                       </tr>

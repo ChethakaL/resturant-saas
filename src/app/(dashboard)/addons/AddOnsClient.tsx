@@ -200,7 +200,7 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
     }
   }
 
-  const { t } = useI18n()
+  const { t, currency } = useI18n()
   const { t: td } = useDynamicTranslate()
 
   return (
@@ -371,7 +371,7 @@ export default function AddOnsClient({ addOns: initialAddOns }: AddOnsClientProp
             </div>
             <div className="space-y-2">
               <Label htmlFor="price">
-                {td('Price (IQD)')} <span className="text-red-500">*</span>
+                {td('Price')} ({currency}) <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="price"

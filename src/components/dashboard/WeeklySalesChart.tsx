@@ -9,7 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { formatCurrency } from '@/lib/utils'
+import { useFormatCurrency } from '@/lib/i18n'
 
 interface WeeklyPoint {
   date: string
@@ -18,6 +18,7 @@ interface WeeklyPoint {
 }
 
 export default function WeeklySalesChart({ data }: { data: WeeklyPoint[] }) {
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   return (
     <div className="h-[280px]">
       <ResponsiveContainer width="100%" height="100%">
@@ -27,7 +28,7 @@ export default function WeeklySalesChart({ data }: { data: WeeklyPoint[] }) {
           <YAxis stroke="#64748b" />
           <Tooltip
             formatter={(value: number, name: string) =>
-              name === 'revenue' ? formatCurrency(value) : value
+              name === 'revenue' ? formatCurrencyWithRestaurant(value) : value
             }
             labelClassName="text-slate-600"
           />

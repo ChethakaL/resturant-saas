@@ -27,8 +27,7 @@ import {
   Sparkles,
   Settings2,
 } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
-import { useDynamicTranslate } from '@/lib/i18n'
+import { useDynamicTranslate, useFormatCurrency } from '@/lib/i18n'
 import type { MenuEngineSettings } from '@/types/menu-engine'
 import type { EngineMode } from '@/types/menu-engine'
 import { DEFAULT_SLOT_TIMES, buildSlotRangeLabels, formatSlotRange } from '@/lib/time-slots'
@@ -129,6 +128,7 @@ export default function MenuOptimizationContent({
 }: MenuOptimizationContentProps) {
   const { toast } = useToast()
   const { t: td } = useDynamicTranslate()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'profit'
   const resolvedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'profit'
   const [engineMode, setEngineMode] = useState<MenuEngineSettings['mode']>(resolvedMode)
@@ -1413,7 +1413,7 @@ export default function MenuOptimizationContent({
                     <div className={`flex h-5 w-5 items-center justify-center rounded border ${isSelected ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>{isSelected && <Check className="h-3 w-3" />}</div>
                     {item.imageUrl && <img src={item.imageUrl} alt="" className="h-8 w-8 rounded object-cover" />}
                     <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{item.name}</p></div>
-                    <span className="text-xs font-medium text-slate-500">{formatCurrency(item.price)}</span>
+                    <span className="text-xs font-medium text-slate-500">{formatCurrencyWithRestaurant(item.price)}</span>
                   </button>
                 )
               })
@@ -1482,7 +1482,7 @@ export default function MenuOptimizationContent({
                                   <input type="checkbox" checked={checked} onChange={() => !atSlotLimit && toggleScheduleSlotItem(scheduleSlotTab, item.id)} className="sr-only" disabled={atSlotLimit} />
                                   {item.imageUrl && <img src={item.imageUrl} alt="" className="h-8 w-8 rounded object-cover shrink-0" />}
                                   <span className="flex-1 truncate text-sm font-medium text-slate-900">{item.name}</span>
-                                  <span className="text-xs text-slate-500">{formatCurrency(item.price)}</span>
+                                  <span className="text-xs text-slate-500">{formatCurrencyWithRestaurant(item.price)}</span>
                                 </label>
                               </li>
                             )

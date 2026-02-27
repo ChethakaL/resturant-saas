@@ -160,6 +160,7 @@ export interface TranslationStrings {
     menu_form_item_name: string
     menu_form_category: string
     menu_form_selling_price_iqd: string
+    menu_form_selling_price: string
     menu_form_status: string
     menu_form_select_category: string
     menu_form_description_helper: string
@@ -477,7 +478,8 @@ const en: TranslationStrings = {
     menu_form_item_details: 'Menu Item Details',
     menu_form_item_name: 'Item Name',
     menu_form_category: 'Category',
-    menu_form_selling_price_iqd: 'Selling Price (IQD)',
+    menu_form_selling_price_iqd: 'Selling Price (IQD)', // legacy, prefer menu_form_selling_price + currency
+    menu_form_selling_price: 'Selling Price',
     menu_form_status: 'Status',
     menu_form_select_category: 'Select category',
     menu_form_description_helper: 'Max 18 words. Leave blank to auto-generate when you save (sensory, texture, heat, origin, scarcity).',
@@ -794,6 +796,7 @@ const ku: TranslationStrings = {
     menu_form_item_name: 'ناوی خواردن',
     menu_form_category: 'پۆل',
     menu_form_selling_price_iqd: 'نرخی فرۆشتن (IQD)',
+    menu_form_selling_price: 'نرخی فرۆشتن',
     menu_form_status: 'باردۆخ',
     menu_form_select_category: 'پۆلێک هەڵبژێرە',
     menu_form_description_helper: 'بەردەستی ماکسی ١٨ وشە. بە بەتاڵی بهێڵەوە بۆ دروستکردنی ئۆتۆماتیکی کاتێک پاشەکەوت دەکەیت.',
@@ -1110,6 +1113,7 @@ const arFusha: TranslationStrings = {
     menu_form_item_name: 'اسم الصنف',
     menu_form_category: 'الفئة',
     menu_form_selling_price_iqd: 'سعر البيع (IQD)',
+    menu_form_selling_price: 'سعر البيع',
     menu_form_status: 'الحالة',
     menu_form_select_category: 'اختر الفئة',
     menu_form_description_helper: 'بحد أقصى 18 كلمة. اتركه فارغاً للإنشاء التلقائي عند الحفظ.',

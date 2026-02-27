@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
+import { useI18n } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -787,7 +788,7 @@ export default function WaiterDashboard() {
     const [kitchenFilter, setKitchenFilter] = useState<'active' | 'PENDING' | 'PREPARING' | 'READY'>('active')
     const [isLoading, setIsLoading] = useState(true)
 
-    const currency = 'IQD'
+    const { currency } = useI18n()
 
     const fetchTables = useCallback(async () => {
         try {

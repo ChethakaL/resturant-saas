@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
+import { useI18n } from '@/lib/i18n'
 
 const UNIT_OPTIONS = [
   { value: 'g', label: 'Grams (g)' },
@@ -20,6 +21,7 @@ const UNIT_OPTIONS = [
 
 export default function NewIngredientPage() {
   const router = useRouter()
+  const { currency } = useI18n()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -126,13 +128,13 @@ export default function NewIngredientPage() {
                   ))}
                 </select>
                 <p className="text-xs text-slate-500">
-                  Cost per unit will be in IQD per {formData.unit}.
+                  Cost per unit will be in {currency} per {formData.unit}.
                 </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="costPerUnit">
-                  Cost Per {formData.unit} (IQD) <span className="text-red-500">*</span>
+                  Cost Per {formData.unit} ({currency}) <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="costPerUnit"

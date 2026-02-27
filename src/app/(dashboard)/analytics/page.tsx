@@ -351,7 +351,11 @@ export default async function AnalyticsPage() {
     redirect('/dashboard/orders')
   }
 
-  const data = await getAnalyticsData(restaurantId)
+  const [data, restaurant] = await Promise.all([
+    getAnalyticsData(restaurantId),
+    prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { currency: true } }),
+  ])
+  const currency = restaurant?.currency ?? 'IQD'
 
   const { t } = await getServerTranslations()
 
@@ -368,7 +372,7 @@ export default async function AnalyticsPage() {
             <CardTitle className="text-sm font-medium">Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(data.totalRevenue)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(data.totalRevenue, currency)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -377,7 +381,7 @@ export default async function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600">
-              {formatCurrency(data.totalCost)}
+              {formatCurrency(data.totalCost, currency)}
             </div>
           </CardContent>
         </Card>
@@ -387,7 +391,7 @@ export default async function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(data.totalProfit)}
+              {formatCurrency(data.totalProfit, currency)}
             </div>
           </CardContent>
         </Card>
@@ -428,7 +432,7 @@ export default async function AnalyticsPage() {
                       <td className="py-3 px-4 text-slate-900 font-medium">{item.name}</td>
                       <td className="py-3 px-4 text-right font-mono">{item.quantity}</td>
                       <td className="py-3 px-4 text-right font-mono">
-                        {formatCurrency(item.revenue)}
+                        {formatCurrency(item.revenue, currency)}
                       </td>
                     </tr>
                   ))}
@@ -466,10 +470,10 @@ export default async function AnalyticsPage() {
                     <tr key={item.name} className="border-b border-slate-100">
                       <td className="py-3 px-4 text-slate-900 font-medium">{item.name}</td>
                       <td className="py-3 px-4 text-right font-mono text-green-600">
-                        {formatCurrency(item.profit)}
+                        {formatCurrency(item.profit, currency)}
                       </td>
                       <td className="py-3 px-4 text-right font-mono">
-                        {formatCurrency(item.revenue)}
+                        {formatCurrency(item.revenue, currency)}
                       </td>
                     </tr>
                   ))}
@@ -516,7 +520,7 @@ export default async function AnalyticsPage() {
                       <td className="py-3 px-4 text-slate-900 font-medium">{item.name}</td>
                       <td className="py-3 px-4 text-right font-mono">{item.quantity}</td>
                       <td className="py-3 px-4 text-right font-mono text-green-600">
-                        {formatCurrency(item.profit)}
+                        {formatCurrency(item.profit, currency)}
                       </td>
                       <td className="py-3 px-4 text-right font-mono">
                         {formatPercentage(item.margin)}

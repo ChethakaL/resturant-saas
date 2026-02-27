@@ -11,7 +11,8 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
-import { formatCurrency, formatPercentage } from '@/lib/utils'
+import { formatPercentage } from '@/lib/utils'
+import { useFormatCurrency } from '@/lib/i18n'
 
 interface DailyData {
   date: string
@@ -21,6 +22,7 @@ interface DailyData {
 }
 
 export default function DailyRevenueMarginChart() {
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   const [data, setData] = useState<DailyData[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -118,10 +120,7 @@ export default function DailyRevenueMarginChart() {
           />
           <YAxis
             stroke="#64748b"
-            tickFormatter={(value) => {
-              const formatted = formatCurrency(value)
-              return formatted.replace('IQD', '').trim()
-            }}
+            tickFormatter={(value) => formatCurrencyWithRestaurant(value)}
             width={90}
             tick={{ fill: '#64748b' }}
           />
@@ -131,14 +130,14 @@ export default function DailyRevenueMarginChart() {
                 // Show both amount and percentage in tooltip
                 const marginPercent = payload?.marginPercent || 0
                 return [
-                  `${formatCurrency(value)} (${formatPercentage(marginPercent, 1)})`,
+                  `${formatCurrencyWithRestaurant(value)} (${formatPercentage(marginPercent, 1)})`,
                   'Margin'
                 ]
               }
               if (name === 'Revenue') {
-                return [formatCurrency(value), 'Revenue']
+                return [formatCurrencyWithRestaurant(value), 'Revenue']
               }
-              return [formatCurrency(value), name]
+              return [formatCurrencyWithRestaurant(value), name]
             }}
             labelFormatter={(label, payload) => {
               if (payload && payload[0]) {

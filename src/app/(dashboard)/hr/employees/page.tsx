@@ -52,7 +52,11 @@ export default async function EmployeesPage() {
     redirect('/dashboard/orders')
   }
 
-  const employees = await getEmployees(restaurantId)
+  const [employees, restaurant] = await Promise.all([
+    getEmployees(restaurantId),
+    prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { currency: true } }),
+  ])
+  const currency = restaurant?.currency ?? 'IQD'
 
   const activeEmployees = employees.filter((e) => e.isActive)
   const stats = {
@@ -156,7 +160,7 @@ export default async function EmployeesPage() {
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-600">Salary:</span>
                       <span className="font-bold">
-                        {formatCurrency(employee.salary)}
+                        {formatCurrency(employee.salary, currency)}
                         <span className="text-xs text-slate-500 ml-1">
                           /{employee.salaryType.toLowerCase()}
                         </span>

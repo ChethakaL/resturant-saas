@@ -1,9 +1,9 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCurrency, formatPercentage } from '@/lib/utils'
+import { formatPercentage } from '@/lib/utils'
 import { Award, TrendingDown, TrendingUp, ShoppingCart } from 'lucide-react'
-import { useI18n } from '@/lib/i18n'
+import { useI18n, useFormatCurrency } from '@/lib/i18n'
 
 interface MenuItemStat {
   id: string
@@ -41,6 +41,7 @@ export default function MenuItemAnalytics({
   topCombos,
 }: MenuItemAnalyticsProps) {
   const { t } = useI18n()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
 
   const translateTimeBucket = (bucket: string) => {
     const key = TIME_BUCKET_KEYS[bucket as keyof typeof TIME_BUCKET_KEYS]
@@ -75,7 +76,7 @@ export default function MenuItemAnalytics({
                     <td className="p-2 font-medium">{item.name}</td>
                     <td className="p-2 text-right">{item.quantity}</td>
                     <td className="p-2 text-right font-mono text-green-600">
-                      {formatCurrency(item.profit)}
+                      {formatCurrencyWithRestaurant(item.profit)}
                     </td>
                     <td className="p-2 text-right font-mono">
                       {formatPercentage(item.margin, 1)}
@@ -116,7 +117,7 @@ export default function MenuItemAnalytics({
                     <td className="p-2 font-medium">{item.name}</td>
                     <td className="p-2 text-right">{item.quantity}</td>
                     <td className="p-2 text-right font-mono">
-                      {formatCurrency(item.revenue)}
+                      {formatCurrencyWithRestaurant(item.revenue)}
                     </td>
                     <td className="p-2 text-right font-mono">
                       {formatPercentage(item.margin, 1)}
@@ -199,7 +200,7 @@ export default function MenuItemAnalytics({
                       {formatPercentage(item.margin, 1)}
                     </td>
                     <td className="p-2 text-right font-mono">
-                      {formatCurrency(item.revenue)}
+                      {formatCurrencyWithRestaurant(item.revenue)}
                     </td>
                   </tr>
                 ))}

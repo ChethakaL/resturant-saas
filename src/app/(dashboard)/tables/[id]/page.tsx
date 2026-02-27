@@ -75,7 +75,11 @@ export default async function TableDetailPage({
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
 
-  const table = await getTable(params.id, restaurantId)
+  const [table, restaurant] = await Promise.all([
+    getTable(params.id, restaurantId),
+    prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { currency: true } }),
+  ])
+  const currency = restaurant?.currency ?? 'IQD'
 
   if (!table) {
     notFound()
@@ -169,7 +173,7 @@ export default async function TableDetailPage({
                               {item.quantity}x {item.menuItem.name}
                             </span>
                             <span className="font-medium">
-                              {formatCurrency(item.price * item.quantity)}
+                              {formatCurrency(item.price * item.quantity, currency)}
                             </span>
                           </div>
                         ))}
@@ -179,7 +183,7 @@ export default async function TableDetailPage({
                     <div className="border-t pt-3 flex justify-between items-center">
                       <span className="font-semibold">Total:</span>
                       <span className="text-xl font-bold text-green-600">
-                        {formatCurrency(order.total)}
+                        {formatCurrency(order.total, currency)}
                       </span>
                     </div>
                   </div>
@@ -210,7 +214,7 @@ export default async function TableDetailPage({
                       </p>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-lg">{formatCurrency(order.total)}</div>
+                      <div className="font-bold text-lg">{formatCurrency(order.total, currency)}</div>
                       <Button size="sm" variant="outline" asChild className="mt-2">
                         <Link href={`/orders/${order.id}`}>View Details</Link>
                       </Button>

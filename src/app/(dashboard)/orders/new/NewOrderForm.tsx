@@ -26,7 +26,7 @@ import {
   Mail,
 } from 'lucide-react'
 import Link from 'next/link'
-import { formatCurrency } from '@/lib/utils'
+import { useFormatCurrency } from '@/lib/i18n'
 import { Category, Ingredient, MenuItem, MenuItemIngredient, Table } from '@prisma/client'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
@@ -176,6 +176,7 @@ export default function NewOrderForm({
   const [sendingEmail, setSendingEmail] = useState(false)
   const isCashPayment = orderDetails.paymentMethod === 'CASH'
   const { toast } = useToast()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
 
   // Filter menu items based on search and category
   const filteredMenuItems = useMemo(() => {
@@ -541,10 +542,10 @@ export default function NewOrderForm({
                           </div>
                           <div className="text-right">
                             <div className="font-bold text-slate-900">
-                              {formatCurrency(item.price)}
+                              {formatCurrencyWithRestaurant(item.price)}
                             </div>
                             <div className="text-xs text-slate-500">
-                              Cost: {formatCurrency(cost)}
+                              Cost: {formatCurrencyWithRestaurant(cost)}
                             </div>
                           </div>
                         </div>
@@ -589,7 +590,7 @@ export default function NewOrderForm({
                             <div className="flex-1">
                               <div className="font-medium text-sm">{menuItem.name}</div>
                               <div className="text-xs text-slate-500">
-                                {formatCurrency(menuItem.price)} each
+                                {formatCurrencyWithRestaurant(menuItem.price)} each
                               </div>
                               <div className="flex items-center gap-2 mt-2">
                                 <Button
@@ -628,7 +629,7 @@ export default function NewOrderForm({
                                 </Button>
                               </div>
                             </div>
-                            <div className="font-medium text-sm">{formatCurrency(itemTotal)}</div>
+                            <div className="font-medium text-sm">{formatCurrencyWithRestaurant(itemTotal)}</div>
                           </div>
                         )
                       })}
@@ -636,18 +637,18 @@ export default function NewOrderForm({
                       <div className="space-y-2 pt-2">
                         <div className="flex justify-between text-sm">
                           <span className="text-slate-500">Cost:</span>
-                          <span className="font-mono">{formatCurrency(orderSummary.totalCost)}</span>
+                          <span className="font-mono">{formatCurrencyWithRestaurant(orderSummary.totalCost)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-slate-500">Profit:</span>
                           <span className="font-mono text-green-600">
-                            {formatCurrency(orderSummary.profit)}
+                            {formatCurrencyWithRestaurant(orderSummary.profit)}
                           </span>
                         </div>
                         <div className="flex justify-between items-center pt-2 border-t-2 border-slate-900">
                           <span className="font-bold text-lg">Total:</span>
                           <span className="font-bold text-2xl">
-                            {formatCurrency(orderSummary.total)}
+                            {formatCurrencyWithRestaurant(orderSummary.total)}
                           </span>
                         </div>
                       </div>
@@ -658,7 +659,7 @@ export default function NewOrderForm({
                 {orderItems.length > 0 && isCashPayment && (
                   <div className="mt-6 space-y-3 border-t border-slate-200 pt-4">
                     <div className="space-y-2">
-                      <Label htmlFor="cashReceived">Cash Received (IQD)</Label>
+                      <Label htmlFor="cashReceived">Cash Received</Label>
                       <Input
                         id="cashReceived"
                         type="number"
@@ -672,7 +673,7 @@ export default function NewOrderForm({
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">Change Due:</span>
                       <span className="font-mono font-medium text-emerald-600">
-                        {formatCurrency(changeDue)}
+                        {formatCurrencyWithRestaurant(changeDue)}
                       </span>
                     </div>
                   </div>
@@ -788,7 +789,7 @@ export default function NewOrderForm({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="CASH">Cash (IQD)</SelectItem>
+                      <SelectItem value="CASH">Cash</SelectItem>
                       <SelectItem value="CARD" disabled={!stripePromise}>
                         Card / Apple Pay (Stripe)
                       </SelectItem>
@@ -822,7 +823,7 @@ export default function NewOrderForm({
                     {latestOrder.tableNumber ? `Table ${latestOrder.tableNumber}` : 'a walk-in customer'}
                   </p>
                   <p className="text-xs text-slate-500">
-                    Total {formatCurrency(latestOrder.total)} · {latestOrder.paymentMethod}
+                    Total {formatCurrencyWithRestaurant(latestOrder.total)} · {latestOrder.paymentMethod}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -893,7 +894,7 @@ export default function NewOrderForm({
                 <div className="rounded-lg bg-slate-50 p-3 text-sm">
                   <div className="font-medium text-slate-900 mb-1">Order Details:</div>
                   <div className="text-slate-600">
-                    Order #{latestOrder.orderNumber} · {formatCurrency(latestOrder.total)}
+                    Order #{latestOrder.orderNumber} · {formatCurrencyWithRestaurant(latestOrder.total)}
                   </div>
                 </div>
               )}

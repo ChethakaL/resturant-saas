@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { buildReceiptHtml, ReceiptOrder } from '@/lib/receipt'
-import { formatCurrency } from '@/lib/utils'
+import { useFormatCurrency } from '@/lib/i18n'
 import { Mail, Printer } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 
@@ -47,6 +47,7 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
   const [shouldRefreshAfterClose, setShouldRefreshAfterClose] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
 
   const mapSaleToReceiptOrder = (completedOrder: any): ReceiptOrder => ({
     id: completedOrder.id,
@@ -191,7 +192,7 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
                     <span>
                       {item.menuItem.name} × {item.quantity}
                     </span>
-                    <span>{formatCurrency(item.price * item.quantity)}</span>
+                    <span>{formatCurrencyWithRestaurant(item.price * item.quantity)}</span>
                   </div>
                 ))}
                 {order.items.length === 0 && (
@@ -199,7 +200,7 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
                 )}
                 <div className="flex justify-between border-t pt-2 text-sm font-semibold text-slate-900">
                   <span>Total</span>
-                  <span>{formatCurrency(order.total)}</span>
+                  <span>{formatCurrencyWithRestaurant(order.total)}</span>
                 </div>
               </div>
             </div>
@@ -208,7 +209,7 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
               <div className="space-y-2">
                 <p className="text-sm text-slate-500">Order #{receiptOrder.orderNumber}</p>
                 <p className="text-base font-semibold text-slate-900">
-                  {formatCurrency(receiptOrder.total)}
+                  {formatCurrencyWithRestaurant(receiptOrder.total)}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">

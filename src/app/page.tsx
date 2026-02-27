@@ -547,6 +547,7 @@ export default async function Home() {
       tables={data.tables}
       snowfallSettings={data.snowfallSettings}
       forceShowImages
+      currency={data.restaurant.currency}
     />
     </Suspense>
   )

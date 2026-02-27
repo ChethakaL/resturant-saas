@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, MapPin, Building2, UserPlus, Users } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { useFormatCurrency } from '@/lib/i18n'
 import AddBranchModal, { AddBranchFormData } from '@/components/branches/AddBranchModal'
 import AddWaiterModal, { AddWaiterFormData } from '@/components/waiters/AddWaiterModal'
 import { useI18n } from '@/lib/i18n'
@@ -67,6 +67,7 @@ export default function TablesClient() {
     const [showAddWaiter, setShowAddWaiter] = useState(false)
     const [addingWaiter, setAddingWaiter] = useState(false)
     const [waiterError, setWaiterError] = useState('')
+    const formatCurrencyWithRestaurant = useFormatCurrency()
 
     const fetchBranches = useCallback(async () => {
         try {
@@ -364,7 +365,7 @@ export default function TablesClient() {
                                                     </div>
                                                     <div className="flex justify-between text-sm">
                                                         <span className="text-slate-600">Total:</span>
-                                                        <span className="font-bold text-green-600">{formatCurrency(orderTotal)}</span>
+                                                        <span className="font-bold text-green-600">{formatCurrencyWithRestaurant(orderTotal)}</span>
                                                     </div>
                                                     <div className="mt-2 pt-2 border-t">
                                                         <span className={`text-xs px-2 py-1 rounded ${activeOrder.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :

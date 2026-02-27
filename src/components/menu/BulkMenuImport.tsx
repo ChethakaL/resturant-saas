@@ -43,7 +43,7 @@ import { Category, Ingredient } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
 import { classifyItemType, type DefaultCategoryKey } from '@/lib/category-suggest'
-import { useI18n } from '@/lib/i18n'
+import { useI18n, useFormatCurrency } from '@/lib/i18n'
 
 interface ParsedIngredient {
   name: string
@@ -195,7 +195,8 @@ function autoAssignCategoryId(item: ExtractedMenuItem, categories: Category[]): 
 
 export default function BulkMenuImport({ categories, ingredients, defaultBackgroundPrompt }: BulkMenuImportProps) {
   const { toast } = useToast()
-  const { t } = useI18n()
+  const { t, currency } = useI18n()
+  const formatCurrencyWithRestaurant = useFormatCurrency()
   const [availableCategories, setAvailableCategories] = useState<Category[]>(categories)
   const [availableIngredients, setAvailableIngredients] = useState<Ingredient[]>(ingredients)
   const [isOpen, setIsOpen] = useState(false)
@@ -750,7 +751,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                           </p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                             <span className="text-xs font-medium text-slate-600">
-                              IQD {(item.price || 0).toLocaleString()}
+                              {formatCurrencyWithRestaurant(item.price || 0)}
                             </span>
                             {categoryName ? (
                               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
@@ -820,7 +821,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs">Price (IQD)</Label>
+                              <Label className="text-xs">Price ({currency})</Label>
                               <Input
                                 type="number"
                                 value={editingItem.price}

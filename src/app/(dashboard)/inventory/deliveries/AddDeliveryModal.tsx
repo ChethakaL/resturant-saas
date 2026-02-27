@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from 'react'
+import { useFormatCurrency } from '@/lib/i18n'
 import {
   Dialog,
   DialogContent,
@@ -39,6 +40,7 @@ export default function AddDeliveryModal({
   onSaved: () => void
 }) {
   const { toast } = useToast()
+  const formatCurrency = useFormatCurrency()
   const [loading, setLoading] = useState(false)
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [formData, setFormData] = useState({
@@ -215,7 +217,7 @@ export default function AddDeliveryModal({
             <div className="rounded-md bg-slate-50 p-3">
               <p className="text-sm text-slate-600">Total + Transport</p>
               <p className="text-lg font-semibold">
-                {totalWithTransport.toLocaleString()} IQD
+                {formatCurrency(totalWithTransport)}
               </p>
             </div>
           </div>
@@ -234,11 +236,11 @@ export default function AddDeliveryModal({
             <div className="rounded-md bg-slate-50 p-3">
               <p className="text-sm text-slate-600">Total Cost</p>
               <p className="text-lg font-semibold">
-                {totalCost.toLocaleString()} IQD
+                {formatCurrency(totalCost)}
               </p>
               {selectedIngredient && (
                 <p className="text-xs text-slate-500 mt-1">
-                  Current cost: {selectedIngredient.costPerUnit.toLocaleString()} IQD/{selectedIngredient.unit}
+                  Current cost: {formatCurrency(selectedIngredient.costPerUnit)}/{selectedIngredient.unit}
                 </p>
               )}
             </div>

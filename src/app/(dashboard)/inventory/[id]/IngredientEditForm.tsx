@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
+import { useI18n } from '@/lib/i18n'
 
 const UNIT_OPTIONS = [
   { value: 'g', label: 'Grams (g)' },
@@ -37,6 +38,7 @@ export default function IngredientEditForm({
   ingredient: IngredientWithSupplier
 }) {
   const router = useRouter()
+  const { currency } = useI18n()
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -176,7 +178,7 @@ export default function IngredientEditForm({
 
               <div className="space-y-2">
                 <Label htmlFor="costPerUnit">
-                  Cost Per {formData.unit} (IQD) <span className="text-red-500">*</span>
+                  Cost Per {formData.unit} ({currency}) <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="costPerUnit"
