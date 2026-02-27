@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { formatCurrency, formatMenuPrice, formatMenuPriceWithVariant } from '@/lib/utils'
+import { MENU_LANGUAGES } from '@/lib/menu-languages'
 import {
   Dialog,
   DialogContent,
@@ -132,28 +133,8 @@ interface MenuItemTranslation {
 
 type TranslationCache = Partial<Record<LanguageCode, Record<string, MenuItemTranslation>>>
 
-/** Built from admin-selected menuTranslationLanguage1/2 + English */
-const LANGUAGE_LABELS: Record<string, string> = {
-  en: 'English',
-  ar: 'Arabic (Iraqi)',
-  ar_fusha: 'Arabic',
-  ku: 'Kurdish',
-  ur: 'Urdu',
-  ru: 'Russian',
-  tr: 'Turkish',
-  fr: 'French',
-  de: 'German',
-  es: 'Spanish',
-  it: 'Italian',
-  pt: 'Portuguese',
-  zh: 'Chinese',
-  ja: 'Japanese',
-  ko: 'Korean',
-  hi: 'Hindi',
-  th: 'Thai',
-  vi: 'Vietnamese',
-  id: 'Indonesian',
-}
+const LANGUAGE_LABELS = Object.fromEntries(MENU_LANGUAGES.map((l) => [l.code, l.name])) as Record<string, string>
+LANGUAGE_LABELS.en = 'English'
 
 const sortOptions: {
   value:
@@ -869,7 +850,8 @@ export default function SmartMenu({
 
         const data = await response.json()
         if (!response.ok) {
-          throw new Error(data?.error || 'Translation service failed')
+          const errMsg = data?.error || data?.details || 'Translation service failed'
+          throw new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg))
         }
 
         if (!Array.isArray(data.items)) {
@@ -1481,10 +1463,14 @@ export default function SmartMenu({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={`h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
+                    className={`relative h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
                     aria-label={`Language: ${currentLanguageLabel}`}
                   >
-                    <Globe className="h-4 w-4" />
+                    {isTranslating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Globe className="h-4 w-4" />
+                    )}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent
@@ -1547,6 +1533,18 @@ export default function SmartMenu({
         )}
 
         <div className="relative mx-auto max-w-7xl px-3 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6">
+          {translationError && (
+            <div className="rounded-lg bg-amber-900/30 border border-amber-500/50 px-4 py-2 text-sm text-amber-200 flex items-center justify-between gap-2">
+              <span>{translationError}</span>
+              <button
+                type="button"
+                onClick={() => setTranslationError(null)}
+                className="text-amber-300 hover:text-white underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           {/* Remaining top showcases (hidden in classic mode) */}
           {engineMode !== 'classic' && topShowcases.slice(1).map((showcase) => (
             <MenuCarousel

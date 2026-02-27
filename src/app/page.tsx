@@ -482,12 +482,15 @@ async function getMenuData() {
     }
   })
 
-  // Extract theme from restaurant settings
+  // Extract theme from restaurant settings (menuTranslationLanguage1/2 are at top level of settings, not in theme)
   const themeFromSettings = (settings.theme as Record<string, unknown>) || {}
+  const s = settings as Record<string, unknown>
   const theme = {
     ...themeFromSettings,
     themePreset: settings.themePreset ?? null,
     backgroundImageUrl: settings.backgroundImageUrl ?? null,
+    menuTranslationLanguage1: (s.menuTranslationLanguage1 as string) ?? themeFromSettings.menuTranslationLanguage1,
+    menuTranslationLanguage2: (s.menuTranslationLanguage2 as string) ?? themeFromSettings.menuTranslationLanguage2,
   }
 
   return {

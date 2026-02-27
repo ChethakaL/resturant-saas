@@ -8,16 +8,10 @@ import {
     getMenuTranslationLanguages,
 } from '@/lib/i18n/translations'
 
-const MENU_LANG_LABELS: Record<string, string> = {
-    ar: 'Arabic',
-    ar_fusha: 'Arabic Fusha',
-    ku: 'Kurdish',
-    en: 'English',
-    ur: 'Urdu',
-    ru: 'Russian',
-    tr: 'Turkish',
-    fr: 'French',
-}
+import { MENU_LANGUAGES } from '@/lib/menu-languages'
+
+const MENU_LANG_LABELS = Object.fromEntries(MENU_LANGUAGES.map((l) => [l.code, l.name]))
+MENU_LANG_LABELS.en = 'English'
 
 interface I18nContextValue {
     locale: ManagementLocale

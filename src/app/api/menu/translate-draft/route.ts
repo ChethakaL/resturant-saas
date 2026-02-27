@@ -3,15 +3,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { callGemini, parseGeminiJson } from '@/lib/generative'
 import { DEFAULT_CATEGORY_NAME } from '@/lib/menu-translation-seed'
+import { MENU_LANGUAGES } from '@/lib/menu-languages'
 
-type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
-
-const LANGUAGE_LABELS: Record<LanguageCode, string> = {
-  en: 'English',
-  ar: 'Iraqi Arabic',
-  ar_fusha: 'Arabic',
-  ku: 'Sorani Kurdish',
-}
+const LANGUAGE_LABELS = Object.fromEntries(MENU_LANGUAGES.map((l) => [l.code, l.name])) as Record<string, string>
+LANGUAGE_LABELS.en = 'English'
 
 function toNullableNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -36,8 +31,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const languageValue = (body.language as LanguageCode | undefined) ?? 'en'
-    if (!LANGUAGE_LABELS[languageValue]) {
+    const languageValue = String(body.language || 'en').toLowerCase().replace(/-/g, '_')
+    const validCodes = new Set(MENU_LANGUAGES.map((l) => l.code))
+    validCodes.add('en')
+    if (!languageValue || !validCodes.has(languageValue)) {
       return NextResponse.json(
         { error: 'Invalid language selection' },
         { status: 400 }

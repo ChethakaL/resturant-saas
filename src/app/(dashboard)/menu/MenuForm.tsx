@@ -56,8 +56,8 @@ interface RecipeIngredient {
   lastPricedAt?: string | null
 }
 
-/** All possible translation language codes (the dynamic subset is chosen at runtime based on management language) */
-const ALL_TRANSLATION_LANGUAGE_CODES = ['en', 'ar', 'ar_fusha', 'ku'] as const
+/** LanguageCode is dynamic - comes from admin-selected menuTranslationLanguage1/2 */
+type LanguageCode = string
 
 const SAMPLE_AI_PROMPT = `Chicken Biryani. Main course. Price 12,000 IQD. Fragrant basmati rice with tender chicken, layered with saffron, fried onions, and mint. Served with raita. Calories about 450 per serving, 28g protein, 42g carbs. Tags: halal, spicy.
 Prep time: 15 minutes. Cook time: 35 minutes.
@@ -65,8 +65,6 @@ Steps: Marinate chicken in yogurt and spices. Soak rice 20 min. Fry onions until
 Steps: Marinate chicken in yogurt and spices. Soak rice 20 min. Fry onions until golden. Layer rice and chicken in pot, add saffron and ghee. Cook on low 25 min. Fluff and serve with raita.
 Tips: Use aged basmati for best fragrance. Let rest 5 min before opening lid.
 Yield: 4 servings`
-
-type LanguageCode = (typeof ALL_TRANSLATION_LANGUAGE_CODES)[number]
 
 interface TranslationDraft {
   name: string
@@ -250,30 +248,47 @@ export default function MenuForm({
   const translationBaseSignature =
     mode === 'edit' ? initialTranslationSeed?.signature ?? '' : ''
 
-  const [translationsState, setTranslationsState] = useState<
-    Record<LanguageCode, TranslationDraft>
-  >(() => {
-    // Initialize for ALL possible language codes from existing translations
-    const allCodes: LanguageCode[] = ['en', 'ar', 'ar_fusha', 'ku']
-    return allCodes.reduce((acc, code) => {
-      const existing = menuItem?.translations?.find(
-        (translation) => translation.language === code
-      )
-
-      acc[code] = {
-        name: existing?.translatedName || '',
-        description: existing?.translatedDescription || '',
-        aiDescription: existing?.aiDescription || '',
-        protein: existing?.protein ?? null,
-        carbs: existing?.carbs ?? null,
-        loading: false,
-        error: undefined,
-        dirty: false,
-        signature: translationBaseSignature,
-      }
-      return acc
-    }, {} as Record<LanguageCode, TranslationDraft>)
+  const buildDraft = (existing?: { translatedName: string; translatedDescription: string; aiDescription: string; protein: number | null; carbs: number | null }) => ({
+    name: existing?.translatedName || '',
+    description: existing?.translatedDescription || '',
+    aiDescription: existing?.aiDescription || '',
+    protein: existing?.protein ?? null,
+    carbs: existing?.carbs ?? null,
+    loading: false,
+    error: undefined as string | undefined,
+    dirty: false,
+    signature: translationBaseSignature,
   })
+
+  const [translationsState, setTranslationsState] = useState<
+    Record<string, TranslationDraft>
+  >(() => {
+    const selectedCodes = translationLanguages.map((l) => l.code)
+    const existingCodes = (menuItem?.translations ?? []).map((t) => t.language)
+    const allCodes = Array.from(new Set([...selectedCodes, ...existingCodes]))
+    return allCodes.reduce((acc, code) => {
+      const existing = menuItem?.translations?.find((t) => t.language === code)
+      acc[code] = buildDraft(existing)
+      return acc
+    }, {} as Record<string, TranslationDraft>)
+  })
+
+  // When theme loads, translationLanguages may update (e.g. ar,ku → si,ru). Add missing codes.
+  useEffect(() => {
+    const codes = translationLanguages.map((l) => l.code)
+    setTranslationsState((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const code of codes) {
+        if (!(code in next)) {
+          const existing = menuItem?.translations?.find((t) => t.language === code)
+          next[code] = buildDraft(existing)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [translationLanguages, menuItem?.translations])
 
   const translationSeed = useMemo(() => {
     const selectedCategoryName = categories.find(
