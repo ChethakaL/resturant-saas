@@ -22,29 +22,6 @@ function LoginPageContent() {
     if (searchParams.get('registered') === '1') setRegistered(true)
   }, [searchParams])
 
-  const handleDemoLogin = async () => {
-    setError('')
-    setIsLoading(true)
-    try {
-      const result = await signIn('credentials', {
-        email: 'owner@alrafidain.iq',
-        password: 'password123',
-        redirect: false,
-      })
-
-      if (result?.error) {
-        setError('Demo login failed. Please try again.')
-      } else {
-        router.push('/dashboard')
-        router.refresh()
-      }
-    } catch (error) {
-      setError('An error occurred. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -89,7 +66,7 @@ function LoginPageContent() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="owner@alrafidain.iq"
+                  placeholder="you@restaurant.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -128,16 +105,6 @@ function LoginPageContent() {
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
 
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={handleDemoLogin}
-                disabled={isLoading}
-              >
-                Sign In as Demo Owner
-              </Button>
-
               <p className="text-center text-sm text-slate-500 mt-4">
                 New restaurant? <Link href="/register" className="text-amber-600 hover:underline">Register your restaurant</Link>
               </p>
@@ -147,12 +114,6 @@ function LoginPageContent() {
               <p className="text-center text-sm text-slate-500">
                 Waiter? <a href="/waiter/login" className="text-amber-600 hover:underline">Sign in to Waiter Portal</a>
               </p>
-              <div className="text-xs text-slate-500 mt-4 p-3 bg-slate-50 rounded-md">
-                <p className="font-semibold mb-1">Demo Accounts:</p>
-                <p>owner@alrafidain.iq / password123</p>
-                <p>manager@alrafidain.iq / password123</p>
-                <p>staff@alrafidain.iq / password123</p>
-              </div>
             </form>
           </CardContent>
         </Card>
