@@ -70,7 +70,7 @@ export function SubscriptionPlans({
           <span className="text-sm font-medium text-slate-500">{t.sub_monthly}</span>
         </div>
         <div className="mb-5">
-          <span className="text-3xl font-bold text-slate-900">$40</span>
+          <span className="text-3xl font-bold text-slate-900">$50</span>
           <span className="text-slate-500">{t.sub_per_month}</span>
           <p className="mt-2 text-sm text-slate-500">{t.sub_cancel_anytime}</p>
         </div>
@@ -112,7 +112,7 @@ export function SubscriptionPlans({
           <span className="text-sm font-medium text-slate-600">{t.sub_annual}</span>
         </div>
         <div className="mb-5">
-          <span className="text-3xl font-bold text-slate-900">$400</span>
+          <span className="text-3xl font-bold text-slate-900">$500</span>
           <span className="text-slate-500">{t.sub_per_year}</span>
           <p className="mt-2 text-sm text-slate-500">
             {t.sub_best_value}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Check, ExternalLink, Loader2 } from 'lucide-react'
+import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { Button } from '@/components/ui/button'
 import { SubscriptionPlans } from '@/components/settings/SubscriptionPlans'
@@ -26,6 +26,9 @@ export default function SubscriptionTab({
   const { t } = useI18n()
   const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'annual' | null>(null)
   const [managingSubscription, setManagingSubscription] = useState(false)
+  const [referralLink, setReferralLink] = useState<string | null>(null)
+  const [referralLoading, setReferralLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const success = searchParams.get('success') === 'true'
@@ -37,6 +40,29 @@ export default function SubscriptionTab({
       toast({ title: t.sub_canceled, description: t.sub_checkout_canceled, variant: 'destructive' })
     }
   }, [searchParams, toast, t.sub_thank_you, t.sub_now_active, t.sub_canceled, t.sub_checkout_canceled])
+
+  useEffect(() => {
+    const fetchReferral = async () => {
+      try {
+        const res = await fetch('/api/billing/referral')
+        if (res.ok) {
+          const data = await res.json()
+          setReferralLink(data.link ?? null)
+        }
+      } catch { /* ignore */ } finally {
+        setReferralLoading(false)
+      }
+    }
+    fetchReferral()
+  }, [])
+
+  const handleCopyReferral = async () => {
+    if (!referralLink) return
+    await navigator.clipboard.writeText(referralLink)
+    setCopied(true)
+    toast({ title: t.sub_referral_copied })
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const handleSubscribe = async (plan: 'monthly' | 'annual') => {
     setLoadingPlan(plan)
@@ -141,6 +167,34 @@ export default function SubscriptionTab({
           loadingPlan={loadingPlan}
           onSubscribe={handleSubscribe}
         />
+      </div>
+
+      {/* Referral section */}
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-slate-800">{t.sub_referral_title}</h3>
+        <p className="mt-1 text-sm text-slate-500">{t.sub_referral_description}</p>
+        {referralLoading ? (
+          <div className="mt-4 flex items-center gap-2 text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">{t.sub_referral_link}</span>
+          </div>
+        ) : referralLink ? (
+          <div className="mt-4 flex flex-col sm:flex-row gap-3">
+            <input
+              readOnly
+              value={referralLink}
+              className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+            />
+            <Button variant="outline" onClick={handleCopyReferral} className="shrink-0">
+              {copied ? (
+                <Check className="h-4 w-4 mr-2" />
+              ) : (
+                <Copy className="h-4 w-4 mr-2" />
+              )}
+              {copied ? t.sub_referral_copied : t.sub_referral_copy}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   )

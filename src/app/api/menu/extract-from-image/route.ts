@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '@/lib/prisma'
+import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
 interface ParsedIngredient {
   name: string
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     if (!process.env.GOOGLE_AI_KEY) {
       return NextResponse.json(
-        { error: 'Google AI API key not configured' },
+        { error: 'AI API key not configured' },
         { status: 500 }
       )
     }
@@ -240,7 +241,7 @@ IMPORTANT:
     return NextResponse.json(
       {
         error: 'Failed to extract menu items',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: sanitizeErrorForClient(error instanceof Error ? error.message : 'Unknown error'),
       },
       { status: 500 }
     )

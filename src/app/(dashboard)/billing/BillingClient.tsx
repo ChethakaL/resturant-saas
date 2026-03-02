@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import SubscriptionTab from '@/components/settings/SubscriptionTab'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,6 +42,8 @@ export default function BillingClient({
   const [loadingBranches, setLoadingBranches] = useState(true)
   const [showAddBranch, setShowAddBranch] = useState(false)
   const [addingBranch, setAddingBranch] = useState(false)
+  const [upgradingForBranch, setUpgradingForBranch] = useState(false)
+  const upgradeCardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetchBranches()
@@ -73,10 +75,30 @@ export default function BillingClient({
         }),
       })
       const data = await res.json()
+
       if (!res.ok) {
-        toast({ title: 'Cannot add branch', description: data.error, variant: 'destructive' })
+        const isLimitReached = res.status === 403 && typeof data.error === 'string' && data.error.toLowerCase().includes('branch limit')
+        if (isLimitReached) {
+          setShowAddBranch(false)
+          toast({
+            title: 'Add a branch slot first',
+            description: stripePriceBranchConfigured && isActive
+              ? `Add a branch slot ($${additionalBranchCost}/mo) below. Once added, you can add your branch with name and details.`
+              : 'Upgrade your plan below to add more branches. Once upgraded, you can add your branch with name and details.',
+          })
+          setTimeout(() => upgradeCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
+          fetchBranches()
+          router.refresh()
+          return
+        }
+        toast({
+          title: 'Cannot add branch',
+          description: data.error,
+          variant: 'destructive',
+        })
         throw new Error(data.error)
       }
+
       toast({
         title: 'Branch added',
         description: stripePriceBranchConfigured && isActive && branches.length >= 1
@@ -123,6 +145,29 @@ export default function BillingClient({
 
   const additionalBranchCost = 10 // $10/month per extra branch
   const extraBranches = Math.max(0, maxBranches - 1)
+
+  const handleUpgradeForBranch = async () => {
+    setUpgradingForBranch(true)
+    try {
+      const res = await fetch('/api/billing/upgrade-for-branch', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast({ title: 'Upgrade failed', description: data.error || 'Could not upgrade', variant: 'destructive' })
+        return
+      }
+      toast({
+        title: 'Subscription updated',
+        description: "You can now add a new branch. The $10/mo charge will appear on your next invoice.",
+      })
+      router.refresh()
+      fetchBranches()
+      setShowAddBranch(true)
+    } catch {
+      toast({ title: 'Error', description: 'Failed to upgrade', variant: 'destructive' })
+    } finally {
+      setUpgradingForBranch(false)
+    }
+  }
 
   const { t } = useI18n()
 
@@ -231,10 +276,10 @@ export default function BillingClient({
           </Button>
         )}
 
-        {/* Request More Branches CTA */}
+        {/* Request More Branches CTA — at limit: show Upgrade or Contact us; otherwise Add Branch */}
         {branches.length >= maxBranches && !showAddBranch && (
-          <Card className="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-            <CardContent className="p-4 flex items-center justify-between">
+          <Card ref={upgradeCardRef} id="upgrade-for-branch" className="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 ring-2 ring-blue-200">
+            <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <p className="font-semibold text-slate-800">{t.billing_need_more_branches}</p>
                 <p className="text-sm text-slate-500 mt-0.5">
@@ -244,9 +289,18 @@ export default function BillingClient({
                   ).replace('{{price}}', String(additionalBranchCost))}
                 </p>
               </div>
-              <Button onClick={() => setShowAddBranch(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                {t.billing_add_branch}
+              <Button
+                onClick={handleUpgradeForBranch}
+                disabled={upgradingForBranch}
+                className="shrink-0"
+                size="lg"
+              >
+                {upgradingForBranch ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4 mr-2" />
+                )}
+                Add branch slot — $10/mo
               </Button>
             </CardContent>
           </Card>

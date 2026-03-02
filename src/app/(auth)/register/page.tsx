@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,7 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function RegisterRestaurantPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [restaurantName, setRestaurantName] = useState('')
+  const [referralCode, setReferralCode] = useState('')
   const [slug, setSlug] = useState('')
   const [restaurantEmail, setRestaurantEmail] = useState('')
   const [restaurantPhone, setRestaurantPhone] = useState('')
@@ -20,6 +22,11 @@ export default function RegisterRestaurantPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    const ref = searchParams.get('ref')?.trim()
+    if (ref) setReferralCode(ref)
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,6 +39,7 @@ export default function RegisterRestaurantPage() {
         body: JSON.stringify({
           restaurantName: restaurantName.trim(),
           slug: slug.trim() || undefined,
+          referralCode: referralCode || undefined,
           restaurantEmail: restaurantEmail.trim() || undefined,
           restaurantPhone: restaurantPhone.trim() || undefined,
           restaurantAddress: restaurantAddress.trim() || undefined,
@@ -95,6 +103,11 @@ export default function RegisterRestaurantPage() {
                   This becomes your page address (for example: `/al-rafidain`). Leave blank and we&apos;ll create it from your restaurant name.
                 </p>
               </div>
+              {referralCode && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                  Referral code applied: <span className="font-mono font-semibold">{referralCode}</span>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="restaurantEmail">Restaurant email (optional)</Label>
                 <Input

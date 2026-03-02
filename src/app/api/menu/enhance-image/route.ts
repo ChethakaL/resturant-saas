@@ -9,6 +9,7 @@ import {
   composeDishOnLockedBackgroundStrict,
   StrictBackgroundLockError,
 } from '@/lib/locked-background-hybrid'
+import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
 export async function POST(request: NextRequest) {
   try {
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to enhance image',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: sanitizeErrorForClient(error instanceof Error ? error.message : 'Unknown error'),
       },
       { status: 500 }
     )

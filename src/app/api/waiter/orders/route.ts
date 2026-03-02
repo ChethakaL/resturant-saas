@@ -13,12 +13,17 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url)
         const status = searchParams.get('status')
         const myOnly = searchParams.get('myOnly') === 'true'
+        const unassignedOnly = searchParams.get('unassigned') === 'true'
 
         const where: any = {
             restaurantId: session.user.restaurantId,
         }
 
-        if (myOnly && session.user.employeeId) {
+        if (unassignedOnly) {
+            where.tableId = { not: null }
+            where.waiterId = null
+            where.status = { in: ['PENDING', 'PREPARING', 'READY'] }
+        } else if (myOnly && session.user.employeeId) {
             where.waiterId = session.user.employeeId
         }
 

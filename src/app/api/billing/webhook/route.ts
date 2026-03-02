@@ -33,6 +33,10 @@ export async function POST(request: NextRequest) {
         const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
         const restaurantId = subscription.metadata?.restaurantId || session.metadata?.restaurantId
         if (!restaurantId) break
+        const restaurant = await prisma.restaurant.findUnique({
+          where: { id: restaurantId },
+          select: { referredByRestaurantId: true },
+        })
         const priceMonthly = process.env.STRIPE_PRICE_MONTHLY
         const priceAnnual = process.env.STRIPE_PRICE_ANNUAL
         const mainPlanItem = subscription.items.data.find(
@@ -47,6 +51,27 @@ export async function POST(request: NextRequest) {
             currentPeriodEnd: new Date((subscription.current_period_end ?? 0) * 1000),
           },
         })
+        // Referral bonus: grant referrer 10% off their next month
+        if (restaurant?.referredByRestaurantId) {
+          try {
+            const referrer = await prisma.restaurant.findUnique({
+              where: { id: restaurant.referredByRestaurantId },
+              select: { stripeSubscriptionId: true },
+            })
+            if (referrer?.stripeSubscriptionId) {
+              const coupon = await stripe.coupons.create({
+                percent_off: 10,
+                duration: 'once',
+                name: 'Referral bonus - 10% off',
+              })
+              await stripe.subscriptions.update(referrer.stripeSubscriptionId, {
+                coupon: coupon.id,
+              })
+            }
+          } catch (err) {
+            console.error('Referral bonus apply error:', err)
+          }
+        }
         break
       }
       case 'customer.subscription.updated':

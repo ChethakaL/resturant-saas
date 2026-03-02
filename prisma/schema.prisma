@@ -27,6 +27,10 @@ model Restaurant {
   subscriptionStatus    String?              @map("subscription_status")
   subscriptionPriceId   String?              @map("subscription_price_id")
   currentPeriodEnd      DateTime?            @map("current_period_end")
+  referralCode          String?              @unique @map("referral_code")
+  referredByRestaurantId String?             @map("referred_by_restaurant_id")
+  referredByRestaurant   Restaurant?         @relation("Referrals", fields: [referredByRestaurantId], references: [id])
+  referredRestaurants    Restaurant[]        @relation("Referrals")
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
   addOns                AddOn[]

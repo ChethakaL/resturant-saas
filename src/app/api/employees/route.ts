@@ -6,7 +6,8 @@ import { NextResponse } from 'next/server'
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.restaurantId) {
+    const restaurantId = session?.user?.restaurantId
+    if (!restaurantId || typeof restaurantId !== 'string' || restaurantId.trim() === '') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -14,8 +15,8 @@ export async function GET(request: Request) {
     const position = searchParams.get('position')
     const isActive = searchParams.get('isActive')
 
-    const where: any = {
-      restaurantId: session.user.restaurantId,
+    const where: { restaurantId: string; position?: string; isActive?: boolean } = {
+      restaurantId: restaurantId.trim(),
     }
 
     if (position && position !== 'all') {

@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import { Edit, Loader2, Trash, Check, X, DollarSign } from 'lucide-react'
 import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
+import { isZeroCostAllowed } from '@/lib/costing'
 
 export interface MenuItemWithMetrics {
   id: string
@@ -708,7 +709,7 @@ export default function MenuItemsTable({
                   {t.menu_complete_costing}: {costingMenuItem?.name}
                 </DialogTitle>
                 <DialogDescription>
-                  <strong>Required:</strong> Enter cost per unit for <strong>ALL</strong> ingredients below. Costing will only be marked complete when every ingredient has a price greater than 0.
+                  <strong>Required:</strong> Enter cost per unit for <strong>ALL</strong> ingredients below. Costing will be marked complete when every ingredient has a price (water may be 0).
                 </DialogDescription>
               </DialogHeader>
 
@@ -726,7 +727,7 @@ export default function MenuItemsTable({
                   <>
                     <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 mb-4">
                       <p className="text-sm text-amber-900">
-                        💡 <strong>Important:</strong> ALL ingredients must have a cost greater than 0. Enter actual supplier prices for accurate profit calculations.
+                        💡 <strong>Important:</strong> Enter cost per unit for each ingredient. Water may be 0; all other ingredients need actual supplier prices for accurate profit calculations.
                       </p>
                     </div>
 
@@ -768,7 +769,7 @@ export default function MenuItemsTable({
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-slate-700">Ingredients with prices:</span>
                         <span className="text-sm font-bold text-slate-900">
-                          {costingIngredients.filter(ing => ing.costPerUnit > 0).length} / {costingIngredients.length}
+                          {costingIngredients.filter(ing => ing.costPerUnit > 0 || isZeroCostAllowed(ing.name)).length} / {costingIngredients.length}
                         </span>
                       </div>
                     </div>

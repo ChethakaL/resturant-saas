@@ -7,6 +7,7 @@ import { buildTranslationSeed } from '@/lib/menu-translation-seed'
 import { buildSourceFingerprint } from '@/lib/menu-translations'
 import { normalizeTranslationInputs } from '@/lib/menu-translation-input'
 import { generateMenuDescription } from '@/lib/menu-description-ai'
+import { isZeroCostAllowed } from '@/lib/costing'
 
 function normalizeMenuIngredients(ingredients: any[] = []) {
   const mergedByIngredient = new Map<string, any>()
@@ -102,12 +103,13 @@ export async function POST(request: Request) {
         )
         const ingredients = await tx.ingredient.findMany({
           where: { id: { in: ingredientIds } },
-          select: { id: true, costPerUnit: true }
+          select: { id: true, name: true, costPerUnit: true }
         })
 
-        // All ingredients must have costPerUnit > 0
-        hasCosting = ingredients.length === validIngredients.length &&
-          ingredients.every(ing => ing.costPerUnit > 0)
+        // All ingredients must have costPerUnit > 0, except water and similar (allowed at 0)
+        hasCosting =
+          ingredients.length === validIngredients.length &&
+          ingredients.every((ing) => ing.costPerUnit > 0 || isZeroCostAllowed(ing.name))
       }
 
       const status = data.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT'

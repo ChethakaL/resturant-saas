@@ -84,8 +84,8 @@ async function callGeminiImage(
 
   if (!response.ok) {
     const errorText = await response.text()
-    console.error('[locked-background-hybrid] callGeminiImage API error: status=%s, body=%s', response.status, errorText.slice(0, 500))
-    throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
+    console.error('[locked-background-hybrid] AI image API error: status=%s, body=%s', response.status, errorText.slice(0, 500))
+    throw new Error(`AI image service error: ${response.status} - ${errorText}`)
   }
 
   const data = await response.json()
@@ -95,7 +95,7 @@ async function callGeminiImage(
   const outMime = imagePart?.inlineData?.mimeType || 'image/png'
   if (!outBase64) {
     console.error('[locked-background-hybrid] callGeminiImage: no image in response, parts=%d', contentParts.length)
-    throw new Error('Gemini did not return image data')
+    throw new Error('AI did not return image data')
   }
   console.log('[locked-background-hybrid] callGeminiImage: success, response image base64Length=%d', outBase64.length)
   return { base64: outBase64, mimeType: outMime }

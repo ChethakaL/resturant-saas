@@ -98,89 +98,7 @@ export function MenuCarousel({
   const highlightColor = isChefsHighlights ? (primaryColor || '#10b981') : (accentColor || '#f59e0b')
   const isHero = variant === 'hero'
 
-  // Full-width hero: always use hero layout when variant is hero (top-of-menu), regardless of theme's static/sliding setting
-  if (isHero) {
-    return (
-      <div className="w-full overflow-hidden bg-black/30">
-        {/* Full-width hero: shorter on mobile, moderate height on desktop */}
-        <div
-          ref={emblaRef}
-          className="relative w-full overflow-hidden aspect-[2/1] sm:aspect-[21/9]"
-        >
-          <div className="flex h-full touch-pan-x" style={{ backfaceVisibility: 'hidden' }}>
-            {items.map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                className="flex-[0_0_100%] min-w-0 w-full h-full relative text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                onClick={() => onItemClick?.(item as CarouselItem)}
-              >
-                <img
-                  src={item.imageUrl || defaultImage}
-                  alt={item.name}
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-8 text-white">
-                  {title && (
-                    <p className="font-body text-xs sm:text-sm text-white/80 uppercase tracking-wider mb-1.5">
-                      {title}
-                    </p>
-                  )}
-                  <span
-                    className="inline-block px-2.5 py-1 rounded text-[10px] uppercase tracking-wider font-semibold mb-2"
-                    style={{ backgroundColor: highlightColor }}
-                  >
-                    {chefRecommendationLabel ?? "Chef's recommendation"}
-                  </span>
-                  <p className={`text-2xl sm:text-3xl md:text-4xl font-bold leading-tight tracking-tight ${displayFontClassName ?? ''}`}>{getDisplayName?.(item.id) || item.name}</p>
-                  {(getDescription?.(item.id) || item.description) && (
-                    <p className="text-sm sm:text-base text-white/90 mt-1.5 line-clamp-2 font-body">{getDescription?.(item.id) || item.description || ''}</p>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-          {items.length > 1 && (
-            <>
-              <button
-                type="button"
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white shadow-lg flex items-center justify-center text-slate-900 hover:bg-white/95 transition"
-                onClick={() => emblaApi?.scrollPrev()}
-                aria-label="Previous"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              </button>
-              <button
-                type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white shadow-lg flex items-center justify-center text-slate-900 hover:bg-white/95 transition"
-                onClick={() => emblaApi?.scrollNext()}
-                aria-label="Next"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </button>
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                {scrollSnaps.map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className="h-1.5 rounded-full transition-all"
-                    style={{
-                      width: i === selectedIndex ? '1.25rem' : '0.375rem',
-                      backgroundColor: i === selectedIndex ? highlightColor : 'rgba(255,255,255,0.4)',
-                    }}
-                    onClick={() => emblaApi?.scrollTo(i)}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  // Static row: horizontal scroll, no sliding (old menu style) — only for card carousels
+  // Static row: when displayMode is 'static', use horizontal row (for both hero and card carousels)
   if (displayMode === 'static') {
     const titleClass = isChefsHighlights
       ? 'text-xs uppercase tracking-[0.35em] font-semibold'
@@ -241,6 +159,87 @@ export function MenuCarousel({
           </div>
         </div>
       </section>
+    )
+  }
+
+  // Full-width hero: one-at-a-time with arrows (only when displayMode is sliding)
+  if (isHero) {
+    return (
+      <div className="w-full overflow-hidden bg-black/30">
+        <div
+          ref={emblaRef}
+          className="relative w-full overflow-hidden aspect-[2/1] sm:aspect-[21/9]"
+        >
+          <div className="flex h-full touch-pan-x" style={{ backfaceVisibility: 'hidden' }}>
+            {items.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                className="flex-[0_0_100%] min-w-0 w-full h-full relative text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                onClick={() => onItemClick?.(item as CarouselItem)}
+              >
+                <img
+                  src={item.imageUrl || defaultImage}
+                  alt={item.name}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 px-14 py-5 sm:px-16 sm:py-8 text-white">
+                  {title && (
+                    <p className="font-body text-xs sm:text-sm text-white/80 uppercase tracking-wider mb-1.5">
+                      {title}
+                    </p>
+                  )}
+                  <span
+                    className="inline-block px-2.5 py-1 rounded text-[10px] uppercase tracking-wider font-semibold mb-2"
+                    style={{ backgroundColor: highlightColor }}
+                  >
+                    {chefRecommendationLabel ?? "Chef's recommendation"}
+                  </span>
+                  <p className={`text-2xl sm:text-3xl md:text-4xl font-bold leading-tight tracking-tight ${displayFontClassName ?? ''}`}>{getDisplayName?.(item.id) || item.name}</p>
+                  {(getDescription?.(item.id) || item.description) && (
+                    <p className="text-sm sm:text-base text-white/90 mt-1.5 line-clamp-2 font-body">{getDescription?.(item.id) || item.description || ''}</p>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+          {items.length > 1 && (
+            <>
+              <button
+                type="button"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white shadow-lg flex items-center justify-center text-slate-900 hover:bg-white/95 transition"
+                onClick={() => emblaApi?.scrollPrev()}
+                aria-label="Previous"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white shadow-lg flex items-center justify-center text-slate-900 hover:bg-white/95 transition"
+                onClick={() => emblaApi?.scrollNext()}
+                aria-label="Next"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </button>
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {scrollSnaps.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="h-1.5 rounded-full transition-all"
+                    style={{
+                      width: i === selectedIndex ? '1.25rem' : '0.375rem',
+                      backgroundColor: i === selectedIndex ? highlightColor : 'rgba(255,255,255,0.4)',
+                    }}
+                    onClick={() => emblaApi?.scrollTo(i)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     )
   }
 

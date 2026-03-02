@@ -245,7 +245,10 @@ export interface TranslationStrings {
     tables_add_branch: string
     tables_new_branch: string
     tables_waiters: string
+    tables_manage_waiters: string
     tables_add_waiter: string
+    tables_edit_waiter: string
+    tables_delete_waiter: string
     tables_waiters_description: string
     tables_no_waiters: string
     tables_add_first_waiter: string
@@ -353,6 +356,12 @@ export interface TranslationStrings {
     sub_per_year: string
     sub_save_amount: string
     sub_best_value: string
+    /* Referral */
+    sub_referral_title: string
+    sub_referral_description: string
+    sub_referral_link: string
+    sub_referral_copy: string
+    sub_referral_copied: string
 
     /* ── Settings page ── */
     settings_title: string
@@ -635,7 +644,10 @@ const en: TranslationStrings = {
     tables_add_branch: 'Add Branch',
     tables_new_branch: 'New Branch',
     tables_waiters: 'Waiters',
+    tables_manage_waiters: 'Manage Waiters',
     tables_add_waiter: 'Add Waiter',
+    tables_edit_waiter: 'Edit',
+    tables_delete_waiter: 'Remove',
     tables_waiters_description: 'Add waiters so they can sign in at /waiter/login and manage tables and orders with your restaurant\'s menu.',
     tables_no_waiters: 'No waiters yet',
     tables_add_first_waiter: 'Add your first waiter',
@@ -712,8 +724,8 @@ const en: TranslationStrings = {
     billing_extra_branch_cost_desc: 'Each additional branch is ${{price}}/month. Contact us to upgrade.',
     billing_extra_branch_cost_desc_invoice: 'Each additional branch is ${{price}}/month. Add one below and it will be reflected on your next invoice.',
     sub_active_subscription: 'Active subscription',
-    sub_annual_plan: 'Annual plan · $400/year',
-    sub_monthly_plan: 'Monthly plan · $40/month',
+    sub_annual_plan: 'Annual plan · $500/year',
+    sub_monthly_plan: 'Monthly plan · $50/month',
     sub_subscription_active: 'Your subscription is active',
     sub_renews_on: 'Renews on {{date}}',
     sub_manage_subscription: 'Manage subscription',
@@ -739,8 +751,13 @@ const en: TranslationStrings = {
     sub_subscribe_now: 'Subscribe now',
     sub_annual: 'Annual',
     sub_per_year: '/year',
-    sub_save_amount: 'Save $80',
-    sub_best_value: 'Best value. Save $80 compared to monthly billing.',
+    sub_save_amount: 'Save $100',
+    sub_best_value: 'Best value. Save $100 compared to monthly billing.',
+    sub_referral_title: 'Refer friends, get 10% off',
+    sub_referral_description: 'Share your link. When they subscribe, you get 10% off your next month.',
+    sub_referral_link: 'Your referral link',
+    sub_referral_copy: 'Copy link',
+    sub_referral_copied: 'Copied',
 
     /* Settings */
     settings_title: 'Restaurant DNA',
@@ -1023,7 +1040,10 @@ const ku: TranslationStrings = {
     tables_add_branch: 'زیادکردنی لق',
     tables_new_branch: 'لقە نوێیە',
     tables_waiters: 'خزمەتکاران',
+    tables_manage_waiters: 'بەڕێوەبردنی خزمەتکاران',
     tables_add_waiter: 'زیادکردنی خزمەتکار',
+    tables_edit_waiter: 'دەستکاری',
+    tables_delete_waiter: 'سڕینەوە',
     tables_waiters_description: 'خزمەتکار زیاد بکە بۆ ئەوەی بتوانن لە /waiter/login داخڵ بن و مێزەکان و داواکاریەکان بە مێنیوی چێشتخانەکەت بەڕێوەببەن.',
     tables_no_waiters: 'هێشتا خزمەتکار نییە',
     tables_add_first_waiter: 'یەکەم خزمەتکارت زیاد بکە',
@@ -1100,8 +1120,8 @@ const ku: TranslationStrings = {
     billing_extra_branch_cost_desc: 'هەر لقی زیادە {{price}}$/مانگە. پەیوەندیمان پێوە بکە بۆ بەرزبونەوە.',
     billing_extra_branch_cost_desc_invoice: 'هەر لقی زیادە {{price}}$/مانگە. یەکێک زیاد بکە و لە قەستەکەتەوە دەردەکەوێت.',
     sub_active_subscription: 'بەشداری چالاک',
-    sub_annual_plan: 'پلانی ساڵانە · ٤٠٠$/ساڵ',
-    sub_monthly_plan: 'پلانی مانگانە · ٤٠$/مانگ',
+    sub_annual_plan: 'پلانی ساڵانە · ٥٠٠$/ساڵ',
+    sub_monthly_plan: 'پلانی مانگانە · ٥٠$/مانگ',
     sub_subscription_active: 'بەشدارییەکەت چالاکە',
     sub_renews_on: 'نوێدەکرێتەوە لە {{date}}',
     sub_manage_subscription: 'بەڕێوەبردنی بەشداری',
@@ -1127,8 +1147,13 @@ const ku: TranslationStrings = {
     sub_subscribe_now: 'ئێستا بەشداری بکە',
     sub_annual: 'ساڵانە',
     sub_per_year: '/ساڵ',
-    sub_save_amount: '٨٠$ واشە',
-    sub_best_value: 'باشترین بەها. ٨٠$ واشە بەراورد بە پارەدانی مانگانە.',
+    sub_save_amount: '١٠٠$ واشە',
+    sub_best_value: 'باشترین بەها. ١٠٠$ واشە بەراورد بە پارەدانی مانگانە.',
+    sub_referral_title: 'هاوڕێکان بناسێنە، ١٠٪ داشکێنە',
+    sub_referral_description: 'لینکەکەت بڵاوبکەرەوە. کاتێک ئەوان بەشداری دەکەن، تۆ ١٠٪ داشکێنە لە مانگی داهاتوو.',
+    sub_referral_link: 'لینکی ئاماژەپێدانەکەت',
+    sub_referral_copy: 'لینک کۆپیکردن',
+    sub_referral_copied: 'کۆپی کرا',
 
     /* Settings */
     settings_title: 'ناسنامەی چێشتخانە',
@@ -1411,7 +1436,10 @@ const arFusha: TranslationStrings = {
     tables_add_branch: 'إضافة فرع',
     tables_new_branch: 'فرع جديد',
     tables_waiters: 'الطاقم',
+    tables_manage_waiters: 'إدارة الموظفين',
     tables_add_waiter: 'إضافة موظف',
+    tables_edit_waiter: 'تعديل',
+    tables_delete_waiter: 'إزالة',
     tables_waiters_description: 'أضف الموظفين ليتمكنوا من تسجيل الدخول عبر /waiter/login وإدارة الطاولات والطلبات بقائمة مطعمك.',
     tables_no_waiters: 'لا يوجد موظفون بعد',
     tables_add_first_waiter: 'أضف أول موظف',
@@ -1488,8 +1516,8 @@ const arFusha: TranslationStrings = {
     billing_extra_branch_cost_desc: 'كل فرع إضافي يكلف {{price}}$/شهر. تواصل معنا للترقية.',
     billing_extra_branch_cost_desc_invoice: 'كل فرع إضافي يكلف {{price}}$/شهر. أضف واحداً أدناه وسيظهر في فاتورتك القادمة.',
     sub_active_subscription: 'اشتراك نشط',
-    sub_annual_plan: 'الخطة السنوية · 400$/سنة',
-    sub_monthly_plan: 'الخطة الشهرية · 40$/شهر',
+    sub_annual_plan: 'الخطة السنوية · 500$/سنة',
+    sub_monthly_plan: 'الخطة الشهرية · 50$/شهر',
     sub_subscription_active: 'اشتراكك نشط',
     sub_renews_on: 'يتجدد في {{date}}',
     sub_manage_subscription: 'إدارة الاشتراك',
@@ -1515,8 +1543,13 @@ const arFusha: TranslationStrings = {
     sub_subscribe_now: 'اشترك الآن',
     sub_annual: 'سنوي',
     sub_per_year: '/سنة',
-    sub_save_amount: 'وفر 80$',
-    sub_best_value: 'أفضل قيمة. وفر 80$ مقارنة بالدفع الشهري.',
+    sub_save_amount: 'وفر 100$',
+    sub_best_value: 'أفضل قيمة. وفر 100$ مقارنة بالدفع الشهري.',
+    sub_referral_title: 'أَحِرْ أصدقاءً واحصل على ١٠٪ خصم',
+    sub_referral_description: 'شارك رابطك. عندما يشتركوا، تحصل على ١٠٪ خصم على الشهر القادم.',
+    sub_referral_link: 'رابط الإحالة الخاص بك',
+    sub_referral_copy: 'نسخ الرابط',
+    sub_referral_copied: 'تم النسخ',
 
     /* Settings */
     settings_title: 'هوية المطعم',

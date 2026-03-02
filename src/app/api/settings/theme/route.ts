@@ -39,6 +39,8 @@ const themeSchema = z.object({
   restaurantVibeImageKey: z.string().min(1).max(512).nullable().optional(),
   /** Legacy: direct URL. Prefer restaurantVibeImageKey + proxy for private buckets. */
   restaurantVibeImageUrl: z.string().url().nullable().optional(),
+  /** When true, guest menu shows table selector; when false, table ordering is disabled. */
+  tableOrderingEnabled: z.boolean().optional(),
 })
 
 export async function GET() {
@@ -60,6 +62,7 @@ export async function GET() {
       themePreset: settings.themePreset ?? null,
       backgroundImageUrl: settings.backgroundImageUrl ?? null,
       managementLanguage: settings.managementLanguage ?? 'en',
+      tableOrderingEnabled: settings.tableOrderingEnabled !== false,
     })
   } catch (error) {
     console.error('Error fetching theme settings:', error)
@@ -92,7 +95,7 @@ export async function PUT(request: Request) {
     })
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageKey, restaurantVibeImageUrl, ...themeData } = parsed.data
+    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageKey, restaurantVibeImageUrl, tableOrderingEnabled, ...themeData } = parsed.data
     const newSettings = {
       ...currentSettings,
       theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }), ...(descriptionTone !== undefined && { descriptionTone }), ...(restaurantVibeImageKey !== undefined && { restaurantVibeImageKey }), ...(restaurantVibeImageUrl !== undefined && { restaurantVibeImageUrl }) },
@@ -104,6 +107,7 @@ export async function PUT(request: Request) {
       ...(snowfallEnabled !== undefined && { snowfallEnabled }),
       ...(snowfallStart !== undefined && { snowfallStart }),
       ...(snowfallEnd !== undefined && { snowfallEnd }),
+      ...(tableOrderingEnabled !== undefined && { tableOrderingEnabled }),
     }
 
     const updateData: Record<string, unknown> = { settings: newSettings }

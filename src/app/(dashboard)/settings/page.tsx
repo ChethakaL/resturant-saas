@@ -38,6 +38,7 @@ export default async function SettingsPage() {
     snowfallEnabled: (settings.snowfallEnabled as string) || 'false',
     snowfallStart: (settings.snowfallStart as string) || '12-15',
     snowfallEnd: (settings.snowfallEnd as string) || '01-07',
+    tableOrderingEnabled: settings.tableOrderingEnabled !== false,
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''

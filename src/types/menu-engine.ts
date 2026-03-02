@@ -22,6 +22,8 @@ export interface ItemDisplayHints {
   badgeText?: string
   scrollDepthHide: boolean
   moodTags: string[]
+  /** When true, do not show signature/most_loved/chef badge — item stays unlabeled */
+  suppressBadge?: boolean
 }
 
 export interface BundleHint {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isZeroCostAllowed } from '@/lib/costing'
 
 /**
  * Recalculates and updates the costing status for a menu item
@@ -55,13 +56,13 @@ export async function POST(
             const ingredientIds = validIngredients.map((ing) => ing.ingredientId)
             const ingredients = await prisma.ingredient.findMany({
                 where: { id: { in: ingredientIds } },
-                select: { id: true, costPerUnit: true },
+                select: { id: true, name: true, costPerUnit: true },
             })
 
-            // All ingredients must have costPerUnit > 0
+            // All ingredients must have costPerUnit > 0, except water and similar (allowed at 0)
             hasCosting =
                 ingredients.length === validIngredients.length &&
-                ingredients.every((ing) => ing.costPerUnit > 0)
+                ingredients.every((ing) => ing.costPerUnit > 0 || isZeroCostAllowed(ing.name))
         }
 
         const costingStatus = hasRecipe && hasCosting ? 'COMPLETE' : 'INCOMPLETE'
