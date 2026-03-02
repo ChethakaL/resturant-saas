@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal } from 'lucide-react'
+import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
@@ -544,7 +544,7 @@ function cartReducer(state: CartLine[], action: CartAction): CartLine[] {
   }
 }
 
-/** Sign in / My visits next to cart. Renders same on server and first client to avoid hydration mismatch, then session-aware after mount. */
+/** Sign in / My visits next to cart. Icon-only on mobile to avoid header overlap. */
 function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
   const [mounted, setMounted] = useState(false)
   const { data: session } = useSession()
@@ -559,8 +559,9 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
   if (!mounted) {
     return (
       <Link href={`/customer/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
-        <Button variant="ghost" size="sm" className={`h-9 px-2.5 sm:px-3 text-xs sm:text-sm shrink-0 ${btnClass}`}>
-          Sign in
+        <Button variant="ghost" size="sm" className={`h-9 w-9 sm:w-auto sm:px-3 p-0 sm:py-2 text-xs sm:text-sm shrink-0 ${btnClass}`} aria-label="Sign in">
+          <User className="h-4 w-4 sm:hidden" />
+          <span className="hidden sm:inline">Sign in</span>
         </Button>
       </Link>
     )
@@ -569,9 +570,9 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
     return (
       <>
         <Link href="/customer/me">
-          <Button variant="ghost" size="sm" className={`h-9 px-2.5 sm:px-3 text-xs sm:text-sm shrink-0 ${btnClass}`}>
+          <Button variant="ghost" size="sm" className={`h-9 w-9 sm:w-auto sm:px-3 p-0 sm:py-2 text-xs sm:text-sm shrink-0 ${btnClass}`} aria-label="My visits">
+            <User className="h-4 w-4 sm:hidden" />
             <span className="hidden sm:inline">My visits</span>
-            <span className="sm:hidden">Visits</span>
           </Button>
         </Link>
         <Button
@@ -587,8 +588,9 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
   }
   return (
     <Link href={`/customer/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
-      <Button variant="ghost" size="sm" className={`h-9 px-2.5 sm:px-3 text-xs sm:text-sm shrink-0 ${btnClass}`}>
-        Sign in
+      <Button variant="ghost" size="sm" className={`h-9 w-9 sm:w-auto sm:px-3 p-0 sm:py-2 text-xs sm:text-sm shrink-0 ${btnClass}`} aria-label="Sign in">
+        <User className="h-4 w-4 sm:hidden" />
+        <span className="hidden sm:inline">Sign in</span>
       </Button>
     </Link>
   )
@@ -959,14 +961,43 @@ export default function SmartMenu({
     return Array.from(uniqueCategories.values())
   }, [menuItems])
 
-  // Extract all unique tags
+  // Whitelist of meaningful dietary attributes for the filter — excludes descriptors like "creamy", "coffee", "potato"
+  const DIETARY_WHITELIST = useMemo(
+    () =>
+      new Set(
+        [
+          'vegetarian',
+          'vegan',
+          'halal',
+          'gluten-free',
+          'dairy-free',
+          'nut-free',
+          'spicy',
+          'keto',
+          'low-carb',
+          'high protein',
+          'protein-rich',
+          'seafood',
+          'pescatarian',
+        ].map((t) => t.toLowerCase())
+      ),
+    []
+  )
+
   const allTags = useMemo(() => {
-    const tags = new Set<string>()
+    const seen = new Set<string>()
+    const normalize = (t: string) => t.toLowerCase().trim().replace(/\s+/g, '-')
     menuItems.forEach((item) => {
-      item.tags?.forEach((tag) => tags.add(tag))
+      item.tags?.forEach((tag) => {
+        const lower = tag.toLowerCase().trim()
+        const norm = normalize(tag)
+        if (DIETARY_WHITELIST.has(lower) || DIETARY_WHITELIST.has(norm)) {
+          seen.add(lower)
+        }
+      })
     })
-    return Array.from(tags)
-  }, [menuItems])
+    return Array.from(seen).sort()
+  }, [menuItems, DIETARY_WHITELIST])
 
   // Filter and sort menu items
   const filteredItems = useMemo(() => {
@@ -1004,10 +1035,12 @@ export default function SmartMenu({
       items = items.filter((item) => item.category?.id === selectedCategory)
     }
 
-    // Tags filter
+    // Tags filter (case-insensitive — selectedTags are canonical lowercase)
     if (selectedTags.length > 0) {
+      const itemTagsLower = (item: MenuItem) =>
+        (item.tags ?? []).map((t) => t.toLowerCase().trim())
       items = items.filter((item) =>
-        selectedTags.every((tag) => item.tags?.includes(tag))
+        selectedTags.every((sel) => itemTagsLower(item).includes(sel))
       )
     }
 
@@ -1268,7 +1301,8 @@ export default function SmartMenu({
   const tierOrder = (tier: ItemDisplayHints['displayTier']) =>
     tier === 'hero' ? 0 : tier === 'featured' ? 1 : tier === 'standard' ? 2 : 3
 
-  // Category sections with placement-based item order: anchor first, then by engine position, DOG last
+  // Category sections: when user picked a sort (price-low, etc.), preserve filteredItems order.
+  // When sortBy === 'popular', use engine order: anchor first, then position, then tier.
   const categorizedSections = useMemo(() => {
     if (!categoriesProp || categoriesProp.length === 0) {
       return [{ category: null as CategorySection | null, items: filteredItems }]
@@ -1284,21 +1318,24 @@ export default function SmartMenu({
         )
         : [...categoriesProp].sort((a, b) => a.displayOrder - b.displayOrder)
 
+    const useEngineOrder = sortBy === 'popular'
+
     for (const cat of sortedCategories) {
       const categoryItems = filteredItems.filter(
         (item) => item.category?.id === cat.id
       )
-      // Place: first = price anchor (highest margin), middle = WORKHORSE, bottom = DOG
-      const ordered = [...categoryItems].sort((a, b) => {
-        const hintsA = a._hints
-        const hintsB = b._hints
-        if (hintsA?.isAnchor && !hintsB?.isAnchor) return -1
-        if (!hintsA?.isAnchor && hintsB?.isAnchor) return 1
-        const posA = hintsA?.position ?? 999
-        const posB = hintsB?.position ?? 999
-        if (posA !== posB) return posA - posB
-        return tierOrder(hintsA?.displayTier ?? 'standard') - tierOrder(hintsB?.displayTier ?? 'standard')
-      })
+      const ordered = useEngineOrder
+        ? [...categoryItems].sort((a, b) => {
+            const hintsA = a._hints
+            const hintsB = b._hints
+            if (hintsA?.isAnchor && !hintsB?.isAnchor) return -1
+            if (!hintsA?.isAnchor && hintsB?.isAnchor) return 1
+            const posA = hintsA?.position ?? 999
+            const posB = hintsB?.position ?? 999
+            if (posA !== posB) return posA - posB
+            return tierOrder(hintsA?.displayTier ?? 'standard') - tierOrder(hintsB?.displayTier ?? 'standard')
+          })
+        : categoryItems
       if (ordered.length > 0) {
         sections.push({ category: cat, items: ordered })
       }
@@ -1313,7 +1350,7 @@ export default function SmartMenu({
     }
 
     return sections
-  }, [filteredItems, categoriesProp, categoryOrder])
+  }, [filteredItems, categoriesProp, categoryOrder, sortBy])
 
   // Highlight which section is in view (for the sticky nav)
   useEffect(() => {
@@ -1398,28 +1435,81 @@ export default function SmartMenu({
         </div>
 
         <div className="relative mx-auto max-w-7xl px-3 sm:px-6 pt-3 sm:pt-6">
-          {/* Header: logo left, category tabs center, cart + language right */}
-          <header className="flex items-center gap-2 sm:gap-4">
-            <div className="flex-shrink-0 flex items-center gap-2 min-w-0">
-              {logoSrc ? (
-                <img
-                  src={logoSrc}
-                  width={40}
-                  height={40}
-                  alt=""
-                  className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg object-contain shrink-0 ${isDarkBg ? 'bg-white/10 border border-white/20' : 'bg-white border border-slate-200'}`}
-                />
-              ) : (
-                <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${isDarkBg ? 'bg-white/10 text-white border border-white/20' : 'bg-slate-800 text-white border border-slate-200'}`}>
-                  {(restaurantName || 'M').slice(0, 2).toUpperCase()}
-                </div>
-              )}
-              <span className={`font-display font-semibold text-sm sm:text-base truncate max-w-[90px] sm:max-w-[140px] ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
-                {restaurantName || 'Menu'}
-              </span>
+          {/* Header: on mobile stack so categories get space; on desktop single row */}
+          <header className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <div className="flex items-center justify-between sm:justify-start gap-2 min-w-0 flex-shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                {logoSrc ? (
+                  <img
+                    src={logoSrc}
+                    width={40}
+                    height={40}
+                    alt=""
+                    className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg object-contain shrink-0 ${isDarkBg ? 'bg-white/10 border border-white/20' : 'bg-white border border-slate-200'}`}
+                  />
+                ) : (
+                  <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${isDarkBg ? 'bg-white/10 text-white border border-white/20' : 'bg-slate-800 text-white border border-slate-200'}`}>
+                    {(restaurantName || 'M').slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <span className={`font-display font-semibold text-sm sm:text-base truncate max-w-[120px] sm:max-w-[140px] ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                  {restaurantName || 'Menu'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-auto">
+                <CustomerSignInControl isDarkBg={isDarkBg} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`relative h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
+                  onClick={() => setCartOpen(true)}
+                  aria-label="Open cart"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                  {cart.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[var(--menu-accent,#f59e0b)] text-white text-[10px] font-bold flex items-center justify-center">
+                      {cart.reduce((n, line) => n + line.quantity, 0)}
+                    </span>
+                  )}
+                </Button>
+                <Popover open={isLanguageMenuOpen} onOpenChange={setIsLanguageMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
+                      aria-label={`Language: ${currentLanguageLabel}`}
+                    >
+                      <Globe className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    sideOffset={8}
+                    className={`w-40 rounded-xl p-1 shadow-xl ${isDarkBg ? 'border-white/20 bg-slate-900' : 'border-slate-200 bg-white'} text-sm`}
+                  >
+                    {languageOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setLanguage(option.value)
+                          setIsLanguageMenuOpen(false)
+                        }}
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${language === option.value
+                            ? 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-200'
+                            : isDarkBg ? 'text-white/80 hover:bg-white/5' : 'text-slate-700 hover:bg-slate-100'
+                          }`}
+                      >
+                        <span>{option.label}</span>
+                        {language === option.value && <span>✓</span>}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
-            <nav className="flex-1 min-w-0 flex justify-center overflow-x-auto scrollbar-hide scroll-px-3 -mx-1">
-              <div className="flex gap-1.5 sm:gap-2 py-1 px-1">
+            <nav className="flex-1 min-w-0 flex justify-center overflow-x-auto sm:overflow-visible scrollbar-hide scroll-px-3 -mx-1">
+              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 py-1 px-1">
                 {categorizedSections.filter((s) => s.category).map((section) => {
                   const isActive = activeSectionId === section.category!.id
                   return (
@@ -1600,8 +1690,7 @@ export default function SmartMenu({
             </section>
           )}
 
-          {/* Search row (hidden in classic mode — simple menu only) */}
-          {engineMode !== 'classic' && (
+          {/* Search row (always shown; filters button is part of search) */}
           <div
             className={`flex flex-col sm:flex-row w-full gap-3 transition duration-300 ${isSmartSearchActive ? 'opacity-0 pointer-events-none' : ''
               }`}
@@ -1632,7 +1721,6 @@ export default function SmartMenu({
               </Button>
             </div>
           </div>
-          )}
 
           <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
             <DialogContent className="max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
@@ -1955,10 +2043,8 @@ export default function SmartMenu({
                             ? ({
                                 ...item._hints,
                                 showImage: true,
-                                displayTier:
-                                  item._hints.displayTier === 'minimal'
-                                    ? 'standard'
-                                    : item._hints.displayTier,
+                                displayTier: 'standard',
+                                badgeText: undefined,
                               } as ItemDisplayHints)
                             : item._hints
                         const handleAddToOrder = () => {
@@ -1985,11 +2071,13 @@ export default function SmartMenu({
                             onPairings={() => fetchPairingSuggestions(item)}
                             onAddToOrder={handleAddToOrder}
                             addToOrderLabel={currentEngineCopy.addToOrder}
-                            badgeLabels={{
-                              signature: currentEngineCopy.signatureBadge,
-                              mostLoved: currentEngineCopy.mostLovedBadge,
-                              chefSelection: currentEngineCopy.chefSelectionBadge,
-                            }}
+                            badgeLabels={engineMode === 'classic' || isExtraRevealedItem || resolvedHints?.suppressBadge
+                              ? { signature: '', mostLoved: '', chefSelection: '' }
+                              : {
+                                  signature: currentEngineCopy.signatureBadge,
+                                  mostLoved: currentEngineCopy.mostLovedBadge,
+                                  chefSelection: currentEngineCopy.chefSelectionBadge,
+                                }}
                             loadingPairings={loadingSuggestions}
                             isSelectedForPairing={selectedItemForPairing?.id === item.id}
                             isDarkTheme={isDarkBg}
@@ -2394,7 +2482,7 @@ export default function SmartMenu({
         cartTitle={currentEngineCopy.cartTitle}
         tables={tables}
         selectedTableNumber={selectedTableNumber}
-        onTableChange={setSelectedTableNumber}
+        onTableChange={tables.length > 0 ? setSelectedTableNumber : undefined}
         onUpdateQuantity={(menuItemId, delta) =>
           dispatchCart({ type: 'UPDATE_QUANTITY', menuItemId, delta })
         }

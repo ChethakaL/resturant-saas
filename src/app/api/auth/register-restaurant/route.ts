@@ -23,6 +23,7 @@ export async function POST(request: Request) {
       userName,
       userEmail,
       password,
+      referralCode: refCode,
     } = body as {
       restaurantName?: string
       slug?: string
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       userName?: string
       userEmail?: string
       password?: string
+      referralCode?: string
     }
 
     if (!restaurantName?.trim()) {
@@ -83,6 +85,15 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 10)
 
+    let referredByRestaurantId: string | null = null
+    if (refCode?.trim()) {
+      const referrer = await prisma.restaurant.findUnique({
+        where: { referralCode: refCode.trim().toUpperCase() },
+        select: { id: true },
+      })
+      if (referrer) referredByRestaurantId = referrer.id
+    }
+
     const restaurant = await prisma.restaurant.create({
       data: {
         name: restaurantName.trim(),
@@ -90,6 +101,7 @@ export async function POST(request: Request) {
         email: restaurantEmail?.trim() || userEmail.trim(),
         phone: restaurantPhone?.trim() || null,
         address: restaurantAddress?.trim() || null,
+        ...(referredByRestaurantId && { referredByRestaurantId }),
       },
     })
 

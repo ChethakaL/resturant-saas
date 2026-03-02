@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     if (!process.env.GOOGLE_AI_KEY) {
       return NextResponse.json(
-        { error: 'Google AI API key not configured' },
+        { error: 'AI API key not configured' },
         { status: 500 }
       )
     }
@@ -165,7 +166,7 @@ Return ONLY valid JSON, no additional text or markdown.`
     return NextResponse.json(
       {
         error: 'Failed to suggest recipe',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: sanitizeErrorForClient(error instanceof Error ? error.message : 'Unknown error'),
       },
       { status: 500 }
     )

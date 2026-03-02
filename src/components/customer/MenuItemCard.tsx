@@ -108,26 +108,18 @@ export function MenuItemCard({
 
   return (
     <Card
-      className={`overflow-hidden backdrop-blur hover:shadow-lg transition-all border ${cardBg} ${textMain} ${
-        isHero ? 'ring-2' : ''
-      } ${isFeatured && !isHero ? 'border-l-4' : ''}`}
-      style={{
-        ...(isHero ? { '--tw-ring-color': 'var(--menu-border, #1e40af)' } as React.CSSProperties : {}),
-        ...(isFeatured && !isHero ? { borderLeftColor: 'var(--menu-border, #1e40af)' } as React.CSSProperties : {}),
-      }}
+      className={`overflow-hidden backdrop-blur hover:shadow-lg transition-all border ${cardBg} ${textMain}`}
       onClick={onDetail}
     >
-      <div className={`flex min-h-[120px] sm:min-h-[140px] ${isHero ? 'flex-col sm:flex-row' : ''}`}>
+      <div className="flex min-h-[120px] sm:min-h-[140px]">
         {showImage && !isMinimal && (
           <div
-            className={`relative flex-shrink-0 flex items-center justify-center p-2 order-first sm:order-none ${
-              isHero ? 'w-full sm:w-[200px] aspect-video sm:aspect-square' : 'w-24 sm:w-28 aspect-square rounded-xl overflow-hidden'
-            }`}
+            className="relative flex-shrink-0 flex items-center justify-center p-2 order-first sm:order-none w-24 sm:w-28 aspect-square rounded-xl overflow-hidden"
           >
             <img
               src={item.imageUrl || defaultPlaceholderImage}
               alt={item.name}
-              className={`w-full h-full object-cover ${isHero ? 'rounded-lg' : 'rounded-xl'}`}
+              className="w-full h-full object-cover rounded-xl"
             />
             {badgeLabel && (
               <span

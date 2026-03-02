@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useI18n } from '@/lib/i18n'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -60,6 +61,7 @@ export function InventoryTable({
   const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
   const formatCurrencyWithRestaurant = useFormatCurrency()
+  const { t } = useI18n()
 
   const openRequestModal = async (ingredient: IngredientRow) => {
     setSelectedIngredient(ingredient)
@@ -177,22 +179,22 @@ export function InventoryTable({
         <thead>
           <tr className="border-b border-slate-200">
             <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Ingredient
+              {t.inventory_col_ingredient}
             </th>
             <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Unit
+              {t.inventory_col_unit}
             </th>
             <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Supplier
+              {t.inventory_col_supplier}
             </th>
             <th className="text-center py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Request
+              {t.inventory_col_request}
             </th>
             <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Cost/Unit
+              {t.inventory_col_cost_unit}
             </th>
             <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Actions
+              {t.inventory_col_actions}
             </th>
           </tr>
         </thead>
@@ -218,7 +220,7 @@ export function InventoryTable({
                       })
                   }
                 >
-                  Request more
+                  {t.inventory_request_more}
                 </Button>
               </td>
               <td className="py-3 px-4 text-right font-mono">
@@ -228,7 +230,7 @@ export function InventoryTable({
                 <div className="flex items-center justify-end gap-2">
                   <Link href={`/inventory/${ingredient.id}`}>
                     <Button variant="ghost" size="sm">
-                      Edit
+                      {t.inventory_edit_btn}
                     </Button>
                   </Link>
                   <Button
@@ -248,24 +250,27 @@ export function InventoryTable({
 
       {ingredients.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-slate-500">No ingredients found. Add your first ingredient to get started.</p>
+          <p className="text-slate-500">{t.inventory_no_ingredients}</p>
         </div>
       )}
 
       {totalPages > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 mt-4">
           <p className="text-sm text-slate-500">
-            Page {currentPage} of {totalPages} ({totalCount} ingredients)
+            {t.inventory_page_of
+              .replace('{{current}}', String(currentPage))
+              .replace('{{total}}', String(totalPages))
+              .replace('{{count}}', String(totalCount))}
           </p>
           <div className="flex items-center gap-2">
             <Link href={`/inventory?page=${Math.max(currentPage - 1, 1)}`}>
               <Button variant="outline" size="sm" disabled={currentPage <= 1}>
-                Previous
+                {t.inventory_previous}
               </Button>
             </Link>
             <Link href={`/inventory?page=${Math.min(currentPage + 1, totalPages)}`}>
               <Button variant="outline" size="sm" disabled={currentPage >= totalPages}>
-                Next
+                {t.inventory_next}
               </Button>
             </Link>
           </div>
@@ -275,21 +280,25 @@ export function InventoryTable({
       <Dialog open={requestModalOpen} onOpenChange={setRequestModalOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Request stock</DialogTitle>
+            <DialogTitle>{t.inventory_request_stock}</DialogTitle>
             <DialogDescription>
-              {selectedIngredient && (
-                <>Request stock for <strong>{selectedIngredient.name}</strong> from {selectedIngredient.preferredSupplier?.name}.</>
+              {selectedIngredient && selectedIngredient.preferredSupplier && (
+                <>
+                  {t.inventory_request_stock_for
+                    .replace('{{name}}', selectedIngredient.name)
+                    .replace('{{supplier}}', selectedIngredient.preferredSupplier.name)}
+                </>
               )}
             </DialogDescription>
           </DialogHeader>
           {selectedIngredient && (
             <div className="grid gap-4 py-4">
               {!selectedIngredient.preferredSupplier ? (
-                <p className="text-sm text-slate-500">No preferred supplier set. Edit this ingredient to link a supplier.</p>
+                <p className="text-sm text-slate-500">{t.inventory_no_preferred_supplier}</p>
               ) : (
                 <>
                   <div className="grid gap-2">
-                    <Label>Product</Label>
+                    <Label>{t.inventory_product}</Label>
                     <select
                       className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
                       value={selectedProductId}
@@ -304,7 +313,7 @@ export function InventoryTable({
                     </select>
                   </div>
                   <div className="grid gap-2">
-                    <Label>Quantity</Label>
+                    <Label>{t.inventory_quantity}</Label>
                     <Input
                       type="number"
                       min="0.01"
@@ -320,10 +329,10 @@ export function InventoryTable({
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestModalOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRequestModalOpen(false)}>{t.common_cancel}</Button>
             {selectedIngredient?.preferredSupplier && (
               <Button onClick={submitRequest} disabled={submitting || loading || !quantity}>
-                {submitting ? 'Sending...' : 'Send request'}
+                {submitting ? t.inventory_sending : t.inventory_send_request}
               </Button>
             )}
           </DialogFooter>
@@ -336,17 +345,17 @@ export function InventoryTable({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Delete Ingredient?
+              {t.inventory_delete_confirm_title}
             </DialogTitle>
             <DialogDescription>
               {ingredientToDelete && (
                 <div className="space-y-2 pt-2">
                   <p>
-                    Are you sure you want to delete <strong>{ingredientToDelete.name}</strong>?
+                    {t.inventory_delete_confirm_desc.replace('{{name}}', ingredientToDelete.name)}
                   </p>
                   <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
                     <p className="text-sm text-amber-900">
-                      ⚠️ This action cannot be undone. Any menu items using this ingredient will lose their recipe costing.
+                      ⚠️ {t.inventory_delete_warning}
                     </p>
                   </div>
                 </div>
@@ -359,14 +368,14 @@ export function InventoryTable({
               onClick={() => setDeleteDialogOpen(false)}
               disabled={deleting}
             >
-              Cancel
+              {t.common_cancel}
             </Button>
             <Button
               variant="destructive"
               onClick={handleDelete}
               disabled={deleting}
             >
-              {deleting ? 'Deleting...' : 'Delete Ingredient'}
+              {deleting ? t.inventory_deleting : t.inventory_delete_btn}
             </Button>
           </DialogFooter>
         </DialogContent>

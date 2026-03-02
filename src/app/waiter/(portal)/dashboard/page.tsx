@@ -63,16 +63,17 @@ interface CartItem {
     quantity: number
 }
 
-// ─── Status Badge (admin-style light theme) ───
+// ─── Status Badge (simplified: Pending or Delivered) ───
 function StatusBadge({ status }: { status: string }) {
+    const isPending = ['PENDING', 'PREPARING', 'READY'].includes(status)
     const config: Record<string, { bg: string; text: string; dot: string; label: string }> = {
         PENDING: { bg: 'bg-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Pending' },
-        PREPARING: { bg: 'bg-blue-100', text: 'text-blue-800', dot: 'bg-blue-500', label: 'Preparing' },
-        READY: { bg: 'bg-emerald-100', text: 'text-emerald-800', dot: 'bg-emerald-500', label: 'Ready' },
+        PREPARING: { bg: 'bg-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Pending' },
+        READY: { bg: 'bg-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Pending' },
         COMPLETED: { bg: 'bg-slate-100', text: 'text-slate-800', dot: 'bg-slate-500', label: 'Delivered' },
         CANCELLED: { bg: 'bg-red-100', text: 'text-red-800', dot: 'bg-red-500', label: 'Cancelled' },
     }
-    const c = config[status] || config.PENDING
+    const c = config[status] || (isPending ? config.PENDING : config.COMPLETED)
     return (
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${c.bg} ${c.text}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${c.dot} animate-pulse`} />
@@ -713,40 +714,22 @@ function OrderDetailPanel({
                         )}
 
                         <div className="grid grid-cols-2 gap-3">
-                            {order.status === 'PENDING' && (
-                                <button
-                                    onClick={() => updateStatus('PREPARING')}
-                                    disabled={isUpdating}
-                                    className="py-3 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 text-sm font-semibold rounded-xl transition-all disabled:opacity-40 active:scale-[0.98]"
-                                >
-                                    🔥 Preparing
-                                </button>
-                            )}
-                            {order.status === 'PREPARING' && (
-                                <button
-                                    onClick={() => updateStatus('READY')}
-                                    disabled={isUpdating}
-                                    className="py-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-sm font-semibold rounded-xl transition-all disabled:opacity-40 active:scale-[0.98]"
-                                >
-                                    ✅ Ready
-                                </button>
-                            )}
                             {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
                                 <button
                                     onClick={() => updateStatus('COMPLETED')}
                                     disabled={isUpdating}
-                                    className="py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-40 active:scale-[0.98]"
+                                    className="py-3 col-span-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-40 active:scale-[0.98]"
                                 >
-                                    🍽️ Delivered
+                                    ✓ Mark delivered
                                 </button>
                             )}
-                            {['PENDING', 'PREPARING'].includes(order.status) && (
+                            {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
                                 <button
                                     onClick={() => {
                                         if (confirm('Cancel this order?')) updateStatus('CANCELLED')
                                     }}
                                     disabled={isUpdating}
-                                    className="py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-sm font-semibold rounded-xl transition-all disabled:opacity-40 active:scale-[0.98]"
+                                    className="py-3 col-span-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-sm font-semibold rounded-xl transition-all disabled:opacity-40 active:scale-[0.98]"
                                 >
                                     ✕ Cancel
                                 </button>
@@ -779,13 +762,16 @@ export default function WaiterDashboard() {
     const [tables, setTables] = useState<Table[]>([])
     const [myOrders, setMyOrders] = useState<Order[]>([])
     const [kitchenOrders, setKitchenOrders] = useState<Order[]>([])
+    const [unconfirmedOrders, setUnconfirmedOrders] = useState<Order[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [activeTab, setActiveTab] = useState<'tables' | 'orders' | 'kitchen'>(tabParam === 'orders' ? 'orders' : tabParam === 'kitchen' ? 'kitchen' : 'tables')
     const [selectedTable, setSelectedTable] = useState<Table | null>(null)
     const [showNewOrder, setShowNewOrder] = useState(false)
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
     const [orderFilter, setOrderFilter] = useState<'active' | 'all' | 'COMPLETED'>('active')
-    const [kitchenFilter, setKitchenFilter] = useState<'active' | 'PENDING' | 'PREPARING' | 'READY'>('active')
+    const [orderSearchTable, setOrderSearchTable] = useState('')
+    const [orderSort, setOrderSort] = useState<'newest' | 'oldest' | 'expensive' | 'cheap'>('newest')
+    const [kitchenSort, setKitchenSort] = useState<'oldest' | 'newest' | 'expensive' | 'cheap'>('oldest')
     const [isLoading, setIsLoading] = useState(true)
 
     const { currency } = useI18n()
@@ -816,18 +802,15 @@ export default function WaiterDashboard() {
 
     const fetchKitchenOrders = useCallback(async () => {
         try {
-            const statusParam = kitchenFilter === 'active' ? 'active' : kitchenFilter
-            const res = await fetch(`/api/waiter/orders?myOnly=false&status=${statusParam}`)
+            const res = await fetch(`/api/waiter/orders?myOnly=false&status=active`)
             if (res.ok) {
                 const data = await res.json()
-                // Sort oldest to newest for kitchen FIFO
-                data.sort((a: Order, b: Order) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
                 setKitchenOrders(data)
             }
         } catch (err) {
             console.error('Failed to fetch kitchen orders:', err)
         }
-    }, [kitchenFilter])
+    }, [])
 
     const fetchMenu = useCallback(async () => {
         try {
@@ -841,25 +824,42 @@ export default function WaiterDashboard() {
         }
     }, [])
 
+    const fetchUnconfirmedOrders = useCallback(async () => {
+        try {
+            const res = await fetch('/api/waiter/orders?unassigned=true')
+            if (res.ok) {
+                const data = await res.json()
+                setUnconfirmedOrders(data)
+            }
+        } catch (err) {
+            console.error('Failed to fetch unconfirmed orders:', err)
+        }
+    }, [])
+
     useEffect(() => {
         if (authStatus === 'unauthenticated') {
             router.push('/waiter/login')
             return
         }
         if (authStatus === 'authenticated') {
-            Promise.all([fetchTables(), fetchOrders(), fetchKitchenOrders(), fetchMenu()]).finally(() =>
-                setIsLoading(false)
-            )
+            Promise.all([
+                fetchTables(),
+                fetchOrders(),
+                fetchKitchenOrders(),
+                fetchMenu(),
+                fetchUnconfirmedOrders(),
+            ]).finally(() => setIsLoading(false))
 
-            // Auto-refresh every 30 seconds
+            // Auto-refresh every 15 seconds (for new QR orders)
             const interval = setInterval(() => {
                 fetchTables()
                 fetchOrders()
                 fetchKitchenOrders()
-            }, 15000) // Kitchen needs faster refresh
+                fetchUnconfirmedOrders()
+            }, 15000)
             return () => clearInterval(interval)
         }
-    }, [authStatus, router, fetchTables, fetchOrders, fetchKitchenOrders, fetchMenu])
+    }, [authStatus, router, fetchTables, fetchOrders, fetchKitchenOrders, fetchMenu, fetchUnconfirmedOrders])
 
     useEffect(() => {
         if (authStatus === 'authenticated') {
@@ -871,7 +871,7 @@ export default function WaiterDashboard() {
         if (authStatus === 'authenticated') {
             fetchKitchenOrders()
         }
-    }, [kitchenFilter, authStatus, fetchKitchenOrders])
+    }, [authStatus, fetchKitchenOrders])
 
     useEffect(() => {
         setActiveTab(tabParam === 'orders' ? 'orders' : tabParam === 'kitchen' ? 'kitchen' : 'tables')
@@ -881,6 +881,7 @@ export default function WaiterDashboard() {
         fetchTables()
         fetchOrders()
         fetchKitchenOrders()
+        fetchUnconfirmedOrders()
     }
 
     const handleOrderCreated = () => {
@@ -924,6 +925,44 @@ export default function WaiterDashboard() {
         <>
             {/* Content - admin-style light theme, sidebar provides nav */}
             <main className="space-y-6">
+                {unconfirmedOrders.length > 0 && (
+                    <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
+                        <p className="text-sm font-semibold text-amber-900 mb-3">
+                            🔔 New order{unconfirmedOrders.length > 1 ? 's' : ''} from customer (QR menu) — confirm to take
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            {unconfirmedOrders.map((order) => (
+                                <div
+                                    key={order.id}
+                                    className="flex items-center gap-3 bg-white rounded-lg px-4 py-2 border border-amber-200"
+                                >
+                                    <span className="font-medium text-slate-900">
+                                        Table {order.table?.number} — {order.orderNumber}
+                                    </span>
+                                    <span className="text-sm text-slate-500">
+                                        {order.total.toLocaleString()} {currency} · {order.items.length} items
+                                    </span>
+                                    <button
+                                        onClick={async () => {
+                                            const res = await fetch(`/api/waiter/orders/${order.id}`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ confirm: true }),
+                                            })
+                                            if (res.ok) {
+                                                handleRefresh()
+                                                setSelectedOrder(await res.json())
+                                            }
+                                        }}
+                                        className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg"
+                                    >
+                                        Confirm
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 {activeTab === 'tables' && (
                     <div>
                         <div className="flex items-center justify-between mb-5">
@@ -974,14 +1013,45 @@ export default function WaiterDashboard() {
                                     <div>
                                         <CardTitle>Table {selectedTable.number}</CardTitle>
                                         <p className="text-sm text-slate-500 mt-1">
-                                            {selectedTable.capacity} seats · {selectedTable.status.toLowerCase()}
+                                            {selectedTable.capacity} seats
                                         </p>
                                     </div>
-                                    <Button
-                                        onClick={() => setShowNewOrder(true)}
-                                    >
-                                        New Order
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                                            {[
+                                                { status: 'AVAILABLE', label: 'Available' },
+                                                { status: 'OCCUPIED', label: 'Occupied' },
+                                                { status: 'RESERVED', label: 'Reserved' },
+                                            ].map((s) => (
+                                                <button
+                                                    key={s.status}
+                                                    onClick={async () => {
+                                                        try {
+                                                            const res = await fetch(`/api/tables/${selectedTable.id}`, {
+                                                                method: 'PATCH',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ status: s.status }),
+                                                            })
+                                                            if (res.ok) {
+                                                                setSelectedTable((prev) => (prev ? { ...prev, status: s.status } : null))
+                                                                fetchTables()
+                                                            }
+                                                        } catch { }
+                                                    }}
+                                                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                                                        selectedTable.status === s.status
+                                                            ? 'bg-white text-slate-900 shadow'
+                                                            : 'text-slate-600 hover:text-slate-900'
+                                                    }`}
+                                                >
+                                                    {s.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <Button onClick={() => setShowNewOrder(true)}>
+                                            New Order
+                                        </Button>
+                                    </div>
                                 </CardHeader>
                                 <CardContent>
                                     {/* Active orders for this table */}
@@ -1020,25 +1090,44 @@ export default function WaiterDashboard() {
 
                 {activeTab === 'orders' && (
                     <div>
-                        <div className="flex items-center justify-between mb-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
                             <h2 className="text-lg font-bold text-slate-900">My Orders</h2>
-                            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                                {[
-                                    { key: 'active', label: 'Active' },
-                                    { key: 'COMPLETED', label: 'Delivered' },
-                                    { key: 'all', label: 'All' },
-                                ].map((f) => (
-                                    <button
-                                        key={f.key}
-                                        onClick={() => setOrderFilter(f.key as any)}
-                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${orderFilter === f.key
-                                            ? 'bg-white text-slate-900 shadow'
-                                            : 'text-slate-600 hover:text-slate-900'
-                                            }`}
-                                    >
-                                        {f.label}
-                                    </button>
-                                ))}
+                            <div className="flex flex-wrap items-center gap-3">
+                                <input
+                                    type="text"
+                                    placeholder="Search by table..."
+                                    value={orderSearchTable}
+                                    onChange={(e) => setOrderSearchTable(e.target.value)}
+                                    className="h-9 px-3 rounded-lg border border-slate-200 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-slate-400/20 focus:border-slate-400"
+                                />
+                                <select
+                                    value={orderSort}
+                                    onChange={(e) => setOrderSort(e.target.value as typeof orderSort)}
+                                    className="h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400/20"
+                                >
+                                    <option value="newest">Newest first</option>
+                                    <option value="oldest">Oldest first</option>
+                                    <option value="expensive">Most expensive</option>
+                                    <option value="cheap">Least expensive</option>
+                                </select>
+                                <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                                    {[
+                                        { key: 'active', label: 'Active' },
+                                        { key: 'COMPLETED', label: 'Delivered' },
+                                        { key: 'all', label: 'All' },
+                                    ].map((f) => (
+                                        <button
+                                            key={f.key}
+                                            onClick={() => setOrderFilter(f.key as any)}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${orderFilter === f.key
+                                                ? 'bg-white text-slate-900 shadow'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                                }`}
+                                        >
+                                            {f.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
@@ -1055,7 +1144,16 @@ export default function WaiterDashboard() {
                             </Card>
                         ) : (
                             <div className="space-y-3">
-                                {myOrders.map((order) => (
+                                {[...myOrders]
+                                    .filter((o) => !orderSearchTable || (o.table?.number ?? '').toString().includes(orderSearchTable.trim()))
+                                    .sort((a, b) => {
+                                        if (orderSort === 'oldest') return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                                        if (orderSort === 'newest') return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                                        if (orderSort === 'expensive') return b.total - a.total
+                                        if (orderSort === 'cheap') return a.total - b.total
+                                        return 0
+                                    })
+                                    .map((order) => (
                                     <button
                                         key={order.id}
                                         onClick={() => setSelectedOrder(order)}
@@ -1104,31 +1202,22 @@ export default function WaiterDashboard() {
 
                 {activeTab === 'kitchen' && (
                     <div>
-                        <div className="flex items-center justify-between mb-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
                             <div>
-                                <h2 className="text-lg font-bold text-slate-900">Chefs — Incoming Orders</h2>
-                                <p className="text-sm text-slate-500">All incoming orders — oldest first</p>
+                                <h2 className="text-lg font-bold text-slate-900">Chef — Pending Orders</h2>
+                                <p className="text-sm text-slate-500">Mark orders as done when ready</p>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                                    {[
-                                        { key: 'active', label: 'Active' },
-                                        { key: 'PENDING', label: '🆕 New' },
-                                        { key: 'PREPARING', label: '🔥 Cooking' },
-                                        { key: 'READY', label: '✅ Ready' },
-                                    ].map((f) => (
-                                        <button
-                                            key={f.key}
-                                            onClick={() => setKitchenFilter(f.key as typeof kitchenFilter)}
-                                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${kitchenFilter === f.key
-                                                ? 'bg-white text-slate-900 shadow'
-                                                : 'text-slate-600 hover:text-slate-900'
-                                                }`}
-                                        >
-                                            {f.label}
-                                        </button>
-                                    ))}
-                                </div>
+                            <div className="flex items-center gap-3">
+                                <select
+                                    value={kitchenSort}
+                                    onChange={(e) => setKitchenSort(e.target.value as typeof kitchenSort)}
+                                    className="h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400/20"
+                                >
+                                    <option value="oldest">Oldest first</option>
+                                    <option value="newest">Newest first</option>
+                                    <option value="expensive">Most expensive</option>
+                                    <option value="cheap">Least expensive</option>
+                                </select>
                                 <Button variant="outline" size="sm" onClick={handleRefresh}>Refresh</Button>
                             </div>
                         </div>
@@ -1143,80 +1232,60 @@ export default function WaiterDashboard() {
                             </Card>
                         ) : (
                             <div className="space-y-3">
-                                {kitchenOrders.map((order, index) => {
-                                    const minutesAgo = Math.floor((Date.now() - new Date(order.timestamp).getTime()) / 60000)
-                                    const isUrgent = minutesAgo > 15 && order.status !== 'READY'
-                                    const isOld = minutesAgo > 10 && order.status === 'PENDING'
-                                    return (
-                                        <Card
-                                            key={order.id}
-                                            className={`border-2 transition-all ${isUrgent ? 'border-red-300 bg-red-50 shadow-md' :
-                                                    isOld ? 'border-amber-300 bg-amber-50' :
-                                                        order.status === 'READY' ? 'border-emerald-300 bg-emerald-50' :
-                                                            order.status === 'PREPARING' ? 'border-blue-200 bg-blue-50' :
-                                                                'border-slate-200'
-                                                }`}
-                                        >
-                                            <CardContent className="p-4">
-                                                <div className="flex items-start justify-between mb-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className={`text-2xl font-bold rounded-lg px-3 py-1 ${isUrgent ? 'bg-red-200 text-red-800' :
-                                                                isOld ? 'bg-amber-200 text-amber-800' :
-                                                                    'bg-slate-200 text-slate-700'
-                                                            }`}>
-                                                            #{index + 1}
-                                                        </span>
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-base font-bold text-slate-900">{order.orderNumber}</span>
-                                                                <StatusBadge status={order.status} />
-                                                            </div>
-                                                            <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
-                                                                <span className="font-mono">
-                                                                    {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                </span>
-                                                                <span className={`font-semibold ${isUrgent ? 'text-red-600' : isOld ? 'text-amber-600' : 'text-slate-500'
-                                                                    }`}>
-                                                                    {minutesAgo < 1 ? 'Just now' : `${minutesAgo}m ago`}
-                                                                </span>
-                                                                {order.table && <span>Table {order.table.number}</span>}
-                                                                {order.waiter && <span>👤 {order.waiter.name}</span>}
+                                {[...kitchenOrders]
+                                    .sort((a, b) => {
+                                        if (kitchenSort === 'oldest') return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                                        if (kitchenSort === 'newest') return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                                        if (kitchenSort === 'expensive') return b.total - a.total
+                                        if (kitchenSort === 'cheap') return a.total - b.total
+                                        return 0
+                                    })
+                                    .map((order, index) => {
+                                        const minutesAgo = Math.floor((Date.now() - new Date(order.timestamp).getTime()) / 60000)
+                                        const isUrgent = minutesAgo > 15
+                                        return (
+                                            <Card
+                                                key={order.id}
+                                                className={`border-2 transition-all ${isUrgent ? 'border-red-300 bg-red-50 shadow-md' : 'border-slate-200'}`}
+                                            >
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-start justify-between mb-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className={`text-2xl font-bold rounded-lg px-3 py-1 ${isUrgent ? 'bg-red-200 text-red-800' : 'bg-slate-200 text-slate-700'}`}>
+                                                                #{index + 1}
+                                                            </span>
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-base font-bold text-slate-900">{order.orderNumber}</span>
+                                                                    {order.table && <span className="text-sm text-slate-500">Table {order.table.number}</span>}
+                                                                </div>
+                                                                <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
+                                                                    <span className="font-mono">
+                                                                        {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
+                                                                    <span className={isUrgent ? 'font-semibold text-red-600' : 'text-slate-500'}>
+                                                                        {minutesAgo < 1 ? 'Just now' : `${minutesAgo}m ago`}
+                                                                    </span>
+                                                                    {order.waiter && <span>👤 {order.waiter.name}</span>}
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        {order.status === 'PENDING' && (
+                                                        {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
                                                             <button
                                                                 onClick={async () => {
                                                                     await fetch(`/api/waiter/orders/${order.id}`, {
                                                                         method: 'PATCH',
                                                                         headers: { 'Content-Type': 'application/json' },
-                                                                        body: JSON.stringify({ status: 'PREPARING' }),
-                                                                    })
-                                                                    fetchKitchenOrders()
-                                                                }}
-                                                                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors"
-                                                            >
-                                                                🔥 Start Cooking
-                                                            </button>
-                                                        )}
-                                                        {order.status === 'PREPARING' && (
-                                                            <button
-                                                                onClick={async () => {
-                                                                    await fetch(`/api/waiter/orders/${order.id}`, {
-                                                                        method: 'PATCH',
-                                                                        headers: { 'Content-Type': 'application/json' },
-                                                                        body: JSON.stringify({ status: 'READY' }),
+                                                                        body: JSON.stringify({ status: 'COMPLETED' }),
                                                                     })
                                                                     fetchKitchenOrders()
                                                                 }}
                                                                 className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-lg transition-colors"
                                                             >
-                                                                ✅ Ready to Serve
+                                                                ✓ Mark done
                                                             </button>
                                                         )}
                                                     </div>
-                                                </div>
                                                 {order.notes && (
                                                     <div className="mb-3 p-2 rounded-lg bg-amber-100 border border-amber-200 text-sm text-amber-800">
                                                         📝 {order.notes}

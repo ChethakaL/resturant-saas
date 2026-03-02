@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import OpenAI from 'openai'
+import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
 const MAX_TEXT_LENGTH = 80_000
 const USER_AGENT =
@@ -244,7 +245,7 @@ export async function POST(request: NextRequest) {
     const hasOpenAI = !!process.env.OPENAI_API_KEY
     if (!hasGemini && !hasOpenAI) {
       return NextResponse.json(
-        { error: 'No AI API key configured. Set GOOGLE_AI_KEY or OPENAI_API_KEY in .env' },
+        { error: 'No AI API key configured' },
         { status: 500 }
       )
     }
@@ -291,7 +292,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to import menu from URL',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: sanitizeErrorForClient(error instanceof Error ? error.message : 'Unknown error'),
       },
       { status: 500 }
     )

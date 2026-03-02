@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     const payload = parseGeminiJson(rawText)
 
     if (!payload || typeof payload.description !== 'string') {
-      throw new Error('Gemini response missing description')
+      throw new Error('AI response missing description')
     }
 
     const description = payload.description.trim()

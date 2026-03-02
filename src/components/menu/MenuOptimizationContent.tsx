@@ -36,6 +36,8 @@ import type { SlotTimes } from '@/lib/time-slots'
 interface SimpleMenuItem {
   id: string
   name: string
+  /** Translated name when management language is not English; otherwise same as name */
+  displayName?: string
   imageUrl: string | null
   price: number
 }
@@ -1114,7 +1116,7 @@ export default function MenuOptimizationContent({
                       {showcase.items.length > 0 && (
                         <div className="flex flex-wrap gap-2">
                           {visibleItems.map((item) => (
-                            <span key={item.menuItemId} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{item.menuItem.name}</span>
+                            <span key={item.menuItemId} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{item.menuItem.displayName ?? item.menuItem.name}</span>
                           ))}
                           {hiddenItemCount > 0 && (
                             <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
@@ -1238,7 +1240,7 @@ export default function MenuOptimizationContent({
                               {typeLabel}
                             </span>
                             <p className="text-white text-xs font-semibold mt-1 line-clamp-1">
-                              {previewItems[0]?.menuItem.name || 'Featured dish name'}
+                              {previewItems[0]?.menuItem.displayName ?? previewItems[0]?.menuItem.name ?? 'Featured dish name'}
                             </p>
                           </div>
                         </div>
@@ -1256,7 +1258,7 @@ export default function MenuOptimizationContent({
                             </div>
                             <div className="p-1.5">
                               <p className="text-[10px] text-white font-medium truncate">
-                                {previewItems[idx]?.menuItem.name || `Dish ${idx + 1}`}
+                                {previewItems[idx]?.menuItem.displayName ?? previewItems[idx]?.menuItem.name ?? `Dish ${idx + 1}`}
                               </p>
                             </div>
                           </div>
@@ -1397,7 +1399,7 @@ export default function MenuOptimizationContent({
           <div className="flex-1 min-h-0 overflow-y-auto space-y-1 py-2">
             {(() => {
               const q = itemPickerSearch.trim().toLowerCase()
-              const filtered = q ? menuItems.filter((item) => item.name.toLowerCase().includes(q)) : menuItems
+              const filtered = q ? menuItems.filter((item) => (item.displayName ?? item.name).toLowerCase().includes(q)) : menuItems
               if (filtered.length === 0) {
                 return (
                   <div className="py-8 text-center text-sm text-slate-500">
@@ -1412,7 +1414,7 @@ export default function MenuOptimizationContent({
                   <button key={item.id} onClick={() => !atLimit && toggleItemSelection(item.id)} disabled={atLimit} className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${isSelected ? 'border-emerald-400 bg-emerald-50' : atLimit ? 'opacity-60 cursor-not-allowed border-slate-200' : 'border-slate-200 hover:bg-slate-50'}`}>
                     <div className={`flex h-5 w-5 items-center justify-center rounded border ${isSelected ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>{isSelected && <Check className="h-3 w-3" />}</div>
                     {item.imageUrl && <img src={item.imageUrl} alt="" className="h-8 w-8 rounded object-cover" />}
-                    <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{item.name}</p></div>
+                    <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{item.displayName ?? item.name}</p></div>
                     <span className="text-xs font-medium text-slate-500">{formatCurrencyWithRestaurant(item.price)}</span>
                   </button>
                 )
@@ -1467,7 +1469,7 @@ export default function MenuOptimizationContent({
                   <div className="flex-1 min-h-[240px] max-h-[320px] overflow-y-auto rounded-lg border border-slate-200">
                     {(() => {
                       const q = scheduleSearch.trim().toLowerCase()
-                      const filtered = q ? menuItems.filter((m) => m.name.toLowerCase().includes(q)) : menuItems
+                      const filtered = q ? menuItems.filter((m) => (m.displayName ?? m.name).toLowerCase().includes(q)) : menuItems
                       if (filtered.length === 0) return <div className="p-4 text-center text-sm text-slate-500">{scheduleSearch ? 'No items match your search.' : 'No menu items.'}</div>
                       return (
                         <ul className="divide-y divide-slate-100">
@@ -1481,7 +1483,7 @@ export default function MenuOptimizationContent({
                                   <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'}`}>{checked && <Check className="h-3 w-3" />}</div>
                                   <input type="checkbox" checked={checked} onChange={() => !atSlotLimit && toggleScheduleSlotItem(scheduleSlotTab, item.id)} className="sr-only" disabled={atSlotLimit} />
                                   {item.imageUrl && <img src={item.imageUrl} alt="" className="h-8 w-8 rounded object-cover shrink-0" />}
-                                  <span className="flex-1 truncate text-sm font-medium text-slate-900">{item.name}</span>
+                                  <span className="flex-1 truncate text-sm font-medium text-slate-900">{item.displayName ?? item.name}</span>
                                   <span className="text-xs text-slate-500">{formatCurrencyWithRestaurant(item.price)}</span>
                                 </label>
                               </li>

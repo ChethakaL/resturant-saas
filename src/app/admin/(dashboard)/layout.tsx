@@ -32,6 +32,9 @@ export default async function AdminDashboardLayout({
           <Link href="/admin/restaurants" className="text-slate-600 hover:text-slate-900 text-sm">
             Restaurants
           </Link>
+          <Link href="/admin/promo-codes" className="text-slate-600 hover:text-slate-900 text-sm">
+            Promo Codes
+          </Link>
         </nav>
         <div className="flex items-center gap-4">
           <span className="text-sm text-slate-500">{session.user.email}</span>

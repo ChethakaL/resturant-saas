@@ -45,6 +45,8 @@ const themeSchema = z.object({
   menuTranslationLanguage1: z.string().max(20).optional(),
   /** Menu translation language 2 (ISO 639-1) */
   menuTranslationLanguage2: z.string().max(20).optional(),
+  /** When true, guest menu shows table selector; when false, table ordering is disabled. */
+  tableOrderingEnabled: z.boolean().optional(),
 })
 
 export async function GET() {
@@ -69,6 +71,7 @@ export async function GET() {
       currency: restaurant?.currency ?? 'IQD',
       menuTranslationLanguage1: (settings.menuTranslationLanguage1 as string) ?? 'ar',
       menuTranslationLanguage2: (settings.menuTranslationLanguage2 as string) ?? 'ku',
+      tableOrderingEnabled: settings.tableOrderingEnabled !== false,
     })
   } catch (error) {
     console.error('Error fetching theme settings:', error)
@@ -101,7 +104,7 @@ export async function PUT(request: Request) {
     })
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageKey, restaurantVibeImageUrl, currency, menuTranslationLanguage1, menuTranslationLanguage2, ...themeData } = parsed.data
+    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageKey, restaurantVibeImageUrl, currency, menuTranslationLanguage1, menuTranslationLanguage2, tableOrderingEnabled, ...themeData } = parsed.data
     const newSettings = {
       ...currentSettings,
       theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }), ...(descriptionTone !== undefined && { descriptionTone }), ...(restaurantVibeImageKey !== undefined && { restaurantVibeImageKey }), ...(restaurantVibeImageUrl !== undefined && { restaurantVibeImageUrl }) },
@@ -115,6 +118,7 @@ export async function PUT(request: Request) {
       ...(snowfallEnd !== undefined && { snowfallEnd }),
       ...(menuTranslationLanguage1 !== undefined && { menuTranslationLanguage1 }),
       ...(menuTranslationLanguage2 !== undefined && { menuTranslationLanguage2 }),
+      ...(tableOrderingEnabled !== undefined && { tableOrderingEnabled }),
     }
 
     const updateData: Record<string, unknown> = { settings: newSettings }

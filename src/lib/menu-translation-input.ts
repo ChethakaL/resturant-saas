@@ -1,3 +1,5 @@
+export type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku' | 'ur' | 'ru' | 'tr' | 'fr'
+
 export interface TranslationInputPayload {
   language: string
   name: string

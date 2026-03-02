@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     if (!process.env.GOOGLE_AI_KEY) {
       return NextResponse.json(
-        { error: 'Google AI API key not configured' },
+        { error: 'AI API key not configured' },
         { status: 500 }
       )
     }
@@ -204,7 +205,7 @@ Be helpful and guide the user step by step!`
     return NextResponse.json(
       {
         error: 'Failed to process message',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: sanitizeErrorForClient(error instanceof Error ? error.message : 'Unknown error'),
       },
       { status: 500 }
     )

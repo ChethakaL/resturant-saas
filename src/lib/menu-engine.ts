@@ -55,6 +55,11 @@ export interface CoPurchasePair {
   totalOrdersWithB?: number
 }
 
+export interface BadgePicks {
+  signatureIds: string[]
+  mostLovedIds: string[]
+}
+
 export interface RunMenuEngineParams {
   settings: MenuEngineSettings
   items: EngineMenuItem[]
@@ -64,6 +69,8 @@ export interface RunMenuEngineParams {
   todaySalesByItem: Record<string, number>
   /** For adaptive mode: units sold in current time slot (e.g. breakfast/lunch/dinner) over recent days so menu changes by time. */
   unitsSoldInCurrentTimeSlot?: Record<string, number>
+  /** When no sales data: AI-suggested signature and most loved item IDs. Most items should have no badge. */
+  aiBadgePicks?: BadgePicks
 }
 
 /** Exported for admin quadrant API only. */
@@ -81,6 +88,67 @@ export function classifyQuadrant(
   return 'DOG'
 }
 
+/**
+ * When no sales data: use AI picks or very selective heuristics.
+ * Most items get no badge (suppressBadge). Only 1 signature + 1–2 most loved per category max.
+ */
+function getColdStartTierAndBadge(
+  itemId: string,
+  indexInOrder: number,
+  categoryItemCount: number,
+  aiBadgePicks?: { signatureIds: string[]; mostLovedIds: string[] }
+): { tier: 'hero' | 'featured' | 'standard'; suppressBadge: boolean } {
+  const sigSet = new Set(aiBadgePicks?.signatureIds ?? [])
+  const lovedSet = new Set(aiBadgePicks?.mostLovedIds ?? [])
+
+  if (sigSet.has(itemId)) return { tier: 'hero', suppressBadge: false }
+  if (lovedSet.has(itemId)) return { tier: 'featured', suppressBadge: false }
+
+  if (aiBadgePicks && (sigSet.size > 0 || lovedSet.size > 0)) {
+    return { tier: 'standard', suppressBadge: true }
+  }
+
+  if (categoryItemCount >= 3 && indexInOrder === 0) return { tier: 'hero', suppressBadge: false }
+  if (categoryItemCount >= 4 && indexInOrder === 1) return { tier: 'featured', suppressBadge: false }
+  return { tier: 'standard', suppressBadge: true }
+}
+
+/** Build display hints from an explicit tier (used for cold-start when no sales data). */
+function computeDisplayHintsFromTier(
+  item: EngineMenuItem,
+  tier: ItemDisplayHints['displayTier'],
+  mode: EngineMode,
+  position: number,
+  isAnchor: boolean,
+  subGroup: string | undefined,
+  badgeText: string | undefined,
+  scrollDepthHide: boolean,
+  priceModifierPercent: number,
+  profitModeVisibleSlot?: boolean
+): ItemDisplayHints {
+  let showImage = tier !== 'minimal'
+  if ((mode === 'profit' || mode === 'adaptive') && profitModeVisibleSlot === false) {
+    showImage = false
+  }
+  const finalPrice =
+    priceModifierPercent > 0 && priceModifierPercent < 100
+      ? item.price * (1 - priceModifierPercent / 100)
+      : item.price
+  return {
+    displayTier: tier,
+    position,
+    showImage,
+    priceDisplay: formatMenuPrice(finalPrice),
+    ...(priceModifierPercent > 0 && { priceModifierPercent }),
+    isAnchor,
+    subGroup,
+    isLimitedToday: !!badgeText && badgeText !== '',
+    badgeText,
+    scrollDepthHide,
+    moodTags: [],
+  }
+}
+
 /** Rule 10: 1 hero per category; WORKHORSE = text only (no image). Profit: only first N visible slots get images. */
 function computeDisplayHints(
   item: EngineMenuItem,
@@ -93,7 +161,8 @@ function computeDisplayHints(
   scrollDepthHide: boolean | undefined,
   isFirstHeroInCategory: boolean,
   priceModifierPercent: number,
-  profitModeVisibleSlot?: boolean
+  profitModeVisibleSlot?: boolean,
+  starIndexInCategory?: number
 ): ItemDisplayHints {
   if (mode === 'classic') {
     return {
@@ -114,7 +183,7 @@ function computeDisplayHints(
     displayTier = isFirstHeroInCategory ? 'hero' : 'featured'
     showImage = true
   } else if (quadrant === 'PUZZLE') {
-    displayTier = 'featured'
+    displayTier = 'standard'
     showImage = true
   } else if (quadrant === 'WORKHORSE') {
     displayTier = 'standard'
@@ -131,6 +200,8 @@ function computeDisplayHints(
     priceModifierPercent > 0 && priceModifierPercent < 100
       ? item.price * (1 - priceModifierPercent / 100)
       : item.price
+  const starIdx = starIndexInCategory ?? 0
+  const suppressBadge = quadrant !== 'STAR' || starIdx > 3
   return {
     displayTier,
     position,
@@ -143,6 +214,7 @@ function computeDisplayHints(
     badgeText,
     scrollDepthHide: hide,
     moodTags: [],
+    suppressBadge,
   }
 }
 
@@ -207,45 +279,20 @@ function computePriceAnchoring(
   return { ordered, anchors }
 }
 
-/** Profit mode: Slot 1 = high margin + high price; Slot 2 = high margin + price ≈ avg+1std; Slot 3 = high margin + price ≈ avg; rest by margin then price. */
+/**
+ * Profit mode: For each category, take the top 3 highest-margin items.
+ * Among those 3, rank by price: highest first, middle second, lowest third.
+ * First item gets "Most Loved" badge; items 2 & 3 have no badge.
+ */
 function orderItemsForProfitMode(items: EngineMenuItem[]): EngineMenuItem[] {
   if (items.length === 0) return []
   const sortedByMargin = [...items].sort((a, b) => b._marginPercent - a._marginPercent)
-  if (items.length === 1) return [items[0]!]
-  if (items.length === 2) return sortedByMargin
-
-  const n = items.length
-  const avgPrice = items.reduce((s, i) => s + i.price, 0) / n
-  const variance = items.reduce((s, i) => s + (i.price - avgPrice) ** 2, 0) / n
-  const stdPrice = Math.sqrt(variance) || 1
-  const targetSlot2 = avgPrice + stdPrice
-  const marginThreshold = sortedByMargin[Math.min(2, Math.floor(n / 2))]?._marginPercent ?? 0
-  const highMargin = items.filter((i) => i._marginPercent >= marginThreshold)
-
-  const pickSlot1 = (): EngineMenuItem => {
-    if (highMargin.length === 0) return sortedByMargin[0]!
-    const byPrice = [...highMargin].sort((a, b) => b.price - a.price)
-    return byPrice[0]!
-  }
-  const pickClosestTo = (target: number, pool: EngineMenuItem[]): EngineMenuItem | null => {
-    if (pool.length === 0) return null
-    return pool.reduce((best, cur) =>
-      Math.abs(cur.price - target) < Math.abs(best.price - target) ? cur : best
-    )
-  }
-
-  const slot1 = pickSlot1()
-  const remaining1 = items.filter((i) => i.id !== slot1.id)
-  const slot2 = pickClosestTo(targetSlot2, remaining1)
-  const remaining2 = slot2 ? remaining1.filter((i) => i.id !== slot2.id) : remaining1
-  const slot3 = slot2 ? pickClosestTo(avgPrice, remaining2) : null
-  const rest = slot3
-    ? remaining2.filter((i) => i.id !== slot3.id).sort(
-        (a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price)
-      )
-    : remaining2.sort((a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price))
-  const firstThree = [slot1, ...(slot2 ? [slot2] : []), ...(slot3 ? [slot3] : [])]
-  return [...firstThree, ...rest]
+  const topThreeByMargin = sortedByMargin.slice(0, 3)
+  const sortedTopThree = [...topThreeByMargin].sort((a, b) => b.price - a.price)
+  const rest = sortedByMargin.slice(3).sort(
+    (a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price)
+  )
+  return [...sortedTopThree, ...rest]
 }
 
 /** Adaptive mode: same 3-slot structure as profit but rank by high margin + popularity (units in current time slot). */
@@ -429,7 +476,8 @@ function computeScarcityBadges(
   if (typeof stock === 'number' && stock > 0 && stock <= 5) {
     return { badge: 'Limited Today', priceModifierPercent: 5 }
   }
-  if (avgDailySales > 0 && sold < avgDailySales * 0.5) {
+  // Only show "Today's Selection" when there's meaningful sales activity — otherwise almost every item would get it
+  if (avgDailySales >= 1 && sold < avgDailySales * 0.5) {
     return { badge: "Today's Selection", priceModifierPercent: 5 }
   }
   return { priceModifierPercent: 0 }
@@ -477,7 +525,11 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
     )
     const groups = applyItemCap(orderedItems.map((i) => i.id), maxPerCat)
 
+    const hasSalesData = (cat._avgUnitsSold ?? 0) > 0.5
+    const catItemCount = catItems.length
+
     let heroAssignedInCategory = false
+    let starIndexInCategory = 0
     let pos = 0
     let indexInCategory = 0
     for (const group of groups) {
@@ -486,28 +538,63 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
         if (!item) continue
         pos++
         const quadrant = quadrants[id]
+        if (quadrant === 'STAR') starIndexInCategory++
         const scarcity =
           opts.scarcityBadges
             ? computeScarcityBadges(id, preppedStocks, todaySalesByItem, avgDailySales)
             : { badge: undefined as string | undefined, priceModifierPercent: 0 }
         const isFirstHeroInCategory =
-          !heroAssignedInCategory && (quadrant === 'STAR')
-        if (isFirstHeroInCategory && quadrant === 'STAR') heroAssignedInCategory = true
+          !heroAssignedInCategory && (quadrant === 'STAR' || !hasSalesData)
+        if (isFirstHeroInCategory && (quadrant === 'STAR' || !hasSalesData)) heroAssignedInCategory = true
         const profitModeVisibleSlot =
           mode === 'profit' || mode === 'adaptive' ? indexInCategory < maxInitial : undefined
-        itemHints[id] = computeDisplayHints(
-          item,
-          quadrant,
-          mode,
-          pos,
-          anchors.has(id),
-          group.subGroup !== 'default' ? group.subGroup : undefined,
-          scarcity.badge,
-          quadrant === 'DOG',
-          isFirstHeroInCategory,
-          scarcity.priceModifierPercent,
-          profitModeVisibleSlot
-        )
+
+        let hints: ItemDisplayHints
+        if (!hasSalesData && mode !== 'classic') {
+          const { tier, suppressBadge } = getColdStartTierAndBadge(
+            id,
+            indexInCategory,
+            catItemCount,
+            params.aiBadgePicks
+          )
+          hints = computeDisplayHintsFromTier(
+            item,
+            tier,
+            mode,
+            pos,
+            anchors.has(id),
+            group.subGroup !== 'default' ? group.subGroup : undefined,
+            scarcity.badge,
+            false,
+            scarcity.priceModifierPercent,
+            profitModeVisibleSlot
+          )
+          if (suppressBadge) hints.suppressBadge = true
+        } else {
+          hints = computeDisplayHints(
+            item,
+            quadrant,
+            mode,
+            pos,
+            anchors.has(id),
+            group.subGroup !== 'default' ? group.subGroup : undefined,
+            scarcity.badge,
+            quadrant === 'DOG',
+            isFirstHeroInCategory,
+            scarcity.priceModifierPercent,
+            profitModeVisibleSlot,
+            starIndexInCategory
+          )
+        }
+        // Profit mode: first item = Most Loved only, items 2 & 3 = no badge (no Signature)
+        if (mode === 'profit' && indexInCategory < maxInitial) {
+          if (indexInCategory === 0) {
+            hints = { ...hints, displayTier: 'featured', isAnchor: false, suppressBadge: false }
+          } else {
+            hints = { ...hints, suppressBadge: true }
+          }
+        }
+        itemHints[id] = hints
         indexInCategory++
         if (itemHints[id].moodTags) {
           const moodIds = Object.keys(MOOD_LABELS).filter((moodId) => {

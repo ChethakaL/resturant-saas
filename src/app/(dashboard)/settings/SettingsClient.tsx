@@ -121,6 +121,7 @@ export default function SettingsClient({
     ? `/api/settings/restaurant-vibe-image?key=${encodeURIComponent(restaurantVibeImageKey)}`
     : vibeImageRemoved ? '' : legacyVibeImageUrl
   const [snowfallEnabled, setSnowfallEnabled] = useState<boolean>(currentTheme.snowfallEnabled === 'true')
+  const [tableOrderingEnabled, setTableOrderingEnabled] = useState<boolean>((currentTheme as Record<string, unknown>).tableOrderingEnabled !== false)
   const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
   const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
   const [savingTheme, setSavingTheme] = useState(false)
@@ -207,6 +208,7 @@ export default function SettingsClient({
           descriptionTone: descriptionTone.trim(),
           restaurantVibeImageKey: restaurantVibeImageKey.trim() || null,
           restaurantVibeImageUrl: (restaurantVibeImageKey.trim() && !vibeImageRemoved) ? undefined : null,
+          tableOrderingEnabled,
         }),
       })
       if (!response.ok) {
@@ -654,6 +656,41 @@ export default function SettingsClient({
               <p className="text-xs text-slate-500 mt-1">{td('All items visible in a horizontal row')}</p>
               {menuCarouselStyle === 'static' && <Check className="h-4 w-4 text-slate-900 mt-1" />}
             </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Table ordering toggle */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <span>📋</span>
+            {td('Table ordering')}
+          </CardTitle>
+          <p className="text-sm text-slate-500">
+            {td('When enabled, guests can select their table when ordering from the digital menu (e.g. via QR codes on tables). When disabled, the table selector is hidden.')}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={tableOrderingEnabled}
+              onClick={() => setTableOrderingEnabled(!tableOrderingEnabled)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
+                tableOrderingEnabled ? 'bg-emerald-500' : 'bg-slate-200'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
+                  tableOrderingEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+            <span className="text-sm font-medium text-slate-700">
+              {tableOrderingEnabled ? td('Enabled') : td('Disabled')}
+            </span>
           </div>
         </CardContent>
       </Card>

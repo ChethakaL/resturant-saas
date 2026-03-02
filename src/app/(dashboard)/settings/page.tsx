@@ -42,6 +42,7 @@ export default async function SettingsPage() {
     currency: restaurant?.currency ?? 'IQD',
     menuTranslationLanguage1: (settings.menuTranslationLanguage1 as string) ?? 'ar',
     menuTranslationLanguage2: (settings.menuTranslationLanguage2 as string) ?? 'ku',
+    tableOrderingEnabled: settings.tableOrderingEnabled !== false,
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''

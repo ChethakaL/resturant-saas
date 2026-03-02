@@ -11,6 +11,7 @@ import type { EngineMode } from '@/types/menu-engine'
 import { suggestCarouselItems, getTimeSlotLabel } from '@/lib/carousel-ai'
 import type { CarouselMenuItem } from '@/lib/carousel-ai'
 import { generateMenuDescription } from '@/lib/menu-description-ai'
+import { getCachedBadgePicks } from '@/lib/menu-badge-ai'
 import { getCurrentTimeSlot as getSlot, getTimeSlotForDate as getSlotForDate, parseSlotTimes, buildSlotRangeLabels } from '@/lib/time-slots'
 
 // Revalidate on every request for DB data; AI carousel suggestions cached 5 min to avoid slow Gemini on every load
@@ -463,6 +464,20 @@ async function getMenuData(slug: string) {
     }
   })
 
+  const totalSales = Array.from(salesByItem.values()).reduce((s, v) => s + v.quantity, 0)
+  const hasMeaningfulSales = totalSales >= 10
+  const badgePicks =
+    !hasMeaningfulSales && mode !== 'classic'
+      ? await getCachedBadgePicks(restaurant.id, enrichedMenuItems.map((i: any) => ({
+          id: i.id,
+          name: i.name,
+          description: i.description,
+          categoryName: i.category?.name,
+          price: i.price,
+          tags: i.tags,
+        })))
+      : undefined
+
   const engineOutput = runMenuEngine({
     settings: menuEngineSettings,
     items: engineItems,
@@ -471,6 +486,7 @@ async function getMenuData(slug: string) {
     preppedStocks,
     todaySalesByItem,
     unitsSoldInCurrentTimeSlot,
+    aiBadgePicks: badgePicks,
   })
 
   // Attach display-safe hints and popularity so "Sort by: Most Popular" works
@@ -513,7 +529,8 @@ async function getMenuData(slug: string) {
     categoryOrder: engineOutput.categoryOrder,
     categoryAnchorBundle: engineOutput.categoryAnchorBundle,
     maxInitialItemsPerCategory: menuEngineSettings.maxInitialItemsPerCategory ?? 3,
-    tables: tables.map((t: { id: string; number: string }) => ({ id: t.id, number: t.number })),
+    tables: (settings.tableOrderingEnabled !== false ? tables : []).map((t: { id: string; number: string }) => ({ id: t.id, number: t.number })),
+    tableOrderingEnabled: settings.tableOrderingEnabled !== false,
     snowfallSettings: {
       enabled: settings.snowfallEnabled === 'true',
       start: (settings.snowfallStart as string) || '12-15',
@@ -551,6 +568,7 @@ export default async function SlugMenuPage({
       categoryAnchorBundle={data.categoryAnchorBundle}
       maxInitialItemsPerCategory={data.maxInitialItemsPerCategory}
       tables={data.tables}
+      tableOrderingEnabled={data.tableOrderingEnabled}
       snowfallSettings={data.snowfallSettings}
       forceShowImages
       currency={data.restaurant.currency}

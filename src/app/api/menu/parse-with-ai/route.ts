@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import OpenAI from 'openai'
+import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
 export interface ParsedIngredient {
   name: string
@@ -219,7 +220,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to parse description',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: sanitizeErrorForClient(error instanceof Error ? error.message : 'Unknown error'),
       },
       { status: 500 }
     )

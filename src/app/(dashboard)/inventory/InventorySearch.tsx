@@ -2,11 +2,13 @@
 
 import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
+import { useI18n } from '@/lib/i18n'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useEffect, useState } from 'react'
 
 export function InventorySearch() {
     const router = useRouter()
+    const { t } = useI18n()
     const searchParams = useSearchParams()
     const [isPending, startTransition] = useTransition()
     const [value, setValue] = useState(searchParams.get('q') || '')
@@ -34,7 +36,7 @@ export function InventorySearch() {
         <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-                placeholder="Search ingredients or suppliers..."
+                placeholder={t.inventory_search_placeholder}
                 className="pl-9"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}

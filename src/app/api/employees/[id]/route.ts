@@ -75,15 +75,14 @@ export async function PATCH(
 
     const data = await request.json()
 
-    const updateData: any = {
-      name: data.name,
-      position: data.position,
-      phone: data.phone,
-      email: data.email,
-      salary: data.salary,
-      salaryType: data.salaryType,
-      isActive: data.isActive,
-    }
+    const updateData: { name?: string; position?: string; phone?: string; email?: string; salary?: number; salaryType?: string; isActive?: boolean; password?: string } = {}
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.position !== undefined) updateData.position = data.position
+    if (data.phone !== undefined) updateData.phone = data.phone
+    if (data.email !== undefined) updateData.email = data.email
+    if (data.salary !== undefined) updateData.salary = data.salary
+    if (data.salaryType !== undefined) updateData.salaryType = data.salaryType
+    if (data.isActive !== undefined) updateData.isActive = data.isActive
 
     if (data.password) {
       updateData.password = await bcrypt.hash(data.password, 10)

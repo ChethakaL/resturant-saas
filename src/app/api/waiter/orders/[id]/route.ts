@@ -34,6 +34,11 @@ export async function PATCH(
 
         const updateData: any = {}
 
+        // Waiter confirms/claims an order from customer QR (assigns themselves)
+        if (data.confirm === true && !existing.waiterId && session.user.employeeId) {
+            updateData.waiterId = session.user.employeeId
+        }
+
         if (data.status) {
             updateData.status = data.status
 
