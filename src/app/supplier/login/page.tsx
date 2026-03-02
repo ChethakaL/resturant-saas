@@ -88,15 +88,6 @@ export default function SupplierLoginPage() {
               <p className="text-center text-sm text-slate-500">
                 Restaurant? <Link href="/login" className="text-amber-600 hover:underline">Sign in here</Link>
               </p>
-              <div className="text-xs text-slate-500 mt-4 p-3 bg-slate-50 rounded-md">
-                <p className="font-semibold mb-2">Demo accounts (password: password123):</p>
-                <ul className="space-y-1">
-                  <li>support@caff.iq</li>
-                  <li>supplier1@demo.iq</li>
-                  <li>supplier2@demo.iq</li>
-                  <li>supplier3@demo.iq</li>
-                </ul>
-              </div>
             </form>
           </CardContent>
         </Card>

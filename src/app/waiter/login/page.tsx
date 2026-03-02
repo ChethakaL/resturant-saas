@@ -16,28 +16,6 @@ export default function WaiterLoginPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleDemoLogin = async () => {
-    setError('')
-    setIsLoading(true)
-    try {
-      const result = await signIn('waiter-credentials', {
-        email: 'waiter@alrafidain.iq',
-        password: 'waiter123',
-        redirect: false,
-      })
-      if (result?.error) {
-        setError('Demo login failed. Please try again.')
-      } else {
-        router.push('/waiter/dashboard')
-        router.refresh()
-      }
-    } catch {
-      setError('An error occurred. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -76,7 +54,7 @@ export default function WaiterLoginPage() {
                 <Input
                   id="waiter-email"
                   type="email"
-                  placeholder="waiter@alrafidain.iq"
+                  placeholder="waiter@restaurant.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -101,15 +79,9 @@ export default function WaiterLoginPage() {
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
-              <Button type="button" variant="outline" className="w-full" onClick={handleDemoLogin} disabled={isLoading}>
-                Sign In as Demo Waiter
-              </Button>
               <p className="text-center text-sm text-slate-500 mt-4">
                 Restaurant staff? <Link href="/login" className="text-amber-600 hover:underline">Sign in to Dashboard</Link>
               </p>
-              <div className="text-xs text-slate-500 mt-4 p-3 bg-slate-50 rounded-md">
-                <p className="font-semibold mb-1">Demo: waiter@alrafidain.iq / waiter123</p>
-              </div>
             </form>
           </CardContent>
         </Card>
