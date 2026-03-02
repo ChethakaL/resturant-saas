@@ -192,7 +192,7 @@ export default function MenuForm({
   const [aiAssistantText, setAiAssistantText] = useState('')
   const [aiParseLoading, setAiParseLoading] = useState(false)
   const AI_ASSISTANT_WELCOME =
-    "Hi! I'm Smart Chef. Tell me what dish you want to add — I'll handle everything: the name, description, recipe, ingredients, costs, and how it looks on your menu. You can also upload a photo or document and I'll work from that.\n\nJust describe your dish and I'll guide you through the rest. When you're happy, hit **Fill Form Now** to save it all automatically."
+    "Hi! I'm Smart Chef. Tell me what dish you want to add — I'll handle everything: the name, description, recipe, ingredients, costs, and how it looks on your menu. You can also upload a photo or document and I'll work from that.\n\nI can respond in **English**, **Arabic**, or **Kurdish** — just write in your preferred language.\n\nJust describe your dish and I'll guide you through the rest. When you're happy, hit **Fill Form Now** to save it all automatically."
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
     { role: 'assistant', text: AI_ASSISTANT_WELCOME },
   ])

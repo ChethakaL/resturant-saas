@@ -232,6 +232,31 @@ export interface TranslationStrings {
     inventory_add_new: string
     inventory_edit: string
     inventory_deliveries: string
+    inventory_col_ingredient: string
+    inventory_col_unit: string
+    inventory_col_supplier: string
+    inventory_col_request: string
+    inventory_col_cost_unit: string
+    inventory_col_actions: string
+    inventory_request_more: string
+    inventory_edit_btn: string
+    inventory_search_placeholder: string
+    inventory_no_ingredients: string
+    inventory_page_of: string
+    inventory_previous: string
+    inventory_next: string
+    inventory_request_stock: string
+    inventory_request_stock_for: string
+    inventory_no_preferred_supplier: string
+    inventory_product: string
+    inventory_quantity: string
+    inventory_sending: string
+    inventory_send_request: string
+    inventory_delete_confirm_title: string
+    inventory_delete_confirm_desc: string
+    inventory_delete_warning: string
+    inventory_delete_btn: string
+    inventory_deleting: string
 
     /* ── Tables Page ── */
     tables_title: string
@@ -362,6 +387,10 @@ export interface TranslationStrings {
     sub_referral_link: string
     sub_referral_copy: string
     sub_referral_copied: string
+    sub_promo_label: string
+    sub_promo_placeholder: string
+    sub_promo_hint: string
+    sub_promo_apply: string
 
     /* ── Settings page ── */
     settings_title: string
@@ -631,6 +660,31 @@ const en: TranslationStrings = {
     inventory_add_new: 'Add New Ingredient',
     inventory_edit: 'Edit Ingredient',
     inventory_deliveries: 'Deliveries',
+    inventory_col_ingredient: 'Ingredient',
+    inventory_col_unit: 'Unit',
+    inventory_col_supplier: 'Supplier',
+    inventory_col_request: 'Request',
+    inventory_col_cost_unit: 'Cost/Unit',
+    inventory_col_actions: 'Actions',
+    inventory_request_more: 'Request more',
+    inventory_edit_btn: 'Edit',
+    inventory_search_placeholder: 'Search ingredients or suppliers...',
+    inventory_no_ingredients: 'No ingredients found. Add your first ingredient to get started.',
+    inventory_page_of: 'Page {{current}} of {{total}} ({{count}} ingredients)',
+    inventory_previous: 'Previous',
+    inventory_next: 'Next',
+    inventory_request_stock: 'Request stock',
+    inventory_request_stock_for: 'Request stock for {{name}} from {{supplier}}.',
+    inventory_no_preferred_supplier: 'No preferred supplier set. Edit this ingredient to link a supplier.',
+    inventory_product: 'Product',
+    inventory_quantity: 'Quantity',
+    inventory_sending: 'Sending...',
+    inventory_send_request: 'Send request',
+    inventory_delete_confirm_title: 'Delete Ingredient?',
+    inventory_delete_confirm_desc: 'Are you sure you want to delete {{name}}?',
+    inventory_delete_warning: 'This action cannot be undone. Any menu items using this ingredient will lose their recipe costing.',
+    inventory_delete_btn: 'Delete Ingredient',
+    inventory_deleting: 'Deleting...',
 
     /* Tables */
     tables_title: 'Tables',
@@ -758,6 +812,10 @@ const en: TranslationStrings = {
     sub_referral_link: 'Your referral link',
     sub_referral_copy: 'Copy link',
     sub_referral_copied: 'Copied',
+    sub_promo_label: 'Promo code',
+    sub_promo_placeholder: 'Enter promo code',
+    sub_promo_hint: 'Get 1 year or 1 month free with a valid promo code.',
+    sub_promo_apply: 'Apply',
 
     /* Settings */
     settings_title: 'Restaurant DNA',
@@ -1027,6 +1085,31 @@ const ku: TranslationStrings = {
     inventory_add_new: 'زیادکردنی خامەتاوی نوێ',
     inventory_edit: 'دەستکاریکردنی خامەتاو',
     inventory_deliveries: 'گەیاندنەکان',
+    inventory_col_ingredient: 'پێکهاتەکان',
+    inventory_col_unit: 'یەکەی پێوانە',
+    inventory_col_supplier: 'دابینکەری سەرەکی',
+    inventory_col_request: 'داواکاری فەرمی',
+    inventory_col_cost_unit: 'نرخی یەکە (بە دینار)',
+    inventory_col_actions: 'هەنگاوە کارگێڕییەکان',
+    inventory_request_more: 'زیادەی داوا بکە',
+    inventory_edit_btn: 'دەستکاری',
+    inventory_search_placeholder: 'گەڕان بە پێکهاتەکان یان دابینکەر...',
+    inventory_no_ingredients: 'هیچ پێکهاتەیەک نەدۆزرایەوە. یەکەم پێکهاتە زیاد بکە بۆ دەستپێکردن.',
+    inventory_page_of: 'پەیج {{current}} لە {{total}} ({{count}} پێکهاتە)',
+    inventory_previous: 'پێشوو',
+    inventory_next: 'داهاتوو',
+    inventory_request_stock: 'داواکردنی کۆگا',
+    inventory_request_stock_for: 'داواکردنی کۆگا بۆ {{name}} لە {{supplier}}.',
+    inventory_no_preferred_supplier: 'هیچ دابینکەری پێشکەوتوو دیارینەکراوە. ئەم پێکهاتە دەستکاری بکە بۆ بەستنەوەی دابینکەر.',
+    inventory_product: 'بەرهەم',
+    inventory_quantity: 'بڕ',
+    inventory_sending: 'ناردن...',
+    inventory_send_request: 'ناردنی داواکاری',
+    inventory_delete_confirm_title: 'سڕینەوەی پێکهاتە؟',
+    inventory_delete_confirm_desc: 'دڵنیایت کە دەتەوێت {{name}} بسڕیتەوە؟',
+    inventory_delete_warning: 'ئەم کارە ناگەڕێتەوە. هەر ئایتمی مینیو ئەم پێکهاتە بەکار بهێنێت دەبێتە خۆی تێچووی ڕەچەتەکەی.',
+    inventory_delete_btn: 'سڕینەوەی پێکهاتە',
+    inventory_deleting: 'سڕینەوە...',
 
     /* Tables */
     tables_title: 'مێزەکان',
@@ -1154,6 +1237,10 @@ const ku: TranslationStrings = {
     sub_referral_link: 'لینکی ئاماژەپێدانەکەت',
     sub_referral_copy: 'لینک کۆپیکردن',
     sub_referral_copied: 'کۆپی کرا',
+    sub_promo_label: 'کۆدی تایبەت',
+    sub_promo_placeholder: 'کۆد بنووسە',
+    sub_promo_hint: '١ ساڵ یان ١ مانگ بە خۆڕایی بە کۆدی دروست.',
+    sub_promo_apply: 'جێبەجێ',
 
     /* Settings */
     settings_title: 'ناسنامەی چێشتخانە',
@@ -1423,6 +1510,31 @@ const arFusha: TranslationStrings = {
     inventory_add_new: 'إضافة مكوّن جديد',
     inventory_edit: 'تعديل المكوّن',
     inventory_deliveries: 'التوصيلات',
+    inventory_col_ingredient: 'المكوّنات',
+    inventory_col_unit: 'الوحدة',
+    inventory_col_supplier: 'المورّد الرئيسي',
+    inventory_col_request: 'الطلب',
+    inventory_col_cost_unit: 'التكلفة/الوحدة (بالدينار)',
+    inventory_col_actions: 'الإجراءات',
+    inventory_request_more: 'طلب المزيد',
+    inventory_edit_btn: 'تعديل',
+    inventory_search_placeholder: 'البحث عن المكوّنات أو المورّدين...',
+    inventory_no_ingredients: 'لم يتم العثور على مكوّنات. أضف أول مكوّن للبدء.',
+    inventory_page_of: 'صفحة {{current}} من {{total}} ({{count}} مكوّن)',
+    inventory_previous: 'السابق',
+    inventory_next: 'التالي',
+    inventory_request_stock: 'طلب مخزون',
+    inventory_request_stock_for: 'طلب مخزون لـ {{name}} من {{supplier}}.',
+    inventory_no_preferred_supplier: 'لم يتم تعيين مورّد مفضّل. عدّل هذا المكوّن لربط مورّد.',
+    inventory_product: 'المنتج',
+    inventory_quantity: 'الكمية',
+    inventory_sending: 'جاري الإرسال...',
+    inventory_send_request: 'إرسال الطلب',
+    inventory_delete_confirm_title: 'حذف المكوّن؟',
+    inventory_delete_confirm_desc: 'هل أنت متأكد أنك تريد حذف {{name}}؟',
+    inventory_delete_warning: 'لا يمكن التراجع عن هذا الإجراء. ستخسر أي أصناف قائمة تستخدم هذا المكوّن تكلفة الوصفة.',
+    inventory_delete_btn: 'حذف المكوّن',
+    inventory_deleting: 'جاري الحذف...',
 
     /* Tables */
     tables_title: 'الطاولات',
@@ -1550,6 +1662,10 @@ const arFusha: TranslationStrings = {
     sub_referral_link: 'رابط الإحالة الخاص بك',
     sub_referral_copy: 'نسخ الرابط',
     sub_referral_copied: 'تم النسخ',
+    sub_promo_label: 'رمز الترويج',
+    sub_promo_placeholder: 'أدخل الرمز',
+    sub_promo_hint: 'احصل على سنة أو شهر مجاناً برمز صالح.',
+    sub_promo_apply: 'تطبيق',
 
     /* Settings */
     settings_title: 'هوية المطعم',

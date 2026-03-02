@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { Button } from '@/components/ui/button'
@@ -22,13 +22,17 @@ export default function SubscriptionTab({
   pricesConfigured,
 }: SubscriptionTabProps) {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { toast } = useToast()
   const { t } = useI18n()
   const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'annual' | null>(null)
   const [managingSubscription, setManagingSubscription] = useState(false)
   const [referralLink, setReferralLink] = useState<string | null>(null)
+  const [promoCode, setPromoCode] = useState('')
   const [referralLoading, setReferralLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [promoApplied, setPromoApplied] = useState(false)
+  const [applyingPromo, setApplyingPromo] = useState(false)
 
   useEffect(() => {
     const success = searchParams.get('success') === 'true'
@@ -70,7 +74,10 @@ export default function SubscriptionTab({
       const res = await fetch('/api/billing/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({
+          plan,
+          ...(promoCode.trim() && { promotionCode: promoCode.trim() }),
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to start checkout')
@@ -94,6 +101,42 @@ export default function SubscriptionTab({
         day: 'numeric',
       })
     : null
+
+  const handleApplyPromo = async () => {
+    const trimmed = promoCode.trim()
+    if (!trimmed) {
+      toast({ title: 'Enter a promo code', variant: 'destructive' })
+      return
+    }
+    setApplyingPromo(true)
+    setPromoApplied(false)
+    try {
+      const res = await fetch('/api/billing/apply-promo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ promotionCode: trimmed }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setPromoApplied(true)
+        toast({ title: 'Subscription activated!', description: data.message || 'Enjoy your free period.' })
+        router.refresh()
+      } else {
+        toast({ title: data.error || 'Invalid promo code', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Could not apply promo', variant: 'destructive' })
+    } finally {
+      setApplyingPromo(false)
+    }
+  }
+
+  const handlePromoKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleApplyPromo()
+    }
+  }
 
   const handleManageSubscription = async () => {
     setManagingSubscription(true)
@@ -160,6 +203,40 @@ export default function SubscriptionTab({
 
       <div>
         <h3 className="text-lg font-semibold text-slate-800 mb-4">{t.sub_choose_plan}</h3>
+        {!isActive && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t.sub_promo_label ?? 'Promo code'}</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => {
+                  setPromoCode(e.target.value.toUpperCase())
+                  setPromoApplied(false)
+                }}
+                onKeyDown={handlePromoKeyDown}
+                placeholder={t.sub_promo_placeholder ?? 'Enter promo code'}
+                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleApplyPromo}
+                disabled={applyingPromo || !promoCode.trim()}
+                className="shrink-0"
+              >
+                {applyingPromo ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : promoApplied ? (
+                  <Check className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  t.sub_promo_apply ?? 'Apply'
+                )}
+              </Button>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{t.sub_promo_hint ?? 'Get 1 year or 1 month free with a valid promo code.'}</p>
+          </div>
+        )}
         <SubscriptionPlans
           pricesConfigured={pricesConfigured}
           isActive={isActive}

@@ -1284,7 +1284,8 @@ export default function SmartMenu({
   const tierOrder = (tier: ItemDisplayHints['displayTier']) =>
     tier === 'hero' ? 0 : tier === 'featured' ? 1 : tier === 'standard' ? 2 : 3
 
-  // Category sections with placement-based item order: anchor first, then by engine position, DOG last
+  // Category sections: when user picked a sort (price-low, etc.), preserve filteredItems order.
+  // When sortBy === 'popular', use engine order: anchor first, then position, then tier.
   const categorizedSections = useMemo(() => {
     if (!categoriesProp || categoriesProp.length === 0) {
       return [{ category: null as CategorySection | null, items: filteredItems }]
@@ -1300,21 +1301,24 @@ export default function SmartMenu({
         )
         : [...categoriesProp].sort((a, b) => a.displayOrder - b.displayOrder)
 
+    const useEngineOrder = sortBy === 'popular'
+
     for (const cat of sortedCategories) {
       const categoryItems = filteredItems.filter(
         (item) => item.category?.id === cat.id
       )
-      // Place: first = price anchor (highest margin), middle = WORKHORSE, bottom = DOG
-      const ordered = [...categoryItems].sort((a, b) => {
-        const hintsA = a._hints
-        const hintsB = b._hints
-        if (hintsA?.isAnchor && !hintsB?.isAnchor) return -1
-        if (!hintsA?.isAnchor && hintsB?.isAnchor) return 1
-        const posA = hintsA?.position ?? 999
-        const posB = hintsB?.position ?? 999
-        if (posA !== posB) return posA - posB
-        return tierOrder(hintsA?.displayTier ?? 'standard') - tierOrder(hintsB?.displayTier ?? 'standard')
-      })
+      const ordered = useEngineOrder
+        ? [...categoryItems].sort((a, b) => {
+            const hintsA = a._hints
+            const hintsB = b._hints
+            if (hintsA?.isAnchor && !hintsB?.isAnchor) return -1
+            if (!hintsA?.isAnchor && hintsB?.isAnchor) return 1
+            const posA = hintsA?.position ?? 999
+            const posB = hintsB?.position ?? 999
+            if (posA !== posB) return posA - posB
+            return tierOrder(hintsA?.displayTier ?? 'standard') - tierOrder(hintsB?.displayTier ?? 'standard')
+          })
+        : categoryItems
       if (ordered.length > 0) {
         sections.push({ category: cat, items: ordered })
       }
@@ -1329,7 +1333,7 @@ export default function SmartMenu({
     }
 
     return sections
-  }, [filteredItems, categoriesProp, categoryOrder])
+  }, [filteredItems, categoriesProp, categoryOrder, sortBy])
 
   // Highlight which section is in view (for the sticky nav)
   useEffect(() => {

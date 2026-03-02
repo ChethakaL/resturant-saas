@@ -279,45 +279,20 @@ function computePriceAnchoring(
   return { ordered, anchors }
 }
 
-/** Profit mode: Slot 1 = high margin + high price; Slot 2 = high margin + price ≈ avg+1std; Slot 3 = high margin + price ≈ avg; rest by margin then price. */
+/**
+ * Profit mode: For each category, take the top 3 highest-margin items.
+ * Among those 3, rank by price: highest first, middle second, lowest third.
+ * First item gets "Most Loved" badge; items 2 & 3 have no badge.
+ */
 function orderItemsForProfitMode(items: EngineMenuItem[]): EngineMenuItem[] {
   if (items.length === 0) return []
   const sortedByMargin = [...items].sort((a, b) => b._marginPercent - a._marginPercent)
-  if (items.length === 1) return [items[0]!]
-  if (items.length === 2) return sortedByMargin
-
-  const n = items.length
-  const avgPrice = items.reduce((s, i) => s + i.price, 0) / n
-  const variance = items.reduce((s, i) => s + (i.price - avgPrice) ** 2, 0) / n
-  const stdPrice = Math.sqrt(variance) || 1
-  const targetSlot2 = avgPrice + stdPrice
-  const marginThreshold = sortedByMargin[Math.min(2, Math.floor(n / 2))]?._marginPercent ?? 0
-  const highMargin = items.filter((i) => i._marginPercent >= marginThreshold)
-
-  const pickSlot1 = (): EngineMenuItem => {
-    if (highMargin.length === 0) return sortedByMargin[0]!
-    const byPrice = [...highMargin].sort((a, b) => b.price - a.price)
-    return byPrice[0]!
-  }
-  const pickClosestTo = (target: number, pool: EngineMenuItem[]): EngineMenuItem | null => {
-    if (pool.length === 0) return null
-    return pool.reduce((best, cur) =>
-      Math.abs(cur.price - target) < Math.abs(best.price - target) ? cur : best
-    )
-  }
-
-  const slot1 = pickSlot1()
-  const remaining1 = items.filter((i) => i.id !== slot1.id)
-  const slot2 = pickClosestTo(targetSlot2, remaining1)
-  const remaining2 = slot2 ? remaining1.filter((i) => i.id !== slot2.id) : remaining1
-  const slot3 = slot2 ? pickClosestTo(avgPrice, remaining2) : null
-  const rest = slot3
-    ? remaining2.filter((i) => i.id !== slot3.id).sort(
-        (a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price)
-      )
-    : remaining2.sort((a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price))
-  const firstThree = [slot1, ...(slot2 ? [slot2] : []), ...(slot3 ? [slot3] : [])]
-  return [...firstThree, ...rest]
+  const topThreeByMargin = sortedByMargin.slice(0, 3)
+  const sortedTopThree = [...topThreeByMargin].sort((a, b) => b.price - a.price)
+  const rest = sortedByMargin.slice(3).sort(
+    (a, b) => (b._marginPercent - a._marginPercent) || (b.price - a.price)
+  )
+  return [...sortedTopThree, ...rest]
 }
 
 /** Adaptive mode: same 3-slot structure as profit but rank by high margin + popularity (units in current time slot). */
@@ -610,6 +585,14 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
             profitModeVisibleSlot,
             starIndexInCategory
           )
+        }
+        // Profit mode: first item = Most Loved only, items 2 & 3 = no badge (no Signature)
+        if (mode === 'profit' && indexInCategory < maxInitial) {
+          if (indexInCategory === 0) {
+            hints = { ...hints, displayTier: 'featured', isAnchor: false, suppressBadge: false }
+          } else {
+            hints = { ...hints, suppressBadge: true }
+          }
         }
         itemHints[id] = hints
         indexInCategory++

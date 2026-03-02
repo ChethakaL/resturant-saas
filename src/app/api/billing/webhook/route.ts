@@ -33,6 +33,26 @@ export async function POST(request: NextRequest) {
         const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
         const restaurantId = subscription.metadata?.restaurantId || session.metadata?.restaurantId
         if (!restaurantId) break
+
+        const promotionCode = session.metadata?.promotionCode as string | undefined
+        if (promotionCode?.trim()) {
+          const promo = await prisma.promoCode.findUnique({
+            where: { code: promotionCode.trim().toUpperCase() },
+          })
+          if (promo) {
+            await prisma.promoCode.update({
+              where: { id: promo.id },
+              data: { timesRedeemed: { increment: 1 } },
+            })
+            await prisma.promoRedemption.upsert({
+              where: {
+                promoCodeId_restaurantId: { promoCodeId: promo.id, restaurantId },
+              },
+              create: { promoCodeId: promo.id, restaurantId },
+              update: {},
+            })
+          }
+        }
         const restaurant = await prisma.restaurant.findUnique({
           where: { id: restaurantId },
           select: { referredByRestaurantId: true },
