@@ -219,47 +219,39 @@ export async function GET(request: Request) {
 
     const grossProfit = totalRevenue - totalCOGSWithPrep
 
-    // Calculate payroll
-    const payrollTotal = payrolls.reduce((sum, payroll) => sum + payroll.totalPaid, 0)
+    // DISABLED for now: payroll (HR). Re-enable when full P&L is needed.
+    // const payrollTotal = payrolls.reduce((sum, payroll) => sum + payroll.totalPaid, 0)
+    const payrollTotal = 0
 
-    // Calculate recurring expenses
-    const expenseTotals = expenses.map((expense) => ({
-      ...expense,
-      total: expenseTotalForPeriod(expense, rangeStart, rangeEnd),
-    }))
+    // DISABLED for now: recurring expenses (e.g. rent). Re-enable when full P&L is needed.
+    // const expenseTotals = expenses.map((expense) => ({
+    //   ...expense,
+    //   total: expenseTotalForPeriod(expense, rangeStart, rangeEnd),
+    // }))
+    // const expenseByCategory = expenseTotals.reduce<Record<string, number>>((acc, exp) => { ... })
+    const expenseByCategory: Record<string, number> = {}
 
-    const expenseByCategory = expenseTotals.reduce<Record<string, number>>((acc, exp) => {
-      const key = exp.category || 'General'
-      acc[key] = (acc[key] || 0) + exp.total
-      return acc
-    }, {})
-
-    // Add one-time expense transactions by category
+    // Add one-time expense transactions by category: only inventory purchases (exclude RENT, UTILITIES, etc.)
     // Exclude expense transactions that are from waste records (they're already counted in wasteRecords)
     let deliveryCOGS = 0
     expenseTransactions.forEach((tx) => {
-      // Skip expense transactions created from waste records (they have "Waste record:" in notes)
-      if (tx.notes?.includes('Waste record:')) {
-        return // Skip this transaction - it's already counted in wasteRecords
+      if (tx.notes?.includes('Waste record:')) return
+      // Only include inventory purchases in sales report expenses
+      if (tx.category !== 'INVENTORY_PURCHASE') {
+        const isCOGS = tx.notes?.includes('COGS') || tx.notes?.includes('Manual stock adjustment')
+        if (isCOGS) {
+          expenseByCategory['COGS'] = (expenseByCategory['COGS'] || 0) + tx.amount
+        }
+        return
       }
 
-      // Check if this is a COGS entry (from manual stock adjustments)
       const isCOGS = tx.notes?.includes('COGS') || tx.notes?.includes('Manual stock adjustment')
       const isDelivery = tx.category === 'INVENTORY_PURCHASE'
-      const category = isCOGS
-        ? 'COGS'
-        : tx.category === 'OTHER'
-          ? 'Other'
-          : tx.category
+      const category = isCOGS ? 'COGS' : tx.category === 'OTHER' ? 'Other' : tx.category
       expenseByCategory[category] = (expenseByCategory[category] || 0) + tx.amount
 
       if (isDelivery) {
         deliveryCOGS += tx.amount
-      }
-
-      // If it's COGS, also add to total COGS
-      if (isCOGS) {
-        // This will be included in the COGS calculation
       }
     })
 
@@ -280,6 +272,15 @@ export async function GET(request: Request) {
 
     const netProfit = grossProfit - totalExpenses - payrollTotal
 
+    // Only return expense transactions that count toward report (inventory + COGS adjustments). Hide RENT/HR-style for now.
+    const visibleExpenseTransactions = expenseTransactions.filter(
+      (tx) =>
+        !tx.notes?.includes('Waste record:') &&
+        (tx.category === 'INVENTORY_PURCHASE' ||
+          tx.notes?.includes('COGS') ||
+          tx.notes?.includes('Manual stock adjustment'))
+    )
+
     return NextResponse.json({
       summary: {
         revenue: totalRevenue,
@@ -295,7 +296,7 @@ export async function GET(request: Request) {
         revenueWithCosting,
       },
       expenseByCategory,
-      expenseTransactions,
+      expenseTransactions: visibleExpenseTransactions,
       wasteRecords,
       mealPrepSessions: mealPrepSessions.map((s) => ({
         id: s.id,
@@ -306,23 +307,10 @@ export async function GET(request: Request) {
           sum + (usage.quantityUsed * usage.ingredient.costPerUnit), 0
         ),
       })),
-      expenses: expenses.map((exp) => ({
-        id: exp.id,
-        name: exp.name,
-        category: exp.category,
-        amount: exp.amount,
-        cadence: exp.cadence,
-        startDate: exp.startDate,
-        endDate: exp.endDate,
-      })),
-      payrolls: payrolls.map((p) => ({
-        id: p.id,
-        period: p.period,
-        paidDate: p.paidDate,
-        totalPaid: p.totalPaid,
-        notes: p.notes,
-        employee: p.employee ? { id: p.employee.id, name: p.employee.name } : null,
-      })),
+      // DISABLED for now: recurring expenses (rent etc.). Re-enable when full P&L is needed.
+      expenses: [],
+      // DISABLED for now: payroll (HR). Re-enable when full P&L is needed.
+      payrolls: [],
       sales: sales.map((s) => ({
         id: s.id,
         orderNumber: s.orderNumber,

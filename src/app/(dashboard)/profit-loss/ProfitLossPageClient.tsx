@@ -854,12 +854,14 @@ export default function ProfitLossPageClient() {
                   {formatCurrencyWithRestaurant(data.summary.grossProfit)}
                 </td>
               </tr>
+              {/* DISABLED for now: Labour/HR. Re-enable when full P&L is needed.
               <tr className="border-b">
                 <td className="p-4 font-semibold">{td('LABOR EXPENSE')}</td>
                 <td className="p-4 text-right font-mono text-red-600">
                   {formatCurrencyWithRestaurant(data.summary.payroll)}
                 </td>
               </tr>
+              */}
               <tr className="border-b">
                 <td className="p-4 font-semibold">{td('OTHER EXPENSE')}</td>
                 <td className="p-4 text-right font-mono text-red-600">
@@ -951,8 +953,9 @@ export default function ProfitLossPageClient() {
         </Card>
       </div>
 
-      {/* Detailed Breakdown - Labor and Other Expenses */}
+      {/* Detailed Breakdown - Other Expenses (Labor section disabled for now; re-enable when full P&L needed) */}
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* DISABLED: Labor Expense card
         <Card>
           <CardHeader className="bg-blue-600 text-white">
             <CardTitle className="text-white">{td('LABOR EXPENSE')}</CardTitle>
@@ -994,6 +997,7 @@ export default function ProfitLossPageClient() {
             </table>
           </CardContent>
         </Card>
+        */}
 
         <Card>
           <CardHeader className="bg-blue-600 text-white">
@@ -1102,7 +1106,7 @@ export default function ProfitLossPageClient() {
                 'COGS',
                 'EXPENSE',
                 'WASTE',
-                'LABOR',
+                // 'LABOR', // DISABLED for now; re-enable when full P&L needed
               ].map((type) => (
                 <Button
                   key={type}

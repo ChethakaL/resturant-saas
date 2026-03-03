@@ -311,13 +311,15 @@ export default function AddExpenseModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                {/* DISABLED for now: Rent, Marketing, Maintenance. Re-enable when full P&L is needed.
                 <SelectItem value="RENT">Rent</SelectItem>
+                <SelectItem value="MARKETING">Marketing</SelectItem>
+                <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+                */}
                 <SelectItem value="UTILITIES">Utilities</SelectItem>
                 {formData.type === 'ONE_TIME' && (
                   <SelectItem value="INVENTORY_PURCHASE">Inventory Purchase</SelectItem>
                 )}
-                <SelectItem value="MARKETING">Marketing</SelectItem>
-                <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
                 <SelectItem value="OTHER">Other</SelectItem>
               </SelectContent>
             </Select>
