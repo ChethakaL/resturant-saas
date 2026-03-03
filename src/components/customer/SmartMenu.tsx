@@ -157,13 +157,23 @@ const sortOptions: {
   ]
 
 const tagTranslations: Record<string, Partial<Record<LanguageCode, string>>> = {
-  spicy: { ar: 'حار', ku: 'تێز' },
+  spicy: { en: 'Spicy', ar: 'حار', ku: 'تێز' },
   'non-vegetarian': { ar: 'غير نباتي', ku: 'نەخۆشی' },
-  'high-protein': { ar: 'عالي البروتين', ku: 'پڕۆتینی زۆر' },
+  'high-protein': { en: 'High protein', ar: 'عالي البروتين', ku: 'پڕۆتینی زۆر' },
+  'gluten-free': { en: 'Gluten free', ar: 'خالٍ من الغلوتين', ku: 'بێ گلووتین' },
   'gluten-free-optional': { ar: 'خالٍ من الغلوتين (اختياري)', ku: 'بێ گلووتین (هەڵبژاردە)' },
-  halal: { ar: 'حلال', ku: 'حەلال' },
-  vegetarian: { ar: 'نباتي', ku: 'نباتی' },
-  vegan: { ar: 'نباتي بالكامل', ku: 'هەموو تێ‌مەند' },
+  'nut-free': { en: 'Nut free', ar: 'خالٍ من المكسرات', ku: 'بێ چەرەسوور' },
+  'dairy-free': { en: 'Dairy free', ar: 'خالٍ من الألبان', ku: 'بێ شیر' },
+  'soy-free': { en: 'Soy free', ar: 'خالٍ من فول الصويا', ku: 'بێ سۆیا' },
+  'egg-free': { en: 'Egg free', ar: 'خالٍ من البيض', ku: 'بێ هێلکە' },
+  kosher: { en: 'Kosher', ar: 'كوشير', ku: 'کۆشەر' },
+  halal: { en: 'Halal', ar: 'حلال', ku: 'حەلال' },
+  vegetarian: { en: 'Vegetarian', ar: 'نباتي', ku: 'نباتی' },
+  vegan: { en: 'Vegan', ar: 'نباتي بالكامل', ku: 'هەموو تێ‌مەند' },
+  keto: { en: 'Keto', ar: 'كيتو', ku: 'کیتۆ' },
+  'low-carb': { en: 'Low carb', ar: 'قليل الكربوهيدرات', ku: 'کاربۆهیدرەتی کەم' },
+  pescatarian: { en: 'Pescatarian', ar: 'سمكي', ku: 'ماسیخۆر' },
+  seafood: { en: 'Seafood', ar: 'مأكولات بحرية', ku: 'خۆراکی دەریایی' },
   chicken: { ar: 'دجاج', ku: 'مرغ' },
   wrap: { ar: 'لفافة', ku: 'لەپەک' },
 }
@@ -944,7 +954,7 @@ export default function SmartMenu({
     return Array.from(uniqueCategories.values())
   }, [menuItems])
 
-  // Whitelist of meaningful dietary attributes for the filter — excludes descriptors like "creamy", "coffee", "potato"
+  // Main dietary attributes for Discover filter (no spicy — it's a taste, not a dietary). High protein / protein-rich shown as one.
   const DIETARY_WHITELIST = useMemo(
     () =>
       new Set(
@@ -952,20 +962,29 @@ export default function SmartMenu({
           'vegetarian',
           'vegan',
           'halal',
+          'kosher',
           'gluten-free',
           'dairy-free',
           'nut-free',
-          'spicy',
+          'soy-free',
+          'egg-free',
           'keto',
           'low-carb',
           'high protein',
           'protein-rich',
+          'high-protein',
           'seafood',
           'pescatarian',
         ].map((t) => t.toLowerCase())
       ),
     []
   )
+
+  const getCanonicalDietaryTag = (tag: string): string => {
+    const lower = tag.toLowerCase().trim().replace(/\s+/g, '-')
+    if (lower === 'high-protein' || lower === 'protein-rich' || tag.toLowerCase().trim() === 'high protein') return 'high-protein'
+    return lower
+  }
 
   const allTags = useMemo(() => {
     const seen = new Set<string>()
@@ -975,12 +994,25 @@ export default function SmartMenu({
         const lower = tag.toLowerCase().trim()
         const norm = normalize(tag)
         if (DIETARY_WHITELIST.has(lower) || DIETARY_WHITELIST.has(norm)) {
-          seen.add(lower)
+          seen.add(getCanonicalDietaryTag(tag))
         }
       })
     })
     return Array.from(seen).sort()
   }, [menuItems, DIETARY_WHITELIST])
+
+  const getItemCanonicalTags = (item: MenuItem): string[] => {
+    const out: string[] = []
+    const normalize = (t: string) => t.toLowerCase().trim().replace(/\s+/g, '-')
+    item.tags?.forEach((tag) => {
+      const lower = tag.toLowerCase().trim()
+      const norm = normalize(tag)
+      if (DIETARY_WHITELIST.has(lower) || DIETARY_WHITELIST.has(norm)) {
+        out.push(getCanonicalDietaryTag(tag))
+      }
+    })
+    return Array.from(new Set(out))
+  }
 
   // Filter and sort menu items
   const filteredItems = useMemo(() => {
@@ -1018,13 +1050,12 @@ export default function SmartMenu({
       items = items.filter((item) => item.category?.id === selectedCategory)
     }
 
-    // Tags filter (case-insensitive — selectedTags are canonical lowercase)
+    // Tags filter (canonical tags — high protein / protein-rich count as one)
     if (selectedTags.length > 0) {
-      const itemTagsLower = (item: MenuItem) =>
-        (item.tags ?? []).map((t) => t.toLowerCase().trim())
-      items = items.filter((item) =>
-        selectedTags.every((sel) => itemTagsLower(item).includes(sel))
-      )
+      items = items.filter((item) => {
+        const canonical = getItemCanonicalTags(item)
+        return selectedTags.every((sel) => canonical.includes(sel))
+      })
     }
 
     // Mood filter (engine)
@@ -1194,10 +1225,12 @@ export default function SmartMenu({
   }
 
   const getLocalizedTagLabel = (tag: string) => {
-    if (language === 'en') return tag
     const normalized = tag.toLowerCase()
     const lang = language === 'ar_fusha' ? 'ar' : language
-    return tagTranslations[normalized]?.[lang] || tag
+    const translated = tagTranslations[normalized]?.[lang]
+    if (translated) return translated
+    if (language === 'en') return tag.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    return tag
   }
 
   const getLocalizedCategoryName = (category?: string | null) => {
@@ -1406,17 +1439,8 @@ export default function SmartMenu({
       {theme?.backgroundImageUrl && (
         <div className="fixed inset-0 bg-black/40 pointer-events-none z-0" aria-hidden />
       )}
-      <div
-        className={`relative overflow-hidden transition-all duration-300 ${theme?.backgroundImageUrl ? 'z-10' : ''} ${isSmartSearchActive ? 'pointer-events-none blur-sm' : 'pointer-events-auto'
-          }`}
-      >
-        {/* Background Effects */}
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute -top-32 left-10 h-72 w-72 rounded-full bg-emerald-400 blur-[140px]" />
-          <div className="absolute top-20 right-10 h-80 w-80 rounded-full bg-amber-400 blur-[160px]" />
-          <div className="absolute bottom-20 left-1/2 h-60 w-60 rounded-full bg-blue-400 blur-[140px]" />
-        </div>
-
+      {/* Sticky header outside overflow-hidden so it can stick when scrolling */}
+      <div className={`sticky top-0 z-40 w-full ${bgClass}`}>
         <div className="relative mx-auto max-w-7xl px-3 sm:px-6 pt-3 sm:pt-6">
           {/* Header: on mobile stack so categories get space; on desktop single row */}
           <header className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
@@ -1516,6 +1540,17 @@ export default function SmartMenu({
               </div>
             </nav>
           </header>
+        </div>
+      </div>
+
+      <div
+        className={`relative overflow-hidden transition-all duration-300 ${theme?.backgroundImageUrl ? 'z-10' : ''} ${isSmartSearchActive ? 'pointer-events-none blur-sm' : 'pointer-events-auto'}`}
+      >
+        {/* Background Effects */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute -top-32 left-10 h-72 w-72 rounded-full bg-emerald-400 blur-[140px]" />
+          <div className="absolute top-20 right-10 h-80 w-80 rounded-full bg-amber-400 blur-[160px]" />
+          <div className="absolute bottom-20 left-1/2 h-60 w-60 rounded-full bg-blue-400 blur-[140px]" />
         </div>
 
         {/* Top of menu: hero carousel (hidden in classic mode — basic menu only). */}
@@ -1872,7 +1907,7 @@ export default function SmartMenu({
           {/* Menu Items — grouped by category with carousels between */}
           <div
             ref={menuListRef}
-            className={`space-y-8 sm:space-y-6 relative px-3 sm:px-4 scroll-mt-24 transition-all ${
+            className={`space-y-8 sm:space-y-6 relative px-3 sm:px-4 scroll-mt-28 sm:scroll-mt-24 transition-all ${
               menuListFlash ? 'ring-2 ring-[var(--menu-accent,#f59e0b)]/40 rounded-xl p-2' : ''
             }`}
           >
@@ -1885,7 +1920,7 @@ export default function SmartMenu({
                 <div
                   key={section.category?.id || 'uncategorized'}
                   ref={section.category ? setSectionRef(section.category.id) : undefined}
-                  className="scroll-mt-24"
+                  className="scroll-mt-28 sm:scroll-mt-24"
                 >
                   {section.category && (
                     <div className="mb-4 mt-6 sm:mt-4 first:mt-0">
