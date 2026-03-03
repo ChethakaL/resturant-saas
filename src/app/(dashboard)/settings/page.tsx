@@ -40,6 +40,7 @@ export default async function SettingsPage() {
     snowfallEnd: (settings.snowfallEnd as string) || '01-07',
     tableOrderingEnabled: settings.tableOrderingEnabled !== false,
     showKurdishOnMenu: (settings.theme as Record<string, unknown>)?.showKurdishOnMenu !== false,
+    showArabicOnMenu: (settings.theme as Record<string, unknown>)?.showArabicOnMenu !== false,
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''

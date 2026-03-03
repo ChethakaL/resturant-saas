@@ -91,6 +91,8 @@ interface MenuTheme {
   menuCarouselStyle?: string
   /** When false, Kurdish is hidden from the language selector (default true). */
   showKurdishOnMenu?: boolean
+  /** When false, Arabic is hidden from the language selector (default true). */
+  showArabicOnMenu?: boolean
 }
 
 interface SmartMenuProps {
@@ -700,19 +702,18 @@ export default function SmartMenu({
   const [scrollDepth, setScrollDepth] = useState(0)
   const [menuListFlash, setMenuListFlash] = useState(false)
 
-  const visibleLanguageOptions = useMemo(
-    () =>
-      theme?.showKurdishOnMenu === false
-        ? LANGUAGE_OPTIONS_ALL.filter((o) => o.value !== 'ku')
-        : LANGUAGE_OPTIONS_ALL,
-    [theme?.showKurdishOnMenu]
-  )
+  const visibleLanguageOptions = useMemo(() => {
+    return LANGUAGE_OPTIONS_ALL.filter((o) => {
+      if (o.value === 'ku' && theme?.showKurdishOnMenu === false) return false
+      if (o.value === 'ar_fusha' && theme?.showArabicOnMenu === false) return false
+      return true
+    })
+  }, [theme?.showKurdishOnMenu, theme?.showArabicOnMenu])
 
   useEffect(() => {
-    if (language === 'ku' && theme?.showKurdishOnMenu === false) {
-      setLanguage('en')
-    }
-  }, [theme?.showKurdishOnMenu, language])
+    if (language === 'ku' && theme?.showKurdishOnMenu === false) setLanguage('en')
+    if (language === 'ar_fusha' && theme?.showArabicOnMenu === false) setLanguage('en')
+  }, [theme?.showKurdishOnMenu, theme?.showArabicOnMenu, language])
   const hideImages = !forceShowImages && getVariant('photo_visibility') === 'hide'
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)

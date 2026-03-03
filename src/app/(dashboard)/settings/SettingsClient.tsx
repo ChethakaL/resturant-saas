@@ -117,6 +117,7 @@ export default function SettingsClient({
   const [snowfallEnabled, setSnowfallEnabled] = useState<boolean>(currentTheme.snowfallEnabled === 'true')
   const [tableOrderingEnabled, setTableOrderingEnabled] = useState<boolean>((currentTheme as Record<string, unknown>).tableOrderingEnabled !== false)
   const [showKurdishOnMenu, setShowKurdishOnMenu] = useState<boolean>((currentTheme as Record<string, unknown>).showKurdishOnMenu !== false)
+  const [showArabicOnMenu, setShowArabicOnMenu] = useState<boolean>((currentTheme as Record<string, unknown>).showArabicOnMenu !== false)
   const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
   const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
   const [savingTheme, setSavingTheme] = useState(false)
@@ -202,6 +203,7 @@ export default function SettingsClient({
           restaurantVibeImageUrl: (restaurantVibeImageKey.trim() && !vibeImageRemoved) ? undefined : null,
           tableOrderingEnabled,
           showKurdishOnMenu,
+          showArabicOnMenu,
         }),
       })
       if (!response.ok) {
@@ -387,31 +389,53 @@ export default function SettingsClient({
       <Card>
         <CardHeader>
           <CardTitle className="text-slate-900">Customer menu languages</CardTitle>
-          <p className="text-sm text-slate-500">Choose which languages guests can switch to on your public menu. In some regions (e.g. southern Iraq) you may prefer to hide Kurdish.</p>
+          <p className="text-sm text-slate-500">Choose which languages guests can switch to on your public menu.</p>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3">
-            <div>
-              <p className="font-medium text-slate-900">Show Kurdish on menu</p>
-              <p className="text-sm text-slate-500">When off, the Kurdish option is hidden from the language selector on the customer menu.</p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={showKurdishOnMenu}
-              onClick={() => setShowKurdishOnMenu(!showKurdishOnMenu)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
-                showKurdishOnMenu ? 'bg-emerald-500' : 'bg-slate-200'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
-                  showKurdishOnMenu ? 'translate-x-5' : 'translate-x-0.5'
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3">
+              <div>
+                <p className="font-medium text-slate-900">Show Arabic on menu</p>
+                <p className="text-sm text-slate-500">When off, the Arabic option is hidden from the language selector.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showArabicOnMenu}
+                onClick={() => setShowArabicOnMenu(!showArabicOnMenu)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
+                  showArabicOnMenu ? 'bg-emerald-500' : 'bg-slate-200'
                 }`}
-              />
-            </button>
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
+                    showArabicOnMenu ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3">
+              <div>
+                <p className="font-medium text-slate-900">Show Kurdish on menu</p>
+                <p className="text-sm text-slate-500">When off, the Kurdish option is hidden from the language selector.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showKurdishOnMenu}
+                onClick={() => setShowKurdishOnMenu(!showKurdishOnMenu)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
+                  showKurdishOnMenu ? 'bg-emerald-500' : 'bg-slate-200'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
+                    showKurdishOnMenu ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
           </div>
-          <p className="mt-2 text-xs text-slate-500">{showKurdishOnMenu ? 'Kurdish is shown. Guests can switch to كوردي on the menu.' : 'Kurdish is hidden. Only English and Arabic appear.'}</p>
         </CardContent>
       </Card>
 

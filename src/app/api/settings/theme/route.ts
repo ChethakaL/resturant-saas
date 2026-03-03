@@ -41,8 +41,10 @@ const themeSchema = z.object({
   restaurantVibeImageUrl: z.string().url().nullable().optional(),
   /** When true, guest menu shows table selector; when false, table ordering is disabled. */
   tableOrderingEnabled: z.boolean().optional(),
-  /** When false, Kurdish is hidden from the customer menu language selector (e.g. for southern Iraq). Default true. */
+  /** When false, Kurdish is hidden from the customer menu language selector. Default true. */
   showKurdishOnMenu: z.boolean().optional(),
+  /** When false, Arabic is hidden from the customer menu language selector. Default true. */
+  showArabicOnMenu: z.boolean().optional(),
 })
 
 export async function GET() {
@@ -97,10 +99,10 @@ export async function PUT(request: Request) {
     })
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageKey, restaurantVibeImageUrl, tableOrderingEnabled, showKurdishOnMenu, ...themeData } = parsed.data
+    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageKey, restaurantVibeImageUrl, tableOrderingEnabled, showKurdishOnMenu, showArabicOnMenu, ...themeData } = parsed.data
     const newSettings = {
       ...currentSettings,
-      theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }), ...(descriptionTone !== undefined && { descriptionTone }), ...(restaurantVibeImageKey !== undefined && { restaurantVibeImageKey }), ...(restaurantVibeImageUrl !== undefined && { restaurantVibeImageUrl }), ...(showKurdishOnMenu !== undefined && { showKurdishOnMenu }) },
+      theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }), ...(descriptionTone !== undefined && { descriptionTone }), ...(restaurantVibeImageKey !== undefined && { restaurantVibeImageKey }), ...(restaurantVibeImageUrl !== undefined && { restaurantVibeImageUrl }), ...(showKurdishOnMenu !== undefined && { showKurdishOnMenu }), ...(showArabicOnMenu !== undefined && { showArabicOnMenu }) },
       ...(menuTimezone !== undefined && { menuTimezone }),
       ...(themePreset !== undefined && { themePreset }),
       ...(backgroundImageUrl !== undefined && { backgroundImageUrl }),
