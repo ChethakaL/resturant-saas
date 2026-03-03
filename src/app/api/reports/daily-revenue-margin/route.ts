@@ -174,13 +174,12 @@ export async function GET(request: Request) {
       }),
     ])
 
-    // Calculate recurring expense totals for the period
-    const recurringExpenseTotal = expenses.reduce((sum, expense) => {
-      return sum + expenseTotalForPeriod(expense, startDate, endDate)
-    }, 0)
-
+    // DISABLED for now: recurring expenses (e.g. rent). Re-enable when full P&L is needed.
+    // const recurringExpenseTotal = expenses.reduce((sum, expense) => {
+    //   return sum + expenseTotalForPeriod(expense, startDate, endDate)
+    // }, 0)
     const periodDays = daysBetweenInclusive(startDate, endDate)
-    const dailyRecurringExpense = periodDays > 0 ? recurringExpenseTotal / periodDays : 0
+    const dailyRecurringExpense = 0
 
     // Group data by day
     const dailyData = new Map<string, {
@@ -235,14 +234,12 @@ export async function GET(request: Request) {
       }
     })
 
-    // Add one-time expenses
+    // Add one-time expenses: only inventory purchases (exclude RENT, UTILITIES, HR-style, etc.)
     // Exclude expense transactions that are from waste records (they're already counted in wasteRecords)
     expenseTransactions.forEach((tx) => {
-      // Skip expense transactions created from waste records (they have "Waste record:" in notes)
-      if (tx.notes?.includes('Waste record:')) {
-        return // Skip this transaction - it's already counted in wasteRecords
-      }
-      
+      if (tx.notes?.includes('Waste record:')) return
+      if (tx.category !== 'INVENTORY_PURCHASE') return
+
       const key = tx.date.toISOString().split('T')[0]
       const day = dailyData.get(key)
       if (day) {
@@ -259,9 +256,9 @@ export async function GET(request: Request) {
       }
     })
 
-    // Add payroll (distribute across days in period)
-    const totalPayroll = payrolls.reduce((sum, p) => sum + p.totalPaid, 0)
-    const dailyPayroll = periodDays > 0 ? totalPayroll / periodDays : 0
+    // DISABLED for now: payroll (HR). Re-enable when full P&L is needed.
+    // const totalPayroll = payrolls.reduce((sum, p) => sum + p.totalPaid, 0)
+    const dailyPayroll = 0
     dailyData.forEach((day) => {
       day.payroll = dailyPayroll
     })

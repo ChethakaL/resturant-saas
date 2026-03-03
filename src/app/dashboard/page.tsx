@@ -486,17 +486,23 @@ async function getDashboardData(restaurantId: string) {
 
   const monthlyCOGS = monthlyCOGSFromSales + mealPrepCOGS
 
-  const recurringExpenseTotal = monthlyExpenses.reduce((sum, expense) => {
-    return sum + expenseTotalForPeriod(expense, monthStart, now)
-  }, 0)
+  // DISABLED for now: HR/rent-style expenses. Re-enable when needed (e.g. full P&L).
+  // const recurringExpenseTotal = monthlyExpenses.reduce((sum, expense) => {
+  //   return sum + expenseTotalForPeriod(expense, monthStart, now)
+  // }, 0)
+  const recurringExpenseTotal = 0
 
-  const expenseTransactionsTotal = monthlyExpenseTransactions.reduce(
-    (sum, tx) => sum + tx.amount,
-    0
-  )
+  // Only count inventory purchases as operating expenses (exclude RENT, UTILITIES, etc.)
+  const expenseTransactionsTotal = monthlyExpenseTransactions
+    .filter((tx) => tx.category === 'INVENTORY_PURCHASE')
+    .reduce((sum, tx) => sum + tx.amount, 0)
 
   const wasteTotal = monthlyWasteRecords.reduce((sum, waste) => sum + waste.cost, 0)
-  const payrollTotal = monthlyPayrolls.reduce((sum, payroll) => sum + payroll.totalPaid, 0)
+
+  // DISABLED for now: payroll (HR). Re-enable when needed.
+  // const payrollTotal = monthlyPayrolls.reduce((sum, payroll) => sum + payroll.totalPaid, 0)
+  const payrollTotal = 0
+
   const totalOperatingExpenses = recurringExpenseTotal + expenseTransactionsTotal + wasteTotal
 
   const monthlyNetProfit = monthlyRevenue - monthlyCOGS - totalOperatingExpenses - payrollTotal
