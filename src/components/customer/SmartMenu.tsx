@@ -89,6 +89,8 @@ interface MenuTheme {
   logoUrl?: string | null
   backgroundImageUrl?: string | null
   menuCarouselStyle?: string
+  /** When false, Kurdish is hidden from the language selector (default true). */
+  showKurdishOnMenu?: boolean
 }
 
 interface SmartMenuProps {
@@ -128,10 +130,22 @@ interface MenuItemTranslation {
 
 type TranslationCache = Partial<Record<LanguageCode, Record<string, MenuItemTranslation>>>
 
-const languageOptions: { value: LanguageCode; label: string }[] = [
+const LANGUAGE_OPTIONS_ALL: { value: LanguageCode; label: string }[] = [
   { value: 'en', label: 'English' },
   { value: 'ku', label: 'كوردي' },
   { value: 'ar_fusha', label: 'Arabic' },
+]
+
+/** Common dietary options always shown in Discover (hardcoded). Menu items can add more. */
+const DISCOVER_DIETARY_OPTIONS: string[] = [
+  'vegetarian',
+  'vegan',
+  'halal',
+  'gluten-free',
+  'nut-free',
+  'dairy-free',
+  'high-protein',
+  'keto',
 ]
 
 const sortOptions: {
@@ -685,6 +699,20 @@ export default function SmartMenu({
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   const [scrollDepth, setScrollDepth] = useState(0)
   const [menuListFlash, setMenuListFlash] = useState(false)
+
+  const visibleLanguageOptions = useMemo(
+    () =>
+      theme?.showKurdishOnMenu === false
+        ? LANGUAGE_OPTIONS_ALL.filter((o) => o.value !== 'ku')
+        : LANGUAGE_OPTIONS_ALL,
+    [theme?.showKurdishOnMenu]
+  )
+
+  useEffect(() => {
+    if (language === 'ku' && theme?.showKurdishOnMenu === false) {
+      setLanguage('en')
+    }
+  }, [theme?.showKurdishOnMenu, language])
   const hideImages = !forceShowImages && getVariant('photo_visibility') === 'hide'
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)
@@ -913,7 +941,7 @@ export default function SmartMenu({
   const currentCopy = uiCopyMap[language]
   const currentEngineCopy = engineCopyMap[language]
   const currentLanguageLabel =
-    languageOptions.find((option) => option.value === language)?.label || ''
+    visibleLanguageOptions.find((option) => option.value === language)?.label || ''
   const buildMacroSegments = (
     item: MenuItem,
     translation?: MenuItemTranslation
@@ -987,7 +1015,7 @@ export default function SmartMenu({
   }
 
   const allTags = useMemo(() => {
-    const seen = new Set<string>()
+    const seen = new Set<string>(DISCOVER_DIETARY_OPTIONS)
     const normalize = (t: string) => t.toLowerCase().trim().replace(/\s+/g, '-')
     menuItems.forEach((item) => {
       item.tags?.forEach((tag) => {
@@ -1495,7 +1523,7 @@ export default function SmartMenu({
                     sideOffset={8}
                     className={`w-40 rounded-xl p-1 shadow-xl ${isDarkBg ? 'border-white/20 bg-slate-900' : 'border-slate-200 bg-white'} text-sm`}
                   >
-                    {languageOptions.map((option) => (
+                    {visibleLanguageOptions.map((option) => (
                       <button
                         key={option.value}
                         onClick={() => {

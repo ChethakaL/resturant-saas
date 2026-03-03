@@ -39,6 +39,7 @@ export default async function SettingsPage() {
     snowfallStart: (settings.snowfallStart as string) || '12-15',
     snowfallEnd: (settings.snowfallEnd as string) || '01-07',
     tableOrderingEnabled: settings.tableOrderingEnabled !== false,
+    showKurdishOnMenu: (settings.theme as Record<string, unknown>)?.showKurdishOnMenu !== false,
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
