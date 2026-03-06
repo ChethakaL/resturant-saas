@@ -180,11 +180,11 @@ export default function MenuOptimizationContent({
         if (Array.isArray(refreshed)) setShowcases(refreshed)
       }
       toast({
-        title: `Christmas backgrounds applied to ${data.count} dish${data.count === 1 ? '' : 'es'}`,
-        description: 'All dishes used the same background prompt — consistent look on the guest menu.',
+        title: `${td('Christmas backgrounds applied to')} ${data.count} ${data.count === 1 ? td('dish') : td('dishes')}`,
+        description: td('All dishes used the same background prompt - consistent look on the guest menu.'),
       })
     } catch (err) {
-      toast({ title: 'Could not apply Christmas backgrounds', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
+      toast({ title: td('Could not apply Christmas backgrounds'), description: err instanceof Error ? err.message : td('Unknown error'), variant: 'destructive' })
     } finally {
       setGeneratingSeasonalBg(null)
     }
@@ -199,9 +199,9 @@ export default function MenuOptimizationContent({
         delete sched.seasonalItemImages
         return { ...s, schedule: sched }
       }))
-      toast({ title: 'Seasonal dish photos cleared — original photos restored.' })
+      toast({ title: td('Seasonal dish photos cleared - original photos restored.') })
     } catch {
-      toast({ title: 'Could not clear', variant: 'destructive' })
+      toast({ title: td('Could not clear'), variant: 'destructive' })
     }
   }
 
@@ -242,15 +242,15 @@ export default function MenuOptimizationContent({
   const maxCarouselItems = (engineMode === 'profit' || engineMode === 'adaptive') ? 6 : 999
 
   const getShowcasePlacementLabel = (showcase: Showcase): string => {
-    if (showcase.position === 'top') return 'Top of menu'
+    if (showcase.position === 'top') return td('Top of menu')
     const category = categories.find((cat) => cat.id === showcase.insertAfterCategoryId)
-    return category ? `After "${category.name}"` : 'Between categories'
+    return category ? `${td('After')} "${td(category.name)}"` : td('Between categories')
   }
 
   const getShowcaseDisplayLabel = (showcase: Showcase): string =>
     (showcase.displayVariant ?? 'cards') === 'hero'
-      ? 'Full-width slider (1 dish at a time)'
-      : 'Card slider (shows 3–4 dishes at once)'
+      ? `${td('Full-width slider')} (${td('1 dish at a time')})`
+      : `${td('Card slider')} (${td('shows 3-4 dishes at once')})`
 
   const getShowcaseTimeLabel = (showcase: Showcase): string => {
     const s = showcase.schedule as TimeSlotSchedule | null | undefined
@@ -259,12 +259,12 @@ export default function MenuOptimizationContent({
     const slots = s?.displayForSlots
     const slot = s?.displayForSlot
     if (Array.isArray(slots) && slots.length > 0) {
-      if (slots.includes('day') && slots.includes('evening')) return `Lunch (${lunchRange})`
+      if (slots.includes('day') && slots.includes('evening')) return `${td('Lunch')} (${lunchRange})`
       return slots.map((sl) => slotRanges[sl]).join(', ')
     }
     if (slot && slotRanges[slot]) return slotRanges[slot]
-    if (s?.useTimeSlots) return 'Different items by time slot'
-    return 'Always visible'
+    if (s?.useTimeSlots) return td('Different items by time slot')
+    return td('Always visible')
   }
 
   const openShowcaseSettings = (showcase: Showcase) => {
@@ -312,9 +312,9 @@ export default function MenuOptimizationContent({
       if (!response.ok) throw new Error('Failed to create featured section')
       const newShowcase = await response.json()
       setShowcases((prev) => [...prev, { ...newShowcase, items: [] }])
-      toast({ title: 'Featured section created', description: 'You can now customize it.' })
+      toast({ title: td('Featured section created'), description: td('You can now customize it.') })
     } catch {
-      toast({ title: 'Error', description: 'Failed to create featured section', variant: 'destructive' })
+      toast({ title: td('Error'), description: td('Failed to create featured section'), variant: 'destructive' })
     }
   }
 
@@ -339,9 +339,9 @@ export default function MenuOptimizationContent({
       })
       const showcase2 = await res2.json()
       setShowcases([{ ...showcase1, items: [] }, { ...showcase2, items: [] }])
-      toast({ title: 'Default featured sections created', description: 'Two featured sections have been set up. Items will be auto-populated.' })
+      toast({ title: td('Default featured sections created'), description: td('Two featured sections have been set up. Items will be auto-populated.') })
     } catch {
-      toast({ title: 'Error', description: 'Failed to create default featured sections', variant: 'destructive' })
+      toast({ title: td('Error'), description: td('Failed to create default featured sections'), variant: 'destructive' })
     }
   }
 
@@ -366,9 +366,9 @@ export default function MenuOptimizationContent({
       const response = await fetch(`/api/menu-showcases/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!response.ok) throw new Error('Failed to update')
       setShowcases((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)))
-      toast({ title: 'Featured section updated' })
+      toast({ title: td('Featured section updated') })
     } catch {
-      toast({ title: 'Error', description: 'Failed to update featured section', variant: 'destructive' })
+      toast({ title: td('Error'), description: td('Failed to update featured section'), variant: 'destructive' })
     } finally {
       setSavingShowcase(null)
     }
@@ -380,9 +380,9 @@ export default function MenuOptimizationContent({
       const response = await fetch(`/api/menu-showcases/${id}`, { method: 'DELETE' })
       if (!response.ok) throw new Error('Failed to delete')
       setShowcases((prev) => prev.filter((s) => s.id !== id))
-      toast({ title: 'Featured section deleted' })
+      toast({ title: td('Featured section deleted') })
     } catch {
-      toast({ title: 'Error', description: 'Failed to delete featured section', variant: 'destructive' })
+      toast({ title: td('Error'), description: td('Failed to delete featured section'), variant: 'destructive' })
     } finally {
       setDeletingShowcase(null)
     }
@@ -412,9 +412,9 @@ export default function MenuOptimizationContent({
         )
       )
       setItemPickerOpen(false)
-      toast({ title: 'Items updated' })
+      toast({ title: td('Items updated') })
     } catch {
-      toast({ title: 'Error', description: 'Failed to update section dishes', variant: 'destructive' })
+      toast({ title: td('Error'), description: td('Failed to update section dishes'), variant: 'destructive' })
     } finally {
       setSavingShowcase(null)
     }
@@ -495,9 +495,9 @@ export default function MenuOptimizationContent({
       if (!response.ok) throw new Error('Failed to update')
       setShowcases((prev) => prev.map((s) => (s.id === scheduleShowcaseId ? { ...s, schedule: scheduleToSave } : s)))
       setScheduleDialogOpen(false)
-      toast({ title: 'Time-based schedule saved' })
+      toast({ title: td('Time-based schedule saved') })
     } catch {
-      toast({ title: 'Failed to save schedule', variant: 'destructive' })
+      toast({ title: td('Failed to save schedule'), variant: 'destructive' })
     } finally {
       setScheduleSaving(false)
     }
@@ -511,7 +511,7 @@ export default function MenuOptimizationContent({
       const data = await res.json()
       setQuadrantData({ counts: data.counts ?? {}, items: data.items ?? [] })
     } catch {
-      toast({ title: 'Could not load quadrant data', variant: 'destructive' })
+      toast({ title: td('Could not load quadrant data'), variant: 'destructive' })
     } finally {
       setLoadingQuadrants(false)
     }
@@ -547,7 +547,7 @@ export default function MenuOptimizationContent({
         body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error('Failed to save')
-      toast({ title: 'Optimization settings saved' })
+      toast({ title: td('Optimization settings saved') })
     } catch {
       toast({ title: 'Failed to save optimization settings', variant: 'destructive' })
     } finally {
@@ -566,9 +566,9 @@ export default function MenuOptimizationContent({
       if (!res.ok) throw new Error('Failed to save')
       setSlotTimes(slotTimesDraft)
       setSlotTimesDialogOpen(false)
-      toast({ title: 'Display times saved', description: 'The guest menu will now use your custom time ranges.' })
+      toast({ title: td('Display times saved'), description: td('The guest menu will now use your custom time ranges.') })
     } catch {
-      toast({ title: 'Could not save times', variant: 'destructive' })
+      toast({ title: td('Could not save times'), variant: 'destructive' })
     } finally {
       setSavingSlotTimes(false)
     }
@@ -1003,7 +1003,7 @@ export default function MenuOptimizationContent({
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-[260px] flex-1 space-y-2">
                           <Input
-                            value={showcase.title}
+                            value={td(showcase.title)}
                             onChange={(e) => setShowcases((prev) => prev.map((s) => (s.id === showcase.id ? { ...s, title: e.target.value } : s)))}
                             onBlur={() => updateShowcase(showcase.id, { title: showcase.title })}
                             className="text-sm font-semibold max-w-[440px]"
@@ -1013,12 +1013,12 @@ export default function MenuOptimizationContent({
                             <span className="rounded-full bg-slate-100 px-2.5 py-1">{getShowcaseDisplayLabel(showcase)}</span>
                             <span className="rounded-full bg-slate-100 px-2.5 py-1">{getShowcasePlacementLabel(showcase)}</span>
                             <span className="rounded-full bg-slate-100 px-2.5 py-1">{getShowcaseTimeLabel(showcase)}</span>
-                            {isSeasonal && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">Seasonal</span>}
+                            {isSeasonal && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">{td('Seasonal')}</span>}
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           {(schedule?.useTimeSlots && !isPinnedToSlot) && (
-                            <Button variant="outline" size="sm" onClick={() => openScheduleDialog(showcase)} title="Set different items by time of day">
+                            <Button variant="outline" size="sm" onClick={() => openScheduleDialog(showcase)} title={td('Set different items by time of day')}>
                               <Clock className="h-4 w-4 mr-1" />
                               {td('Time slots')}
                             </Button>
@@ -1077,7 +1077,7 @@ export default function MenuOptimizationContent({
             const previewItems = (showcase?.items || []).slice(0, 3)
             const placementCategoryId = settingsDraft.position.startsWith('after-') ? settingsDraft.position.replace('after-', '') : null
             const placementCategoryName = placementCategoryId ? categories.find((c) => c.id === placementCategoryId)?.name : null
-            const typeLabel = settingsDraft.type === 'CHEFS_HIGHLIGHTS' ? "Chef's Highlights" : 'Recommendations'
+            const typeLabel = settingsDraft.type === 'CHEFS_HIGHLIGHTS' ? td("Chef's Highlights") : td('Recommendations')
             const typeColor = settingsDraft.type === 'CHEFS_HIGHLIGHTS' ? '#16a34a' : '#f59e0b'
             return (
               <div className="space-y-4 py-2">
@@ -1113,7 +1113,7 @@ export default function MenuOptimizationContent({
                     >
                       <option value="top">{td('Top of menu')}</option>
                       {categories.map((cat) => (
-                        <option key={cat.id} value={`after-${cat.id}`}>{td('After')} &quot;{cat.name}&quot;</option>
+                        <option key={cat.id} value={`after-${cat.id}`}>{td('After')} &quot;{td(cat.name)}&quot;</option>
                       ))}
                     </select>
                   </div>
@@ -1150,7 +1150,7 @@ export default function MenuOptimizationContent({
                   </div>
 
                   <div className="rounded-lg border border-slate-200 bg-slate-900 p-3">
-                    <p className="text-xs font-medium text-white/85 mb-2">Display style</p>
+                    <p className="text-xs font-medium text-white/85 mb-2">{td('Display style')}</p>
                     {settingsDraft.displayVariant === 'hero' ? (
                       <div className="rounded-lg overflow-hidden border border-white/10 bg-black/30">
                         <div className="relative h-28">
@@ -1168,7 +1168,7 @@ export default function MenuOptimizationContent({
                               {typeLabel}
                             </span>
                             <p className="text-white text-xs font-semibold mt-1 line-clamp-1">
-                              {previewItems[0]?.menuItem.displayName ?? previewItems[0]?.menuItem.name ?? 'Featured dish name'}
+                              {previewItems[0]?.menuItem.displayName ?? previewItems[0]?.menuItem.name ?? td('Featured dish name')}
                             </p>
                           </div>
                         </div>
@@ -1186,7 +1186,7 @@ export default function MenuOptimizationContent({
                             </div>
                             <div className="p-1.5">
                               <p className="text-[10px] text-white font-medium truncate">
-                                {previewItems[idx]?.menuItem.displayName ?? previewItems[idx]?.menuItem.name ?? `Dish ${idx + 1}`}
+                                {previewItems[idx]?.menuItem.displayName ?? previewItems[idx]?.menuItem.name ?? `${td('Dish')} ${idx + 1}`}
                               </p>
                             </div>
                           </div>
@@ -1197,11 +1197,11 @@ export default function MenuOptimizationContent({
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-slate-500">Badge label (optional)</Label>
+                  <Label className="text-xs text-slate-500">{td('Badge label (optional)')}</Label>
                   <Input
                     value={settingsDraft.label}
                     onChange={(e) => setSettingsDraft((d) => ({ ...d, label: e.target.value }))}
-                    placeholder='e.g. 🎄 Christmas Special'
+                    placeholder={td('e.g. Christmas Special')}
                     className="h-9 max-w-[360px]"
                   />
                 </div>
@@ -1214,10 +1214,10 @@ export default function MenuOptimizationContent({
                       onChange={(e) => setSettingsDraft((d) => ({ ...d, useTimeSlots: e.target.checked }))}
                       className="rounded border-slate-300"
                     />
-                    <span className="text-sm">Use different items by Breakfast / Day / Evening / Night</span>
+                    <span className="text-sm">{td('Use different items by Breakfast / Day / Evening / Night')}</span>
                   </label>
                 ) : (
-                  <p className="text-xs text-slate-500">This section is pinned to a specific time period. Slot behavior is locked.</p>
+                  <p className="text-xs text-slate-500">{td('This section is pinned to a specific time period. Slot behavior is locked.')}</p>
                 )}
 
                 <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -1228,13 +1228,13 @@ export default function MenuOptimizationContent({
                       onChange={(e) => setSettingsDraft((d) => ({ ...d, isSeasonal: e.target.checked }))}
                       className="rounded border-slate-300"
                     />
-                    <span className="text-sm">Seasonal date range</span>
+                    <span className="text-sm">{td('Seasonal date range')}</span>
                   </label>
                   {settingsDraft.isSeasonal && (
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-3">
                         <div className="flex flex-col gap-1">
-                          <Label className="text-xs text-slate-500">Start date</Label>
+                          <Label className="text-xs text-slate-500">{td('Start date')}</Label>
                           <input
                             type="date"
                             value={settingsDraft.seasonalStart}
@@ -1243,7 +1243,7 @@ export default function MenuOptimizationContent({
                           />
                         </div>
                         <div className="flex flex-col gap-1">
-                          <Label className="text-xs text-slate-500">End date</Label>
+                          <Label className="text-xs text-slate-500">{td('End date')}</Label>
                           <input
                             type="date"
                             value={settingsDraft.seasonalEnd}
@@ -1262,12 +1262,12 @@ export default function MenuOptimizationContent({
                             </div>
                             {showcase && (
                               <button type="button" onClick={() => clearSeasonalItemImages(showcase.id)} className="text-xs text-red-500 underline underline-offset-2">
-                                Restore original photos
+                                {td('Restore original photos')}
                               </button>
                             )}
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-500">Original photos will be used unless you apply festive backgrounds.</p>
+                          <p className="text-xs text-slate-500">{td('Original photos will be used unless you apply festive backgrounds.')}</p>
                         )}
                         {showcase && (
                           <Button
@@ -1278,8 +1278,8 @@ export default function MenuOptimizationContent({
                             className="gap-1.5"
                           >
                             {generatingSeasonalBg === showcase.id
-                              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
-                              : <><Sparkles className="h-3.5 w-3.5" />Apply Christmas backgrounds</>}
+                              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {td('Generating...')}</>
+                              : <><Sparkles className="h-3.5 w-3.5" />{td('Apply Christmas backgrounds')}</>}
                           </Button>
                         )}
                       </div>
@@ -1291,11 +1291,11 @@ export default function MenuOptimizationContent({
           })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSettingsDialogOpen(false)}>
-              Cancel
+              {td('Cancel')}
             </Button>
             <Button onClick={saveShowcaseSettings} disabled={settingsSaving || !settingsShowcaseId}>
               {settingsSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Save settings
+              {td('Save settings')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1304,22 +1304,22 @@ export default function MenuOptimizationContent({
       <Dialog open={itemPickerOpen} onOpenChange={setItemPickerOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Choose dishes for this section</DialogTitle>
+            <DialogTitle>{td('Choose dishes for this section')}</DialogTitle>
             <DialogDescription>
-              Choose which dishes to show in this section. {(engineMode === 'profit' || engineMode === 'adaptive') && 'Maximum 6 dishes. '}
-              Leave empty for automatic selection.
+              {td('Choose which dishes to show in this section.')} {(engineMode === 'profit' || engineMode === 'adaptive') && `${td('Maximum')} 6 ${td('dishes')}. `}
+              {td('Leave empty for automatic selection.')}
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Search menu items..."
+              placeholder={td('Search menu items...')}
               value={itemPickerSearch}
               onChange={(e) => setItemPickerSearch(e.target.value)}
               className="pl-9"
             />
             {itemPickerSearch && (
-              <button type="button" onClick={() => setItemPickerSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Clear search">
+              <button type="button" onClick={() => setItemPickerSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={td('Clear search')}>
                 <X className="h-4 w-4" />
               </button>
             )}
@@ -1331,7 +1331,7 @@ export default function MenuOptimizationContent({
               if (filtered.length === 0) {
                 return (
                   <div className="py-8 text-center text-sm text-slate-500">
-                    {itemPickerSearch ? 'No menu items match your search.' : 'No menu items.'}
+                    {itemPickerSearch ? td('No menu items match your search.') : td('No menu items.')}
                   </div>
                 )
               }
@@ -1350,8 +1350,8 @@ export default function MenuOptimizationContent({
             })()}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setSelectedItemIds(new Set())}>Clear All</Button>
-            <Button onClick={saveShowcaseItems} disabled={savingShowcase !== null}>{savingShowcase ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}Save ({selectedItemIds.size} items)</Button>
+            <Button variant="ghost" onClick={() => setSelectedItemIds(new Set())}>{td('Clear All')}</Button>
+            <Button onClick={saveShowcaseItems} disabled={savingShowcase !== null}>{savingShowcase ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}{td('Save')} ({selectedItemIds.size} {selectedItemIds.size === 1 ? td('item') : td('items')})</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1359,10 +1359,10 @@ export default function MenuOptimizationContent({
       <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Choose dishes by time of day</DialogTitle>
+            <DialogTitle>{td('Choose dishes by time of day')}</DialogTitle>
             <DialogDescription>
-              Choose which dishes appear for each time of day (menu timezone). {(engineMode === 'profit' || engineMode === 'adaptive') && 'Max 6 dishes per time period. '}
-              Leave a slot empty to use AI suggestions or manual picks.
+              {td('Choose which dishes appear for each time of day (menu timezone).')} {(engineMode === 'profit' || engineMode === 'adaptive') && `${td('Max')} 6 ${td('dishes per time period')}. `}
+              {td('Leave a slot empty to use AI suggestions or manual picks.')}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col flex-1 min-h-0 gap-3 py-2">
@@ -1370,7 +1370,13 @@ export default function MenuOptimizationContent({
               {(['breakfast', 'day', 'evening', 'night'] as const).map((slot) => {
                 const count = scheduleDraft[slot]?.itemIds?.length ?? 0
                 const ranges = buildSlotRangeLabels(slotTimes)
-                const label = slot === 'breakfast' ? `Breakfast (${ranges.breakfast})` : slot === 'day' ? `Day (${ranges.day})` : slot === 'evening' ? `Evening (${ranges.evening})` : `Night (${ranges.night})`
+                const label = slot === 'breakfast'
+                  ? `${td('Breakfast')} (${ranges.breakfast})`
+                  : slot === 'day'
+                    ? `${td('Day')} (${ranges.day})`
+                    : slot === 'evening'
+                      ? `${td('Evening')} (${ranges.evening})`
+                      : `${td('Night')} (${ranges.night})`
                 return (
                   <button key={slot} type="button" onClick={() => setScheduleSlotTab(slot)} className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${scheduleSlotTab === slot ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}>
                     {label}{count > 0 && <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700">{count}</span>}
@@ -1380,8 +1386,8 @@ export default function MenuOptimizationContent({
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input placeholder="Search menu items..." value={scheduleSearch} onChange={(e) => setScheduleSearch(e.target.value)} className="pl-9" />
-              {scheduleSearch && <button type="button" onClick={() => setScheduleSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Clear search"><X className="h-4 w-4" /></button>}
+              <Input placeholder={td('Search menu items...')} value={scheduleSearch} onChange={(e) => setScheduleSearch(e.target.value)} className="pl-9" />
+              {scheduleSearch && <button type="button" onClick={() => setScheduleSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label={td('Clear search')}><X className="h-4 w-4" /></button>}
             </div>
             {(() => {
               const ids = scheduleDraft[scheduleSlotTab]?.itemIds ?? []
@@ -1390,15 +1396,15 @@ export default function MenuOptimizationContent({
                 <>
                   {selectedItems.length > 0 && (
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs text-slate-500">{selectedItems.length} selected for this slot</p>
-                      <Button type="button" variant="ghost" size="sm" className="text-xs text-slate-500" onClick={() => clearScheduleSlot(scheduleSlotTab)}>Clear slot</Button>
+                      <p className="text-xs text-slate-500">{selectedItems.length} {td('selected for this slot')}</p>
+                      <Button type="button" variant="ghost" size="sm" className="text-xs text-slate-500" onClick={() => clearScheduleSlot(scheduleSlotTab)}>{td('Clear slot')}</Button>
                     </div>
                   )}
                   <div className="flex-1 min-h-[240px] max-h-[320px] overflow-y-auto rounded-lg border border-slate-200">
                     {(() => {
                       const q = scheduleSearch.trim().toLowerCase()
                       const filtered = q ? menuItems.filter((m) => (m.displayName ?? m.name).toLowerCase().includes(q)) : menuItems
-                      if (filtered.length === 0) return <div className="p-4 text-center text-sm text-slate-500">{scheduleSearch ? 'No items match your search.' : 'No menu items.'}</div>
+                      if (filtered.length === 0) return <div className="p-4 text-center text-sm text-slate-500">{scheduleSearch ? td('No items match your search.') : td('No menu items.')}</div>
                       return (
                         <ul className="divide-y divide-slate-100">
                           {filtered.map((item) => {
@@ -1426,8 +1432,8 @@ export default function MenuOptimizationContent({
             })()}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveSchedule} disabled={scheduleSaving}>{scheduleSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save schedule</Button>
+            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>{td('Cancel')}</Button>
+            <Button onClick={saveSchedule} disabled={scheduleSaving}>{scheduleSaving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}{td('Save schedule')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1436,21 +1442,21 @@ export default function MenuOptimizationContent({
       <Dialog open={slotTimesDialogOpen} onOpenChange={setSlotTimesDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Set featured section display times</DialogTitle>
+            <DialogTitle>{td('Set featured section display times')}</DialogTitle>
             <DialogDescription>
-              Set the hours (24h) when each time slot is active on the guest menu. &ldquo;Night&rdquo; is automatically everything outside these three slots.
+              {td('Set the hours (24h) when each time slot is active on the guest menu. Night is automatically everything outside these three slots.')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-5 py-2">
             {(['breakfast', 'day', 'evening'] as const).map((slot) => {
-              const label = slot === 'breakfast' ? 'Breakfast' : slot === 'day' ? 'Day / Lunch' : 'Evening / Dinner'
+              const label = slot === 'breakfast' ? td('Breakfast') : slot === 'day' ? td('Day / Lunch') : td('Evening / Dinner')
               const current = slotTimesDraft[slot]
               return (
                 <div key={slot} className="space-y-1.5">
                   <p className="text-sm font-medium text-slate-800">{label}</p>
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col gap-1 flex-1">
-                      <Label className="text-xs text-slate-500">Start (hour, 0–23)</Label>
+                      <Label className="text-xs text-slate-500">{td('Start (hour, 0–23)')}</Label>
                       <Input
                         type="number"
                         min={0}
@@ -1465,7 +1471,7 @@ export default function MenuOptimizationContent({
                     </div>
                     <span className="text-slate-400 mt-5">–</span>
                     <div className="flex flex-col gap-1 flex-1">
-                      <Label className="text-xs text-slate-500">End (hour, 1–24)</Label>
+                      <Label className="text-xs text-slate-500">{td('End (hour, 1–24)')}</Label>
                       <Input
                         type="number"
                         min={1}
@@ -1486,10 +1492,10 @@ export default function MenuOptimizationContent({
               )
             })}
             <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-500 space-y-0.5">
-              <p className="font-medium text-slate-700 mb-1">Preview</p>
+              <p className="font-medium text-slate-700 mb-1">{td('Preview')}</p>
               {(['breakfast', 'day', 'evening', 'night'] as const).map((slot) => {
                 const ranges = buildSlotRangeLabels(slotTimesDraft)
-                const names = { breakfast: 'Breakfast', day: 'Day / Lunch', evening: 'Evening / Dinner', night: 'Night' }
+                const names = { breakfast: td('Breakfast'), day: td('Day / Lunch'), evening: td('Evening / Dinner'), night: td('Night') }
                 return <p key={slot}><span className="font-medium">{names[slot]}:</span> {ranges[slot]}</p>
               })}
             </div>
@@ -1500,11 +1506,11 @@ export default function MenuOptimizationContent({
               onClick={() => { setSlotTimesDraft(DEFAULT_SLOT_TIMES) }}
               type="button"
             >
-              Reset to defaults
+              {td('Reset to defaults')}
             </Button>
             <Button onClick={saveSlotTimes} disabled={savingSlotTimes}>
               {savingSlotTimes && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Save times
+              {td('Save times')}
             </Button>
           </DialogFooter>
         </DialogContent>
