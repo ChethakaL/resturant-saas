@@ -105,6 +105,7 @@ export default function SettingsClient({
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
   const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
   const [descriptionTone, setDescriptionTone] = useState<string>((currentTheme as Record<string, unknown>).descriptionTone as string || '')
+  const [foodTerminologyOverrides, setFoodTerminologyOverrides] = useState<string>((currentTheme as Record<string, unknown>).foodTerminologyOverrides as string || '')
   const [restaurantVibeImageKey, setRestaurantVibeImageKey] = useState<string>((currentTheme as Record<string, unknown>).restaurantVibeImageKey as string || '')
   const legacyVibeImageUrl = ((currentTheme as Record<string, unknown>).restaurantVibeImageUrl as string) || ''
   const [vibeImageRemoved, setVibeImageRemoved] = useState(false)
@@ -131,6 +132,11 @@ export default function SettingsClient({
   const [describingImage, setDescribingImage] = useState(false)
   const [savingBackgroundPrompt, setSavingBackgroundPrompt] = useState(false)
   const [applyBackgroundProgress, setApplyBackgroundProgress] = useState<{ total: number; done: number } | null>(null)
+  const [applyBackgroundStartedAt, setApplyBackgroundStartedAt] = useState<number | null>(null)
+  const [applySelectedDialogOpen, setApplySelectedDialogOpen] = useState(false)
+  const [applySelectedItems, setApplySelectedItems] = useState<{ id: string; name: string }[]>([])
+  const [applySelectedIds, setApplySelectedIds] = useState<Set<string>>(new Set())
+  const [applySelectedListLoading, setApplySelectedListLoading] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -144,6 +150,7 @@ export default function SettingsClient({
   const [themeSuggestApplying, setThemeSuggestApplying] = useState(false)
   const [themeSuggestItemCount, setThemeSuggestItemCount] = useState<number | null>(null)
   const [themeSuggestApplyProgress, setThemeSuggestApplyProgress] = useState<{ done: number; total: number } | null>(null)
+  const [themeSuggestApplyStartedAt, setThemeSuggestApplyStartedAt] = useState<number | null>(null)
 
   // Smart Designer chat
   const [designerOpen, setDesignerOpen] = useState(false)
@@ -177,6 +184,23 @@ export default function SettingsClient({
     designerEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [designerMessages])
 
+  const getEtaLabel = (done: number, total: number, startedAt: number | null): string => {
+    if (!startedAt || total <= 0) return ''
+    if (done >= total) return ''
+    // Upfront estimate before first item completes (~1 min per photo for AI processing)
+    if (done <= 0) {
+      const estimatedMin = Math.max(1, total)
+      return total === 1
+        ? td('This might take about 1 minute.')
+        : td(`This might take about ${estimatedMin} minutes.`)
+    }
+    const elapsedMs = Date.now() - startedAt
+    const avgPerItem = elapsedMs / done
+    const remainingMs = avgPerItem * (total - done)
+    const remainingMin = Math.max(1, Math.round(remainingMs / 60000))
+    return td(`About ${remainingMin} min remaining`)
+  }
+
   /* =========================
    *  SAVE THEME
    * ========================= */
@@ -199,6 +223,7 @@ export default function SettingsClient({
           snowfallEnd: snowfallEnd || '01-07',
           ...(restaurantName.trim() && { restaurantName: restaurantName.trim() }),
           descriptionTone: descriptionTone.trim(),
+          foodTerminologyOverrides: foodTerminologyOverrides.trim(),
           restaurantVibeImageKey: restaurantVibeImageKey.trim() || null,
           restaurantVibeImageUrl: (restaurantVibeImageKey.trim() && !vibeImageRemoved) ? undefined : null,
           tableOrderingEnabled,
@@ -247,6 +272,7 @@ export default function SettingsClient({
     if (!themeSuggestPrompt) return
     setThemeSuggestApplying(true)
     setThemeSuggestApplyProgress(null)
+    setThemeSuggestApplyStartedAt(null)
     try {
       const res = await fetch('/api/user/background', {
         method: 'POST',
@@ -268,6 +294,7 @@ export default function SettingsClient({
         toast({ title: 'Background style saved', description: 'No dish photos to update. New photos will use this style.' })
         return
       }
+      setThemeSuggestApplyStartedAt(Date.now())
       setThemeSuggestApplyProgress({ done: 0, total: ids.length })
       let done = 0
       for (const id of ids) {
@@ -283,6 +310,7 @@ export default function SettingsClient({
     } finally {
       setThemeSuggestApplying(false)
       setThemeSuggestApplyProgress(null)
+      setThemeSuggestApplyStartedAt(null)
     }
   }
 
@@ -449,6 +477,26 @@ export default function SettingsClient({
           <p className="text-sm text-slate-500">{td('Pick a starting point, then customize everything below.')}</p>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (!themeSuggestPrompt.trim() && themePreset && PRESET_SUGGESTED_BACKGROUNDS[themePreset]) {
+                  setThemeSuggestPrompt(PRESET_SUGGESTED_BACKGROUNDS[themePreset])
+                  setThemeSuggestPresetLabel(THEME_PRESETS[themePreset]?.label || 'Preset')
+                }
+                if (!themeSuggestPresetLabel && themePreset && THEME_PRESETS[themePreset]) {
+                  setThemeSuggestPresetLabel(THEME_PRESETS[themePreset].label)
+                }
+                setThemePreviewImageUrl(null)
+                setThemeSuggestDialogOpen(true)
+              }}
+            >
+              {td('Preview/update dish photo backgrounds')}
+            </Button>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {Object.entries(THEME_PRESETS).map(([key, preset]) => (
               <button
@@ -464,8 +512,8 @@ export default function SettingsClient({
                     setThemeSuggestPrompt(suggestedBg)
                     setThemeSuggestPresetLabel(preset.label)
                     setThemePreviewImageUrl(null)
-                    setThemeSuggestDialogOpen(true)
                   }
+                  toast({ title: 'Style updated', description: 'Colors and typography are instant. Dish photo background updates are optional and separate.' })
                 }}
                 className={`relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all hover:shadow-md ${themePreset === key ? 'border-slate-900 bg-slate-50 shadow-md' : 'border-slate-200 hover:border-slate-300'
                   }`}
@@ -655,7 +703,7 @@ export default function SettingsClient({
                 }`}
             >
               <p className="text-sm font-semibold text-slate-800">📐 {td('Static Row')}</p>
-              <p className="text-xs text-slate-500 mt-1">{td('All items visible in a horizontal row')}</p>
+              <p className="text-xs text-slate-500 mt-1">{td('Manual horizontal swipe/scroll row (no auto-slide)')}</p>
               {menuCarouselStyle === 'static' && <Check className="h-4 w-4 text-slate-900 mt-1" />}
             </button>
           </div>
@@ -783,6 +831,23 @@ export default function SettingsClient({
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>{td('Food Terminology Overrides')}</CardTitle>
+          <p className="text-sm text-slate-500">{td('Set cuisine-specific wording preferences for AI recipes. One rule per line: "from => to".')}</p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <textarea
+            value={foodTerminologyOverrides}
+            onChange={(e) => setFoodTerminologyOverrides(e.target.value)}
+            placeholder={td('pita bread => Lebanese bread\nsyrian bread => Samoon')}
+            className="min-h-[100px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400"
+            rows={4}
+          />
+          <p className="text-xs text-slate-500">{td('Used by Smart Chef and recipe generation so terminology matches your market.')}</p>
+        </CardContent>
+      </Card>
+
       {/* Timezone */}
       <Card>
         <CardHeader>
@@ -875,30 +940,168 @@ export default function SettingsClient({
             >{td('Remove reference image')}</Button>
           )}
           <div className="pt-3 border-t border-slate-200 space-y-2">
-            <p className="text-xs text-slate-500">{td('Apply the background to all existing dish photos.')}</p>
-            <Button type="button" variant="secondary" size="sm"
-              disabled={!!applyBackgroundProgress || !(defaultBackgroundPrompt?.trim() || hasDefaultBackgroundImage)}
-              onClick={async () => {
-                setApplyBackgroundProgress({ total: 0, done: 0 })
-                try {
-                  const listRes = await fetch('/api/menu/items-with-images'); const listData = await listRes.json()
-                  if (!listRes.ok) throw new Error(listData.error || 'Failed'); const ids: string[] = listData.itemIds ?? []
-                  if (ids.length === 0) { toast({ title: 'No dish photos to update' }); setApplyBackgroundProgress(null); return }
-                  setApplyBackgroundProgress((p) => (p ? { ...p, total: ids.length } : null))
-                  let done = 0
-                  for (const id of ids) {
-                    const res = await fetch(`/api/menu/${id}/apply-background`, { method: 'POST' })
-                    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `Failed for item`) }
-                    done += 1; setApplyBackgroundProgress((p) => (p ? { ...p, done } : null))
+            <p className="text-xs text-slate-500">{td('Apply the background to all existing dish photos, or choose which dishes to update.')}</p>
+            <p className="text-xs text-slate-500">{td('Roughly 1 minute per photo; progress and time estimate appear below.')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" size="sm"
+                disabled={!!applyBackgroundProgress || !(defaultBackgroundPrompt?.trim() || hasDefaultBackgroundImage)}
+                onClick={async () => {
+                  setApplyBackgroundProgress({ total: 0, done: 0 })
+                  setApplyBackgroundStartedAt(null)
+                  try {
+                    const listRes = await fetch('/api/menu/items-with-images')
+                    const listData = await listRes.json()
+                    if (!listRes.ok) throw new Error(listData.error || 'Failed to load menu items')
+                    const ids: string[] = listData.itemIds ?? []
+                    if (ids.length === 0) {
+                      toast({ title: td('No dish photos to update') })
+                      setApplyBackgroundProgress(null)
+                      return
+                    }
+                    setApplyBackgroundStartedAt(Date.now())
+                    setApplyBackgroundProgress({ total: ids.length, done: 0 })
+                    let done = 0
+                    for (const id of ids) {
+                      const res = await fetch(`/api/menu/${id}/apply-background`, { method: 'POST' })
+                      if (!res.ok) {
+                        const err = await res.json().catch(() => ({}))
+                        const message = err.details || err.error || td('Failed for one item')
+                        throw new Error(message)
+                      }
+                      done += 1
+                      setApplyBackgroundProgress((p) => (p ? { ...p, done } : null))
+                    }
+                    toast({ title: td('Background applied'), description: `${ids.length} ${ids.length === 1 ? td('photo') : td('photos')} ${td('updated')}.` })
+                  } catch (e) {
+                    toast({ title: td('Could not apply'), description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' })
+                  } finally {
+                    setApplyBackgroundProgress(null)
+                    setApplyBackgroundStartedAt(null)
                   }
-                  toast({ title: 'Background applied', description: `Updated ${ids.length} photo${ids.length === 1 ? '' : 's'}.` })
-                } catch (e) { toast({ title: 'Could not apply', description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' }) }
-                finally { setApplyBackgroundProgress(null) }
-              }}
-            >
-              {applyBackgroundProgress ? (<><Loader2 className="h-4 w-4 animate-spin mr-2" />{applyBackgroundProgress.total > 0 ? td(`Updating ${applyBackgroundProgress.done}/${applyBackgroundProgress.total}…`) : td('Loading…')}</>) : td('Apply to all dish photos')}
-            </Button>
+                }}
+              >
+                {applyBackgroundProgress ? (<><Loader2 className="h-4 w-4 animate-spin mr-2" />{applyBackgroundProgress.total > 0 ? td(`Updating ${applyBackgroundProgress.done}/${applyBackgroundProgress.total}…`) : td('Loading…')}</>) : td('Apply to all dish photos')}
+              </Button>
+              <Button type="button" variant="outline" size="sm"
+                disabled={!!applyBackgroundProgress || !(defaultBackgroundPrompt?.trim() || hasDefaultBackgroundImage)}
+                onClick={async () => {
+                  setApplySelectedListLoading(true)
+                  setApplySelectedDialogOpen(true)
+                  try {
+                    const listRes = await fetch('/api/menu/items-with-images')
+                    const listData = await listRes.json()
+                    if (!listRes.ok) throw new Error(listData.error || 'Failed to load')
+                    const items: { id: string; name: string }[] = listData.items ?? listData.itemIds?.map((id: string) => ({ id, name: '' })) ?? []
+                    setApplySelectedItems(items)
+                    setApplySelectedIds(new Set(items.map((i) => i.id)))
+                  } catch {
+                    toast({ title: td('Could not load menu items'), variant: 'destructive' })
+                    setApplySelectedDialogOpen(false)
+                  } finally {
+                    setApplySelectedListLoading(false)
+                  }
+                }}
+              >
+                {td('Select dishes to update')}
+              </Button>
+            </div>
+            {applyBackgroundProgress && applyBackgroundProgress.total > 0 && (
+              <p className="text-xs text-slate-500">
+                {getEtaLabel(applyBackgroundProgress.done, applyBackgroundProgress.total, applyBackgroundStartedAt)}
+              </p>
+            )}
           </div>
+
+          {/* Apply to selected dishes dialog */}
+          <Dialog open={applySelectedDialogOpen} onOpenChange={(open) => { if (!applyBackgroundProgress) setApplySelectedDialogOpen(open) }}>
+            <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>{td('Select dishes to update')}</DialogTitle>
+                <DialogDescription>{td('Choose which menu items should get the new background. Then click Apply to selected.')}</DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 min-h-0 overflow-auto space-y-2 py-2">
+                {applySelectedListLoading ? (
+                  <p className="text-sm text-slate-500 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{td('Loading…')}</p>
+                ) : applySelectedItems.length === 0 ? (
+                  <p className="text-sm text-slate-500">{td('No dish photos to update.')}</p>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setApplySelectedIds(new Set(applySelectedItems.map((i) => i.id)))}>
+                        {td('Select all')}
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setApplySelectedIds(new Set())}>
+                        {td('Deselect all')}
+                      </Button>
+                    </div>
+                    <ul className="space-y-1.5 max-h-[50vh] overflow-y-auto border rounded-md p-2">
+                      {applySelectedItems.map((item) => (
+                        <li key={item.id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`apply-sel-${item.id}`}
+                            checked={applySelectedIds.has(item.id)}
+                            onChange={() => {
+                              setApplySelectedIds((prev) => {
+                                const next = new Set(prev)
+                                if (next.has(item.id)) next.delete(item.id)
+                                else next.add(item.id)
+                                return next
+                              })
+                            }}
+                            className="rounded border-slate-300"
+                          />
+                          <label htmlFor={`apply-sel-${item.id}`} className="text-sm cursor-pointer flex-1 truncate">{item.name || item.id}</label>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+              <DialogFooter>
+                {applyBackgroundProgress && applyBackgroundProgress.total > 0 ? (
+                  <p className="text-xs text-slate-500 mr-auto">
+                    {getEtaLabel(applyBackgroundProgress.done, applyBackgroundProgress.total, applyBackgroundStartedAt)}
+                  </p>
+                ) : null}
+                <Button type="button" variant="outline" onClick={() => setApplySelectedDialogOpen(false)} disabled={!!applyBackgroundProgress}>
+                  {td('Cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={applySelectedListLoading || applySelectedIds.size === 0 || !!applyBackgroundProgress || !(defaultBackgroundPrompt?.trim() || hasDefaultBackgroundImage)}
+                  onClick={async () => {
+                    const ids = Array.from(applySelectedIds)
+                    if (ids.length === 0) return
+                    setApplyBackgroundStartedAt(Date.now())
+                    setApplyBackgroundProgress({ total: ids.length, done: 0 })
+                    let done = 0
+                    try {
+                      for (const id of ids) {
+                        const res = await fetch(`/api/menu/${id}/apply-background`, { method: 'POST' })
+                        if (!res.ok) {
+                          const err = await res.json().catch(() => ({}))
+                          throw new Error(err.details || err.error || td('Failed for one item'))
+                        }
+                        done += 1
+                        setApplyBackgroundProgress((p) => (p ? { ...p, done } : null))
+                      }
+                      toast({ title: td('Background applied'), description: `${ids.length} ${ids.length === 1 ? td('photo') : td('photos')} ${td('updated')}.` })
+                      setApplySelectedDialogOpen(false)
+                    } catch (e) {
+                      toast({ title: td('Could not apply'), description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' })
+                    } finally {
+                      setApplyBackgroundProgress(null)
+                      setApplyBackgroundStartedAt(null)
+                    }
+                  }}
+                >
+                  {applyBackgroundProgress ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />{td(`Updating ${applyBackgroundProgress.done}/${applyBackgroundProgress.total}…`)}</> : td(`Apply to selected (${applySelectedIds.size})`)}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
 
@@ -1010,13 +1213,16 @@ export default function SettingsClient({
       <Dialog open={themeSuggestDialogOpen} onOpenChange={setThemeSuggestDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Dish photo background for {themeSuggestPresetLabel}</DialogTitle>
+            <DialogTitle>Dish photo background {themeSuggestPresetLabel ? `for ${themeSuggestPresetLabel}` : ''}</DialogTitle>
             <DialogDescription>Preview and apply a matching background style for your menu item photos.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <textarea value={themeSuggestPrompt} onChange={(e) => setThemeSuggestPrompt(e.target.value)} placeholder="Background style description…" className="min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" rows={3} />
             {themeSuggestItemCount !== null && (
               <p className="text-sm text-slate-600"><strong>{themeSuggestItemCount}</strong> photo{themeSuggestItemCount !== 1 ? 's' : ''} will be updated.</p>
+            )}
+            {themeSuggestItemCount !== null && themeSuggestItemCount > 0 && (
+              <p className="text-xs text-slate-500">This process may take a few minutes for larger menus.</p>
             )}
             <div>
               <Button type="button" variant="outline" size="sm" disabled={themePreviewLoading || !!themeSuggestApplyProgress} onClick={generateThemePreview}>
@@ -1028,7 +1234,14 @@ export default function SettingsClient({
                 </div>
               )}
             </div>
-            {themeSuggestApplyProgress && <p className="text-sm text-slate-600">Updating {themeSuggestApplyProgress.done}/{themeSuggestApplyProgress.total}…</p>}
+            {themeSuggestApplyProgress && (
+              <div className="space-y-1">
+                <p className="text-sm text-slate-600">Updating {themeSuggestApplyProgress.done}/{themeSuggestApplyProgress.total}…</p>
+                <p className="text-xs text-slate-500">
+                  {getEtaLabel(themeSuggestApplyProgress.done, themeSuggestApplyProgress.total, themeSuggestApplyStartedAt) || 'Preparing estimate…'}
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setThemeSuggestDialogOpen(false)} disabled={!!themeSuggestApplyProgress}>Skip</Button>

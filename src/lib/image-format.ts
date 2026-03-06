@@ -26,9 +26,9 @@ export const imageOrientationOptions: {
 ]
 
 export const imageOrientationPrompts: Record<ImageOrientation, string> = {
-  landscape: 'Frame the dish in a horizontal (16:9) composition with ample width.',
-  portrait: 'Crop the scene into a vertical (9:16) perspective emphasizing height.',
-  square: 'Deliver a square (1:1) layout that keeps the food centered.',
+  landscape: 'Horizontal (16:9). CLOSE-UP: the dish must fill the frame—plate and food occupy most of the image, little empty table.',
+  portrait: 'Vertical (9:16). CLOSE-UP: the dish must fill the frame—plate and food occupy most of the image.',
+  square: 'Square (1:1). CLOSE-UP: the dish must fill the frame—plate and food occupy most of the image.',
 }
 
 export const imageOrientationAspectRatios: Record<ImageOrientation, number> = {

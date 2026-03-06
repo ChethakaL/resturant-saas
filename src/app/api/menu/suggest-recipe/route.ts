@@ -4,6 +4,12 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
+import {
+  applyTerminologyOverrides,
+  buildTerminologyPromptBlock,
+  normalizeRecipeTerminology,
+  parseTerminologyOverrides,
+} from '@/lib/terminology'
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,11 +34,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get existing ingredients from the database
-    const existingIngredients = await prisma.ingredient.findMany({
-      where: { restaurantId: session.user.restaurantId },
-      select: { id: true, name: true, unit: true, costPerUnit: true },
-    })
+    // Get existing ingredients and terminology preferences.
+    const [existingIngredients, restaurant] = await Promise.all([
+      prisma.ingredient.findMany({
+        where: { restaurantId: session.user.restaurantId },
+        select: { id: true, name: true, unit: true, costPerUnit: true },
+      }),
+      prisma.restaurant.findUnique({
+        where: { id: session.user.restaurantId },
+        select: { settings: true },
+      }),
+    ])
+    const settings = (restaurant?.settings as Record<string, unknown>) || {}
+    const theme = (settings.theme as Record<string, unknown>) || {}
+    const terminologyRaw = typeof theme.foodTerminologyOverrides === 'string' ? theme.foodTerminologyOverrides : ''
+    const terminologyOverrides = parseTerminologyOverrides(terminologyRaw)
+    const terminologyPrompt = buildTerminologyPromptBlock(terminologyOverrides)
 
     const ingredientNames = existingIngredients.map((i) => `${i.name} (${i.unit})`).join(', ')
 
@@ -52,6 +69,8 @@ export async function POST(request: NextRequest) {
     }
 
     prompt += `
+
+${terminologyPrompt}
 
 The restaurant has these ingredients available: ${ingredientNames || 'No ingredients in inventory yet'}.
 
@@ -136,10 +155,11 @@ Return ONLY valid JSON, no additional text or markdown.`
 
     // Match ingredients with existing ones
     const matchedIngredients = recipe.ingredients.map((ing: any) => {
+      const normalizedIncomingName = applyTerminologyOverrides(String(ing.name || ''), terminologyOverrides)
       const match = existingIngredients.find(
         (existing) =>
-          existing.name.toLowerCase().includes(ing.name.toLowerCase()) ||
-          ing.name.toLowerCase().includes(existing.name.toLowerCase())
+          existing.name.toLowerCase().includes(normalizedIncomingName.toLowerCase()) ||
+          normalizedIncomingName.toLowerCase().includes(existing.name.toLowerCase())
       )
 
       return {
@@ -155,10 +175,10 @@ Return ONLY valid JSON, no additional text or markdown.`
 
     return NextResponse.json({
       success: true,
-      recipe: {
+      recipe: normalizeRecipeTerminology({
         ...recipe,
         ingredients: matchedIngredients,
-      },
+      }, terminologyOverrides),
       existingIngredients,
     })
   } catch (error) {

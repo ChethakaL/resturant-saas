@@ -110,7 +110,7 @@ export function MenuCarousel({
     const cardWidth = isHero ? 'min-w-[260px] sm:min-w-[300px]' : 'min-w-[180px] sm:min-w-[200px]'
 
     return (
-      <section className="w-full space-y-4">
+      <section className="w-full space-y-4 min-w-0">
         <div className="px-4 sm:px-6 flex flex-wrap items-center gap-2">
           <p
             className={`font-body ${titleClass} ${titleColor}`}
@@ -124,8 +124,18 @@ export function MenuCarousel({
             </span>
           )}
         </div>
-        <div className="overflow-x-auto scrollbar-hide px-4 sm:px-6 -mx-4 sm:-mx-6">
-          <div className="flex gap-4 pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div
+          className="relative overflow-x-scroll overflow-y-hidden overscroll-x-contain scrollbar-hide px-4 sm:px-6 -mx-4 sm:-mx-6 w-full max-w-full min-w-0"
+          style={{
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            touchAction: 'pan-x',
+          }}
+          role="region"
+          aria-label={title}
+        >
+          <div className="flex w-max min-w-full gap-4 pb-2 snap-x snap-mandatory flex-nowrap">
             {items.map((item) => {
               const displayName = getDisplayName?.(item.id) || item.name
               const categoryName = getCategoryName?.(item.category?.name ?? null) || item.category?.name || ''
@@ -134,7 +144,7 @@ export function MenuCarousel({
                 <button
                   type="button"
                   key={item.id}
-                  className={`${cardWidth} flex-shrink-0 w-[min(200px,70vw)] sm:w-[200px] text-left rounded-2xl overflow-hidden transition-transform active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--menu-accent,#f59e0b)]`}
+                  className={`${cardWidth} snap-start flex-shrink-0 w-[min(200px,70vw)] sm:w-[200px] text-left rounded-2xl overflow-hidden transition-transform active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--menu-accent,#f59e0b)]`}
                   onClick={() => onItemClick?.(item as CarouselItem)}
                 >
                   <div className={`aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
@@ -158,6 +168,11 @@ export function MenuCarousel({
             })}
           </div>
         </div>
+        {items.length > 1 && (
+          <p className={`px-4 sm:px-6 text-[11px] ${isDarkTheme ? 'text-white/60' : 'text-slate-500'}`}>
+            Swipe left or right to explore.
+          </p>
+        )}
       </section>
     )
   }

@@ -3,14 +3,23 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import OpenAI from 'openai'
+import { prisma } from '@/lib/prisma'
+import {
+  buildTerminologyPromptBlock,
+  normalizeRecipeTerminology,
+  parseTerminologyOverrides,
+} from '@/lib/terminology'
 
-const SYSTEM_PROMPT = (categories: string[], inventory: { name: string, unit: string, costPerUnit: number }[]) => `
+const SYSTEM_PROMPT = (categories: string[], inventory: { name: string, unit: string, costPerUnit: number }[], terminologyPrompt: string) => `
 You are a "Smart Chef" with extensive F&B and kitchen knowledge. You are professional, proactive, and highly knowledgeable. Your goal is to guide the user through creating a menu item using your expertise to minimize their effort.
 
 LANGUAGE RULES (CRITICAL):
 - In the "message" field of your JSON response, you MUST reply in the EXACT same language the user uses (e.g., if they speak Arabic, reply in Arabic).
+- In the "message" text, NEVER embed English words (e.g. category names like "Sandwich", "Drinks") when the user is writing in another language. Always translate or express them in the user's language (e.g. in Arabic say "سندويش" or "فئة السندويشات", not "Sandwich"). The category list below is for you to pick the correct category; when you mention it in your reply, use the user's language.
 - However, ALL output within the "data" JSON block (including name, categoryName, ingredients, recipeSteps, recipeTips, and description) MUST ALWAYS be translated to and written in ENGLISH, regardless of the conversation language.
 - When asking for ingredient cost (market quantity + price), translate the question to the user's language.
+
+${terminologyPrompt}
 
 YOUR KNOWLEDGE (USE IT — DO NOT ASK THE USER):
 - You know standard conversions: 1 tsp ≈ 5g (powders/salt), 1 tbsp ≈ 15g, 1 tbsp oil ≈ 14ml, 1 cup flour ≈ 120g, 1 cup sugar/rice ≈ 200g, 1 cup liquid ≈ 240ml, 1 medium onion ≈ 110g, pinch ≈ 0.3g, 1 oz ≈ 28g (dry) / 30ml (liquid). Use these; never ask the user to convert.
@@ -40,7 +49,7 @@ NEVER ASK THE USER:
 
 THE STRUCTURED FLOW:
 1. **Name**: Ask for the dish name. If a document is uploaded, extract it immediately.
-2. **Category**: Suggest the best category from [${categories.join(', ')}]. Ask "Is this correct, or should it be in a different category?".
+2. **Category**: Suggest the best category from [${categories.join(', ')}]. When asking in your "message", say the category name IN THE USER'S LANGUAGE (e.g. Arabic: سندويش not Sandwich; Kurdish: ساندویش). Ask "Is this correct, or should it be in a different category?" — with the category name translated.
 3. **Recipe & Ingredients**: When you suggest a recipe, you MUST display BOTH the ingredient list AND the cooking steps directly INSIDE your "message" chat response. Do NOT just put them in the "data" block. They MUST be fully translated to the user's language (e.g. if the user speaks Arabic, the ingredients and steps displayed in the chat MUST be in Arabic, but keep numbers as standard Western Arabic numerals like 1, 2, 500, etc.). 
    CRITICAL FOR JSON: Because you are responding in JSON, you MUST use literal \\n for line breaks inside the "message" string instead of actual newlines.
    Use this exact formatting inside the "message" JSON string:
@@ -75,7 +84,7 @@ ${inventory.map(i => `- ${i.name} (${i.unit}, Cost: ${i.costPerUnit} IQD)`).join
 8. **Finalize**: When all is done, say "FINISHED" and generate a professional sensory description (taste, texture, key ingredients; max ~18 words) and put it in the "data.description" field so the form autofills. Always include the full "data" block with name, categoryName, recipeYield, price, ingredients, recipeSteps, recipeTips, and description when finishing.
 
 RULES:
-- **Language**: If user speaks Arabic, reply in Arabic in "message". ALWAYS put English translations in properties inside "data".
+- **Language**: If user speaks Arabic, reply in Arabic in "message" and do not use English words (e.g. category names) in that message — translate them (سندويش not Sandwich). Same for Kurdish, or any other language. ALWAYS put English in properties inside "data" only.
 - **Confirmation First**: If a document is uploaded, start with: "Are you trying to add a menu item called '**[Name]**'? I have extracted the recipe and ingredients from your document."
 - **Document already has recipe**: If the document (or user message) already provided ingredients and steps, do NOT re-suggest a recipe or ask "is this recipe accurate, any changes?". Use the extracted data and proceed (e.g. confirm category, then yield, then inventory/costing).
 - **Yield phrasing**: Say "This recipe seems like it makes one dish" or "This looks like it makes about 4 servings" (or similar natural phrasing), then ask for confirmation. Do not sound robotic.
@@ -109,6 +118,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { messages, categories, inventory, currentData, attachments, finalize } = body
 
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: session.user.restaurantId },
+      select: { settings: true },
+    })
+    const settings = (restaurant?.settings as Record<string, unknown>) || {}
+    const theme = (settings.theme as Record<string, unknown>) || {}
+    const foodTerminologyOverridesRaw = typeof theme.foodTerminologyOverrides === 'string' ? theme.foodTerminologyOverrides : ''
+    const terminologyOverrides = parseTerminologyOverrides(foodTerminologyOverridesRaw)
+    const terminologyPrompt = buildTerminologyPromptBlock(terminologyOverrides)
+
     const googleKey = process.env.GOOGLE_AI_KEY
     if (!googleKey) {
       return NextResponse.json({ error: 'Google AI key not configured' }, { status: 500 })
@@ -118,7 +137,7 @@ export async function POST(request: NextRequest) {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
     const prompt = `
-${SYSTEM_PROMPT(categories, inventory)}
+${SYSTEM_PROMPT(categories, inventory, terminologyPrompt)}
 
 Current Form Data State: ${JSON.stringify(currentData)}
 
@@ -221,12 +240,14 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
         }
       }
     }
+    responseData = normalizeRecipeTerminology(responseData, terminologyOverrides) as Record<string, unknown>
+    const responseDataObj = responseData as { message?: unknown; data?: Record<string, unknown> }
     // Ensure message is never undefined/null — a blank response would crash the client
-    if (!responseData.message) {
-      const ings = Array.isArray((responseData.data as Record<string, unknown>)?.ingredients)
-        ? (responseData.data as Record<string, unknown>).ingredients as unknown[]
+    if (!responseDataObj.message) {
+      const ings = Array.isArray(responseDataObj.data?.ingredients)
+        ? responseDataObj.data.ingredients as unknown[]
         : []
-      responseData.message = ings.length
+      responseDataObj.message = ings.length
         ? 'Noted. Now let\'s check each ingredient against your inventory to calculate costs.'
         : 'Noted. Please share the recipe or dish name so I can continue.'
     }
@@ -236,7 +257,7 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
     // Guardrail: do not allow yield/servings questions before recipe ingredients exist.
     // This prevents stale or jumpy flow where the assistant asks servings right after category.
     const currentIngredients = Array.isArray(currentData?.ingredients) ? currentData.ingredients : []
-    const responseIngredients = Array.isArray(responseData?.data?.ingredients) ? responseData.data.ingredients : []
+    const responseIngredients = Array.isArray(responseDataObj.data?.ingredients) ? responseDataObj.data.ingredients : []
     const hasKnownIngredients =
       [...currentIngredients, ...responseIngredients].some((ing: any) => {
         const hasName = typeof ing?.name === 'string' && ing.name.trim().length > 0
@@ -267,7 +288,7 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
       (Array.isArray(attachments) && attachments.length > 0) ||
       userProvidedRecipeSignals
 
-    const messageText = String(responseData?.message || '')
+    const messageText = String(responseDataObj.message || '')
     const lowerMsg = messageText.toLowerCase()
     const asksYield =
       lowerMsg.includes('servings') ||
@@ -307,10 +328,10 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
       })
       // Let the recipe suggestion through if ingredients were generated; only kill the yield question.
       if (responseIngredients.length === 0) {
-        responseData.message =
+        responseDataObj.message =
           'Great, category confirmed. Please share the recipe ingredients with quantities (or upload the recipe), then I will estimate servings.'
-        responseData.data = {
-          ...(responseData.data || {}),
+        responseDataObj.data = {
+          ...(responseDataObj.data || {}),
           isFinished: false,
         }
       }
@@ -318,7 +339,7 @@ When isFinished is true, description MUST be a sensory menu description (taste, 
       // The AI will ask about servings on the NEXT turn once hasKnownIngredients is true.
     }
 
-    return NextResponse.json(responseData)
+    return NextResponse.json(responseDataObj)
 
   } catch (error) {
     console.error('Smart Chef API error:', error)

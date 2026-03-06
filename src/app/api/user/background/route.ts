@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getImageModelGenerateContentUrl } from '@/lib/image-api-model'
 
 async function generateTemplateImageFromPrompt(prompt: string): Promise<string | null> {
   const apiKey = process.env.GOOGLE_AI_KEY
@@ -15,7 +16,7 @@ async function generateTemplateImageFromPrompt(prompt: string): Promise<string |
     'Photorealistic lighting and tabletop/studio scene suitable for placing many different dishes consistently.'
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
+    getImageModelGenerateContentUrl(apiKey),
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
