@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { Square, Receipt, LogOut, ChefHat } from 'lucide-react'
 import { signOut } from 'next-auth/react'
@@ -29,13 +28,10 @@ export function WaiterSidebar({ userName, restaurantName }: WaiterSidebarProps) 
   return (
     <div className="flex flex-col h-full bg-slate-900 text-white w-64">
       <div className="p-6 flex flex-col items-center">
-        <Image
+        <img
           src="/logo.png"
           alt="iServe+"
-          width={140}
-          height={50}
           className="h-12 w-auto rounded-full"
-          priority
         />
         <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">{t.waiter_role_label}</p>
       </div>

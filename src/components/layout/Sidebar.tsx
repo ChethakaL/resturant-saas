@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import {
   Home,
@@ -55,13 +54,10 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
     <div className="flex h-full min-h-full flex-col bg-slate-900 text-white w-64 shrink-0 self-stretch">
       {/* Header */}
       <div className="p-6 flex flex-col items-center">
-        <Image
+        <img
           src="/logo.png"
           alt="iServe+"
-          width={140}
-          height={50}
           className="h-12 w-auto rounded-full"
-          priority
         />
         <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">{userRole}</p>
       </div>

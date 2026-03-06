@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useI18n } from '@/lib/i18n'
+import { useDynamicTranslate } from '@/lib/i18n'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,6 +62,7 @@ export function InventoryTable({
   const [submitting, setSubmitting] = useState(false)
   const { toast } = useToast()
   const { t } = useI18n()
+  const { t: td } = useDynamicTranslate()
 
   const openRequestModal = async (ingredient: IngredientRow) => {
     setSelectedIngredient(ingredient)
@@ -80,7 +82,7 @@ export function InventoryTable({
       setProducts(Array.isArray(data) ? data : [])
       if (data.length > 0) setSelectedProductId(data[0].id)
     } catch {
-      toast({ title: 'Error', description: 'Could not load supplier products', variant: 'destructive' })
+      toast({ title: td('Error'), description: td('Could not load supplier products'), variant: 'destructive' })
       setProducts([])
     } finally {
       setLoading(false)
@@ -89,13 +91,13 @@ export function InventoryTable({
 
   const submitRequest = async () => {
     if (!selectedIngredient?.preferredSupplier?.id || !quantity || !selectedProductId) {
-      toast({ title: 'Validation', description: 'Select supplier product and enter quantity', variant: 'destructive' })
+      toast({ title: td('Validation'), description: td('Select supplier product and enter quantity'), variant: 'destructive' })
       return
     }
     const product = products.find((p) => p.id === selectedProductId)
     const qty = parseFloat(quantity)
     if (!product || isNaN(qty) || qty <= 0) {
-      toast({ title: 'Validation', description: 'Invalid quantity', variant: 'destructive' })
+      toast({ title: td('Validation'), description: td('Invalid quantity'), variant: 'destructive' })
       return
     }
     setSubmitting(true)
@@ -105,7 +107,7 @@ export function InventoryTable({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           supplierId: selectedIngredient.preferredSupplier.id,
-          notes: `Request for ${selectedIngredient.name}`,
+          notes: `${td('Request for')} ${td(selectedIngredient.name)}`,
           lines: [
             { supplierProductId: selectedProductId, quantity: qty, unit: product.packUnit },
           ],
@@ -113,15 +115,15 @@ export function InventoryTable({
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Failed to create request')
+        throw new Error(err.error || td('Failed to create request'))
       }
-      toast({ title: 'Request sent', description: 'Stock request has been sent to the supplier.' })
+      toast({ title: td('Request sent'), description: td('Stock request has been sent to the supplier.') })
       setRequestModalOpen(false)
       setSelectedIngredient(null)
     } catch (e) {
       toast({
-        title: 'Error',
-        description: e instanceof Error ? e.message : 'Failed to create stock request',
+        title: td('Error'),
+        description: e instanceof Error ? e.message : td('Failed to create stock request'),
         variant: 'destructive',
       })
     } finally {
@@ -145,12 +147,12 @@ export function InventoryTable({
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        throw new Error(error.error || 'Failed to delete ingredient')
+        throw new Error(error.error || td('Failed to delete ingredient'))
       }
 
       toast({
-        title: 'Ingredient deleted',
-        description: `${ingredientToDelete.name} has been removed from inventory.`,
+        title: td('Ingredient deleted'),
+        description: `${td(ingredientToDelete.name)} ${td('has been removed from inventory.')}`,
       })
 
       setDeleteDialogOpen(false)
@@ -160,8 +162,8 @@ export function InventoryTable({
       router.refresh()
     } catch (error) {
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to delete ingredient',
+        title: td('Error'),
+        description: error instanceof Error ? error.message : td('Failed to delete ingredient'),
         variant: 'destructive',
       })
     } finally {
@@ -201,10 +203,12 @@ export function InventoryTable({
           {ingredients.map((ingredient) => (
             <tr key={ingredient.id} className="border-b border-slate-100 hover:bg-slate-50">
               <td className="py-3 px-4">
-                <div className="font-medium text-slate-900">{ingredient.name}</div>
+                <div className="font-medium text-slate-900">{td(ingredient.name)}</div>
               </td>
-              <td className="py-3 px-4 text-slate-600">{ingredient.unit}</td>
-              <td className="py-3 px-4 text-slate-600">{supplierName(ingredient)}</td>
+              <td className="py-3 px-4 text-slate-600">{td(ingredient.unit)}</td>
+              <td className="py-3 px-4 text-slate-600">
+                {supplierName(ingredient) === '—' ? '—' : td(supplierName(ingredient))}
+              </td>
               <td className="py-3 px-4 text-center">
                 <Button
                   variant="outline"
@@ -213,8 +217,8 @@ export function InventoryTable({
                     ingredient.preferredSupplier
                       ? openRequestModal(ingredient)
                       : toast({
-                        title: 'Set supplier first',
-                        description: 'Edit this ingredient and set a preferred supplier to request stock.',
+                        title: td('Set supplier first'),
+                        description: td('Edit this ingredient and set a preferred supplier to request stock.'),
                         variant: 'destructive',
                       })
                   }
@@ -284,8 +288,8 @@ export function InventoryTable({
               {selectedIngredient && selectedIngredient.preferredSupplier && (
                 <>
                   {t.inventory_request_stock_for
-                    .replace('{{name}}', selectedIngredient.name)
-                    .replace('{{supplier}}', selectedIngredient.preferredSupplier.name)}
+                    .replace('{{name}}', td(selectedIngredient.name))
+                    .replace('{{supplier}}', td(selectedIngredient.preferredSupplier.name))}
                 </>
               )}
             </DialogDescription>
@@ -306,7 +310,7 @@ export function InventoryTable({
                     >
                       {products.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} ({p.packSize} {p.packUnit})
+                          {td(p.name)} ({p.packSize} {td(p.packUnit)})
                         </option>
                       ))}
                     </select>
@@ -319,7 +323,7 @@ export function InventoryTable({
                       step="any"
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
-                      placeholder="e.g. 50"
+                      placeholder={td('e.g. 50')}
                       disabled={submitting}
                     />
                   </div>
@@ -350,7 +354,7 @@ export function InventoryTable({
               {ingredientToDelete && (
                 <div className="space-y-2 pt-2">
                   <p>
-                    {t.inventory_delete_confirm_desc.replace('{{name}}', ingredientToDelete.name)}
+                    {t.inventory_delete_confirm_desc.replace('{{name}}', td(ingredientToDelete.name))}
                   </p>
                   <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
                     <p className="text-sm text-amber-900">
