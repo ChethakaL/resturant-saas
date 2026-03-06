@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import { Edit, Loader2, Trash, Check, X, DollarSign } from 'lucide-react'
 import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
+import { useDynamicTranslate } from '@/lib/i18n'
 import { isZeroCostAllowed } from '@/lib/costing'
 
 export interface MenuItemWithMetrics {
@@ -70,6 +71,7 @@ export default function MenuItemsTable({
   const itemsRef = useRef(items)
   const { toast } = useToast()
   const { t } = useI18n()
+  const { t: td } = useDynamicTranslate()
 
   // Inline price editing state
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
@@ -709,7 +711,7 @@ export default function MenuItemsTable({
                   {t.menu_complete_costing}: {costingMenuItem?.name}
                 </DialogTitle>
                 <DialogDescription>
-                  <strong>Required:</strong> Enter cost per unit for <strong>ALL</strong> ingredients below. Costing will be marked complete when every ingredient has a price (water may be 0).
+                  <strong>{td('Required:')}</strong> {td('Enter cost per unit for')} <strong>{td('ALL')}</strong> {td('ingredients below. Costing will be marked complete when every ingredient has a price (water may be 0).')}
                 </DialogDescription>
               </DialogHeader>
 
@@ -720,14 +722,14 @@ export default function MenuItemsTable({
                   </div>
                 ) : costingIngredients.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-slate-500">No ingredients found for this menu item.</p>
-                    <p className="text-sm text-slate-400 mt-2">Add ingredients to this item first.</p>
+                    <p className="text-slate-500">{td('No ingredients found for this menu item.')}</p>
+                    <p className="text-sm text-slate-400 mt-2">{td('Add ingredients to this item first.')}</p>
                   </div>
                 ) : (
                   <>
                     <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 mb-4">
                       <p className="text-sm text-amber-900">
-                        💡 <strong>Important:</strong> Enter cost per unit for each ingredient. Water may be 0; all other ingredients need actual supplier prices for accurate profit calculations.
+                        💡 <strong>{td('Important:')}</strong> {td('Enter cost per unit for each ingredient. Water may be 0; all other ingredients need actual supplier prices for accurate profit calculations.')}
                       </p>
                     </div>
 
@@ -738,12 +740,12 @@ export default function MenuItemsTable({
                           className="flex items-center gap-4 p-3 rounded-lg border border-slate-200 bg-white"
                         >
                           <div className="flex-1">
-                            <div className="font-medium text-slate-900">{ingredient.name}</div>
-                            <div className="text-sm text-slate-500">Unit: {ingredient.unit}</div>
+                            <div className="font-medium text-slate-900">{td(ingredient.name)}</div>
+                            <div className="text-sm text-slate-500">{td('Unit:')} {ingredient.unit}</div>
                           </div>
                           <div className="w-48">
                             <Label htmlFor={`cost-${ingredient.id}`} className="text-xs text-slate-600">
-                              Cost per {ingredient.unit}
+                              {td('Cost per')} {ingredient.unit}
                             </Label>
                             <div className="relative mt-1">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">
@@ -767,7 +769,7 @@ export default function MenuItemsTable({
 
                     <div className="mt-4 p-3 rounded-lg bg-slate-50 border border-slate-200">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-700">Ingredients with prices:</span>
+                        <span className="text-sm font-medium text-slate-700">{td('Ingredients with prices:')}</span>
                         <span className="text-sm font-bold text-slate-900">
                           {costingIngredients.filter(ing => ing.costPerUnit > 0 || isZeroCostAllowed(ing.name)).length} / {costingIngredients.length}
                         </span>
@@ -787,7 +789,7 @@ export default function MenuItemsTable({
                   }}
                   disabled={savingCosting}
                 >
-                  Cancel
+                  {t.common_cancel}
                 </Button>
                 <Button
                   onClick={saveCosting}
@@ -797,12 +799,12 @@ export default function MenuItemsTable({
                   {savingCosting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Saving...
+                      {td('Saving...')}
                     </>
                   ) : (
                     <>
                       <Check className="h-4 w-4 mr-2" />
-                      Save & Complete
+                      {td('Save & Complete')}
                     </>
                   )}
                 </Button>
