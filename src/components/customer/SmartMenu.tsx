@@ -98,6 +98,8 @@ interface MenuTheme {
 interface SmartMenuProps {
   restaurantId: string
   menuItems: MenuItem[]
+  initialLanguage?: LanguageCode
+  initialTranslationCache?: TranslationCache
   showcases?: ShowcaseSection[]
   categories?: CategorySection[]
   theme?: MenuTheme | null
@@ -257,6 +259,15 @@ const uiCopyMap: Record<
     tryItemLabel: string
     suggestingLabel: string
     chefRecommendationLabel: string
+    pairingsButtonLabel: string
+    moreInfoButtonLabel: string
+    limitedTodayLabel: string
+    optionalAddOnsDescription: string
+    closeLabel: string
+    signInLabel: string
+    myVisitsLabel: string
+    signOutLabel: string
+    groupDiningLabel: string
   }
 > = {
   en: {
@@ -294,6 +305,15 @@ const uiCopyMap: Record<
     tryItemLabel: 'Try',
     suggestingLabel: 'Suggesting…',
     chefRecommendationLabel: "Chef's recommendation",
+    pairingsButtonLabel: 'Pairings',
+    moreInfoButtonLabel: 'More info',
+    limitedTodayLabel: 'Limited Today',
+    optionalAddOnsDescription: 'Enhance your meal with these optional additions',
+    closeLabel: 'Close',
+    signInLabel: 'Sign in',
+    myVisitsLabel: 'My visits',
+    signOutLabel: 'Sign out',
+    groupDiningLabel: 'Dining with a group? Try something to share.',
   },
   ar: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -330,6 +350,15 @@ const uiCopyMap: Record<
     tryItemLabel: 'جرّب',
     suggestingLabel: 'جاري الاقتراح…',
     chefRecommendationLabel: 'توصية الشيف',
+    pairingsButtonLabel: 'مقترحات',
+    moreInfoButtonLabel: 'مزيد من المعلومات',
+    limitedTodayLabel: 'محدود اليوم',
+    optionalAddOnsDescription: 'حسّن وجبتك بهذه الإضافات الاختيارية',
+    closeLabel: 'إغلاق',
+    signInLabel: 'تسجيل الدخول',
+    myVisitsLabel: 'زياراتي',
+    signOutLabel: 'تسجيل الخروج',
+    groupDiningLabel: 'تتناول الطعام مع مجموعة؟ جرّب شيئًا للمشاركة.',
   },
   ar_fusha: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -366,6 +395,15 @@ const uiCopyMap: Record<
     tryItemLabel: 'جرّب',
     suggestingLabel: 'جاري الاقتراح…',
     chefRecommendationLabel: 'توصية الشيف',
+    pairingsButtonLabel: 'مقترحات',
+    moreInfoButtonLabel: 'مزيد من المعلومات',
+    limitedTodayLabel: 'محدود اليوم',
+    optionalAddOnsDescription: 'حسّن وجبتك بهذه الإضافات الاختيارية',
+    closeLabel: 'إغلاق',
+    signInLabel: 'تسجيل الدخول',
+    myVisitsLabel: 'زياراتي',
+    signOutLabel: 'تسجيل الخروج',
+    groupDiningLabel: 'تتناول الطعام مع مجموعة؟ جرّب شيئًا للمشاركة.',
   },
   ku: {
     searchPlaceholder: 'ئێستا خواردنەکان بگەڕە…',
@@ -402,6 +440,15 @@ const uiCopyMap: Record<
     tryItemLabel: 'تاقی بکەرەوە',
     suggestingLabel: 'پێشنیار دەکرێت…',
     chefRecommendationLabel: 'پێشنیاری چێشتلێنەر',
+    pairingsButtonLabel: 'پێشنیارە هاوپەیوەندەکان',
+    moreInfoButtonLabel: 'زانیاری زیاتر',
+    limitedTodayLabel: 'تەنها بۆ ئەمڕۆ',
+    optionalAddOnsDescription: 'ئەم زیادکارییانە هەڵبژێرە بۆ باشترکردنی خواردنەکەت',
+    closeLabel: 'داخستن',
+    signInLabel: 'چوونەژوورەوە',
+    myVisitsLabel: 'سەردانەکانم',
+    signOutLabel: 'چوونەدەرەوە',
+    groupDiningLabel: 'لەگەڵ گروپێک خواردن دەخۆیت؟ شتێک بۆ هاوبەشکردن تاقی بکە.',
   },
 }
 
@@ -426,6 +473,16 @@ const engineCopyMap: Record<
     signatureBadge: string
     mostLovedBadge: string
     chefSelectionBadge: string
+    removeLabel: string
+    tableLabel: string
+    selectTableLabel: string
+    changeLabel: string
+    optionalLabel: string
+    selectYourTableLabel: string
+    tableHelperLabel: string
+    noTableLabel: string
+    totalLabel: string
+    placingLabel: string
   }
 > = {
   en: {
@@ -447,6 +504,16 @@ const engineCopyMap: Record<
     signatureBadge: '★ SIGNATURE',
     mostLovedBadge: '★ MOST LOVED',
     chefSelectionBadge: "CHEF'S SELECTION",
+    removeLabel: 'Remove',
+    tableLabel: 'Table',
+    selectTableLabel: 'Select table',
+    changeLabel: 'Change',
+    optionalLabel: 'Optional',
+    selectYourTableLabel: 'Select your table',
+    tableHelperLabel: 'Tap your table on the layout, or choose not to select.',
+    noTableLabel: "I'm not at a table",
+    totalLabel: 'Total',
+    placingLabel: 'Placing…',
   },
   ar: {
     showAll: 'عرض الكل',
@@ -467,6 +534,16 @@ const engineCopyMap: Record<
     signatureBadge: '★ مميز',
     mostLovedBadge: '★ الأكثر حباً',
     chefSelectionBadge: 'اختيار الشيف',
+    removeLabel: 'إزالة',
+    tableLabel: 'الطاولة',
+    selectTableLabel: 'اختر الطاولة',
+    changeLabel: 'تغيير',
+    optionalLabel: 'اختياري',
+    selectYourTableLabel: 'اختر طاولتك',
+    tableHelperLabel: 'اضغط على طاولتك في المخطط أو اختر عدم التحديد.',
+    noTableLabel: 'لست على طاولة',
+    totalLabel: 'الإجمالي',
+    placingLabel: 'جارٍ الإرسال…',
   },
   ar_fusha: {
     showAll: 'عرض الكل',
@@ -487,6 +564,16 @@ const engineCopyMap: Record<
     signatureBadge: '★ مميز',
     mostLovedBadge: '★ الأكثر حباً',
     chefSelectionBadge: 'اختيار الشيف',
+    removeLabel: 'إزالة',
+    tableLabel: 'الطاولة',
+    selectTableLabel: 'اختر الطاولة',
+    changeLabel: 'تغيير',
+    optionalLabel: 'اختياري',
+    selectYourTableLabel: 'اختر طاولتك',
+    tableHelperLabel: 'اضغط على طاولتك في المخطط أو اختر عدم التحديد.',
+    noTableLabel: 'لست على طاولة',
+    totalLabel: 'الإجمالي',
+    placingLabel: 'جارٍ الإرسال…',
   },
   ku: {
     showAll: 'هەموویان',
@@ -507,6 +594,16 @@ const engineCopyMap: Record<
     signatureBadge: '★ تایبەت',
     mostLovedBadge: '★ خۆشەویستترین',
     chefSelectionBadge: 'هەڵبژاردنی چێشتلێنەر',
+    removeLabel: 'لابردن',
+    tableLabel: 'مێز',
+    selectTableLabel: 'مێز هەڵبژێرە',
+    changeLabel: 'گۆڕین',
+    optionalLabel: 'ئیختیاری',
+    selectYourTableLabel: 'مێزەکەت هەڵبژێرە',
+    tableHelperLabel: 'لە نەخشەکەدا لەسەر مێزەکەت بکە یان هەڵنەبژێرە.',
+    noTableLabel: 'لەسەر مێزێک نیم',
+    totalLabel: 'کۆی گشتی',
+    placingLabel: 'دادەنرێت…',
   },
 }
 
@@ -569,7 +666,17 @@ function cartReducer(state: CartLine[], action: CartAction): CartLine[] {
 }
 
 /** Sign in / My visits next to cart. Icon-only on mobile to avoid header overlap. */
-function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
+function CustomerSignInControl({
+  isDarkBg,
+  signInLabel,
+  myVisitsLabel,
+  signOutLabel,
+}: {
+  isDarkBg: boolean
+  signInLabel: string
+  myVisitsLabel: string
+  signOutLabel: string
+}) {
   const [mounted, setMounted] = useState(false)
   const { data: session } = useSession()
   const pathname = usePathname()
@@ -583,9 +690,9 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
   if (!mounted) {
     return (
       <Link href={`/customer/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
-        <Button variant="ghost" size="sm" className={`h-9 w-9 sm:w-auto sm:px-3 p-0 sm:py-2 text-xs sm:text-sm shrink-0 ${btnClass}`} aria-label="Sign in">
+        <Button variant="ghost" size="sm" className={`h-9 w-9 sm:w-auto sm:px-3 p-0 sm:py-2 text-xs sm:text-sm shrink-0 ${btnClass}`} aria-label={signInLabel}>
           <User className="h-4 w-4 sm:hidden" />
-          <span className="hidden sm:inline">Sign in</span>
+          <span className="hidden sm:inline">{signInLabel}</span>
         </Button>
       </Link>
     )
@@ -594,9 +701,9 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
     return (
       <>
         <Link href="/customer/me">
-          <Button variant="ghost" size="sm" className={`h-9 w-9 sm:w-auto sm:px-3 p-0 sm:py-2 text-xs sm:text-sm shrink-0 ${btnClass}`} aria-label="My visits">
+          <Button variant="ghost" size="sm" className={`h-9 w-9 sm:w-auto sm:px-3 p-0 sm:py-2 text-xs sm:text-sm shrink-0 ${btnClass}`} aria-label={myVisitsLabel}>
             <User className="h-4 w-4 sm:hidden" />
-            <span className="hidden sm:inline">My visits</span>
+            <span className="hidden sm:inline">{myVisitsLabel}</span>
           </Button>
         </Link>
         <Button
@@ -605,16 +712,16 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
           className={`h-9 px-2 sm:px-2.5 text-xs shrink-0 ${btnClass}`}
           onClick={() => signOut({ callbackUrl })}
         >
-          Sign out
+          {signOutLabel}
         </Button>
       </>
     )
   }
   return (
     <Link href={`/customer/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
-      <Button variant="ghost" size="sm" className={`h-9 w-9 sm:w-auto sm:px-3 p-0 sm:py-2 text-xs sm:text-sm shrink-0 ${btnClass}`} aria-label="Sign in">
+      <Button variant="ghost" size="sm" className={`h-9 w-9 sm:w-auto sm:px-3 p-0 sm:py-2 text-xs sm:text-sm shrink-0 ${btnClass}`} aria-label={signInLabel}>
         <User className="h-4 w-4 sm:hidden" />
-        <span className="hidden sm:inline">Sign in</span>
+        <span className="hidden sm:inline">{signInLabel}</span>
       </Button>
     </Link>
   )
@@ -623,6 +730,8 @@ function CustomerSignInControl({ isDarkBg }: { isDarkBg: boolean }) {
 export default function SmartMenu({
   restaurantId,
   menuItems,
+  initialLanguage = 'en',
+  initialTranslationCache,
   showcases,
   categories: categoriesProp,
   theme,
@@ -671,9 +780,9 @@ export default function SmartMenu({
     useState<MenuItem | null>(null)
   const [pairingSuggestions, setPairingSuggestions] = useState<MenuItem[]>([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
-  const [language, setLanguage] = useState<LanguageCode>('en')
-  const [translationCache, setTranslationCache] = useState<TranslationCache>({})
-  const translationCacheRef = useRef<TranslationCache>({})
+  const [language, setLanguage] = useState<LanguageCode>(initialLanguage)
+  const [translationCache, setTranslationCache] = useState<TranslationCache>(() => initialTranslationCache ?? {})
+  const translationCacheRef = useRef<TranslationCache>(initialTranslationCache ?? {})
   const [isTranslating, setIsTranslating] = useState(false)
   const [translationError, setTranslationError] = useState<string | null>(null)
   const [translatedCount, setTranslatedCount] = useState<Record<LanguageCode, number>>({
@@ -698,9 +807,13 @@ export default function SmartMenu({
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set())
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const menuListRef = useRef<HTMLDivElement | null>(null)
+  const stickyHeaderRef = useRef<HTMLDivElement | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
+  const [navActiveSectionId, setNavActiveSectionId] = useState<string | null>(null)
   const [scrollDepth, setScrollDepth] = useState(0)
   const [menuListFlash, setMenuListFlash] = useState(false)
+  const navScrollTargetRef = useRef<string | null>(null)
+  const navScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const visibleLanguageOptions = useMemo(() => {
     return LANGUAGE_OPTIONS_ALL.filter((o) => {
@@ -769,8 +882,36 @@ export default function SmartMenu({
   }, [])
 
   const scrollToSection = useCallback((categoryId: string) => {
-    sectionRefs.current.get(categoryId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const sectionEl = sectionRefs.current.get(categoryId)
+    if (!sectionEl) return
+    const stickyHeaderHeight = stickyHeaderRef.current?.offsetHeight ?? 0
+    const targetTop = sectionEl.getBoundingClientRect().top + window.scrollY - stickyHeaderHeight - 12
+    navScrollTargetRef.current = categoryId
+    setNavActiveSectionId(categoryId)
+    setActiveSectionId(categoryId)
+    if (navScrollResetTimerRef.current) {
+      clearTimeout(navScrollResetTimerRef.current)
+    }
+    navScrollResetTimerRef.current = setTimeout(() => {
+      navScrollTargetRef.current = null
+      setNavActiveSectionId(null)
+      navScrollResetTimerRef.current = null
+    }, 900)
+    window.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
   }, [])
+
+  const hasCompleteTranslations = useCallback(
+    (lang: LanguageCode) => {
+      if (lang === 'en') return true
+      const langCache = translationCache[lang]
+      if (!langCache) return false
+      return menuItems.every((item) => {
+        const translation = langCache[item.id]
+        return Boolean(translation?.name && translation?.description !== undefined)
+      })
+    },
+    [menuItems, translationCache]
+  )
 
   const trimmedSearch = search.trim()
   const searchTokens = useMemo(() => {
@@ -799,7 +940,10 @@ export default function SmartMenu({
       if (
         existingCache &&
         Object.keys(existingCache).length === menuItems.length &&
-        menuItems.every((item) => Boolean(existingCache[item.id]))
+        menuItems.every((item) => {
+          const translation = existingCache[item.id]
+          return Boolean(translation?.name && translation?.description !== undefined)
+        })
       ) {
         return
       }
@@ -844,10 +988,6 @@ export default function SmartMenu({
         ...prev,
         [lang]: 0,
       }))
-
-      if (!existingCache) {
-        updateCache(baseMap)
-      }
 
       try {
         const payloadItems = menuItems.map((item) => ({
@@ -938,6 +1078,8 @@ export default function SmartMenu({
       searchOverlayInputRef.current.focus({ preventScroll: true })
     }
   }, [isSmartSearchActive])
+
+  const languageContentReady = hasCompleteTranslations(language)
 
   const currentCopy = uiCopyMap[language]
   const currentEngineCopy = engineCopyMap[language]
@@ -1403,15 +1545,27 @@ export default function SmartMenu({
     if (sections.length === 0) return
     const firstId = sections[0]?.category.id ?? null
     setActiveSectionId((prev) => prev ?? firstId)
+    setNavActiveSectionId((prev) => prev ?? firstId)
+    const stickyHeaderHeight = stickyHeaderRef.current?.offsetHeight ?? 0
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue
           const id = (entry.target as HTMLElement).getAttribute('data-section-id')
-          if (id) setActiveSectionId(id)
+          if (id) {
+            setActiveSectionId(id)
+            setNavActiveSectionId(id)
+            if (navScrollTargetRef.current === id) {
+              navScrollTargetRef.current = null
+              if (navScrollResetTimerRef.current) {
+                clearTimeout(navScrollResetTimerRef.current)
+                navScrollResetTimerRef.current = null
+              }
+            }
+          }
         }
       },
-      { rootMargin: '-80px 0px -60% 0px', threshold: 0 }
+      { rootMargin: `-${Math.max(stickyHeaderHeight + 8, 80)}px 0px -55% 0px`, threshold: 0 }
     )
     const raf = requestAnimationFrame(() => {
       sections.forEach((s) => {
@@ -1427,6 +1581,14 @@ export default function SmartMenu({
       observer.disconnect()
     }
   }, [categorizedSections])
+
+  useEffect(() => {
+    return () => {
+      if (navScrollResetTimerRef.current) {
+        clearTimeout(navScrollResetTimerRef.current)
+      }
+    }
+  }, [])
 
   const topShowcases = useMemo(
     () => (showcases || []).filter((s) => s.position === 'top'),
@@ -1469,7 +1631,7 @@ export default function SmartMenu({
         <div className="fixed inset-0 bg-black/40 pointer-events-none z-0" aria-hidden />
       )}
       {/* Sticky header outside overflow-hidden so it can stick when scrolling */}
-      <div className={`sticky top-0 z-40 w-full ${bgClass}`}>
+      <div ref={stickyHeaderRef} className={`sticky top-0 z-40 w-full ${bgClass}`}>
         <div className="relative mx-auto max-w-7xl px-3 sm:px-6 pt-3 sm:pt-6">
           {/* Header: on mobile stack so categories get space; on desktop single row */}
           <header className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
@@ -1493,7 +1655,12 @@ export default function SmartMenu({
                 </span>
               </div>
               <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-auto">
-                <CustomerSignInControl isDarkBg={isDarkBg} />
+                <CustomerSignInControl
+                  isDarkBg={isDarkBg}
+                  signInLabel={currentCopy.signInLabel}
+                  myVisitsLabel={currentCopy.myVisitsLabel}
+                  signOutLabel={currentCopy.signOutLabel}
+                />
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1528,6 +1695,10 @@ export default function SmartMenu({
                       <button
                         key={option.value}
                         onClick={() => {
+                          if (option.value === language) {
+                            setIsLanguageMenuOpen(false)
+                            return
+                          }
                           setLanguage(option.value)
                           setIsLanguageMenuOpen(false)
                         }}
@@ -1547,16 +1718,16 @@ export default function SmartMenu({
             <nav className="flex-1 min-w-0 flex justify-center overflow-x-auto sm:overflow-visible scrollbar-hide scroll-px-3 -mx-1">
               <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 py-1 px-1">
                 {categorizedSections.filter((s) => s.category).map((section) => {
-                  const isActive = activeSectionId === section.category!.id
+                  const isActive = (navActiveSectionId ?? activeSectionId) === section.category!.id
                   return (
                     <button
                       key={section.category!.id}
                       type="button"
                       onClick={() => scrollToSection(section.category!.id)}
-                      className={`flex-shrink-0 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${isActive
+                      className={`flex-shrink-0 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap ${isActive
                           ? isDarkBg
-                            ? 'bg-[var(--menu-accent,theme colors.amber.500)] text-white'
-                            : 'bg-slate-800 text-white'
+                            ? 'bg-white/14 text-white shadow-sm ring-1 ring-white/12'
+                            : 'bg-slate-800 text-white shadow-sm'
                           : isDarkBg
                             ? 'text-white/80 hover:bg-white/10'
                             : 'text-slate-600 hover:bg-slate-200'
@@ -1575,6 +1746,15 @@ export default function SmartMenu({
       <div
         className={`relative overflow-hidden transition-all duration-300 ${theme?.backgroundImageUrl ? 'z-10' : ''} ${isSmartSearchActive ? 'pointer-events-none blur-sm' : 'pointer-events-auto'}`}
       >
+        {language !== 'en' && (!languageContentReady || isTranslating) && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/88 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/90 px-6 py-5 shadow-lg">
+              <Loader2 className="h-7 w-7 animate-spin text-emerald-600" />
+              <p className="text-sm font-medium text-slate-700">{currentCopy.loadingLabel}</p>
+            </div>
+          </div>
+        )}
+
         {/* Background Effects */}
         <div className="absolute inset-0 opacity-20">
           <div className="absolute -top-32 left-10 h-72 w-72 rounded-full bg-emerald-400 blur-[140px]" />
@@ -1903,7 +2083,7 @@ export default function SmartMenu({
                 onClick={() => setSelectedMoodId('sharing')}
                 className={`text-sm font-medium px-3 py-2 rounded-lg w-full text-left transition ${isDarkBg ? 'bg-[var(--menu-accent,#f59e0b)]/20 text-[var(--menu-accent,#f59e0b)] hover:bg-[var(--menu-accent,#f59e0b)]/30' : 'bg-[var(--menu-accent,#f59e0b)]/10 text-[var(--menu-accent,#f59e0b)] hover:bg-[var(--menu-accent,#f59e0b)]/20'}`}
               >
-                Dining with a group? Try something to share.
+                {currentCopy.groupDiningLabel}
               </button>
             </div>
           )}
@@ -2051,6 +2231,9 @@ export default function SmartMenu({
                             onPairings={() => fetchPairingSuggestions(item)}
                             onAddToOrder={handleAddToOrder}
                             addToOrderLabel={currentEngineCopy.addToOrder}
+                            pairingsLabel={currentCopy.pairingsButtonLabel}
+                            moreInfoLabel={currentCopy.moreInfoButtonLabel}
+                            limitedTodayLabel={currentCopy.limitedTodayLabel}
                             badgeLabels={engineMode === 'classic' || isExtraRevealedItem || resolvedHints?.suppressBadge
                               ? { signature: '', mostLoved: '', chefSelection: '' }
                               : {
@@ -2409,7 +2592,7 @@ export default function SmartMenu({
                       {currentCopy.addOnsLabel}
                     </p>
                     <p className="text-xs text-slate-500 mb-3">
-                      Enhance your meal with these optional additions
+                      {currentCopy.optionalAddOnsDescription}
                     </p>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -2446,7 +2629,7 @@ export default function SmartMenu({
               variant="outline"
               onClick={() => setSelectedItemForDetail(null)}
             >
-              Close
+              {currentCopy.closeLabel}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2468,6 +2651,17 @@ export default function SmartMenu({
         }
         onRemove={(menuItemId) => dispatchCart({ type: 'REMOVE_ITEM', menuItemId })}
         formatPrice={(amount) => formatMenuPriceWithVariant(amount, getVariant('price_format'))}
+        closeLabel={currentCopy.closeLabel}
+        removeLabel={currentEngineCopy.removeLabel}
+        tableLabel={currentEngineCopy.tableLabel}
+        selectTableLabel={currentEngineCopy.selectTableLabel}
+        changeLabel={currentEngineCopy.changeLabel}
+        optionalLabel={currentEngineCopy.optionalLabel}
+        selectYourTableLabel={currentEngineCopy.selectYourTableLabel}
+        tableHelperLabel={currentEngineCopy.tableHelperLabel}
+        noTableLabel={currentEngineCopy.noTableLabel}
+        totalLabel={currentEngineCopy.totalLabel}
+        placingLabel={currentEngineCopy.placingLabel}
         onPlaceOrder={async () => {
           if (cart.length === 0) return
           setStoredLastOrder(restaurantId, cart.map((l) => ({ menuItemId: l.menuItemId, name: l.name, quantity: l.quantity })))

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -90,6 +91,7 @@ export default function SettingsClient({
   const { toast } = useToast()
   const { t: i18n } = useI18n()
   const { t: td } = useDynamicTranslate()
+  const router = useRouter()
 
   // Theme state
   const [restaurantName, setRestaurantName] = useState(currentTheme.restaurantName || '')
@@ -103,6 +105,7 @@ export default function SettingsClient({
   const [menuTimezone, setMenuTimezone] = useState(currentTheme.menuTimezone || 'Asia/Baghdad')
   const [themePreset, setThemePreset] = useState<string | null>(currentTheme.themePreset ?? null)
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
+  const initialManagementLanguage = currentTheme.managementLanguage || 'en'
   const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
   const [descriptionTone, setDescriptionTone] = useState<string>((currentTheme as Record<string, unknown>).descriptionTone as string || '')
   const [foodTerminologyOverrides, setFoodTerminologyOverrides] = useState<string>((currentTheme as Record<string, unknown>).foodTerminologyOverrides as string || '')
@@ -122,6 +125,8 @@ export default function SettingsClient({
   const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
   const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
   const [savingTheme, setSavingTheme] = useState(false)
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
+  const [resettingDemoAccount, setResettingDemoAccount] = useState(false)
   const [fontDropdownOpen, setFontDropdownOpen] = useState(false)
 
   // Dish photo background state
@@ -207,6 +212,7 @@ export default function SettingsClient({
   const saveTheme = async () => {
     setSavingTheme(true)
     try {
+      const languageChanged = (managementLanguage || 'en') !== initialManagementLanguage
       const response = await fetch('/api/settings/theme', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -236,10 +242,45 @@ export default function SettingsClient({
         throw new Error(data.error || 'Failed to save theme')
       }
       toast({ title: 'Theme saved ✨', description: 'Your Restaurant DNA has been updated.' })
+      if (languageChanged) {
+        router.refresh()
+        window.location.reload()
+        return
+      }
     } catch (error) {
       toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to save theme', variant: 'destructive' })
     } finally {
       setSavingTheme(false)
+    }
+  }
+
+  const resetDemoAccount = async () => {
+    setResettingDemoAccount(true)
+    try {
+      const response = await fetch('/api/settings/reset-demo-account', {
+        method: 'POST',
+      })
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to reset demo account')
+      }
+
+      toast({
+        title: 'Demo account reset',
+        description: 'Restaurant data was cleared and Restaurant DNA onboarding will open again.',
+      })
+      setResetDialogOpen(false)
+      router.refresh()
+      window.location.reload()
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to reset demo account',
+        variant: 'destructive',
+      })
+    } finally {
+      setResettingDemoAccount(false)
     }
   }
 
@@ -416,15 +457,15 @@ export default function SettingsClient({
       {/* Customer menu: show Kurdish language option */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-slate-900">Customer menu languages</CardTitle>
-          <p className="text-sm text-slate-500">Choose which languages guests can switch to on your public menu.</p>
+          <CardTitle className="text-slate-900">{i18n.settings_customer_menu_languages}</CardTitle>
+          <p className="text-sm text-slate-500">{i18n.settings_customer_menu_languages_description}</p>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3">
               <div>
-                <p className="font-medium text-slate-900">Show Arabic on menu</p>
-                <p className="text-sm text-slate-500">When off, the Arabic option is hidden from the language selector.</p>
+                <p className="font-medium text-slate-900">{i18n.settings_show_arabic_on_menu}</p>
+                <p className="text-sm text-slate-500">{i18n.settings_show_arabic_on_menu_description}</p>
               </div>
               <button
                 type="button"
@@ -444,8 +485,8 @@ export default function SettingsClient({
             </div>
             <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3">
               <div>
-                <p className="font-medium text-slate-900">Show Kurdish on menu</p>
-                <p className="text-sm text-slate-500">When off, the Kurdish option is hidden from the language selector.</p>
+                <p className="font-medium text-slate-900">{i18n.settings_show_kurdish_on_menu}</p>
+                <p className="text-sm text-slate-500">{i18n.settings_show_kurdish_on_menu_description}</p>
               </div>
               <button
                 type="button"
@@ -1199,6 +1240,24 @@ export default function SettingsClient({
         )}
       </Card>
 
+      <Card className="border-red-200 bg-red-50/40">
+        <CardHeader>
+          <CardTitle className="text-red-700">{td('Demo account reset')}</CardTitle>
+          <p className="text-sm text-red-600">
+            {td('This clears menu items, categories, sales, expenses, inventory, tables, branches, employees, featured sections, and Restaurant DNA setup for this restaurant. It does not touch the global UI translations.')}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => setResetDialogOpen(true)}
+          >
+            {td('Reset demo account')}
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Save Button */}
       <div className="sticky bottom-6 z-10">
         <Button onClick={saveTheme} disabled={savingTheme}
@@ -1208,6 +1267,37 @@ export default function SettingsClient({
           {i18n.settings_save_button}
         </Button>
       </div>
+
+      {/* Theme Suggest Dialog */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{td('Reset demo account?')}</DialogTitle>
+            <DialogDescription>
+              {td('This will delete this restaurant’s menu items, categories, sales, expenses, inventory, tables, branches, employees, featured sections, and related demo data. Restaurant DNA onboarding will appear again after reload. UI translations will not be reset.')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setResetDialogOpen(false)}
+              disabled={resettingDemoAccount}
+            >
+              {i18n.common_cancel}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={resetDemoAccount}
+              disabled={resettingDemoAccount}
+            >
+              {resettingDemoAccount ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {td('Yes, reset everything')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Theme Suggest Dialog */}
       <Dialog open={themeSuggestDialogOpen} onOpenChange={setThemeSuggestDialogOpen}>

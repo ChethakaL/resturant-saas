@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import AddExpenseModal from './AddExpenseModal'
 import AddWasteModal from './AddWasteModal'
-import { useI18n, useDynamicTranslate } from '@/lib/i18n'
+import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
 import DatePicker from '@/components/ui/date-picker'
 
 function daysBetweenInclusive(start: Date, end: Date) {
@@ -139,10 +139,274 @@ function getQuickPeriod(period: 'today' | 'week' | 'month') {
   }
 }
 
+const UI_COPY = {
+  en: {
+    loading: 'Loading...',
+    period: 'Period',
+    downloadPdf: 'Download PDF',
+    cogsIncompleteTitle: 'COGS is incomplete',
+    cogsIncompleteBody: 'Only {percent}% of sales are covered by items with complete costing. Add recipe costs to menu items for accurate COGS and gross profit.',
+    basedOnElapsed: 'Based on {elapsed} of {total} days elapsed, projected revenue is {revenue}.',
+    topCostDrivers: 'Top cost drivers',
+    today: 'Today',
+    thisWeek: 'This week',
+    thisMonth: 'This month',
+    from: 'From',
+    to: 'To',
+    apply: 'Apply',
+    revenue: 'Revenue',
+    expenses: 'Expenses',
+    netProfit: 'Net Profit',
+    profitMargin: 'Profit Margin',
+    grossProfit: 'Gross Profit',
+    coverage: 'Coverage',
+    profitAndLossSummary: 'PROFIT AND LOSS SUMMARY',
+    item: 'Item',
+    amount: 'Amount',
+    sales: 'SALES',
+    cogsCostOfGoodsSold: 'COGS (Cost of Goods Sold)',
+    otherExpense: 'OTHER EXPENSE',
+    netIncome: 'NET INCOME',
+    salesLabel: 'Sales',
+    costOfGoodsSold: 'COST OF GOODS SOLD',
+    category: 'Category',
+    totalSales: 'TOTAL SALES',
+    totalCogs: 'TOTAL COGS',
+    actions: 'Actions',
+    wasteLossesDamages: 'Waste / Losses and Damages',
+    totalOtherExpense: 'TOTAL OTHER EXPENSE',
+    addExpense: 'Add Expense',
+    recordWaste: 'Record Waste',
+    detailedTransactionRecords: 'DETAILED TRANSACTION RECORDS',
+    all: 'All',
+    allCategories: 'All Categories',
+    date: 'Date',
+    type: 'Type',
+    description: 'Description',
+    details: 'Details',
+    noTransactions: 'No transactions found for this period',
+    success: 'Success',
+    error: 'Error',
+    deleteExpenseConfirm: 'Are you sure you want to delete this expense?',
+    deleteWasteConfirm: 'Are you sure you want to delete this waste record?',
+    deleteRecurringConfirm: 'End this recurring expense today?',
+    expenseDeleted: 'Expense deleted successfully',
+    wasteDeleted: 'Waste record deleted successfully',
+    recurringEnded: 'Recurring expense ended successfully',
+    noExpenseFound: 'No expense found',
+    noExpenseFoundDescription: 'There are no expense transactions to edit for this category.',
+    failedLoad: 'Failed to load P&L data',
+    revenueType: 'REVENUE',
+    cogsType: 'COGS',
+    expenseType: 'EXPENSE',
+    wasteType: 'WASTE',
+    laborType: 'LABOR',
+    revenueCategory: 'Revenue',
+    cogsCategory: 'COGS',
+    ingredientsUsed: 'Ingredients used',
+    mealPrep: 'Meal Prep',
+    kitchen: 'Kitchen',
+    labor: 'Labor',
+    wasteCategory: 'Waste / Losses',
+    recurringPrefix: 'Recurring',
+    salePrefix: 'Sale',
+    cogsPrefix: 'COGS',
+    wastePrefix: 'Waste',
+    payrollPrefix: 'Payroll',
+    periodPrefix: 'Period',
+    cadencePrefix: 'Cadence',
+    unknownReason: 'No reason',
+    unknownEmployee: 'Employee',
+    operatingExpenses: 'Operating Expenses',
+    selectDate: 'Select date',
+    itemsSuffix: 'items',
+    ofConnector: 'of',
+    noValue: '-',
+    cadenceDaily: 'Daily',
+    cadenceWeekly: 'Weekly',
+    cadenceMonthly: 'Monthly',
+    cadenceAnnual: 'Annual',
+  },
+  'ar-fusha': {
+    loading: 'جارٍ التحميل...',
+    period: 'الفترة',
+    downloadPdf: 'تنزيل PDF',
+    cogsIncompleteTitle: 'تكلفة البضاعة غير مكتملة',
+    cogsIncompleteBody: 'فقط {percent}% من المبيعات مغطاة بأصناف ذات تكلفة مكتملة. أضف تكاليف الوصفات للحصول على تكلفة بضاعة وربح إجمالي دقيقين.',
+    basedOnElapsed: 'استناداً إلى مرور {elapsed} من أصل {total} يوماً، فإن الإيرادات المتوقعة هي {revenue}.',
+    topCostDrivers: 'أكبر عوامل التكلفة',
+    today: 'اليوم',
+    thisWeek: 'هذا الأسبوع',
+    thisMonth: 'هذا الشهر',
+    from: 'من',
+    to: 'إلى',
+    apply: 'تطبيق',
+    revenue: 'الإيرادات',
+    expenses: 'المصروفات',
+    netProfit: 'صافي الربح',
+    profitMargin: 'هامش الربح',
+    grossProfit: 'الربح الإجمالي',
+    coverage: 'التغطية',
+    profitAndLossSummary: 'ملخص الأرباح والخسائر',
+    item: 'البند',
+    amount: 'المبلغ',
+    sales: 'المبيعات',
+    cogsCostOfGoodsSold: 'تكلفة البضاعة المباعة',
+    otherExpense: 'مصروفات أخرى',
+    netIncome: 'صافي الدخل',
+    salesLabel: 'مبيعات',
+    costOfGoodsSold: 'تكلفة البضاعة المباعة',
+    category: 'الفئة',
+    totalSales: 'إجمالي المبيعات',
+    totalCogs: 'إجمالي تكلفة البضاعة',
+    actions: 'الإجراءات',
+    wasteLossesDamages: 'الهدر / الخسائر والتلف',
+    totalOtherExpense: 'إجمالي المصروفات الأخرى',
+    addExpense: 'إضافة مصروف',
+    recordWaste: 'تسجيل هدر',
+    detailedTransactionRecords: 'سجلات المعاملات المفصلة',
+    all: 'الكل',
+    allCategories: 'جميع الفئات',
+    date: 'التاريخ',
+    type: 'النوع',
+    description: 'الوصف',
+    details: 'تفاصيل',
+    noTransactions: 'لا توجد معاملات لهذه الفترة',
+    success: 'نجاح',
+    error: 'خطأ',
+    deleteExpenseConfirm: 'هل أنت متأكد من حذف هذا المصروف؟',
+    deleteWasteConfirm: 'هل أنت متأكد من حذف سجل الهدر هذا؟',
+    deleteRecurringConfirm: 'هل تريد إنهاء هذا المصروف المتكرر اليوم؟',
+    expenseDeleted: 'تم حذف المصروف بنجاح',
+    wasteDeleted: 'تم حذف سجل الهدر بنجاح',
+    recurringEnded: 'تم إنهاء المصروف المتكرر بنجاح',
+    noExpenseFound: 'لم يتم العثور على مصروف',
+    noExpenseFoundDescription: 'لا توجد معاملات مصروفات لتعديلها لهذه الفئة.',
+    failedLoad: 'فشل تحميل بيانات الأرباح والخسائر',
+    revenueType: 'الإيرادات',
+    cogsType: 'تكلفة البضاعة',
+    expenseType: 'مصروف',
+    wasteType: 'هدر',
+    laborType: 'عمالة',
+    revenueCategory: 'الإيرادات',
+    cogsCategory: 'تكلفة البضاعة',
+    ingredientsUsed: 'المكونات المستخدمة',
+    mealPrep: 'تحضير مسبق',
+    kitchen: 'المطبخ',
+    labor: 'العمالة',
+    wasteCategory: 'الهدر / الخسائر',
+    recurringPrefix: 'متكرر',
+    salePrefix: 'بيع',
+    cogsPrefix: 'تكلفة البضاعة',
+    wastePrefix: 'هدر',
+    payrollPrefix: 'رواتب',
+    periodPrefix: 'الفترة',
+    cadencePrefix: 'الدورية',
+    unknownReason: 'بلا سبب',
+    unknownEmployee: 'موظف',
+    operatingExpenses: 'المصروفات التشغيلية',
+    selectDate: 'اختر التاريخ',
+    itemsSuffix: 'عناصر',
+    ofConnector: 'من',
+    noValue: '-',
+    cadenceDaily: 'يومي',
+    cadenceWeekly: 'أسبوعي',
+    cadenceMonthly: 'شهري',
+    cadenceAnnual: 'سنوي',
+  },
+  ku: {
+    loading: 'چاوەڕوان بە...',
+    period: 'ماوە',
+    downloadPdf: 'داگرتنی PDF',
+    cogsIncompleteTitle: 'تێچوونی خواردن تەواو نییە',
+    cogsIncompleteBody: 'تەنها {percent}% لە فرۆشتنەکان بە بابەتە تێچوون تەواوەکان داپۆشراون. تێچوونی ڕەچەتەکان زیاد بکە بۆ ژماردنی دروستی COGS و قازانجی گشتی.',
+    basedOnElapsed: 'بەپێی تێپەڕبوونی {elapsed} لە {total} ڕۆژ، داهاتی چاوەڕوانکراو {revenue}ە.',
+    topCostDrivers: 'سەرەکیترین هۆکارەکانی تێچوون',
+    today: 'ئەمڕۆ',
+    thisWeek: 'ئەم هەفتەیە',
+    thisMonth: 'ئەم مانگە',
+    from: 'لە',
+    to: 'بۆ',
+    apply: 'جێبەجێکردن',
+    revenue: 'داهات',
+    expenses: 'خەرجی',
+    netProfit: 'قازانجی ڕەوا',
+    profitMargin: 'ڕێژەی قازانج',
+    grossProfit: 'قازانجی گشتی',
+    coverage: 'داپۆشین',
+    profitAndLossSummary: 'پوختەی قازانج و زیان',
+    item: 'بەند',
+    amount: 'بڕ',
+    sales: 'فرۆشتن',
+    cogsCostOfGoodsSold: 'تێچوونی کەلوپەلی فرۆشراو',
+    otherExpense: 'خەرجییەکانی تر',
+    netIncome: 'داهاتی ڕەوا',
+    salesLabel: 'مبیعات',
+    costOfGoodsSold: 'تێچوونی کەلوپەلی فرۆشراو',
+    category: 'پۆل',
+    totalSales: 'کۆی فرۆشتن',
+    totalCogs: 'کۆی تێچوونی خواردن',
+    actions: 'کردارەکان',
+    wasteLossesDamages: 'بەفیڕۆچوو / زیان و تێکچوون',
+    totalOtherExpense: 'کۆی خەرجییەکانی تر',
+    addExpense: 'زیادکردنی خەرجی',
+    recordWaste: 'تۆمارکردنی بەفیڕۆچوو',
+    detailedTransactionRecords: 'تۆمارە وردەکانی مامەڵەکان',
+    all: 'هەموو',
+    allCategories: 'هەموو پۆلەکان',
+    date: 'بەروار',
+    type: 'جۆر',
+    description: 'وەسف',
+    details: 'وردەکاری',
+    noTransactions: 'هیچ مامەڵەیەک بۆ ئەم ماوەیە نەدۆزرایەوە',
+    success: 'سەرکەوتوو',
+    error: 'هەڵە',
+    deleteExpenseConfirm: 'دڵنیایت لە سڕینەوەی ئەم خەرجییە؟',
+    deleteWasteConfirm: 'دڵنیایت لە سڕینەوەی ئەم تۆمارەی بەفیڕۆچووە؟',
+    deleteRecurringConfirm: 'ئەمڕۆ ئەم خەرجییە دووبارەبووە کۆتایی پێبهێنرێت؟',
+    expenseDeleted: 'خەرجی بە سەرکەوتوویی سڕایەوە',
+    wasteDeleted: 'تۆماری بەفیڕۆچوو بە سەرکەوتوویی سڕایەوە',
+    recurringEnded: 'خەرجیی دووبارەبوو بە سەرکەوتوویی کۆتایی پێهات',
+    noExpenseFound: 'هیچ خەرجییەک نەدۆزرایەوە',
+    noExpenseFoundDescription: 'هیچ مامەڵەی خەرجییەک نییە بۆ دەستکاریکردنی ئەم پۆلە.',
+    failedLoad: 'بارکردنی داتای قازانج و زیان سەرکەوتوو نەبوو',
+    revenueType: 'داهات',
+    cogsType: 'تێچوونی خواردن',
+    expenseType: 'خەرجی',
+    wasteType: 'بەفیڕۆچوو',
+    laborType: 'کرێی کار',
+    revenueCategory: 'داهات',
+    cogsCategory: 'تێچوونی خواردن',
+    ingredientsUsed: 'پێکهاتە بەکارهاتووەکان',
+    mealPrep: 'ئامادەکاری پێشوو',
+    kitchen: 'چێشتخانە',
+    labor: 'کرێی کار',
+    wasteCategory: 'بەفیڕۆچوو / زیان',
+    recurringPrefix: 'دووبارەبوو',
+    salePrefix: 'فرۆشتن',
+    cogsPrefix: 'تێچوونی خواردن',
+    wastePrefix: 'بەفیڕۆچوو',
+    payrollPrefix: 'مووچە',
+    periodPrefix: 'ماوە',
+    cadencePrefix: 'دووری',
+    unknownReason: 'بێ هۆکار',
+    unknownEmployee: 'کارمەند',
+    operatingExpenses: 'خەرجییەکانی بەڕێوەبردن',
+    selectDate: 'بەروار هەڵبژێرە',
+    itemsSuffix: 'بابەت',
+    ofConnector: 'لە',
+    noValue: '-',
+    cadenceDaily: 'ڕۆژانە',
+    cadenceWeekly: 'هەفتانە',
+    cadenceMonthly: 'مانگانە',
+    cadenceAnnual: 'ساڵانە',
+  },
+} as const
+
 export default function ProfitLossPageClient() {
   const { toast } = useToast()
-  const { t } = useI18n()
-  const { t: td } = useDynamicTranslate()
+  const { t, locale } = useI18n()
+  const ui = UI_COPY[locale]
   const [activePeriod, setActivePeriod] = useState<string>('month')
   const [dateRange, setDateRange] = useState(() => getQuickPeriod('month'))
   const [data, setData] = useState<PnLData | null>(null)
@@ -160,6 +424,19 @@ export default function ProfitLossPageClient() {
   const [branches, setBranches] = useState<{ id: string; name: string; address?: string | null }[]>([])
   const [selectedBranch, setSelectedBranch] = useState<string>('')
 
+  const formatDate = (value: Date, options?: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(
+      locale === 'ar-fusha' ? 'ar' : locale === 'ku' ? 'ku' : 'en',
+      options ?? { year: 'numeric', month: '2-digit', day: '2-digit' }
+    ).format(value)
+
+  const formatCadence = (cadence: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL') => {
+    if (cadence === 'DAILY') return ui.cadenceDaily
+    if (cadence === 'WEEKLY') return ui.cadenceWeekly
+    if (cadence === 'MONTHLY') return ui.cadenceMonthly
+    return ui.cadenceAnnual
+  }
+
   const fetchData = async () => {
     setLoading(true)
     try {
@@ -169,13 +446,13 @@ export default function ProfitLossPageClient() {
         url += `&branchId=${branchId}`
       }
       const response = await fetch(url)
-      if (!response.ok) throw new Error('Failed to fetch data')
+      if (!response.ok) throw new Error(ui.failedLoad)
       const result = await response.json()
       setData(result)
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to load P&L data',
+        title: ui.error,
+        description: error.message || ui.failedLoad,
         variant: 'destructive',
       })
     } finally {
@@ -207,44 +484,44 @@ export default function ProfitLossPageClient() {
   }
 
   const handleDeleteExpense = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this expense?')) return
+    if (!confirm(ui.deleteExpenseConfirm)) return
 
     try {
       const response = await fetch(`/api/expenses/transactions/${id}`, {
         method: 'DELETE',
       })
-      if (!response.ok) throw new Error('Failed to delete')
+      if (!response.ok) throw new Error(ui.error)
       toast({
-        title: 'Success',
-        description: 'Expense deleted successfully',
+        title: ui.success,
+        description: ui.expenseDeleted,
       })
       fetchData()
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to delete expense',
+        title: ui.error,
+        description: error.message || ui.error,
         variant: 'destructive',
       })
     }
   }
 
   const handleDeleteWaste = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this waste record?')) return
+    if (!confirm(ui.deleteWasteConfirm)) return
 
     try {
       const response = await fetch(`/api/waste/${id}`, {
         method: 'DELETE',
       })
-      if (!response.ok) throw new Error('Failed to delete')
+      if (!response.ok) throw new Error(ui.error)
       toast({
-        title: 'Success',
-        description: 'Waste record deleted successfully',
+        title: ui.success,
+        description: ui.wasteDeleted,
       })
       fetchData()
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to delete waste record',
+        title: ui.error,
+        description: error.message || ui.error,
         variant: 'destructive',
       })
     }
@@ -253,8 +530,8 @@ export default function ProfitLossPageClient() {
   const handleEditExpense = (transaction: any | null) => {
     if (!transaction) {
       toast({
-        title: 'No expense found',
-        description: 'There are no expense transactions to edit for this category.',
+        title: ui.noExpenseFound,
+        description: ui.noExpenseFoundDescription,
         variant: 'destructive',
       })
       return
@@ -264,22 +541,22 @@ export default function ProfitLossPageClient() {
   }
 
   const handleDeleteRecurring = async (id: string) => {
-    if (!confirm('End this recurring expense today?')) return
+    if (!confirm(ui.deleteRecurringConfirm)) return
 
     try {
       const response = await fetch(`/api/expenses/${id}`, {
         method: 'DELETE',
       })
-      if (!response.ok) throw new Error('Failed to delete expense')
+      if (!response.ok) throw new Error(ui.error)
       toast({
-        title: 'Success',
-        description: 'Recurring expense ended successfully',
+        title: ui.success,
+        description: ui.recurringEnded,
       })
       fetchData()
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to delete expense',
+        title: ui.error,
+        description: error.message || ui.error,
         variant: 'destructive',
       })
     }
@@ -320,11 +597,11 @@ export default function ProfitLossPageClient() {
     // Top cost drivers
     const drivers: Array<{ label: string; amount: number }> = []
     if (projectedCogs > 0)
-      drivers.push({ label: 'COGS', amount: projectedCogs })
+      drivers.push({ label: ui.cogsType, amount: projectedCogs })
     if (projectedPayroll > 0)
-      drivers.push({ label: 'Labor', amount: projectedPayroll })
+      drivers.push({ label: ui.labor, amount: projectedPayroll })
     if (projectedExpenses > 0)
-      drivers.push({ label: 'Operating Expenses', amount: projectedExpenses })
+      drivers.push({ label: ui.operatingExpenses, amount: projectedExpenses })
     drivers.sort((a, b) => b.amount - a.amount)
 
     return {
@@ -340,9 +617,27 @@ export default function ProfitLossPageClient() {
   if (loading || !data) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-500">{td('Loading...')}</div>
+        <div className="text-slate-500">{ui.loading}</div>
       </div>
     )
+  }
+
+  const localizeCategory = (category: string) => {
+    if (!category) return ''
+    if (category === 'Revenue') return ui.revenueCategory
+    if (category === 'COGS') return ui.cogsCategory
+    if (category === 'Waste' || category === 'Waste / Losses') return ui.wasteCategory
+    if (category === 'Labor') return ui.labor
+    return getTranslatedCategoryName(category, t)
+  }
+
+  const localizeTransactionType = (type: TransactionRow['type'] | 'ALL') => {
+    if (type === 'ALL') return ui.all
+    if (type === 'REVENUE') return ui.revenueType
+    if (type === 'COGS') return ui.cogsType
+    if (type === 'EXPENSE') return ui.expenseType
+    if (type === 'WASTE') return ui.wasteType
+    return ui.laborType
   }
 
   const expenseRangeStart = new Date(dateRange.start)
@@ -353,22 +648,22 @@ export default function ProfitLossPageClient() {
       id: sale.id,
       date: new Date(sale.timestamp),
       type: 'REVENUE' as const,
-      description: `Sale: ${sale.orderNumber}`,
-      category: 'Revenue',
+      description: `${ui.salePrefix}: ${sale.orderNumber}`,
+      category: ui.revenueCategory,
       amount: sale.total,
-      details: `${sale.items.length} items`,
+      details: `${sale.items.length} ${ui.itemsSuffix}`,
     })),
     ...data.sales.map((sale) => ({
       id: `${sale.id}-cogs`,
       date: new Date(sale.timestamp),
       type: 'COGS' as const,
-      description: `COGS: ${sale.orderNumber}`,
-      category: 'COGS',
+      description: `${ui.cogsPrefix}: ${sale.orderNumber}`,
+      category: ui.cogsCategory,
       amount: -sale.items.reduce(
         (sum: number, item: any) => sum + item.cost * item.quantity,
         0
       ),
-      details: 'Ingredients used',
+      details: ui.ingredientsUsed,
     })),
     ...data.expenseTransactions.map((tx) => ({
       id: tx.id,
@@ -378,8 +673,8 @@ export default function ProfitLossPageClient() {
       category: tx.category,
       amount: -tx.amount,
       details: tx.ingredient
-        ? `${tx.quantity} ${tx.ingredient.unit} of ${tx.ingredient.name}`
-        : tx.notes || '-',
+        ? `${tx.quantity} ${tx.ingredient.unit} ${ui.ofConnector} ${tx.ingredient.name}`
+        : tx.notes || ui.noValue,
       deleteType: 'expense' as const,
       editKind: 'transaction' as const,
       editPayload: tx,
@@ -400,10 +695,10 @@ export default function ProfitLossPageClient() {
           id: exp.id,
           date: new Date(exp.startDate),
           type: 'EXPENSE' as const,
-          description: `Recurring: ${exp.name}`,
-          category: exp.category || 'Other',
+          description: `${ui.recurringPrefix}: ${exp.name}`,
+          category: exp.category || t.common_description,
           amount: -totalForRange,
-          details: `Cadence: ${exp.cadence}`,
+          details: `${ui.cadencePrefix}: ${formatCadence(exp.cadence)}`,
           editKind: 'recurring' as const,
           editPayload: exp,
         }
@@ -413,29 +708,29 @@ export default function ProfitLossPageClient() {
       id: waste.id,
       date: new Date(waste.date),
       type: 'WASTE' as const,
-      description: `Waste: ${waste.ingredient.name}`,
-      category: 'Waste / Losses',
+      description: `${ui.wastePrefix}: ${waste.ingredient.name}`,
+      category: ui.wasteCategory,
       amount: -waste.cost,
-      details: `${waste.quantity} ${waste.ingredient.unit} - ${waste.reason || 'No reason'}`,
+      details: `${waste.quantity} ${waste.ingredient.unit} - ${waste.reason || ui.unknownReason}`,
       deleteType: 'waste' as const,
     })),
     ...data.mealPrepSessions.map((session) => ({
       id: `${session.id}-prep`,
       date: new Date(session.prepDate),
       type: 'COGS' as const,
-      description: `Meal Prep: ${session.sessionTime}`,
-      category: 'Meal Prep',
+      description: `${ui.mealPrep}: ${session.sessionTime}`,
+      category: ui.mealPrep,
       amount: -session.totalCost,
-      details: `Prepared by ${session.preparedBy || 'Kitchen'}`,
+      details: `${ui.description}: ${session.preparedBy || ui.kitchen}`,
     })),
     ...data.payrolls.map((payroll) => ({
       id: payroll.id,
       date: new Date(payroll.paidDate || payroll.period),
       type: 'LABOR' as const,
-      description: `Payroll: ${payroll.employee?.name || 'Employee'}`,
-      category: 'Labor',
+      description: `${ui.payrollPrefix}: ${payroll.employee?.name || ui.unknownEmployee}`,
+      category: ui.labor,
       amount: -payroll.totalPaid,
-      details: payroll.notes || `Period: ${new Date(payroll.period).toLocaleDateString()}`,
+      details: payroll.notes || `${ui.periodPrefix}: ${formatDate(new Date(payroll.period))}`,
     })),
   ]
 
@@ -500,7 +795,7 @@ export default function ProfitLossPageClient() {
   // Group sales by category (for detailed breakdown)
   const salesByCategory = data.sales.reduce((acc: Record<string, { revenue: number; cogs: number; count: number }>, sale) => {
     sale.items.forEach((item: any) => {
-      const category = item.menuItem?.category?.name || 'Other'
+      const category = localizeCategory(item.menuItem?.category?.name || '')
       if (!acc[category]) {
         acc[category] = { revenue: 0, cogs: 0, count: 0 }
       }
@@ -512,15 +807,15 @@ export default function ProfitLossPageClient() {
   }, {})
 
   // Format date range label
-  const dateRangeLabel = new Intl.DateTimeFormat('en-US', {
+  const dateRangeLabel = `${formatDate(new Date(dateRange.start), {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(dateRange.start)) + ' to ' + new Intl.DateTimeFormat('en-US', {
+  })} ${ui.to} ${formatDate(new Date(dateRange.end), {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(dateRange.end))
+  })}`
 
   return (
     <div className="space-y-6">
@@ -528,7 +823,7 @@ export default function ProfitLossPageClient() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">{t.sales_title}</h1>
-          <p className="text-slate-500 mt-1">{td('Period')}: {dateRangeLabel}</p>
+          <p className="text-slate-500 mt-1">{ui.period}: {dateRangeLabel}</p>
         </div>
         <div className="flex items-center gap-3">
           {branches.length > 0 && (
@@ -557,7 +852,7 @@ export default function ProfitLossPageClient() {
             }}
           >
             <Download className="h-4 w-4 mr-2" />
-            {td('Download PDF')}
+            {ui.downloadPdf}
           </Button>
         </div>
       </div>
@@ -570,9 +865,9 @@ export default function ProfitLossPageClient() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-amber-800">{td('COGS is incomplete')}</h3>
+                <h3 className="font-semibold text-amber-800">{ui.cogsIncompleteTitle}</h3>
                 <p className="text-sm text-amber-700 mt-1">
-                  {td('Only')} {data.summary.cogsCoveragePercent}% {td('of sales are covered by items with complete costing. Add recipe costs to menu items for accurate COGS and gross profit.')}
+                  {ui.cogsIncompleteBody.replace('{percent}', String(data.summary.cogsCoveragePercent))}
                 </p>
               </div>
             </div>
@@ -586,15 +881,18 @@ export default function ProfitLossPageClient() {
             <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <h3 className="font-semibold text-red-800">
-                {td('Projected net loss this month')}: {formatCurrency(Math.abs(forecast.projectedNetProfit))}
+                {t.dashboard_projected_loss}: {formatCurrency(Math.abs(forecast.projectedNetProfit))}
               </h3>
               <p className="text-sm text-red-700 mt-1">
-                {td('Based on')} {forecast.daysElapsed} {td('of')} {forecast.daysInMonth} {td('days elapsed, projected revenue is')} {formatCurrency(forecast.projectedRevenue)}.
+                {ui.basedOnElapsed
+                  .replace('{elapsed}', String(forecast.daysElapsed))
+                  .replace('{total}', String(forecast.daysInMonth))
+                  .replace('{revenue}', formatCurrency(forecast.projectedRevenue))}
               </p>
               {forecast.drivers.length > 0 && (
                 <div className="mt-2">
                   <p className="text-xs font-medium text-red-700 uppercase tracking-wide">
-                    {td('Top cost drivers')}:
+                    {ui.topCostDrivers}:
                   </p>
                   <ul className="mt-1 space-y-0.5">
                     {forecast.drivers.map((d) => (
@@ -602,7 +900,7 @@ export default function ProfitLossPageClient() {
                         key={d.label}
                         className="text-sm text-red-700 flex items-center justify-between max-w-xs"
                       >
-                        <span>{td(d.label)}</span>
+                        <span>{d.label}</span>
                         <span className="font-mono">
                           {formatCurrency(d.amount)}
                         </span>
@@ -623,14 +921,14 @@ export default function ProfitLossPageClient() {
             {/* Presets: horizontal segmented control */}
             <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit">
               {[
-                { key: 'today', label: td('Today') },
-                { key: 'week', label: td('This week') },
-                { key: 'month', label: td('This month') },
+                { key: 'today', label: ui.today },
+                { key: 'week', label: ui.thisWeek },
+                { key: 'month', label: ui.thisMonth },
               ].map(({ key, label }) => (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => handleQuickPeriod(key)}
+                  onClick={() => handleQuickPeriod(key as 'today' | 'week' | 'month')}
                   className={`rounded-md px-4 py-2 text-sm font-medium transition-colors min-w-[88px] ${activePeriod === key
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
@@ -643,10 +941,11 @@ export default function ProfitLossPageClient() {
             {/* Custom range: From / To with clear spacing */}
             <div className="flex flex-wrap items-end gap-6">
               <div className="flex items-end gap-2">
-                <Label htmlFor="pnl-start-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">{td('From')}</Label>
+                <Label htmlFor="pnl-start-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">{ui.from}</Label>
                 <div className="w-[160px]">
                   <DatePicker
                     value={dateRange.start}
+                    placeholder={ui.selectDate}
                     onChange={(value) => {
                       setActivePeriod('custom')
                       setDateRange({ ...dateRange, start: value })
@@ -655,10 +954,11 @@ export default function ProfitLossPageClient() {
                 </div>
               </div>
               <div className="flex items-end gap-2">
-                <Label htmlFor="pnl-end-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">{td('To')}</Label>
+                <Label htmlFor="pnl-end-date" className="text-sm text-slate-600 whitespace-nowrap pb-2.5">{ui.to}</Label>
                 <div className="w-[160px]">
                   <DatePicker
                     value={dateRange.end}
+                    placeholder={ui.selectDate}
                     onChange={(value) => {
                       setActivePeriod('custom')
                       setDateRange({ ...dateRange, end: value })
@@ -675,7 +975,7 @@ export default function ProfitLossPageClient() {
                 }}
                 className="shrink-0 mb-0.5"
               >
-                {td('Apply')}
+                {ui.apply}
               </Button>
             </div>
           </div>
@@ -692,7 +992,7 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {td('Revenue')}
+                  {ui.revenue}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-green-600 font-mono break-all">
                   {formatCurrency(data.summary.revenue)}
@@ -710,14 +1010,14 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {td('COGS')}
+                  {ui.cogsType}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-amber-600 font-mono break-all">
                   {formatCurrency(data.summary.cogs)}
                 </p>
                 {typeof data.summary.cogsCoveragePercent === 'number' && (
                   <p className="text-[10px] text-slate-500 mt-0.5">
-                    {td('Coverage')}: {data.summary.cogsCoveragePercent}%
+                    {ui.coverage}: {data.summary.cogsCoveragePercent}%
                   </p>
                 )}
               </div>
@@ -733,7 +1033,7 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {td('Gross Profit')}
+                  {ui.grossProfit}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-emerald-600 font-mono break-all">
                   {formatCurrency(data.summary.grossProfit)}
@@ -751,7 +1051,7 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {td('Expenses')}
+                  {ui.expenses}
                 </p>
                 <p className="text-base sm:text-lg xl:text-xl font-bold text-red-600 font-mono break-all">
                   {formatCurrency(data.summary.expenses + data.summary.payroll)}
@@ -778,7 +1078,7 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {td('Net Profit')}
+                  {ui.netProfit}
                 </p>
                 <p
                   className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${data.summary.netProfit >= 0
@@ -808,7 +1108,7 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {td('Profit Margin')}
+                  {ui.profitMargin}
                 </p>
                 <p
                   className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${profitMargin >= 0 ? 'text-blue-600' : 'text-red-600'
@@ -825,31 +1125,31 @@ export default function ProfitLossPageClient() {
       {/* P&L Summary Table */}
       <Card>
         <CardHeader className="bg-slate-800 text-white">
-          <CardTitle className="text-white">{td('PROFIT AND LOSS SUMMARY')}</CardTitle>
+          <CardTitle className="text-white">{ui.profitAndLossSummary}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <table className="w-full">
             <thead className="bg-slate-100">
               <tr>
-                <th className="text-left p-4 font-semibold">{td('Item')}</th>
-                <th className="text-right p-4 font-semibold">{td('Amount')}</th>
+                <th className="text-left p-4 font-semibold">{ui.item}</th>
+                <th className="text-right p-4 font-semibold">{ui.amount}</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b">
-                <td className="p-4 font-semibold">{td('SALES')}</td>
+                <td className="p-4 font-semibold">{ui.sales}</td>
                 <td className="p-4 text-right font-mono text-green-600">
                   {formatCurrency(data.summary.revenue)}
                 </td>
               </tr>
               <tr className="border-b">
-                <td className="p-4 font-semibold">{td('COGS (Cost of Goods Sold)')}</td>
+                <td className="p-4 font-semibold">{ui.cogsCostOfGoodsSold}</td>
                 <td className="p-4 text-right font-mono text-amber-600">
                   {formatCurrency(data.summary.cogs)}
                 </td>
               </tr>
               <tr className="border-b bg-slate-50">
-                <td className="p-4 font-semibold">{td('GROSS PROFIT')}</td>
+                <td className="p-4 font-semibold">{ui.grossProfit}</td>
                 <td className="p-4 text-right font-mono font-bold text-green-600">
                   {formatCurrency(data.summary.grossProfit)}
                 </td>
@@ -863,20 +1163,20 @@ export default function ProfitLossPageClient() {
               </tr>
               */}
               <tr className="border-b">
-                <td className="p-4 font-semibold">{td('OTHER EXPENSE')}</td>
+                <td className="p-4 font-semibold">{ui.otherExpense}</td>
                 <td className="p-4 text-right font-mono text-red-600">
                   {formatCurrency(data.summary.expenses)}
                 </td>
               </tr>
               <tr className="bg-slate-50">
-                <td className="p-4 font-bold text-lg">{td('NET INCOME')}</td>
+                <td className="p-4 font-bold text-lg">{ui.netIncome}</td>
                 <td className={`p-4 text-right font-mono font-bold text-lg ${data.summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
                   {formatCurrency(data.summary.netProfit)}
                 </td>
               </tr>
               <tr>
-                <td className="p-4 font-semibold">{td('PROFIT MARGIN')}</td>
+                <td className="p-4 font-semibold">{ui.profitMargin}</td>
                 <td className="p-4 text-right font-mono">
                   {profitMargin.toFixed(2)}%
                 </td>
@@ -890,27 +1190,27 @@ export default function ProfitLossPageClient() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="bg-blue-600 text-white">
-            <CardTitle className="text-white">{td('SALES')}</CardTitle>
+            <CardTitle className="text-white">{ui.salesLabel}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <table className="w-full">
               <thead className="bg-slate-100">
                 <tr>
-                  <th className="text-left p-3 text-sm font-semibold">{td('Category')}</th>
-                  <th className="text-right p-3 text-sm font-semibold">{td('Amount')}</th>
+                  <th className="text-left p-3 text-sm font-semibold">{ui.category}</th>
+                  <th className="text-right p-3 text-sm font-semibold">{ui.amount}</th>
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(salesByCategory).map(([category, stats]) => (
+                {Object.entries(salesByCategory).map(([category, stats]: [string, { revenue: number; cogs: number; count: number }]) => (
                   <tr key={category} className="border-b">
-                    <td className="p-3">{category}</td>
+                  <td className="p-3">{localizeCategory(category)}</td>
                     <td className="p-3 text-right font-mono">
                       {formatCurrency(stats.revenue)}
                     </td>
                   </tr>
                 ))}
                 <tr className="bg-slate-50 font-semibold">
-                  <td className="p-3">{td('TOTAL SALES')}</td>
+                  <td className="p-3">{ui.totalSales}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.revenue)}
                   </td>
@@ -922,27 +1222,27 @@ export default function ProfitLossPageClient() {
 
         <Card>
           <CardHeader className="bg-blue-600 text-white">
-            <CardTitle className="text-white">{td('COST OF GOODS SOLD')}</CardTitle>
+            <CardTitle className="text-white">{ui.costOfGoodsSold}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <table className="w-full">
               <thead className="bg-slate-100">
                 <tr>
-                  <th className="text-left p-3 text-sm font-semibold">{td('Category')}</th>
-                  <th className="text-right p-3 text-sm font-semibold">{td('Amount')}</th>
+                  <th className="text-left p-3 text-sm font-semibold">{ui.category}</th>
+                  <th className="text-right p-3 text-sm font-semibold">{ui.amount}</th>
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(salesByCategory).map(([category, stats]) => (
+                {Object.entries(salesByCategory).map(([category, stats]: [string, { revenue: number; cogs: number; count: number }]) => (
                   <tr key={category} className="border-b">
-                    <td className="p-3">{category}</td>
+                  <td className="p-3">{localizeCategory(category)}</td>
                     <td className="p-3 text-right font-mono">
                       {formatCurrency(stats.cogs)}
                     </td>
                   </tr>
                 ))}
                 <tr className="bg-slate-50 font-semibold">
-                  <td className="p-3">{td('TOTAL COGS')}</td>
+                  <td className="p-3">{ui.totalCogs}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.cogs)}
                   </td>
@@ -1001,15 +1301,15 @@ export default function ProfitLossPageClient() {
 
         <Card>
           <CardHeader className="bg-blue-600 text-white">
-            <CardTitle className="text-white">{td('OTHER EXPENSE')}</CardTitle>
+            <CardTitle className="text-white">{ui.otherExpense}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <table className="w-full">
               <thead className="bg-slate-100">
                 <tr>
-                  <th className="text-left p-3 text-sm font-semibold">{td('Category')}</th>
-                  <th className="text-right p-3 text-sm font-semibold">{td('Amount')}</th>
-                  <th className="text-center p-3 text-sm font-semibold">{td('Actions')}</th>
+                  <th className="text-left p-3 text-sm font-semibold">{ui.category}</th>
+                  <th className="text-right p-3 text-sm font-semibold">{ui.amount}</th>
+                  <th className="text-center p-3 text-sm font-semibold">{ui.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1021,7 +1321,7 @@ export default function ProfitLossPageClient() {
                       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
                     return (
                       <tr key={category} className="border-b">
-                        <td className="p-3">{td(category)}</td>
+                        <td className="p-3">{localizeCategory(category)}</td>
                         <td className="p-3 text-right font-mono">
                           {formatCurrency(total)}
                         </td>
@@ -1047,7 +1347,7 @@ export default function ProfitLossPageClient() {
                 {/* Waste section - automatically shown */}
                 {data.wasteRecords.length > 0 && (
                   <tr className="border-b bg-red-50">
-                    <td className="p-3 font-semibold text-red-700">{td('Waste / Losses and Damages')}</td>
+                    <td className="p-3 font-semibold text-red-700">{ui.wasteLossesDamages}</td>
                     <td className="p-3 text-right font-mono text-red-700">
                       {formatCurrency(
                         data.wasteRecords.reduce((sum, w) => sum + w.cost, 0)
@@ -1065,7 +1365,7 @@ export default function ProfitLossPageClient() {
                   </tr>
                 )}
                 <tr className="bg-slate-50 font-semibold">
-                  <td className="p-3">{td('TOTAL OTHER EXPENSE')}</td>
+                  <td className="p-3">{ui.totalOtherExpense}</td>
                   <td className="p-3 text-right font-mono">
                     {formatCurrency(data.summary.expenses)}
                   </td>
@@ -1084,18 +1384,18 @@ export default function ProfitLossPageClient() {
           setShowExpenseModal(true)
         }}>
           <Plus className="h-4 w-4 mr-2" />
-          {td('Add Expense')}
+          {ui.addExpense}
         </Button>
         <Button variant="outline" onClick={() => setShowWasteModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
-          {td('Record Waste')}
+          {ui.recordWaste}
         </Button>
       </div>
 
       {/* Detailed Transaction Records - Spreadsheet Style */}
       <Card>
         <CardHeader className="bg-slate-800 text-white">
-          <CardTitle className="text-white">{td('DETAILED TRANSACTION RECORDS')}</CardTitle>
+          <CardTitle className="text-white">{ui.detailedTransactionRecords}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="border-b bg-white px-4 py-3">
@@ -1115,7 +1415,7 @@ export default function ProfitLossPageClient() {
                   className="rounded-full"
                   onClick={() => setTransactionTypeFilter(type)}
                 >
-                  {type === 'ALL' ? td('All') : type}
+                  {localizeTransactionType(type as TransactionRow['type'] | 'ALL')}
                 </Button>
               ))}
             </div>
@@ -1126,7 +1426,7 @@ export default function ProfitLossPageClient() {
                 className="rounded-full"
                 onClick={() => setTransactionCategoryFilter('ALL')}
               >
-                {td('All Categories')}
+                {ui.allCategories}
               </Button>
               {transactionCategories.map((category) => (
                 <Button
@@ -1138,7 +1438,7 @@ export default function ProfitLossPageClient() {
                   className="rounded-full"
                   onClick={() => setTransactionCategoryFilter(category)}
                 >
-                  {category}
+                  {localizeCategory(category)}
                 </Button>
               ))}
             </div>
@@ -1153,7 +1453,7 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('date')}
                       className="flex items-center gap-2"
                     >
-                      Date
+                      {ui.date}
                       <span className="text-xs text-slate-400">{sortIndicator('date')}</span>
                     </button>
                   </th>
@@ -1163,7 +1463,7 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('type')}
                       className="flex items-center gap-2"
                     >
-                      {td('Type')}
+                      {ui.type}
                       <span className="text-xs text-slate-400">{sortIndicator('type')}</span>
                     </button>
                   </th>
@@ -1173,7 +1473,7 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('description')}
                       className="flex items-center gap-2"
                     >
-                      {td('Description')}
+                      {ui.description}
                       <span className="text-xs text-slate-400">{sortIndicator('description')}</span>
                     </button>
                   </th>
@@ -1183,7 +1483,7 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('category')}
                       className="flex items-center gap-2"
                     >
-                      {td('Category')}
+                      {ui.category}
                       <span className="text-xs text-slate-400">{sortIndicator('category')}</span>
                     </button>
                   </th>
@@ -1193,7 +1493,7 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('amount')}
                       className="ml-auto flex items-center gap-2"
                     >
-                      {td('Amount')}
+                      {ui.amount}
                       <span className="text-xs text-slate-400">{sortIndicator('amount')}</span>
                     </button>
                   </th>
@@ -1203,18 +1503,18 @@ export default function ProfitLossPageClient() {
                       onClick={() => toggleSort('details')}
                       className="flex items-center gap-2"
                     >
-                      {td('Details')}
+                      {ui.details}
                       <span className="text-xs text-slate-400">{sortIndicator('details')}</span>
                     </button>
                   </th>
-                  <th className="text-center p-3 font-semibold">{td('Actions')}</th>
+                  <th className="text-center p-3 font-semibold">{ui.actions}</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTransactions.map((row) => (
                   <tr key={`${row.type}-${row.id}`} className="border-b hover:bg-slate-50">
                     <td className="p-3">
-                      {row.date.toLocaleDateString()}
+                      {formatDate(row.date)}
                     </td>
                     <td className="p-3">
                       <span
@@ -1229,11 +1529,11 @@ export default function ProfitLossPageClient() {
                                 : 'bg-blue-100 text-blue-800'
                           }`}
                       >
-                        {row.type}
+                        {localizeTransactionType(row.type)}
                       </span>
                     </td>
                     <td className="p-3">{row.description}</td>
-                    <td className="p-3">{row.category}</td>
+                    <td className="p-3">{localizeCategory(row.category)}</td>
                     <td
                       className={`p-3 text-right font-mono ${row.amount >= 0 ? 'text-green-600' : 'text-red-600'
                         }`}
@@ -1286,7 +1586,7 @@ export default function ProfitLossPageClient() {
                 {filteredTransactions.length === 0 && (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-slate-500">
-                      No transactions found for this period
+                      {ui.noTransactions}
                     </td>
                   </tr>
                 )}

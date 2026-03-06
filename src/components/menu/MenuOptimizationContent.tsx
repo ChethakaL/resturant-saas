@@ -785,7 +785,7 @@ export default function MenuOptimizationContent({
             {td('Optimize your menu to increase profit and sales')}
           </CardTitle>
           <p className="text-sm text-slate-500">
-            {td('We offer three options to optimize your menu:')} <strong>{td('1. Classic Mode')}</strong> — {td('do it yourself')}. <strong>{td('2. Profit Mode')}</strong> — {td('highlight high-margin items')}. <strong>{td('3. Smart Profit Mode')}</strong> — {td('use sales and profit data to order and suggest. Only you see this data; guests never do.')}
+            {td('We offer three options to optimize your menu:')} <strong>{td('1. Classic Mode')}</strong>. <strong>{td('2. Profit Mode')}</strong> — {td('highlight high-margin items')}. <strong>{td('3. Smart Profit Mode')}</strong> — {td('use sales and profit data to order and suggest. Only you see this data; guests never do.')}
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -799,7 +799,7 @@ export default function MenuOptimizationContent({
                   className={`rounded-xl border-2 p-4 text-left transition ${engineMode === mode ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
                 >
                   <span className="font-semibold">
-                    {mode === 'classic' && td('1. Classic Mode: do it yourself')}
+                    {mode === 'classic' && td('1. Classic Mode')}
                     {mode === 'profit' && td('2. Profit Mode')}
                     {mode === 'adaptive' && td('3. Smart Profit Mode')}
                   </span>
@@ -812,78 +812,6 @@ export default function MenuOptimizationContent({
               ))}
             </div>
           </div>
-
-          {engineMode === 'classic' && (
-            <>
-              <div className="space-y-2">
-                <Label>{td('Suggestions and highlights')}</Label>
-                <p className="text-xs text-slate-500 mb-2">{td('Enable or disable menu suggestion features.')}</p>
-                <div className="flex flex-wrap gap-4">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={moodFlow} onChange={(e) => setMoodFlow(e.target.checked)} className="rounded" />
-                    <span className="text-sm">{td('Mood-based suggestions')} (e.g. &quot;{td('something light')}&quot;, &quot;{td('something filling')}&quot;)</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={bundles} onChange={(e) => setBundles(e.target.checked)} className="rounded" />
-                    <span className="text-sm">{td('Often bought together')} {td('combos')} ({td('top 5 by purchase count')})</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={upsells} onChange={(e) => setUpsells(e.target.checked)} className="rounded" />
-                    <span className="text-sm">{td('Add-on suggestions while browsing')}</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={scarcityBadges} onChange={(e) => setScarcityBadges(e.target.checked)} className="rounded" />
-                    <span className="text-sm">&quot;{td('Popular')}&quot; {td('or')} &quot;{td('Limited')}&quot; {td('badges on items')}</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={priceAnchoring} onChange={(e) => setPriceAnchoring(e.target.checked)} className="rounded" />
-                    <span className="text-sm">{td('Show a higher-priced item first to make others feel reasonably priced')}</span>
-                  </label>
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <div className="h-14 flex items-center">
-                    <Label className="leading-tight">{td('Max items to show per category')} (3–15)</Label>
-                  </div>
-                  <Input
-                    type="number"
-                    min={3}
-                    max={15}
-                    value={maxItemsPerCategory}
-                    onChange={(e) => setMaxItemsPerCategory(parseInt(e.target.value, 10) || 7)}
-                    className="w-full"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-14 flex items-center">
-                    <Label className="leading-tight">{td('Items shown before "See more" per category')} (1–10)</Label>
-                  </div>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={maxInitialItemsPerCategory}
-                    onChange={(e) => setMaxInitialItemsPerCategory(parseInt(e.target.value, 10) || 3)}
-                    className="w-full"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-14 flex items-start">
-                    <Label className="leading-tight">{td('When to show add-on suggestions')} ({td('seconds after guest stops scrolling')}, 2–30)</Label>
-                  </div>
-                  <Input
-                    type="number"
-                    min={2}
-                    max={30}
-                    value={idleUpsellDelaySeconds}
-                    onChange={(e) => setIdleUpsellDelaySeconds(parseInt(e.target.value, 10) || 6)}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-            </>
-          )}
 
           {(engineMode === 'profit' || engineMode === 'adaptive') && (
             <div className="mt-4 pt-4 border-t border-slate-100">

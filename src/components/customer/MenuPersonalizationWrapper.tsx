@@ -12,6 +12,14 @@ export interface MenuPersonalizationWrapperProps {
   showcases?: any[]
   categories?: any[]
   theme?: any
+  initialLanguage?: 'en' | 'ar' | 'ar_fusha' | 'ku'
+  initialTranslationCache?: Partial<Record<'en' | 'ar' | 'ar_fusha' | 'ku', Record<string, {
+    name: string
+    description: string
+    aiDescription: string
+    protein?: number | null
+    carbs?: number | null
+  }>>>
   restaurantName?: string
   restaurantLogo?: string | null
   engineMode?: 'classic' | 'profit' | 'adaptive'
@@ -40,6 +48,8 @@ export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProp
     <SmartMenu
       {...props}
       forceShowImages={props.forceShowImages}
+      initialLanguage={props.initialLanguage}
+      initialTranslationCache={props.initialTranslationCache}
       tableSize={validTableSize}
       tableNumber={tableNumber}
       tables={props.tables}

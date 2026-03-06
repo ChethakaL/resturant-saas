@@ -397,6 +397,12 @@ export interface TranslationStrings {
     settings_subtitle: string
     settings_management_language: string
     settings_management_language_description: string
+    settings_customer_menu_languages: string
+    settings_customer_menu_languages_description: string
+    settings_show_arabic_on_menu: string
+    settings_show_arabic_on_menu_description: string
+    settings_show_kurdish_on_menu: string
+    settings_show_kurdish_on_menu_description: string
     settings_save_button: string
     settings_style_presets: string
     settings_brand_colors: string
@@ -822,6 +828,12 @@ const en: TranslationStrings = {
     settings_subtitle: "Your restaurant's unique identity — colors, fonts, and everything that makes your brand yours.",
     settings_management_language: 'Management Language',
     settings_management_language_description: 'Choose the language for this dashboard.',
+    settings_customer_menu_languages: 'Customer menu languages',
+    settings_customer_menu_languages_description: 'Choose which languages guests can switch to on your public menu.',
+    settings_show_arabic_on_menu: 'Show Arabic on menu',
+    settings_show_arabic_on_menu_description: 'When off, the Arabic option is hidden from the language selector.',
+    settings_show_kurdish_on_menu: 'Show Kurdish on menu',
+    settings_show_kurdish_on_menu_description: 'When off, the Kurdish option is hidden from the language selector.',
     settings_save_button: 'Save Restaurant DNA',
     settings_style_presets: 'Style Presets',
     settings_brand_colors: 'Brand Colors',
@@ -1247,6 +1259,12 @@ const ku: TranslationStrings = {
     settings_subtitle: 'ناسنامەی تایبەتی چێشتخانەکەت — ڕەنگ، فۆنت، و هەموو ئەوەی براندەکەت دەناسێنێت.',
     settings_management_language: 'زمانی بەڕێوەبردن',
     settings_management_language_description: 'زمان بۆ ئەم داشبۆردە هەڵبژێرە.',
+    settings_customer_menu_languages: 'زمانەکانی مینیوی میوان',
+    settings_customer_menu_languages_description: 'هەڵبژێرە کام زمانانە میوان دەتوانن لە مینیوی گشتی بگۆڕن.',
+    settings_show_arabic_on_menu: 'عەرەبی لە مینیو پیشان بدە',
+    settings_show_arabic_on_menu_description: 'کاتێک ناچالاک بێت، هەڵبژاردەی عەرەبی لە هەڵبژێرەری زماندا دەشاردرێتەوە.',
+    settings_show_kurdish_on_menu: 'کوردی لە مینیو پیشان بدە',
+    settings_show_kurdish_on_menu_description: 'کاتێک ناچالاک بێت، هەڵبژاردەی کوردی لە هەڵبژێرەری زماندا دەشاردرێتەوە.',
     settings_save_button: 'پاشەکەوتکردنی ناسنامەی چێشتخانە',
     settings_style_presets: 'شێوازی ئامادەکراو',
     settings_brand_colors: 'ڕەنگەکانی براند',
@@ -1672,6 +1690,12 @@ const arFusha: TranslationStrings = {
     settings_subtitle: 'هوية مطعمك الفريدة — الألوان والخطوط وكل ما يميز علامتك التجارية.',
     settings_management_language: 'لغة الإدارة',
     settings_management_language_description: 'اختر لغة لوحة التحكم.',
+    settings_customer_menu_languages: 'لغات قائمة العملاء',
+    settings_customer_menu_languages_description: 'اختر اللغات التي يمكن للضيوف التبديل إليها في قائمتك العامة.',
+    settings_show_arabic_on_menu: 'إظهار العربية في القائمة',
+    settings_show_arabic_on_menu_description: 'عند الإيقاف، يتم إخفاء خيار العربية من محدد اللغة.',
+    settings_show_kurdish_on_menu: 'إظهار الكردية في القائمة',
+    settings_show_kurdish_on_menu_description: 'عند الإيقاف، يتم إخفاء خيار الكردية من محدد اللغة.',
     settings_save_button: 'حفظ هوية المطعم',
     settings_style_presets: 'أنماط جاهزة',
     settings_brand_colors: 'ألوان العلامة التجارية',
@@ -1724,6 +1748,33 @@ export function getTranslations(locale: string): TranslationStrings {
     if (locale === 'ku') return translations.ku
     if (locale === 'ar-fusha' || locale === 'ar_fusha') return translations['ar-fusha']
     return translations.en
+}
+
+const ENGLISH_VALUE_TO_KEY = Object.entries(translations.en).reduce(
+    (acc, [key, value]) => {
+        const normalized = String(value ?? '').trim()
+        if (normalized) {
+            acc[normalized] = key as keyof TranslationStrings
+        }
+        return acc
+    },
+    {} as Record<string, keyof TranslationStrings>
+)
+
+export function getStaticTranslationForSourceText(
+    locale: string,
+    sourceText: string
+): string | null {
+    const normalized = String(sourceText ?? '').trim()
+    if (!normalized) return normalized
+    if (locale === 'en') return normalized
+
+    const key = ENGLISH_VALUE_TO_KEY[normalized]
+    if (!key) return null
+
+    const bundle = getTranslations(locale)
+    const translated = bundle[key]
+    return typeof translated === 'string' && translated.trim() ? translated : null
 }
 
 /**

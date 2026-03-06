@@ -36,6 +36,9 @@ interface MenuItemCardProps {
   onAddToOrder: () => void
   /** Localized "Add to order" button text. */
   addToOrderLabel?: string
+  pairingsLabel?: string
+  moreInfoLabel?: string
+  limitedTodayLabel?: string
   /** Localized badge text for signature / most loved / chef selection. */
   badgeLabels?: BadgeLabels
   loadingPairings?: boolean
@@ -83,6 +86,9 @@ export function MenuItemCard({
   onPairings,
   onAddToOrder,
   addToOrderLabel = 'Add to order',
+  pairingsLabel = 'Pairings',
+  moreInfoLabel = 'More info',
+  limitedTodayLabel = 'Limited Today',
   badgeLabels,
   loadingPairings = false,
   isSelectedForPairing = false,
@@ -147,7 +153,7 @@ export function MenuItemCard({
             )}
             {isLimitedToday && (
               <p className={`text-[10px] flex items-center gap-1 mb-1 ${isDarkTheme ? 'text-white/60' : 'text-slate-500'}`}>
-                <span>ⓘ</span> Limited Today
+                <span>ⓘ</span> {limitedTodayLabel}
               </p>
             )}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -181,11 +187,11 @@ export function MenuItemCard({
               className={`flex items-center gap-1 text-[9px] font-medium ${btnLink} transition-colors`}
             >
               {loadingPairings && isSelectedForPairing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-              <span>Pairings</span>
+              <span>{pairingsLabel}</span>
             </button>
             <span className={textMuted}>&bull;</span>
             <button type="button" onClick={(e) => { e.stopPropagation(); onDetail() }} className={`text-[9px] font-medium ${textMuted} hover:underline`}>
-              More info
+              {moreInfoLabel}
             </button>
             <button
               type="button"

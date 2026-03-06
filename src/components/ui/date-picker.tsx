@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 
 import Calendar from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 const parseDateInput = (value: string) => {
@@ -26,8 +27,9 @@ export default function DatePicker({
   value,
   onChange,
   className,
-  placeholder = 'Select date',
+  placeholder,
 }: DatePickerProps) {
+  const { locale } = useI18n()
   const parsedValue = useMemo(() => parseDateInput(value), [value])
   const [open, setOpen] = useState(false)
   const [month, setMonth] = useState(parsedValue || new Date())
@@ -38,7 +40,20 @@ export default function DatePicker({
     }
   }, [parsedValue])
 
-  const displayValue = parsedValue ? format(parsedValue, 'MMM dd, yyyy') : placeholder
+  const resolvedPlaceholder =
+    placeholder ||
+    (locale === 'ar-fusha'
+      ? 'اختر التاريخ'
+      : locale === 'ku'
+        ? 'بەروار هەڵبژێرە'
+        : 'Select date')
+
+  const displayValue = parsedValue
+    ? new Intl.DateTimeFormat(
+        locale === 'ar-fusha' ? 'ar' : locale === 'ku' ? 'ku' : 'en',
+        { month: 'short', day: '2-digit', year: 'numeric' }
+      ).format(parsedValue)
+    : resolvedPlaceholder
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -57,6 +72,7 @@ export default function DatePicker({
       </PopoverTrigger>
       <PopoverContent className="p-0" align="start">
         <Calendar
+          locale={locale}
           month={month}
           selected={parsedValue}
           onMonthChange={setMonth}

@@ -18,6 +18,12 @@ export const revalidate = 0
 
 const CAROUSEL_CACHE_SECONDS = 300 // 5 min
 
+function getInitialMenuLanguage(managementLanguage: unknown): 'en' | 'ar_fusha' | 'ku' {
+  if (managementLanguage === 'ku') return 'ku'
+  if (managementLanguage === 'ar-fusha' || managementLanguage === 'ar_fusha') return 'ar_fusha'
+  return 'en'
+}
+
 /** Cached AI carousel suggestion so the page doesn't wait on Gemini every request */
 async function getCachedCarouselSuggestions(
   restaurantId: string,
@@ -55,6 +61,8 @@ async function getMenuData() {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
   const todayStart = new Date()
   todayStart.setUTCHours(0, 0, 0, 0)
+  const restaurantSettings = (restaurant.settings as Record<string, unknown>) || {}
+  const initialLanguage = getInitialMenuLanguage(restaurantSettings.managementLanguage)
 
   const [menuItems, chefPicks, showcases, categories, salesLast30d, preppedStocksRows, salesToday, tables] =
     await prisma.$transaction([
@@ -64,6 +72,18 @@ async function getMenuData() {
           category: true,
           ingredients: { include: { ingredient: true } },
           addOns: { include: { addOn: true } },
+          translations: initialLanguage === 'en'
+            ? false
+            : {
+                where: { language: initialLanguage },
+                select: {
+                  translatedName: true,
+                  translatedDescription: true,
+                  aiDescription: true,
+                  protein: true,
+                  carbs: true,
+                },
+              },
         },
         orderBy: { price: 'asc' },
       }),
@@ -149,6 +169,26 @@ async function getMenuData() {
         })),
     }
   })
+  const initialTranslationCache =
+    initialLanguage === 'en'
+      ? {}
+      : {
+          [initialLanguage]: Object.fromEntries(
+            enrichedMenuItems.map((item: any) => {
+              const translation = Array.isArray(item.translations) ? item.translations[0] : null
+              return [
+                item.id,
+                {
+                  name: translation?.translatedName || '',
+                  description: translation?.translatedDescription || '',
+                  aiDescription: translation?.aiDescription || translation?.translatedDescription || '',
+                  protein: typeof translation?.protein === 'number' ? translation.protein : null,
+                  carbs: typeof translation?.carbs === 'number' ? translation.carbs : null,
+                },
+              ]
+            })
+          ),
+        }
 
   // If any item has no description (e.g. legacy), generate once and persist so next time it's already there
   const settingsForTone = (restaurant.settings as Record<string, unknown>) || {}
@@ -509,6 +549,8 @@ async function getMenuData() {
   return {
     restaurant,
     menuItems: clientMenuItems,
+    initialLanguage,
+    initialTranslationCache,
     showcases: showcaseData,
     categories: categoriesForMenu.map((c: { id: string; name: string; displayOrder: number }) => ({
       id: c.id,
@@ -549,6 +591,8 @@ export default async function Home() {
     <MenuPersonalizationWrapper
       restaurantId={data.restaurant.id}
       menuItems={data.menuItems}
+      initialLanguage={data.initialLanguage}
+      initialTranslationCache={data.initialTranslationCache}
       showcases={data.showcases}
       categories={data.categories}
       theme={data.theme}

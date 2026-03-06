@@ -4,9 +4,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
-const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
 export type CalendarProps = {
+  locale?: 'en' | 'ku' | 'ar-fusha'
   month: Date
   selected?: Date | null
   onSelect: (date: Date) => void
@@ -15,16 +14,23 @@ export type CalendarProps = {
 }
 
 export default function Calendar({
+  locale = 'en',
   month,
   selected,
   onSelect,
   onMonthChange,
   className,
 }: CalendarProps) {
+  const intlLocale = locale === 'ar-fusha' ? 'ar' : locale === 'ku' ? 'ku' : 'en'
   const monthStart = startOfMonth(month)
   const monthEnd = endOfMonth(monthStart)
   const startDate = startOfWeek(monthStart)
   const endDate = endOfWeek(monthEnd)
+  const weekDays = Array.from({ length: 7 }, (_, index) =>
+    new Intl.DateTimeFormat(intlLocale, { weekday: 'short' }).format(
+      addDays(startOfWeek(new Date(2026, 0, 4)), index)
+    )
+  )
 
   const rows: JSX.Element[] = []
   let days: JSX.Element[] = []
@@ -74,7 +80,10 @@ export default function Calendar({
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <div className="text-sm font-semibold text-slate-900">
-          {format(monthStart, 'MMMM yyyy')}
+          {new Intl.DateTimeFormat(intlLocale, {
+            month: 'long',
+            year: 'numeric',
+          }).format(monthStart)}
         </div>
         <Button
           type="button"
@@ -86,7 +95,7 @@ export default function Calendar({
         </Button>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-slate-500">
-        {WEEK_DAYS.map((dayLabel) => (
+        {weekDays.map((dayLabel) => (
           <div key={dayLabel}>{dayLabel}</div>
         ))}
       </div>

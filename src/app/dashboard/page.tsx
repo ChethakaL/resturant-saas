@@ -19,6 +19,7 @@ import { redirect } from 'next/navigation'
 import PnLReminder from '@/components/dashboard/PnLReminder'
 import DailyRevenueMarginChart from '@/components/dashboard/DailyRevenueMarginChart'
 import MenuItemAnalytics from '@/components/dashboard/MenuItemAnalytics'
+import type { ManagementLocale } from '@/lib/i18n'
 
 function daysBetweenInclusive(start: Date, end: Date) {
   const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
@@ -75,6 +76,12 @@ function expenseTotalForPeriod(
 const TIME_BUCKETS = ['Morning', 'Afternoon', 'Evening'] as const
 type TimeBucket = typeof TIME_BUCKETS[number]
 
+function getDashboardTranslationLanguage(locale: ManagementLocale): 'ar_fusha' | 'ku' | null {
+  if (locale === 'ku') return 'ku'
+  if (locale === 'ar-fusha') return 'ar_fusha'
+  return null
+}
+
 function getTimeBucket(date: Date): TimeBucket {
   const hour = date.getHours()
   if (hour < 12) return 'Morning'
@@ -82,9 +89,10 @@ function getTimeBucket(date: Date): TimeBucket {
   return 'Evening'
 }
 
-async function getAnalyticsData(restaurantId: string) {
+async function getAnalyticsData(restaurantId: string, locale: ManagementLocale) {
   const endDate = new Date()
   const monthStart = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+  const translationLang = getDashboardTranslationLanguage(locale)
 
   const monthlySales = await prisma.sale.findMany({
     where: {
@@ -112,10 +120,22 @@ async function getAnalyticsData(restaurantId: string) {
       },
     },
     include: {
-      menuItem: true,
+      menuItem: {
+        include: translationLang
+          ? {
+              translations: {
+                where: { language: translationLang },
+                select: { translatedName: true },
+              },
+            }
+          : {},
+      },
       sale: true,
     },
   })
+
+  const getDisplayName = (menuItem: { name: string; translations?: { translatedName: string }[] }) =>
+    menuItem.translations?.[0]?.translatedName || menuItem.name
 
   const itemStats = new Map<
     string,
@@ -135,7 +155,7 @@ async function getAnalyticsData(restaurantId: string) {
     const bucket = getTimeBucket(item.sale.timestamp)
     const current = itemStats.get(item.menuItemId) || {
       id: item.menuItemId,
-      name: item.menuItem.name,
+      name: getDisplayName(item.menuItem as typeof item.menuItem & { translations?: { translatedName: string }[] }),
       quantity: 0,
       revenue: 0,
       profit: 0,
@@ -226,7 +246,10 @@ async function getAnalyticsData(restaurantId: string) {
   })
 
   const menuItemNameById = new Map(
-    monthlySaleItems.map((item) => [item.menuItemId, item.menuItem.name])
+    monthlySaleItems.map((item) => [
+      item.menuItemId,
+      getDisplayName(item.menuItem as typeof item.menuItem & { translations?: { translatedName: string }[] }),
+    ])
   )
 
   const topSellingItems = [...itemStatsArray]
@@ -674,6 +697,7 @@ async function getDashboardData(restaurantId: string) {
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
+  const { locale, t } = await getServerTranslations()
   if (session!.user.role === 'STAFF') {
     redirect('/dashboard/orders')
   }
@@ -681,9 +705,7 @@ export default async function DashboardPage() {
   const data = await getDashboardData(restaurantId)
 
   // Get analytics data for menu items
-  const analyticsData = await getAnalyticsData(restaurantId)
-
-  const { t } = await getServerTranslations()
+  const analyticsData = await getAnalyticsData(restaurantId, locale)
 
   return (
     <div className="space-y-8">

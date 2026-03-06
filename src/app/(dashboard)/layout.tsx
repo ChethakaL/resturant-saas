@@ -7,12 +7,14 @@ import { ManagementLanguageProvider } from '@/components/layout/ManagementLangua
 import { SubscriptionGate } from '@/components/SubscriptionGate'
 import ChatbotWidget from '@/components/chatbot/ChatbotWidget'
 import RestaurantDNAGate from '@/components/settings/RestaurantDNAGate'
+import { getServerTranslations } from '@/lib/i18n/server'
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const { locale } = await getServerTranslations()
   const session = await getServerSession(authOptions)
 
   if (!session) {
@@ -69,7 +71,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <ManagementLanguageProvider>
+    <ManagementLanguageProvider initialLocale={locale}>
       <SubscriptionGate
         hasActiveSubscription={!!hasActiveSubscription}
         subscription={subscriptionData}

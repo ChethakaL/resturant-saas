@@ -41,6 +41,17 @@ interface CartDrawerProps {
   onTableChange?: (tableNumber: string | null) => void
   /** Optional formatter for prices (e.g. A/B test variant). */
   formatPrice?: (amount: number) => string
+  closeLabel?: string
+  removeLabel?: string
+  tableLabel?: string
+  selectTableLabel?: string
+  changeLabel?: string
+  optionalLabel?: string
+  selectYourTableLabel?: string
+  tableHelperLabel?: string
+  noTableLabel?: string
+  totalLabel?: string
+  placingLabel?: string
 }
 
 export function CartDrawer({
@@ -61,6 +72,17 @@ export function CartDrawer({
   selectedTableNumber = null,
   onTableChange,
   formatPrice,
+  closeLabel = 'Close',
+  removeLabel = 'Remove',
+  tableLabel = 'Table',
+  selectTableLabel = 'Select table',
+  changeLabel = 'Change',
+  optionalLabel = 'Optional',
+  selectYourTableLabel = 'Select your table',
+  tableHelperLabel = 'Tap your table on the layout, or choose not to select.',
+  noTableLabel = "I'm not at a table",
+  totalLabel = 'Total',
+  placingLabel = 'Placing…',
 }: CartDrawerProps) {
   const [internalOpen, setInternalOpen] = useState(false)
   const [tablePickerOpen, setTablePickerOpen] = useState(false)
@@ -114,7 +136,7 @@ export function CartDrawer({
                 type="button"
                 onClick={() => setOpen(false)}
                 className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                aria-label="Close"
+                aria-label={closeLabel}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -156,9 +178,9 @@ export function CartDrawer({
                         type="button"
                         onClick={() => onRemove(line.menuItemId)}
                         className="text-white/60 hover:text-red-400 text-sm ml-1"
-                        aria-label="Remove"
+                        aria-label={removeLabel}
                       >
-                        Remove
+                        {removeLabel}
                       </button>
                     </div>
                   </div>
@@ -169,7 +191,7 @@ export function CartDrawer({
             <div className="p-4 border-t border-white/10 flex flex-col gap-2">
               {showTableSelector && onTableChange && (
                 <div className="flex flex-col gap-1.5">
-                  <p className="text-sm text-white/80">Table</p>
+                  <p className="text-sm text-white/80">{tableLabel}</p>
                   <Button
                     type="button"
                     variant="outline"
@@ -177,18 +199,18 @@ export function CartDrawer({
                     className="w-full justify-between border-white/20 bg-white/5 text-white hover:bg-white/10"
                   >
                     <span>
-                      {selectedTableNumber ? `Table ${selectedTableNumber}` : 'Select table'}
+                      {selectedTableNumber ? `${tableLabel} ${selectedTableNumber}` : selectTableLabel}
                     </span>
                     <span className="text-white/60 text-sm">
-                      {selectedTableNumber ? 'Change' : 'Optional'}
+                      {selectedTableNumber ? changeLabel : optionalLabel}
                     </span>
                   </Button>
                   <Dialog open={tablePickerOpen} onOpenChange={setTablePickerOpen}>
                     <DialogContent className="max-w-sm bg-slate-900 border-white/20 text-white">
                       <DialogHeader>
-                        <DialogTitle>Select your table</DialogTitle>
+                        <DialogTitle>{selectYourTableLabel}</DialogTitle>
                       </DialogHeader>
-                      <p className="text-sm text-white/70">Tap your table on the layout, or choose not to select.</p>
+                      <p className="text-sm text-white/70">{tableHelperLabel}</p>
                       <div className="rounded-xl border border-white/20 bg-white/5 p-4">
                         <div className="grid grid-cols-4 gap-3">
                           {displayTables.map((t) => (
@@ -219,14 +241,14 @@ export function CartDrawer({
                         }}
                         className="w-full text-white/90 hover:bg-white/10 hover:text-white"
                       >
-                        I&apos;m not at a table
+                        {noTableLabel}
                       </Button>
                     </DialogContent>
                   </Dialog>
                 </div>
               )}
               <div className="flex justify-between text-lg font-semibold">
-                <span>Total</span>
+                <span>{totalLabel}</span>
                 <span>{format(total)}</span>
               </div>
               <Button
@@ -237,7 +259,7 @@ export function CartDrawer({
                 disabled={lines.length === 0 || isPlacing}
                 className="w-full bg-[var(--menu-accent,#f59e0b)] hover:opacity-90 text-white font-semibold"
               >
-                {isPlacing ? 'Placing…' : placeOrderLabel}
+                {isPlacing ? placingLabel : placeOrderLabel}
               </Button>
             </div>
           </div>

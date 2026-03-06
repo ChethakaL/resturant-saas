@@ -35,6 +35,7 @@ import { RefreshCw } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { buildTranslationSeed, TranslationSeedPayload } from '@/lib/menu-translation-seed'
 import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
+import { useDynamicTranslate } from '@/lib/i18n'
 import {
   ImageOrientation,
   ImageSizePreset,
@@ -136,7 +137,8 @@ export default function MenuForm({
 }: MenuFormProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const { t, menuTranslationLanguages } = useI18n()
+  const { locale, t, menuTranslationLanguages } = useI18n()
+  const { t: td, fetchTranslation } = useDynamicTranslate()
 
   /** translationLanguages typed for internal use */
   const translationLanguages = menuTranslationLanguages as { code: LanguageCode; label: string }[]
@@ -274,6 +276,44 @@ export default function MenuForm({
     }, {} as Record<LanguageCode, TranslationDraft>)
   })
 
+  const activeTranslationLanguage = useMemo<LanguageCode | null>(() => {
+    if (locale === 'ku') return 'ku'
+    if (locale === 'ar-fusha') return 'ar_fusha'
+    return null
+  }, [locale])
+
+  const isEditingTranslatedFields =
+    mode === 'edit' && activeTranslationLanguage !== null
+  const shouldTranslateEditableContent = mode === 'edit' && locale !== 'en'
+
+  const activeTranslationDraft = activeTranslationLanguage
+    ? translationsState[activeTranslationLanguage]
+    : null
+
+  const localizedFieldValues = useMemo(() => {
+    if (!isEditingTranslatedFields || !activeTranslationDraft) {
+      return {
+        name: formData.name,
+        description: formData.description,
+        protein: formData.protein,
+        carbs: formData.carbs,
+      }
+    }
+
+    return {
+      name: activeTranslationDraft.name || formData.name,
+      description: activeTranslationDraft.description || formData.description,
+      protein:
+        activeTranslationDraft.protein !== null && activeTranslationDraft.protein !== undefined
+          ? activeTranslationDraft.protein.toString()
+          : formData.protein,
+      carbs:
+        activeTranslationDraft.carbs !== null && activeTranslationDraft.carbs !== undefined
+          ? activeTranslationDraft.carbs.toString()
+          : formData.carbs,
+    }
+  }, [activeTranslationDraft, formData.carbs, formData.description, formData.name, formData.protein, isEditingTranslatedFields])
+
   const translationSeed = useMemo(() => {
     const selectedCategoryName = categories.find(
       (category) => category.id === formData.categoryId
@@ -315,6 +355,40 @@ export default function MenuForm({
         dirty: true,
       },
     }))
+  }
+
+  const updateTranslationNutritionField = (
+    language: LanguageCode,
+    field: 'protein' | 'carbs',
+    value: string
+  ) => {
+    const parsedValue = value.trim() === '' ? null : Number.parseInt(value, 10)
+
+    setTranslationsState((prev) => ({
+      ...prev,
+      [language]: {
+        ...prev[language],
+        [field]: Number.isNaN(parsedValue as number) ? null : parsedValue,
+        dirty: true,
+      },
+    }))
+  }
+
+  const updateLocalizedField = (
+    field: 'name' | 'description' | 'protein' | 'carbs',
+    value: string
+  ) => {
+    if (!isEditingTranslatedFields || !activeTranslationLanguage) {
+      setFormData((prev) => ({ ...prev, [field]: value }))
+      return
+    }
+
+    if (field === 'name' || field === 'description') {
+      updateTranslationField(activeTranslationLanguage, field, value)
+      return
+    }
+
+    updateTranslationNutritionField(activeTranslationLanguage, field, value)
   }
 
   const translateSingleLanguage = async (
@@ -485,6 +559,10 @@ export default function MenuForm({
   // Store recipe steps and tips
   const [recipeSteps, setRecipeSteps] = useState<string[]>(menuItem?.recipeSteps || [])
   const [recipeTips, setRecipeTips] = useState<string[]>(menuItem?.recipeTips || [])
+  const [localizedTags, setLocalizedTags] = useState(menuItem?.tags?.join(', ') || '')
+  const [localizedRecipeSteps, setLocalizedRecipeSteps] = useState<string[]>(menuItem?.recipeSteps || [])
+  const [localizedRecipeTips, setLocalizedRecipeTips] = useState<string[]>(menuItem?.recipeTips || [])
+  const [translatedIngredientNames, setTranslatedIngredientNames] = useState<Record<string, string>>({})
   const [prepTime, setPrepTime] = useState(menuItem?.prepTime || '')
   const [cookTime, setCookTime] = useState(menuItem?.cookTime || '')
   const [recipeYield, setRecipeYield] = useState<number>((menuItem as any)?.recipeYield || 1)
@@ -524,12 +602,101 @@ export default function MenuForm({
   const [addOnPage, setAddOnPage] = useState(1)
   const addOnsPerPage = 6
 
+  useEffect(() => {
+    setLocalizedTags(menuItem?.tags?.join(', ') || formData.tags || '')
+  }, [formData.tags, menuItem?.id, menuItem?.tags])
+
+  useEffect(() => {
+    setLocalizedRecipeSteps(menuItem?.recipeSteps || recipeSteps)
+  }, [menuItem?.id, recipeSteps])
+
+  useEffect(() => {
+    setLocalizedRecipeTips(menuItem?.recipeTips || recipeTips)
+  }, [menuItem?.id, recipeTips])
+
+  useEffect(() => {
+    if (!shouldTranslateEditableContent) {
+      setLocalizedTags(formData.tags)
+      setLocalizedRecipeSteps(recipeSteps)
+      setLocalizedRecipeTips(recipeTips)
+      return
+    }
+
+    let cancelled = false
+
+    const translateEditableContent = async () => {
+      const translatedTags = formData.tags
+        ? (
+          await Promise.all(
+            formData.tags
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean)
+              .map((tag) => fetchTranslation(tag))
+          )
+        ).join(', ')
+        : ''
+      const translatedSteps = await Promise.all(recipeSteps.map((step) => fetchTranslation(step)))
+      const translatedTips = await Promise.all(recipeTips.map((tip) => fetchTranslation(tip)))
+
+      if (cancelled) return
+
+      setLocalizedTags(translatedTags)
+      setLocalizedRecipeSteps(translatedSteps)
+      setLocalizedRecipeTips(translatedTips)
+    }
+
+    void translateEditableContent()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fetchTranslation, formData.tags, recipeSteps, recipeTips, shouldTranslateEditableContent])
+
   // Combined ingredients list (original + newly created)
   const allIngredients = useMemo(() => {
     const existingIds = new Set(ingredients.map((i) => i.id))
     const newOnes = newlyCreatedIngredients.filter((i) => !existingIds.has(i.id))
     return [...ingredients, ...newOnes]
   }, [ingredients, newlyCreatedIngredients])
+
+  useEffect(() => {
+    if (!shouldTranslateEditableContent) {
+      setTranslatedIngredientNames({})
+      return
+    }
+
+    let cancelled = false
+
+    const translateIngredients = async () => {
+      const entries = await Promise.all(
+        allIngredients.map(async (ingredient) => [
+          ingredient.id,
+          await fetchTranslation(ingredient.name),
+        ] as const)
+      )
+
+      if (cancelled) return
+
+      setTranslatedIngredientNames(Object.fromEntries(entries))
+    }
+
+    void translateIngredients()
+
+    return () => {
+      cancelled = true
+    }
+  }, [allIngredients, fetchTranslation, shouldTranslateEditableContent])
+
+  const displayedTags = shouldTranslateEditableContent ? localizedTags : formData.tags
+  const displayedRecipeSteps = shouldTranslateEditableContent ? localizedRecipeSteps : recipeSteps
+  const displayedRecipeTips = shouldTranslateEditableContent ? localizedRecipeTips : recipeTips
+
+  const getDisplayedIngredientName = (ingredient?: Ingredient | null) => {
+    if (!ingredient) return ''
+    if (!shouldTranslateEditableContent) return ingredient.name
+    return translatedIngredientNames[ingredient.id] || td(ingredient.name)
+  }
 
   // Supplier products for recipe costing (4.1)
   type SupplierProductOption = {
@@ -601,30 +768,58 @@ export default function MenuForm({
   }, [nextStepHighlight])
 
   const addRecipeStep = () => {
+    if (shouldTranslateEditableContent) {
+      setLocalizedRecipeSteps((prev) => [...prev, ''])
+      return
+    }
     setRecipeSteps((prev) => [...prev, ''])
   }
 
   const updateRecipeStep = (index: number, value: string) => {
+    if (shouldTranslateEditableContent) {
+      setLocalizedRecipeSteps((prev) =>
+        prev.map((step, stepIndex) => (stepIndex === index ? value : step))
+      )
+      return
+    }
     setRecipeSteps((prev) =>
       prev.map((step, stepIndex) => (stepIndex === index ? value : step))
     )
   }
 
   const removeRecipeStep = (index: number) => {
+    if (shouldTranslateEditableContent) {
+      setLocalizedRecipeSteps((prev) => prev.filter((_, stepIndex) => stepIndex !== index))
+      return
+    }
     setRecipeSteps((prev) => prev.filter((_, stepIndex) => stepIndex !== index))
   }
 
   const addRecipeTip = () => {
+    if (shouldTranslateEditableContent) {
+      setLocalizedRecipeTips((prev) => [...prev, ''])
+      return
+    }
     setRecipeTips((prev) => [...prev, ''])
   }
 
   const updateRecipeTip = (index: number, value: string) => {
+    if (shouldTranslateEditableContent) {
+      setLocalizedRecipeTips((prev) =>
+        prev.map((tip, tipIndex) => (tipIndex === index ? value : tip))
+      )
+      return
+    }
     setRecipeTips((prev) =>
       prev.map((tip, tipIndex) => (tipIndex === index ? value : tip))
     )
   }
 
   const removeRecipeTip = (index: number) => {
+    if (shouldTranslateEditableContent) {
+      setLocalizedRecipeTips((prev) => prev.filter((_, tipIndex) => tipIndex !== index))
+      return
+    }
     setRecipeTips((prev) => prev.filter((_, tipIndex) => tipIndex !== index))
   }
 
@@ -2030,8 +2225,8 @@ export default function MenuForm({
           calories: formData.calories ? parseInt(formData.calories) : null,
           protein: formData.protein ? parseInt(formData.protein) : null,
           carbs: formData.carbs ? parseInt(formData.carbs) : null,
-          tags: formData.tags
-            ? formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+          tags: displayedTags
+            ? displayedTags.split(',').map((tag) => tag.trim()).filter(Boolean)
             : [],
           ingredients: validRecipeLines.map((item) => ({
             ingredientId: item.ingredientId,
@@ -2045,8 +2240,8 @@ export default function MenuForm({
           })),
           prepTime: prepTime || null,
           cookTime: cookTime || null,
-          recipeSteps: recipeSteps,
-          recipeTips: recipeTips,
+          recipeSteps: displayedRecipeSteps,
+          recipeTips: displayedRecipeTips,
           addOnIds: selectedAddOnIds,
           translations: preparedTranslations,
         }),
@@ -2172,7 +2367,7 @@ export default function MenuForm({
               {menuItemStatus === 'ACTIVE' ? t.menu_published : t.menu_draft}
             </Badge>
             <Badge variant={validRecipeLines.length > 0 && validRecipeLines.every((r) => r.unitCostCached != null) ? 'default' : 'secondary'}>
-              Costing: {validRecipeLines.length > 0 && validRecipeLines.every((r) => r.unitCostCached != null) ? 'Complete' : 'Incomplete'}
+              {td('Costing:')} {validRecipeLines.length > 0 && validRecipeLines.every((r) => r.unitCostCached != null) ? td('Complete') : td('Incomplete')}
             </Badge>
           </div>
         </div>
@@ -2229,7 +2424,7 @@ export default function MenuForm({
                           <div className="aspect-[4/3] relative w-full">
                             <img
                               src={formData.imageUrl || menuItem?.imageUrl || ''}
-                              alt={formData.name || 'Menu item'}
+                              alt={localizedFieldValues.name || 'Menu item'}
                               className="h-full w-full object-cover"
                               onError={(e) => {
                                 e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400'
@@ -2249,22 +2444,22 @@ export default function MenuForm({
                             })()}
                           </p>
                           <h3 className="text-xl font-semibold text-slate-900">
-                            {formData.name || t.menu_form_untitled_item}
+                            {localizedFieldValues.name || t.menu_form_untitled_item}
                           </h3>
                           <p className="text-sm text-slate-600 line-clamp-3">
-                            {formData.description || t.menu_form_no_description}
+                            {localizedFieldValues.description || t.menu_form_no_description}
                           </p>
                           <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                             {formData.calories != null && formData.calories !== '' && (
                               <span>{formData.calories} cal</span>
                             )}
-                            {formData.protein != null && formData.protein !== '' && (
-                              <span>{formData.protein}g {t.menu_translation_protein}</span>
+                            {localizedFieldValues.protein != null && localizedFieldValues.protein !== '' && (
+                              <span>{localizedFieldValues.protein}g {t.menu_translation_protein}</span>
                             )}
-                            {formData.carbs != null && formData.carbs !== '' && (
-                              <span>{formData.carbs}g {t.menu_translation_carbs}</span>
+                            {localizedFieldValues.carbs != null && localizedFieldValues.carbs !== '' && (
+                              <span>{localizedFieldValues.carbs}g {t.menu_translation_carbs}</span>
                             )}
-                            {formData.tags && formData.tags.split(',').map((t) => t.trim()).filter(Boolean).map((tag) => (
+                            {displayedTags && displayedTags.split(',').map((t) => t.trim()).filter(Boolean).map((tag) => (
                               <span key={tag} className="rounded-full bg-slate-200 px-2 py-0.5">{tag}</span>
                             ))}
                           </div>
@@ -2574,8 +2769,8 @@ export default function MenuForm({
                         <Input
                           id="name"
                           required
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          value={localizedFieldValues.name}
+                          onChange={(e) => updateLocalizedField('name', e.target.value)}
                           placeholder={t.menu_form_placeholder_name}
                         />
                       </div>
@@ -2675,8 +2870,8 @@ export default function MenuForm({
                       <p className="text-xs text-slate-500">{t.menu_form_description_helper}</p>
                       <Textarea
                         id="description"
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        value={localizedFieldValues.description}
+                        onChange={(e) => updateLocalizedField('description', e.target.value)}
                         placeholder={t.menu_form_placeholder_description}
                         rows={3}
                       />
@@ -2780,8 +2975,8 @@ export default function MenuForm({
                           <Input
                             id="protein"
                             type="number"
-                            value={formData.protein}
-                            onChange={(e) => setFormData({ ...formData, protein: e.target.value })}
+                            value={localizedFieldValues.protein}
+                            onChange={(e) => updateLocalizedField('protein', e.target.value)}
                             placeholder="e.g., 25"
                           />
                         </div>
@@ -2790,8 +2985,8 @@ export default function MenuForm({
                           <Input
                             id="carbs"
                             type="number"
-                            value={formData.carbs}
-                            onChange={(e) => setFormData({ ...formData, carbs: e.target.value })}
+                            value={localizedFieldValues.carbs}
+                            onChange={(e) => updateLocalizedField('carbs', e.target.value)}
                             placeholder="e.g., 40"
                           />
                         </div>
@@ -2801,8 +2996,14 @@ export default function MenuForm({
                       <Label htmlFor="tags">{t.menu_form_dietary_tags}</Label>
                       <Input
                         id="tags"
-                        value={formData.tags}
-                        onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                        value={displayedTags}
+                        onChange={(e) => {
+                          if (shouldTranslateEditableContent) {
+                            setLocalizedTags(e.target.value)
+                            return
+                          }
+                          setFormData({ ...formData, tags: e.target.value })
+                        }}
                         placeholder={t.menu_form_placeholder_tags}
                       />
                       <p className="text-xs text-slate-500">{t.menu_form_comma_separated}</p>
@@ -2929,13 +3130,13 @@ export default function MenuForm({
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium text-amber-800">
-                          These ingredients from your description weren&apos;t found in your inventory:
+                          {td("These ingredients from your description weren't found in your inventory:")}
                         </p>
                         <p className="mt-1 text-sm text-amber-700">
                           {unmatchedIngredientsFromPrompt.join(', ')}
                         </p>
                         <p className="mt-2 text-xs text-amber-600">
-                          Add them under Inventory first, or use &quot;AI Recipe&quot; below to create a full recipe with suggestions.
+                          {td('Add them under Inventory first, or use "AI Recipe" below to create a full recipe with suggestions.')}
                         </p>
                       </div>
                       <Button
@@ -2945,45 +3146,45 @@ export default function MenuForm({
                         onClick={() => setUnmatchedIngredientsFromPrompt([])}
                         className="text-amber-700 hover:text-amber-900 shrink-0"
                       >
-                        Dismiss
+                        {td('Dismiss')}
                       </Button>
                     </div>
                   </div>
                 )}
                 <Card>
                   <CardHeader className="flex items-center justify-between gap-3">
-                    <CardTitle>SOP</CardTitle>
+                    <CardTitle>{td('SOP')}</CardTitle>
                     <div className="flex flex-wrap gap-2">
                       <Button type="button" variant="outline" size="sm" onClick={addRecipeStep}>
                         <Plus className="h-3 w-3 mr-2" />
-                        Add Step
+                        {td('Add Step')}
                       </Button>
                       <Button type="button" variant="outline" size="sm" onClick={addRecipeTip}>
                         <Plus className="h-3 w-3 mr-2" />
-                        Add Tip
+                        {td('Add Tip')}
                       </Button>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-slate-700">Steps</p>
-                        <p className="text-xs text-slate-400">Describe the cooking sequence</p>
+                        <p className="text-sm font-medium text-slate-700">{td('Steps')}</p>
+                        <p className="text-xs text-slate-400">{td('Describe the cooking sequence')}</p>
                       </div>
-                      {recipeSteps.length === 0 ? (
+                      {displayedRecipeSteps.length === 0 ? (
                         <p className="text-xs text-slate-500">
-                          No steps yet. Use the &quot;Add Step&quot; button to outline the recipe.
+                          {td('No steps yet. Use the "Add Step" button to outline the recipe.')}
                         </p>
                       ) : (
                         <div className="space-y-3">
-                          {recipeSteps.map((step, index) => (
+                          {displayedRecipeSteps.map((step, index) => (
                             <div
                               key={`step-${index}`}
                               className="border border-slate-200 rounded-md p-3 bg-white"
                             >
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-medium text-slate-500">
-                                  Step {index + 1}
+                                  {td('Step')} {index + 1}
                                 </span>
                                 <Button
                                   type="button"
@@ -2992,12 +3193,12 @@ export default function MenuForm({
                                   onClick={() => removeRecipeStep(index)}
                                   className="text-red-500 hover:text-red-700"
                                 >
-                                  Remove
+                                  {td('Remove')}
                                 </Button>
                               </div>
                               <Textarea
                                 rows={2}
-                                placeholder="e.g., Sweat onions until translucent..."
+                                placeholder={td('e.g., Sweat onions until translucent...')}
                                 value={step}
                                 onChange={(e) => updateRecipeStep(index, e.target.value)}
                               />
@@ -3008,27 +3209,27 @@ export default function MenuForm({
                     </div>
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-slate-700">Tips</p>
-                        <p className="text-xs text-slate-400">Chef notes for great results</p>
+                        <p className="text-sm font-medium text-slate-700">{td('Tips')}</p>
+                        <p className="text-xs text-slate-400">{td('Chef notes for great results')}</p>
                       </div>
-                      {recipeTips.length === 0 ? (
+                      {displayedRecipeTips.length === 0 ? (
                         <p className="text-xs text-slate-500">
-                          Add a few tips to help the team serve the dish consistently.
+                          {td('Add a few tips to help the team serve the dish consistently.')}
                         </p>
                       ) : (
                         <div className="space-y-2">
-                          {recipeTips.map((tip, index) => (
+                          {displayedRecipeTips.map((tip, index) => (
                             <div
                               key={`tip-${index}`}
                               className="flex items-start gap-3 border border-dashed border-slate-200 rounded-md p-3 bg-slate-50"
                             >
                               <Badge variant="outline" className="text-xs uppercase">
-                                Tip {index + 1}
+                                {td('Tip')} {index + 1}
                               </Badge>
                               <div className="flex-1 space-y-2">
                                 <Textarea
                                   rows={2}
-                                  placeholder="e.g., Garnish with parsley..."
+                                  placeholder={td('e.g., Garnish with parsley...')}
                                   value={tip}
                                   onChange={(e) => updateRecipeTip(index, e.target.value)}
                                 />
@@ -3040,7 +3241,7 @@ export default function MenuForm({
                                 onClick={() => removeRecipeTip(index)}
                                 className="text-red-500 hover:text-red-700"
                               >
-                                Remove
+                                {td('Remove')}
                               </Button>
                             </div>
                           ))}
@@ -3059,17 +3260,17 @@ export default function MenuForm({
                   {nextStepHighlight === 'recipe' && (
                     <p className="text-sm font-medium text-emerald-700 mb-3 flex items-center gap-2">
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Add at least one ingredient to continue (or use AI Recipe)
+                      {td('Add at least one ingredient to continue (or use AI Recipe)')}
                     </p>
                   )}
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
-                      <CardTitle>Recipe Builder</CardTitle>
+                      <CardTitle>{td('Recipe Builder')}</CardTitle>
                       <div className="flex gap-2">
                         {recipe.some((r) => r.supplierProductId) && (
                           <Button type="button" variant="outline" size="sm" onClick={refreshAllCosts} title="Refresh all supplier costs to latest prices">
                             <RefreshCw className="h-4 w-4 mr-2" />
-                            Refresh Costs
+                            {td('Refresh Costs')}
                           </Button>
                         )}
                         <Button
@@ -3081,18 +3282,18 @@ export default function MenuForm({
                           title={!formData.name ? 'Enter item name first' : 'Get AI recipe suggestion'}
                         >
                           <ChefHat className="h-4 w-4 mr-2" />
-                          AI Recipe
+                          {td('AI Recipe')}
                         </Button>
                         <Button type="button" variant="outline" size="sm" onClick={addIngredient}>
                           <Plus className="h-4 w-4 mr-2" />
-                          Add Ingredient
+                          {td('Add Ingredient')}
                         </Button>
                       </div>
                     </CardHeader>
                     <CardContent>
                       {recipe.length === 0 ? (
                         <div className="text-center py-8 text-slate-500">
-                          No ingredients added. Click &quot;Add Ingredient&quot; or use &quot;AI Recipe&quot; to get suggestions.
+                          {td('No ingredients added. Click "Add Ingredient" or use "AI Recipe" to get suggestions.')}
                         </div>
                       ) : (
                         <div className="space-y-3">
@@ -3143,7 +3344,7 @@ export default function MenuForm({
                               >
                                 <div className="flex items-end gap-3">
                                   <div className="flex-1 space-y-2">
-                                    <Label>Ingredient</Label>
+                                    <Label>{td('Ingredient')}</Label>
                                     <Popover
                                       open={activeIngredientPickerIndex === index}
                                       onOpenChange={(open) => {
@@ -3168,7 +3369,7 @@ export default function MenuForm({
                                               'truncate text-sm',
                                               ingredient ? 'text-slate-900' : 'text-slate-500'
                                             )}>
-                                              {ingredient ? `${ingredient.name} (${ingredient.unit})` : 'Search ingredient...'}
+                                              {ingredient ? `${getDisplayedIngredientName(ingredient)} (${ingredient.unit})` : td('Search ingredient...')}
                                             </span>
                                           </span>
                                           <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
@@ -3182,7 +3383,7 @@ export default function MenuForm({
                                               autoFocus
                                               value={ingredientSearchQuery}
                                               onChange={(e) => setIngredientSearchQuery(e.target.value)}
-                                              placeholder="Type to filter ingredients..."
+                                              placeholder={td('Type to filter ingredients...')}
                                               className="h-9 pl-8 border-slate-200 focus-visible:ring-emerald-500"
                                             />
                                           </div>
@@ -3199,7 +3400,7 @@ export default function MenuForm({
                                               }}
                                               className="w-full px-3 py-2 text-left hover:bg-emerald-50 flex items-center justify-between gap-3"
                                             >
-                                              <span className="truncate text-sm text-slate-800">{ing.name}</span>
+                                              <span className="truncate text-sm text-slate-800">{getDisplayedIngredientName(ing)}</span>
                                               <span className="flex items-center gap-2 shrink-0">
                                                 <span className="text-xs text-slate-500">({ing.unit})</span>
                                                 {item.ingredientId === ing.id && (
@@ -3210,7 +3411,7 @@ export default function MenuForm({
                                           ))}
                                           {filteredIngredientOptions.length === 0 && (
                                             <p className="px-3 py-3 text-xs text-slate-500">
-                                              No ingredient matches your search.
+                                              {td('No ingredient matches your search.')}
                                             </p>
                                           )}
                                         </div>
@@ -3231,7 +3432,7 @@ export default function MenuForm({
 
                                 <div className="grid grid-cols-4 gap-3">
                                   <div className="space-y-2">
-                                    <Label>Count (optional)</Label>
+                                    <Label>{td('Count (optional)')}</Label>
                                     <Input
                                       type="number"
                                       step="any"
@@ -3244,15 +3445,15 @@ export default function MenuForm({
                                           e.target.value ? Number(e.target.value) : null
                                         )
                                       }
-                                      placeholder="e.g., 2"
+                                      placeholder={td('e.g., 2')}
                                     />
                                     <p className="text-xs text-slate-400">
-                                      Use cups for dry goods (lentils, rice) or pieces for countable veggies.
+                                      {td('Use cups for dry goods (lentils, rice) or pieces for countable veggies.')}
                                     </p>
                                   </div>
 
                                   <div className="space-y-2">
-                                    <Label>Quantity ({ingredient?.unit || 'unit'})</Label>
+                                    <Label>{td('Quantity')} ({ingredient?.unit || td('unit')})</Label>
                                     <Input
                                       type="number"
                                       step="any"
@@ -3267,11 +3468,11 @@ export default function MenuForm({
                                       }
                                       placeholder="0.00"
                                     />
-                                    <p className="text-xs text-slate-400">Weight/Volume</p>
+                                    <p className="text-xs text-slate-400">{td('Weight/Volume')}</p>
                                   </div>
 
                                   <div className="space-y-2">
-                                    <Label>Cost per unit (IQD)</Label>
+                                    <Label>{td('Cost per unit (IQD)')}</Label>
                                     {ingredient ? (
                                       <>
                                         <Input
@@ -3306,20 +3507,20 @@ export default function MenuForm({
                                           }}
                                           placeholder="0"
                                         />
-                                        <p className="text-xs text-slate-400">Saves to inventory on blur</p>
+                                        <p className="text-xs text-slate-400">{td('Saves to inventory on blur')}</p>
                                       </>
                                     ) : (
                                       <div className="h-10 px-3 py-2 bg-slate-50 rounded-md text-sm font-mono text-slate-500">
-                                        Select an ingredient
+                                        {td('Select an ingredient')}
                                       </div>
                                     )}
                                   </div>
                                   <div className="space-y-2">
-                                    <Label>Direct cost</Label>
+                                    <Label>{td('Direct cost')}</Label>
                                     <div className="h-10 px-3 py-2 rounded-md border border-slate-200 bg-slate-50 text-sm font-mono font-medium text-slate-800 flex items-center">
                                       {ingredient ? formatCurrency(itemCost) : '—'}
                                     </div>
-                                    <p className="text-xs text-slate-400">Quantity × cost per unit</p>
+                                    <p className="text-xs text-slate-400">{td('Quantity × cost per unit')}</p>
                                   </div>
                                 </div>
 
@@ -3327,7 +3528,7 @@ export default function MenuForm({
                                 {supplierProducts.length > 0 && (
                                   <div className="grid gap-3 md:grid-cols-2">
                                     <div className="space-y-1">
-                                      <Label className="text-xs">Supplier (optional)</Label>
+                                      <Label className="text-xs">{td('Supplier (optional)')}</Label>
                                       <Input
                                         value={item.supplierName ?? ''}
                                         onChange={(e) => {
@@ -3342,29 +3543,29 @@ export default function MenuForm({
                                           updateIngredient(index, 'currency', nextLine.currency)
                                           updateIngredient(index, 'lastPricedAt', nextLine.lastPricedAt)
                                         }}
-                                        placeholder="Type supplier name"
+                                        placeholder={td('Type supplier name')}
                                         className="h-8 text-xs"
                                       />
                                       <p className="text-[10px] text-slate-400">
-                                        We auto-select the best matching supplier price for this ingredient.
+                                        {td('We auto-select the best matching supplier price for this ingredient.')}
                                       </p>
                                     </div>
                                     <div className="space-y-1">
-                                      <Label className="text-xs">Supplier price source</Label>
+                                      <Label className="text-xs">{td('Supplier price source')}</Label>
                                       <div className="h-8 px-2 py-1 rounded-md border border-input bg-slate-50 text-xs text-slate-600 flex items-center">
                                         {item.supplierProductId
                                           ? (() => {
                                             const selected = supplierProducts.find((sp) => sp.id === item.supplierProductId)
                                             return selected
                                               ? `${selected.supplierName} — ${selected.name}`
-                                              : 'Matched supplier product'
+                                              : td('Matched supplier product')
                                           })()
-                                          : 'No supplier match (using ingredient base cost)'}
+                                          : td('No supplier match (using ingredient base cost)')}
                                       </div>
                                       {item.supplierProductId && item.unitCostCached != null && (
                                         <p className="text-[10px] text-slate-400">
-                                          Unit cost: {item.unitCostCached.toFixed(2)} {item.currency}/{ingredient?.unit || 'unit'}
-                                          {item.lastPricedAt && ` — priced ${new Date(item.lastPricedAt).toLocaleDateString()}`}
+                                          {td('Unit cost:')} {item.unitCostCached.toFixed(2)} {item.currency}/{ingredient?.unit || td('unit')}
+                                          {item.lastPricedAt && ` — ${td('priced')} ${new Date(item.lastPricedAt).toLocaleDateString()}`}
                                         </p>
                                       )}
                                     </div>
@@ -3373,7 +3574,7 @@ export default function MenuForm({
 
                                 {ingredient && (
                                   <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
-                                    Display: <strong>{ingredient.name}</strong> - {displayQuantity}
+                                    {td('Display:')} <strong>{getDisplayedIngredientName(ingredient)}</strong> - {displayQuantity}
                                   </div>
                                 )}
                               </div>
@@ -3388,7 +3589,7 @@ export default function MenuForm({
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                       <div className="flex items-center gap-2">
-                        <CardTitle>Available Add-ons</CardTitle>
+                        <CardTitle>{td('Available Add-ons')}</CardTitle>
                         <Button
                           type="button"
                           variant="outline"
@@ -3402,20 +3603,20 @@ export default function MenuForm({
                           }}
                         >
                           <Plus className="h-4 w-4" />
-                          Create new add-on
+                          {td('Create new add-on')}
                         </Button>
                       </div>
                       {selectedAddOnIds.length > 0 && (
                         <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-                          {selectedAddOnIds.length} selected
+                          {selectedAddOnIds.length} {td('selected')}
                         </Badge>
                       )}
                     </CardHeader>
                     <CardContent>
                       {addOnsList.length === 0 ? (
                         <div className="text-center py-6 text-slate-500">
-                          <p className="text-sm">No add-ons available.</p>
-                          <p className="text-xs mt-2 mb-3">Create an add-on to offer extras with this menu item.</p>
+                          <p className="text-sm">{td('No add-ons available.')}</p>
+                          <p className="text-xs mt-2 mb-3">{td('Create an add-on to offer extras with this menu item.')}</p>
                           <Button
                             type="button"
                             variant="outline"
@@ -3429,7 +3630,7 @@ export default function MenuForm({
                             }}
                           >
                             <Plus className="h-4 w-4" />
-                            Create new add-on
+                            {td('Create new add-on')}
                           </Button>
                         </div>
                       ) : (
@@ -3438,7 +3639,7 @@ export default function MenuForm({
                           <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <Input
-                              placeholder="Search add-ons..."
+                              placeholder={td('Search add-ons...')}
                               value={addOnSearchQuery}
                               onChange={(e) => {
                                 setAddOnSearchQuery(e.target.value)
@@ -3462,7 +3663,7 @@ export default function MenuForm({
                               <>
                                 {filteredAddOns.length === 0 ? (
                                   <div className="text-center py-6 text-slate-500">
-                                    <p className="text-sm">No add-ons match your search.</p>
+                                    <p className="text-sm">{td('No add-ons match your search.')}</p>
                                   </div>
                                 ) : (
                                   <>
@@ -3509,7 +3710,7 @@ export default function MenuForm({
                                     {totalPages > 1 && (
                                       <div className="flex items-center justify-between pt-2">
                                         <p className="text-xs text-slate-500">
-                                          Page {addOnPage} of {totalPages}
+                                          {td('Page')} {addOnPage} {td('of')} {totalPages}
                                         </p>
                                         <div className="flex gap-1">
                                           <Button
@@ -3761,10 +3962,10 @@ export default function MenuForm({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-emerald-500" />
-              Generate Image with AI
+              {td('Generate Image with AI')}
             </DialogTitle>
             <DialogDescription>
-              Upload your own photo for professional enhancement, or generate a new image from scratch.
+              {td('Upload your own photo for professional enhancement, or generate a new image from scratch.')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
@@ -3772,14 +3973,14 @@ export default function MenuForm({
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 <Loader2 className="h-12 w-12 animate-spin text-emerald-500" />
                 <p className="text-sm text-slate-500">
-                  {uploadedPhoto ? 'Enhancing your photo professionally...' : 'Generating your image with AI...'}
+                  {uploadedPhoto ? td('Enhancing your photo professionally...') : td('Generating your image with AI...')}
                 </p>
-                <p className="text-xs text-slate-400">This may take a few moments</p>
+                <p className="text-xs text-slate-400">{td('This may take a few moments')}</p>
               </div>
             ) : previewImageUrl ? (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Image Preview</Label>
+                  <Label>{td('Image Preview')}</Label>
                   <div className="border rounded-lg overflow-hidden">
                     <img
                       src={previewImageUrl}
@@ -3802,7 +4003,7 @@ export default function MenuForm({
                       }}
                     >
                       <Check className="h-4 w-4 mr-2" />
-                      Use This Image
+                      {td('Use This Image')}
                     </Button>
                     <Button
                       type="button"
@@ -3811,7 +4012,7 @@ export default function MenuForm({
                         setPreviewImageUrl(null)
                       }}
                     >
-                      Try Again
+                      {td('Try Again')}
                     </Button>
                   </div>
                 </div>
@@ -3820,10 +4021,9 @@ export default function MenuForm({
               <div className="space-y-4">
                 {/* Upload Photo Section */}
                 <div className="space-y-2">
-                  <Label>Upload Your Photo (Recommended)</Label>
+                  <Label>{td('Upload Your Photo (Recommended)')}</Label>
                   <p className="text-xs text-slate-500">
-                    Upload a photo of your actual dish and our AI will enhance it to look professionally shot.
-                    This helps customers see exactly what they&apos;ll receive!
+                    {td("Upload a photo of your actual dish and our AI will enhance it to look professionally shot. This helps customers see exactly what they'll receive!")}
                   </p>
                   <div className="flex gap-2 items-center">
                     <Button
@@ -3832,7 +4032,7 @@ export default function MenuForm({
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <ImagePlus className="h-4 w-4 mr-2" />
-                      Select Photo
+                      {td('Select Photo')}
                     </Button>
                     {uploadedPhoto && (
                       <Button
@@ -3842,7 +4042,7 @@ export default function MenuForm({
                         onClick={() => setUploadedPhoto(null)}
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
-                        Remove
+                        {td('Remove')}
                       </Button>
                     )}
                   </div>
@@ -3862,7 +4062,7 @@ export default function MenuForm({
                       />
                       <div className="px-3 py-2 bg-emerald-500/10 text-xs text-emerald-700 flex items-center gap-2">
                         <Check className="h-3 w-3" />
-                        Photo ready for AI enhancement
+                        {td('Photo ready for AI enhancement')}
                       </div>
                     </div>
                   )}
@@ -3874,18 +4074,18 @@ export default function MenuForm({
                       <span className="w-full border-t border-slate-200" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-white px-2 text-slate-500">or generate from scratch</span>
+                      <span className="bg-white px-2 text-slate-500">{td('or generate from scratch')}</span>
                     </div>
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="customPrompt">Custom Prompt (optional)</Label>
+                  <Label htmlFor="customPrompt">{td('Custom Prompt (optional)')}</Label>
                   <Textarea
                     id="customPrompt"
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="Describe subtle adjustments or recreate the scene from scratch..."
+                    placeholder={td('Describe subtle adjustments or recreate the scene from scratch...')}
                     rows={3}
                     disabled={generatingImage}
                   />
@@ -3893,8 +4093,8 @@ export default function MenuForm({
                     <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                       <p className="leading-relaxed">
                         {trimmedSavedBackgroundPrompt
-                          ? 'Saved consistent background style is ready and used by default when prompt is empty.'
-                          : 'A saved consistent background image is ready and used by default when prompt is empty.'}
+                          ? td('Saved consistent background style is ready and used by default when prompt is empty.')
+                          : td('A saved consistent background image is ready and used by default when prompt is empty.')}
                       </p>
                       {trimmedSavedBackgroundPrompt && (
                         <Button
@@ -3905,26 +4105,26 @@ export default function MenuForm({
                           disabled={generatingImage}
                           className="rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-600"
                         >
-                          Use default prompt
+                          {td('Use default prompt')}
                         </Button>
                       )}
                     </div>
                   )}
                   <div className="text-xs text-slate-500">
                     <Link href="/settings#dish-photo-background" className="font-medium text-emerald-700 hover:underline">
-                      Configure consistent background prompt or upload a reference image
+                      {td('Configure consistent background prompt or upload a reference image')}
                     </Link>
                   </div>
                   <p className="text-xs text-slate-500">
                     {uploadedPhoto
-                      ? 'Leave prompt empty to use your saved consistent background settings. Add text only if you want a one-time custom style.'
-                      : 'Leave prompt empty to use your saved consistent background settings (prompt and/or image).'}
+                      ? td('Leave prompt empty to use your saved consistent background settings. Add text only if you want a one-time custom style.')
+                      : td('Leave prompt empty to use your saved consistent background settings (prompt and/or image).')}
                   </p>
                 </div>
                 <div className="space-y-3 border-t border-dashed border-slate-200 pt-3">
                   <div className="space-y-2">
                     <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                      Orientation
+                      {td('Orientation')}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {imageOrientationOptions.map((option) => {
@@ -3951,7 +4151,7 @@ export default function MenuForm({
                   </div>
                   <div className="space-y-2">
                     <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                      Target size
+                      {td('Target size')}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {imageSizeOptions.map((option) => {
@@ -3992,14 +4192,14 @@ export default function MenuForm({
                   setUploadedPhoto(null)
                 }}
               >
-                Cancel
+                {td('Cancel')}
               </Button>
               <Button
                 type="button"
                 onClick={generateImage}
               >
                 <Sparkles className="h-4 w-4 mr-2" />
-                {uploadedPhoto ? 'Enhance Photo' : 'Generate Image'}
+                {uploadedPhoto ? td('Enhance Photo') : td('Generate Image')}
               </Button>
             </DialogFooter>
           )}
@@ -4012,10 +4212,10 @@ export default function MenuForm({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ChefHat className="h-5 w-5 text-emerald-600" />
-              AI Recipe Suggestion for "{formData.name}"
+              {td('AI Recipe Suggestion for')} "{localizedFieldValues.name || formData.name}"
             </DialogTitle>
             <DialogDescription>
-              Get a recipe suggestion from AI based on your menu item
+              {td('Get a recipe suggestion from AI based on your menu item')}
             </DialogDescription>
           </DialogHeader>
 
@@ -4024,12 +4224,12 @@ export default function MenuForm({
               <div className="text-center py-4">
                 <ChefHat className="h-12 w-12 mx-auto text-emerald-500 mb-3" />
                 <p className="text-slate-600 mb-4">
-                  Let AI find the perfect recipe for <strong>"{formData.name}"</strong>
+                  {td('Let AI find the perfect recipe for')} <strong>"{localizedFieldValues.name || formData.name}"</strong>
                 </p>
               </div>
               <Button onClick={fetchRecipeSuggestion} className="w-full">
                 <ChefHat className="h-4 w-4 mr-2" />
-                Get Recipe Suggestion
+                {td('Get Recipe Suggestion')}
               </Button>
             </div>
           )}
@@ -4037,7 +4237,7 @@ export default function MenuForm({
           {loadingRecipe && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="h-12 w-12 animate-spin text-emerald-500" />
-              <p className="text-sm text-slate-500">Searching for the perfect recipe...</p>
+              <p className="text-sm text-slate-500">{td('Searching for the perfect recipe...')}</p>
             </div>
           )}
 
@@ -4047,10 +4247,10 @@ export default function MenuForm({
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                 <h3 className="font-semibold text-emerald-800 text-lg">{suggestedRecipe.recipeName}</h3>
                 <div className="flex flex-wrap gap-4 mt-2 text-sm text-emerald-700">
-                  <span>Prep: {suggestedRecipe.prepTime}</span>
-                  <span>Cook: {suggestedRecipe.cookTime}</span>
-                  <span>Servings: {suggestedRecipe.servings}</span>
-                  {suggestedRecipe.calories && <span>{suggestedRecipe.calories} calories</span>}
+                  <span>{td('Prep:')} {suggestedRecipe.prepTime}</span>
+                  <span>{td('Cook:')} {suggestedRecipe.cookTime}</span>
+                  <span>{td('Servings:')} {suggestedRecipe.servings}</span>
+                  {suggestedRecipe.calories && <span>{suggestedRecipe.calories} {td('calories')}</span>}
                 </div>
                 {suggestedRecipe.dietaryTags?.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
@@ -4066,10 +4266,10 @@ export default function MenuForm({
               {/* Ingredients */}
               <div className="space-y-3">
                 <h4 className="font-semibold text-slate-800 flex items-center gap-2">
-                  Ingredients
+                  {td('Ingredients')}
                   <span className="text-xs font-normal text-slate-500">
-                    ({suggestedRecipe.ingredients?.filter((i: any) => i.isAvailable).length || 0} available,{' '}
-                    {suggestedRecipe.ingredients?.filter((i: any) => !i.isAvailable).length || 0} need to be created)
+                    ({suggestedRecipe.ingredients?.filter((i: any) => i.isAvailable).length || 0} {td('available')},{' '}
+                    {suggestedRecipe.ingredients?.filter((i: any) => !i.isAvailable).length || 0} {td('need to be created')})
                   </span>
                 </h4>
                 <div className="space-y-2">
@@ -4088,10 +4288,10 @@ export default function MenuForm({
                           <AlertCircle className="h-5 w-5 text-amber-600" />
                         )}
                         <div>
-                          <span className="font-medium">{ing.name}</span>
+                          <span className="font-medium">{shouldTranslateEditableContent ? td(ing.name) : ing.name}</span>
                           <span className="text-slate-500 ml-2">
                             {ing.pieceCount ? (
-                              <>{ing.pieceCount} items ({ing.quantity} {ing.unit})</>
+                              <>{ing.pieceCount} {td('items')} ({ing.quantity} {ing.unit})</>
                             ) : (
                               <>{ing.quantity} {ing.unit}</>
                             )}
@@ -4103,9 +4303,9 @@ export default function MenuForm({
                       </div>
                       <div className="text-xs">
                         {ing.isAvailable ? (
-                          <span className="text-green-600">In inventory</span>
+                          <span className="text-green-600">{td('In inventory')}</span>
                         ) : (
-                          <span className="text-amber-600">Will be created</span>
+                          <span className="text-amber-600">{td('Will be created')}</span>
                         )}
                       </div>
                     </div>
@@ -4115,7 +4315,7 @@ export default function MenuForm({
 
               {/* Cooking Steps */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-slate-800">Cooking Steps</h4>
+                <h4 className="font-semibold text-slate-800">{td('Cooking Steps')}</h4>
                 <ol className="space-y-2">
                   {suggestedRecipe.steps?.map((step: string, index: number) => (
                     <li
@@ -4125,7 +4325,7 @@ export default function MenuForm({
                       <span className="flex-shrink-0 w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center text-sm font-medium">
                         {index + 1}
                       </span>
-                      <span className="text-slate-700">{step}</span>
+                      <span className="text-slate-700">{shouldTranslateEditableContent ? td(step) : step}</span>
                     </li>
                   ))}
                 </ol>
@@ -4134,12 +4334,12 @@ export default function MenuForm({
               {/* Tips */}
               {suggestedRecipe.tips?.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="font-semibold text-slate-800">Tips</h4>
+                  <h4 className="font-semibold text-slate-800">{td('Tips')}</h4>
                   <ul className="space-y-1">
                     {suggestedRecipe.tips.map((tip: string, index: number) => (
                       <li key={index} className="text-sm text-slate-600 flex items-start gap-2">
                         <span className="text-emerald-500">•</span>
-                        {tip}
+                        {shouldTranslateEditableContent ? td(tip) : tip}
                       </li>
                     ))}
                   </ul>
@@ -4148,14 +4348,14 @@ export default function MenuForm({
 
               {/* Ask for modifications */}
               <div className="space-y-3 border-t pt-4">
-                <Label className="text-base font-medium">Want to modify this recipe?</Label>
+                <Label className="text-base font-medium">{td('Want to modify this recipe?')}</Label>
                 <p className="text-sm text-slate-500">
-                  Tell us what you'd like to add, remove, or change
+                  {td("Tell us what you'd like to add, remove, or change")}
                 </p>
                 <Textarea
                   value={recipeInstructions}
                   onChange={(e) => setRecipeInstructions(e.target.value)}
-                  placeholder="e.g., Add more garlic and onions, use olive oil instead of butter, make it less spicy, add cumin and coriander..."
+                  placeholder={td('e.g., Add more garlic and onions, use olive oil instead of butter, make it less spicy, add cumin and coriander...')}
                   rows={2}
                   className="resize-none"
                 />
@@ -4169,12 +4369,12 @@ export default function MenuForm({
                   {loadingRecipe ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Updating Recipe...
+                      {td('Updating Recipe...')}
                     </>
                   ) : (
                     <>
                       <ChefHat className="h-4 w-4 mr-2" />
-                      Update Recipe with Changes
+                      {td('Update Recipe with Changes')}
                     </>
                   )}
                 </Button>
@@ -4192,7 +4392,7 @@ export default function MenuForm({
                   }}
                   className="flex-1"
                 >
-                  Cancel
+                  {td('Cancel')}
                 </Button>
                 <Button
                   type="button"
@@ -4203,12 +4403,12 @@ export default function MenuForm({
                   {creatingIngredients ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Applying...
+                      {td('Applying...')}
                     </>
                   ) : (
                     <>
                       <Check className="h-4 w-4 mr-2" />
-                      Apply Recipe Ingredients
+                      {td('Apply Recipe Ingredients')}
                     </>
                   )}
                 </Button>
