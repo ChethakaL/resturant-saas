@@ -9,6 +9,7 @@ import {
   imageSizePrompts,
 } from '@/lib/image-format'
 import { enforceImageDimensions } from '@/lib/image-processor'
+import { getImageModelGenerateContentUrl, DISH_GROUNDING_PROMPT, DISH_SCALE_PROMPT } from '@/lib/image-api-model'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
 export async function POST(request: NextRequest) {
@@ -75,7 +76,11 @@ export async function POST(request: NextRequest) {
       .filter(Boolean)
       .join(' ')
 
-    const corePrompt = `Professional food photography of ${dishDescription}. The image must show this specific dish only - do not show other foods, drinks, or unrelated items. IMPORTANT: The dish must be fully visible and centered in the frame - do not crop or cut off any part of the food. Show the complete dish from a slightly elevated angle. High-quality, appetizing presentation on a clean plate with beautiful lighting, garnish, and styling. Leave adequate margin around the food. Restaurant menu quality, photorealistic, full dish visible with nothing cut off.`
+    const corePrompt = `Professional food photography of ${dishDescription}. One dish only, fully visible. CLOSE-UP: the plate and food must FILL the frame (about 80-90% of the image)—little empty table. Do NOT draw the dish small in the middle of empty space. A pizza = large pizza that nearly fills the image; not a mini pizza. CRITICAL: Plate ON the table; no gap, no floating. High-quality, appetizing, photorealistic.
+
+${DISH_GROUNDING_PROMPT}
+
+${DISH_SCALE_PROMPT}`
 
     const stylePart =
       effectivePrompt
@@ -106,11 +111,11 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    console.log('Generating image with Gemini 2.5 Flash Image:', imagePrompt)
+    const modelUrl = getImageModelGenerateContentUrl(process.env.GOOGLE_AI_KEY)
+    console.log('Generating image with image model:', imagePrompt.slice(0, 200) + '…')
 
-    // Use Gemini 2.5 Flash Image API directly
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${process.env.GOOGLE_AI_KEY}`,
+      modelUrl,
       {
         method: 'POST',
         headers: {

@@ -5,33 +5,37 @@ import {
   imageOrientationPrompts,
   imageSizePrompts,
 } from '@/lib/image-format'
+import { getImageModelGenerateContentUrl, DISH_GROUNDING_PROMPT, DISH_SCALE_PROMPT } from '@/lib/image-api-model'
+import {
+  analyzeDishImageForFixes,
+  formatAnalysisForPrompt,
+  analysisSaysStillFloating,
+} from '@/lib/analyze-dish-image'
 
 const ENHANCEMENT_PROMPT = `
-You are editing a real photo of a cooked dish. Your job is to create a restaurant-quality menu photograph of THE SAME EXACT DISH.
+You are editing a real photo of a cooked dish. Create a restaurant-quality menu photo of THE SAME EXACT DISH.
 
-TOP PRIORITY RULE:
-- Return a final, full-frame photorealistic image with NO transparency and NO checkerboard/alpha artifacts.
+CAMERA ANGLE: Use the same or a similar camera angle as the input food image—match the perspective (e.g. top-down, 3/4 view, or slight high angle) so the dish type is shown appropriately. Do not invent a completely different angle.
 
-GOAL:
-- Make it look like professional food photography (studio lighting, appetizing color, crisp detail).
-- Move the dish onto a clean, professional tabletop/studio background (e.g., neutral plate on a nice table or seamless backdrop).
-- Improve composition: straighten perspective, crop, and reframe to a pleasing menu-photo angle (3/4 angle or top-down, whichever suits the dish).
+FOOD SIZE: The food must be at actual, realistic size. The dish is the main subject and must fill the frame appropriately—like a real menu photo. A pizza is a full-size pizza; a burger is a real portion. Not miniature. The plate and food should occupy most of the image.
 
-STRICT PRESERVATION (MOST IMPORTANT):
-- Do NOT change what the user cooked.
-- Do NOT add, remove, replace, or invent any ingredients, garnishes, sauces, steam, props, utensils, extra food, or plate decorations that were not already present.
-- Keep the same portion sizes, shapes, textures, and arrangement of the food and plate/bowl.
-- Keep identifying details of the dish (toppings, edges, crumbs, burn marks, cuts, placement) consistent with the original.
-- Only change: lighting, color grading, sharpness, perspective correction, and BACKGROUND/surface.
+PLATE ON SURFACE: The plate or bowl must be physically on the table. No gap, no elevation, no floating.
 
-    BACKGROUND RULES:
-    - Replace the messy/phone background with a clean, premium restaurant-style setting.
-    - Use realistic shadows/reflections so the dish sits naturally in the new scene.
-    - No text, no logos, no watermarks.
+BACKGROUND: When a reference background image is provided, match it exactly so this menu item looks consistent with the others—same surface, same lighting style, same mood. If no reference, use a clean restaurant-style background.
 
-OUTPUT:
-- Photorealistic, high-quality menu-style image.
+Return one photorealistic image. Same food (same ingredients, plate). Adjust only: angle to match input where appropriate, lighting, background for consistency. No text, no logos.
+
+${DISH_GROUNDING_PROMPT}
+
+${DISH_SCALE_PROMPT}
 `
+
+/** Single-purpose prompt for second pass when the first output still has a floating dish. */
+const FIX_FLOATING_ONLY_PROMPT = `This image shows the dish or plate floating or elevated above the table. Your ONLY job: correct it so the plate is ON the table.
+
+- The bottom of the plate must touch the table surface. No gap. No elevation. No tilt that makes it look like it is in the air.
+- Keep the exact same dish, food, background, and lighting. Change ONLY the position so the plate rests on the table. Do not redraw the food.
+- Output a single photorealistic image with the plate clearly on the surface.`
 
 export type EnhanceDishImageOptions = {
   imageData: string // base64 or data URL
@@ -70,16 +74,34 @@ export async function enhanceDishImage(options: EnhanceDishImageOptions): Promis
 
   const orientationHint = imageOrientationPrompts[orientation] ?? ''
   const sizeHint = imageSizePrompts[sizePreset] ?? ''
+
+  // Have Gemini analyze the current image for issues (floating, angle, distance) and produce fix instructions; then pass that into the image model so it can correct before returning the final result.
+  let analysisBlock = ''
+  try {
+    const analysis = await analyzeDishImageForFixes(imageData)
+    if (analysis?.fixInstructions) {
+      analysisBlock = `\n\n${formatAnalysisForPrompt(analysis)}\n`
+      console.log('[enhance-dish-image] using analysis fix instructions')
+    }
+  } catch (_) {
+    // non-fatal; continue without analysis
+  }
+
   const fullPrompt =
     ENHANCEMENT_PROMPT +
     (orientationHint ? `\n${orientationHint}\n` : '') +
     (sizeHint ? `\n${sizeHint}\n` : '') +
+    analysisBlock +
     (backgroundReferenceImageData.trim()
-      ? '\n\nBACKGROUND REFERENCE IMAGE PROVIDED (IMMUTABLE): The reference background must remain unchanged in style and appearance. Do not repaint, redesign, replace, or add/remove any background objects, textures, surfaces, or lighting elements. Keep the dish realistic and blended naturally into that same background.'
+      ? '\n\nBACKGROUND REFERENCE (CONSISTENCY): The second image is the reference background. Your output background must match it so this menu item looks consistent with the others—same surface, same lighting, same style. Do not change the reference background. Blend the dish naturally into that background.'
       : '') +
     (userPrompt.trim() ? `\n\nUSER NOTE: ${userPrompt.trim()}` : '')
 
+  // Instruction first: match angle from input, actual size, consistent background
+  const leadingInstruction =
+    'Before editing: (1) Match the camera angle to the input food image—use the same or similar perspective. (2) Show the food at actual, realistic size—the dish must be the main subject and fill the frame like a real menu photo, not miniature. (3) If you have a reference background, match it so this item is consistent with others. Now edit the following image:\n\n'
   const parts: Array<Record<string, unknown>> = [
+    { text: leadingInstruction },
     { inlineData: { mimeType: geminiMimeType, data: base64Data } },
   ]
   if (backgroundReferenceImageData.trim()) {
@@ -104,10 +126,10 @@ export async function enhanceDishImage(options: EnhanceDishImageOptions): Promis
 
   const requestBody = {
     contents: [{ parts }],
-    generationConfig: { responseModalities: ['image'], temperature: 0.3, topK: 20, topP: 0.85 },
+    generationConfig: { responseModalities: ['image'], temperature: 0.2, topK: 16, topP: 0.8 },
   }
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
+    getImageModelGenerateContentUrl(apiKey),
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -142,7 +164,49 @@ export async function enhanceDishImage(options: EnhanceDishImageOptions): Promis
   }
   console.log('[enhance-dish-image] AI returned image, base64Length=%d', imageBase64.length)
 
-  const processed = await enforceImageDimensions(imageBase64, orientation, sizePreset)
+  let finalBase64 = imageBase64
+  let finalMime = imageMimeType
+
+  // Second pass: have the model look at its own output and fix if still floating or too small
+  const firstDataUrl = `data:${imageMimeType};base64,${imageBase64}`
+  const outputAnalysis = await analyzeDishImageForFixes(firstDataUrl)
+  const needsFloatingFix = outputAnalysis && analysisSaysStillFloating(outputAnalysis)
+
+  const runCorrectionPass = async (prompt: string): Promise<boolean> => {
+    const fixParts: Array<Record<string, unknown>> = [
+      { inlineData: { mimeType: finalMime, data: finalBase64 } },
+      { text: prompt },
+    ]
+    const fixBody = {
+      contents: [{ parts: fixParts }],
+      generationConfig: { responseModalities: ['image'], temperature: 0.15, topK: 10, topP: 0.75 },
+    }
+    const fixRes = await fetch(getImageModelGenerateContentUrl(apiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fixBody),
+    })
+    if (!fixRes.ok) return false
+    const fixData = await fixRes.json()
+    const fixCandidates = fixData.candidates
+    if (!fixCandidates?.length || !fixCandidates[0].content?.parts) return false
+    for (const part of fixCandidates[0].content.parts) {
+      if (part.inlineData?.mimeType?.startsWith('image/')) {
+        finalBase64 = part.inlineData.data
+        finalMime = part.inlineData.mimeType
+        return true
+      }
+    }
+    return false
+  }
+
+  if (needsFloatingFix) {
+    console.log('[enhance-dish-image] output still floating, running correction pass')
+    if (await runCorrectionPass(FIX_FLOATING_ONLY_PROMPT)) console.log('[enhance-dish-image] floating correction done')
+  }
+  // Do NOT run scale correction pass - it was making the food smaller. Rely on first-pass "fill frame" prompt only.
+
+  const processed = await enforceImageDimensions(finalBase64, orientation, sizePreset)
   const dataUrl = `data:${processed.mimeType};base64,${processed.base64}`
   return { dataUrl }
 }

@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 
 /**
  * GET /api/menu/items-with-images
- * Returns IDs of menu items that have an image (for "apply background to all").
+ * Returns IDs and list of menu items that have an image (for "apply background to all" and "apply to selected").
  */
 export async function GET() {
   try {
@@ -18,13 +18,13 @@ export async function GET() {
 
     const items = await prisma.menuItem.findMany({
       where: { restaurantId: session.user.restaurantId },
-      select: { id: true, imageUrl: true },
+      select: { id: true, name: true, imageUrl: true },
     })
-    const itemIds = items
-      .filter((i) => i.imageUrl != null && String(i.imageUrl).trim() !== '')
-      .map((i) => i.id)
+    const withImages = items.filter((i) => i.imageUrl != null && String(i.imageUrl).trim() !== '')
+    const itemIds = withImages.map((i) => i.id)
+    const itemList = withImages.map((i) => ({ id: i.id, name: i.name ?? '' }))
 
-    return NextResponse.json({ itemIds })
+    return NextResponse.json({ itemIds, items: itemList })
   } catch (error) {
     console.error('Error listing items with images:', error)
     return NextResponse.json(

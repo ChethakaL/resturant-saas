@@ -5,11 +5,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { enhanceDishImage } from '@/lib/enhance-dish-image'
 import { getImageBufferFromS3IfOurs } from '@/lib/s3-get-image'
-import {
-  enhanceDishWithLockedBackground,
-  composeDishOnLockedBackgroundStrict,
-  StrictBackgroundLockError,
-} from '@/lib/locked-background-hybrid'
+import { enhanceDishWithLockedBackground } from '@/lib/locked-background-hybrid'
+import { checkDishImageQuality } from '@/lib/dish-image-quality-check'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
 export async function POST(
@@ -70,68 +67,45 @@ export async function POST(
       }
     }
 
-    const useHybrid =
-      Boolean(defaultBackgroundImageData.trim()) &&
-      process.env.ENABLE_LOCKED_BACKGROUND_HYBRID !== 'false'
-    const useStrictPaste =
-      Boolean(defaultBackgroundImageData.trim()) &&
-      process.env.STRICT_BACKGROUND_LOCK === 'true' &&
-      !useHybrid
+    const hasReferenceBackground = Boolean(defaultBackgroundImageData.trim())
+    const hasQualityChecker = Boolean(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
 
     let dataUrl: string
-    if (useHybrid) {
-      try {
-        const result = await enhanceDishWithLockedBackground({
-          dishImageData: imageData,
-          backgroundImageData: defaultBackgroundImageData,
-          userPrompt: defaultPrompt,
-        })
-        dataUrl = result.dataUrl
-      } catch (hybridError) {
-        console.warn('Hybrid harmonization failed in apply-background, using AI enhancement.', hybridError)
-        const standard = await enhanceDishImage({
-          imageData,
-          userPrompt: defaultPrompt,
-          backgroundReferenceImageData: defaultBackgroundImageData,
-        })
-        dataUrl = standard.dataUrl
-      }
-    } else if (useStrictPaste) {
-      try {
-        const strict = await composeDishOnLockedBackgroundStrict({
-          dishImageData: imageData,
-          backgroundImageData: defaultBackgroundImageData,
-        })
-        dataUrl = strict.dataUrl
-      } catch (strictError) {
-        console.warn('Strict background lock failed in apply-background.', strictError)
-        if (strictError instanceof StrictBackgroundLockError) {
-        return NextResponse.json(
-          {
-            error: 'Could not lock dish into background with this photo',
-            details: sanitizeErrorForClient(strictError.message),
-              strictBackgroundLock: true,
-              code: strictError.code,
-            },
-            { status: 422 }
-          )
+
+    if (hasReferenceBackground) {
+      // Pure AI: send dish + background to Gemini, get a menu photo back
+      const result = await enhanceDishWithLockedBackground({
+        dishImageData: imageData,
+        backgroundImageData: defaultBackgroundImageData,
+        userPrompt: defaultPrompt,
+      })
+      dataUrl = result.dataUrl
+
+      // Quality check — if BAD, retry once with the feedback
+      if (hasQualityChecker) {
+        try {
+          const quality = await checkDishImageQuality(dataUrl)
+          if (quality && quality.quality === 'BAD') {
+            console.log('[apply-background] quality check BAD: %s — retrying', quality.reason)
+            const retry = await enhanceDishWithLockedBackground({
+              dishImageData: imageData,
+              backgroundImageData: defaultBackgroundImageData,
+              userPrompt: defaultPrompt,
+              fixInstructionsFromAnalysis: quality.reason,
+            })
+            dataUrl = retry.dataUrl
+          }
+        } catch {
+          // Quality check failed — keep the first result
         }
-        return NextResponse.json(
-          {
-            error: 'Strict background lock failed',
-            details: sanitizeErrorForClient(strictError instanceof Error ? strictError.message : 'Unknown error'),
-            strictBackgroundLock: true,
-          },
-          { status: 422 }
-        )
       }
     } else {
-      const standard = await enhanceDishImage({
+      const result = await enhanceDishImage({
         imageData,
         userPrompt: defaultPrompt,
         backgroundReferenceImageData: defaultBackgroundImageData,
       })
-      dataUrl = standard.dataUrl
+      dataUrl = result.dataUrl
     }
 
     // Always save the Gemini data URL to the menu item (no S3 upload)

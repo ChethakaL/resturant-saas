@@ -134,6 +134,9 @@ interface MenuItemTranslation {
 type TranslationCache = Partial<Record<LanguageCode, Record<string, MenuItemTranslation>>>
 
 const LANGUAGE_LABELS = Object.fromEntries(MENU_LANGUAGES.map((l) => [l.code, l.name])) as Record<string, string>
+
+/** Language codes that use right-to-left script (Arabic, Kurdish Sorani, Persian, Hebrew, Urdu, Pashto) */
+const RTL_LANGUAGE_CODES = new Set(['ar', 'ar_fusha', 'ku', 'fa', 'he', 'ur', 'ps'])
 LANGUAGE_LABELS.en = 'English'
 
 /** Common dietary options always shown in Discover (hardcoded). Menu items can add more. */
@@ -1455,10 +1458,14 @@ export default function SmartMenu({
     return today >= start || today <= end
   }, [snowfallSettings])
 
+  const isRtl = RTL_LANGUAGE_CODES.has(language)
+
   return (
     <div
       className={`min-h-screen ${bgClass} ${fontClass}`}
       style={{ ...themeStyle, ...bgImageStyle }}
+      dir={isRtl ? 'rtl' : 'ltr'}
+      lang={language === 'ar_fusha' ? 'ar' : language}
     >
       {showSnowfall && (
         <Snowfall
@@ -1489,7 +1496,10 @@ export default function SmartMenu({
                     {(restaurantName || 'M').slice(0, 2).toUpperCase()}
                   </div>
                 )}
-                <span className={`font-display font-semibold text-sm sm:text-base truncate max-w-[120px] sm:max-w-[140px] ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                <span
+                  className={`font-display font-semibold text-sm sm:text-base truncate max-w-[160px] sm:max-w-[220px] ${isDarkBg ? 'text-white' : 'text-slate-900'}`}
+                  title={restaurantName || 'Menu'}
+                >
                   {restaurantName || 'Menu'}
                 </span>
               </div>
@@ -1545,8 +1555,8 @@ export default function SmartMenu({
                 </Popover>
               </div>
             </div>
-            <nav className="flex-1 min-w-0 flex justify-center overflow-x-auto sm:overflow-visible scrollbar-hide scroll-px-3 -mx-1">
-              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 py-1 px-1">
+            <nav className="flex-1 min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x scrollbar-hide scroll-px-3 -mx-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <div className="flex flex-nowrap sm:flex-wrap justify-center gap-1.5 sm:gap-2 py-1 px-1 w-max min-w-full sm:w-full">
                 {categorizedSections.filter((s) => s.category).map((section) => {
                   const isActive = activeSectionId === section.category!.id
                   return (
@@ -1724,7 +1734,7 @@ export default function SmartMenu({
               </h2>
               <MoodSelector
                 moods={moods}
-                language={language}
+                language={language as 'en' | 'ar' | 'ar_fusha' | 'ku'}
                 selectedMoodId={selectedMoodId}
                 onSelectMood={setSelectedMoodId}
                 showAllLabel={currentEngineCopy.showAll}

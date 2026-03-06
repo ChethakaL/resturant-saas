@@ -2387,6 +2387,7 @@ export default function MenuForm({
                       {assistantMessages.map((message, index) => (
                         <div
                           key={`${message.role}-${index}`}
+                          dir="auto"
                           className={cn(
                             'rounded-xl px-4 py-3 text-sm max-w-[85%]',
                             message.role === 'assistant'
@@ -2394,7 +2395,7 @@ export default function MenuForm({
                               : 'bg-white border border-slate-200 text-slate-700 ml-auto mr-0 shadow-sm'
                           )}
                         >
-                          <div className="whitespace-pre-wrap leading-relaxed">
+                          <div className="whitespace-pre-wrap leading-relaxed [unicode-bidi:plaintext]">
                             {(message.text || '').split(/(\*\*.*?\*\*)/g).map((part, i) => {
                               if (part.startsWith('**') && part.endsWith('**')) {
                                 return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
@@ -2448,6 +2449,7 @@ export default function MenuForm({
                             onChange={(e) => handleAssistantFileUpload(e, 'image')}
                           />
                           <Textarea
+                            dir="auto"
                             placeholder="Ask about item name, description, or upload images, documents, or bills/receipts for price extraction..."
                             value={aiAssistantText}
                             onChange={(e) => setAiAssistantText(e.target.value)}
