@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { classifyItemType, type DefaultCategoryKey } from '@/lib/category-suggest'
 import type { ItemForSuggest } from '@/lib/category-suggest'
+import { getCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
+import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,19 +69,33 @@ export async function GET(request: Request) {
 
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
     const timezone = (settings.menuTimezone as string) || restaurant?.timezone || 'Asia/Baghdad'
+    const importedSales = getCurrentMonthlySalesImport(settings)
 
     const salesByItem = new Map<string, { quantity: number; costSum: number }>()
     const unitsBySlot = new Map<string, Record<Slot, number>>()
-    for (const sale of salesLast30d) {
-      const slot = getTimeSlotForDate(sale.timestamp, timezone)
-      for (const si of sale.items) {
-        const cur = salesByItem.get(si.menuItemId) ?? { quantity: 0, costSum: 0 }
-        cur.quantity += si.quantity
-        cur.costSum += (si.cost ?? 0) * si.quantity
-        salesByItem.set(si.menuItemId, cur)
-        const slotMap = unitsBySlot.get(si.menuItemId) ?? { breakfast: 0, day: 0, evening: 0, night: 0 }
-        slotMap[slot] += si.quantity
-        unitsBySlot.set(si.menuItemId, slotMap)
+    if (importedSales) {
+      const importedByItem = buildImportedSalesByItem(importedSales, buildCostedMenuItems(menuItems))
+      for (const [menuItemId, value] of importedByItem.entries()) {
+        salesByItem.set(menuItemId, { quantity: value.quantity, costSum: value.costSum })
+        unitsBySlot.set(menuItemId, {
+          breakfast: 0,
+          day: value.quantity,
+          evening: 0,
+          night: 0,
+        })
+      }
+    } else {
+      for (const sale of salesLast30d) {
+        const slot = getTimeSlotForDate(sale.timestamp, timezone)
+        for (const si of sale.items) {
+          const cur = salesByItem.get(si.menuItemId) ?? { quantity: 0, costSum: 0 }
+          cur.quantity += si.quantity
+          cur.costSum += (si.cost ?? 0) * si.quantity
+          salesByItem.set(si.menuItemId, cur)
+          const slotMap = unitsBySlot.get(si.menuItemId) ?? { breakfast: 0, day: 0, evening: 0, night: 0 }
+          slotMap[slot] += si.quantity
+          unitsBySlot.set(si.menuItemId, slotMap)
+        }
       }
     }
 

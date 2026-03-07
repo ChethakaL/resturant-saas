@@ -5,6 +5,7 @@ import { MenuPersonalizationWrapper } from '@/components/customer/MenuPersonaliz
 import { runMenuEngine } from '@/lib/menu-engine'
 import type { EngineMenuItem, EngineCategory, CoPurchasePair } from '@/lib/menu-engine'
 import { getSettingsForMode } from '@/lib/menu-engine-defaults'
+import { hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
 import type { MenuEngineSettings } from '@/types/menu-engine'
 import type { EngineMode } from '@/types/menu-engine'
 import { suggestCarouselItems, getTimeSlotLabel } from '@/lib/carousel-ai'
@@ -450,7 +451,8 @@ async function getMenuData() {
 
   const stored = (settings.menuEngine as Record<string, unknown>) || {}
   const storedMode = stored.mode as EngineMode | undefined
-  const mode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'classic'
+  const requestedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'classic'
+  const mode = requestedMode === 'adaptive' && !hasCurrentMonthlySalesImport(settings) ? 'profit' : requestedMode
   const base = getSettingsForMode(mode)
   const suggestionKeys = ['moodFlow', 'bundles', 'upsells', 'scarcityBadges', 'priceAnchoring'] as const
   const overrides =

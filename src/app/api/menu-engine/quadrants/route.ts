@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { classifyQuadrant } from '@/lib/menu-engine'
 import type { EngineMenuItem, EngineCategory } from '@/lib/menu-engine'
+import { getCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
+import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +21,11 @@ export async function GET() {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-    const [menuItems, categories, salesLast30d] = await Promise.all([
+    const [restaurant, menuItems, categories, salesLast30d] = await Promise.all([
+      prisma.restaurant.findUnique({
+        where: { id: restaurantId },
+        select: { settings: true },
+      }),
       prisma.menuItem.findMany({
         where: { available: true, restaurantId },
         include: {
@@ -38,12 +44,21 @@ export async function GET() {
     ])
 
     const salesByItem = new Map<string, { quantity: number; costSum: number }>()
-    for (const sale of salesLast30d) {
-      for (const si of sale.items) {
-        const cur = salesByItem.get(si.menuItemId) ?? { quantity: 0, costSum: 0 }
-        cur.quantity += si.quantity
-        cur.costSum += (si.cost ?? 0) * si.quantity
-        salesByItem.set(si.menuItemId, cur)
+    const settings = (restaurant?.settings as Record<string, unknown>) || {}
+    const importedSales = getCurrentMonthlySalesImport(settings)
+    if (importedSales) {
+      const importedByItem = buildImportedSalesByItem(importedSales, buildCostedMenuItems(menuItems))
+      for (const [menuItemId, value] of importedByItem.entries()) {
+        salesByItem.set(menuItemId, { quantity: value.quantity, costSum: value.costSum })
+      }
+    } else {
+      for (const sale of salesLast30d) {
+        for (const si of sale.items) {
+          const cur = salesByItem.get(si.menuItemId) ?? { quantity: 0, costSum: 0 }
+          cur.quantity += si.quantity
+          cur.costSum += (si.cost ?? 0) * si.quantity
+          salesByItem.set(si.menuItemId, cur)
+        }
       }
     }
 

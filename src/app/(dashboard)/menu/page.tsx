@@ -15,6 +15,8 @@ import CategoriesButtonWithHelp from '@/components/menu/CategoriesButtonWithHelp
 import MenuItemsTable from '@/components/menu/MenuItemsTable'
 import MenuPageTabs from '@/components/menu/MenuPageTabs'
 import { parseSlotTimes } from '@/lib/time-slots'
+import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
+import { hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
 
 const PAGE_SIZE = 20
 
@@ -201,6 +203,8 @@ export default async function MenuPage({
     + (statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : '')
   const settings = (restaurant?.settings as Record<string, unknown>) || {}
   const menuEngineSettings = (settings.menuEngine as Record<string, unknown>) || null
+  const currentSalesPdfPeriod = getCurrentSalesPdfPeriod()
+  const smartProfitUnlocked = hasCurrentMonthlySalesImport(settings)
   const slotTimesRaw = parseSlotTimes(settings.slotTimes)
   const normalizedBaseUrl = (process.env.NEXTAUTH_URL || '').trim().replace(/\/+$/, '')
   const publicMenuPath = restaurant?.slug ? `/${restaurant.slug}` : '/'
@@ -228,6 +232,8 @@ export default async function MenuPage({
         categories={categoryOptions}
         menuEngineSettings={menuEngineSettings}
         slotTimes={slotTimesRaw}
+        smartProfitUnlocked={smartProfitUnlocked}
+        smartProfitRequiredPeriodLabel={formatSalesPdfPeriod(currentSalesPdfPeriod.year, currentSalesPdfPeriod.month)}
       >
         <div className="space-y-6">
           <div className="flex items-center justify-between">

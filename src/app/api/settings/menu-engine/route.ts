@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { getSettingsForMode } from '@/lib/menu-engine-defaults'
 import type { EngineMode } from '@/types/menu-engine'
+import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
+import { hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +82,16 @@ export async function PUT(request: Request) {
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
     const currentEngine = (currentSettings.menuEngine as Record<string, unknown>) || {}
     const mode = parsed.data.mode
+    const currentPeriod = getCurrentSalesPdfPeriod()
+
+    if (mode === 'adaptive' && !hasCurrentMonthlySalesImport(currentSettings)) {
+      return NextResponse.json(
+        {
+          error: `Upload the ${formatSalesPdfPeriod(currentPeriod.year, currentPeriod.month)} sales PDF in Profit & Loss before enabling Smart Profit mode.`,
+        },
+        { status: 403 }
+      )
+    }
 
     // Spread currentEngine first so parsed.data.mode and overrides always win (fixes classic not persisting)
     const menuEngine: Record<string, unknown> =

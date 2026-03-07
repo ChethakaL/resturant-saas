@@ -120,6 +120,8 @@ export interface MenuOptimizationContentProps {
   menuEngineSettings?: Record<string, unknown> | null
   /** Custom carousel time slot boundaries from restaurant settings */
   slotTimes?: SlotTimes | null
+  smartProfitUnlocked?: boolean
+  smartProfitRequiredPeriodLabel?: string
 }
 
 export default function MenuOptimizationContent({
@@ -128,11 +130,16 @@ export default function MenuOptimizationContent({
   menuItems,
   menuEngineSettings: initialMenuEngineSettings,
   slotTimes: initialSlotTimes,
+  smartProfitUnlocked = false,
+  smartProfitRequiredPeriodLabel,
 }: MenuOptimizationContentProps) {
   const { toast } = useToast()
   const { t: td } = useDynamicTranslate()
   const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'profit'
-  const resolvedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'profit'
+  const resolvedStoredMode =
+    storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'profit'
+  const resolvedMode =
+    resolvedStoredMode === 'adaptive' && !smartProfitUnlocked ? 'profit' : resolvedStoredMode
   const [engineMode, setEngineMode] = useState<MenuEngineSettings['mode']>(resolvedMode)
   const [savingEngine, setSavingEngine] = useState(false)
 
@@ -518,6 +525,14 @@ export default function MenuOptimizationContent({
   }
 
   const saveMenuEngine = async () => {
+    if (engineMode === 'adaptive' && !smartProfitUnlocked) {
+      toast({
+        title: td('Smart Profit mode is locked'),
+        description: td(`Upload the ${smartProfitRequiredPeriodLabel || 'current month'} sales PDF in Profit & Loss first.`),
+        variant: 'destructive',
+      })
+      return
+    }
     setSavingEngine(true)
     try {
       const body =
@@ -546,10 +561,15 @@ export default function MenuOptimizationContent({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error('Failed to save')
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'Failed to save')
       toast({ title: td('Optimization settings saved') })
-    } catch {
-      toast({ title: 'Failed to save optimization settings', variant: 'destructive' })
+    } catch (error) {
+      toast({
+        title: 'Failed to save optimization settings',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      })
     } finally {
       setSavingEngine(false)
     }
@@ -795,8 +815,18 @@ export default function MenuOptimizationContent({
                 <button
                   key={mode}
                   type="button"
-                  onClick={() => setEngineMode(mode)}
-                  className={`rounded-xl border-2 p-4 text-left transition ${engineMode === mode ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
+                  onClick={() => {
+                    if (mode === 'adaptive' && !smartProfitUnlocked) return
+                    setEngineMode(mode)
+                  }}
+                  className={`rounded-xl border-2 p-4 text-left transition ${
+                    mode === 'adaptive' && !smartProfitUnlocked
+                      ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                      : engineMode === mode
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                  disabled={mode === 'adaptive' && !smartProfitUnlocked}
                 >
                   <span className="font-semibold">
                     {mode === 'classic' && td('1. Classic Mode')}
@@ -808,6 +838,11 @@ export default function MenuOptimizationContent({
                     {mode === 'profit' && td('Highlights high-margin items and suggests profitable combinations to guests.')}
                     {mode === 'adaptive' && td('Uses your sales and profit data to optimize what guests see and suggest add-ons that increase revenue.')}
                   </p>
+                  {mode === 'adaptive' && !smartProfitUnlocked && (
+                    <p className="mt-2 text-xs font-medium text-amber-700">
+                      {td(`Locked until the ${smartProfitRequiredPeriodLabel || 'current month'} sales PDF is uploaded in Profit & Loss.`)}
+                    </p>
+                  )}
                 </button>
               ))}
             </div>

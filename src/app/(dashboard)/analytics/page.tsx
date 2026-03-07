@@ -6,6 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import AnalyticsCharts from './AnalyticsCharts'
 import { redirect } from 'next/navigation'
+import MonthlySalesPdfUploadCard from '@/components/dashboard/MonthlySalesPdfUploadCard'
+import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
+import { getCurrentMonthlySalesImport, hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
+import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
 
 const TIME_BUCKETS = ['Morning', 'Afternoon', 'Evening'] as const
 type TimeBucket = typeof TIME_BUCKETS[number]
@@ -351,7 +355,88 @@ export default async function AnalyticsPage() {
     redirect('/dashboard/orders')
   }
 
-  const data = await getAnalyticsData(restaurantId)
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { settings: true },
+  })
+  const settings = (restaurant?.settings as Record<string, unknown>) || {}
+  const currentPeriod = getCurrentSalesPdfPeriod()
+  const importedSales = getCurrentMonthlySalesImport(settings)
+  if (!hasCurrentMonthlySalesImport(settings)) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Analytics</h1>
+          <p className="text-slate-500 mt-1">
+            Upload the {formatSalesPdfPeriod(currentPeriod.year, currentPeriod.month)} sales PDF to unlock analytics this month.
+          </p>
+        </div>
+        <MonthlySalesPdfUploadCard compact />
+      </div>
+    )
+  }
+
+  const data = importedSales
+    ? await (async () => {
+        const menuItems = await prisma.menuItem.findMany({
+          where: { restaurantId },
+          include: {
+            category: true,
+            ingredients: { include: { ingredient: true } },
+          },
+        })
+        const costedItems = buildCostedMenuItems(menuItems)
+        const importedByItem = buildImportedSalesByItem(importedSales, costedItems)
+        const itemRows = Array.from(importedByItem.entries()).map(([menuItemId, stats]) => {
+          const menuItem = menuItems.find((item) => item.id === menuItemId)
+          const revenue = stats.revenue
+          const profit = revenue - stats.costSum
+          return {
+            name: menuItem?.name || stats.name,
+            revenue,
+            profit,
+            quantity: stats.quantity,
+          }
+        })
+        return {
+          totalRevenue: importedSales.summary.netSales || importedSales.summary.totalSales,
+          totalCost: Array.from(importedByItem.values()).reduce((sum, item) => sum + item.costSum, 0),
+          totalProfit: itemRows.reduce((sum, item) => sum + item.profit, 0),
+          margin:
+            (importedSales.summary.netSales || importedSales.summary.totalSales) > 0
+              ? (itemRows.reduce((sum, item) => sum + item.profit, 0) / (importedSales.summary.netSales || importedSales.summary.totalSales)) * 100
+              : 0,
+          trendData: importedSales.dailySales.map((row) => ({
+            date: row.date,
+            revenue: row.netSales || row.grossSales,
+            cost: 0,
+          })),
+          categoryData: [],
+          topItemsByRevenue: [...itemRows].sort((a, b) => b.revenue - a.revenue).slice(0, 10),
+          topItemsByProfit: [...itemRows].sort((a, b) => b.profit - a.profit).slice(0, 10),
+          topSellingItems: [...itemRows]
+            .sort((a, b) => b.quantity - a.quantity)
+            .slice(0, 10)
+            .map((item) => ({ ...item, margin: item.revenue > 0 ? (item.profit / item.revenue) * 100 : 0, topTimeOfDay: 'Afternoon' })),
+          worstSellingItems: [...itemRows]
+            .filter((item) => item.quantity > 0)
+            .sort((a, b) => a.quantity - b.quantity)
+            .slice(0, 10)
+            .map((item) => ({ ...item })),
+          highestMarginItems: [...itemRows]
+            .filter((item) => item.revenue > 0)
+            .sort((a, b) => (b.profit / Math.max(1, b.revenue)) - (a.profit / Math.max(1, a.revenue)))
+            .slice(0, 10)
+            .map((item) => ({ ...item, margin: item.revenue > 0 ? (item.profit / item.revenue) * 100 : 0, topTimeOfDay: 'Afternoon', commonlyWith: undefined })),
+          lowestMarginItems: [...itemRows]
+            .filter((item) => item.revenue > 0)
+            .sort((a, b) => (a.profit / Math.max(1, a.revenue)) - (b.profit / Math.max(1, b.revenue)))
+            .slice(0, 10)
+            .map((item) => ({ ...item, margin: item.revenue > 0 ? (item.profit / item.revenue) * 100 : 0 })),
+          topCombos: [],
+        }
+      })()
+    : await getAnalyticsData(restaurantId)
 
   const { t } = await getServerTranslations()
 

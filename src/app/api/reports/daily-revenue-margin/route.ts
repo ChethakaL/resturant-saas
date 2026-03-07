@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { getCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,6 +87,27 @@ export async function GET(request: Request) {
       startDate.setDate(endDate.getDate() - days)
       startDate.setHours(0, 0, 0, 0)
       endDate.setHours(23, 59, 59, 999)
+    }
+
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: session.user.restaurantId },
+      select: { settings: true },
+    })
+    const settings = (restaurant?.settings as Record<string, unknown>) || {}
+    const importedSales = getCurrentMonthlySalesImport(settings)
+    if (importedSales) {
+      const importedRows = importedSales.dailySales
+        .map((row) => ({
+          date: row.date,
+          revenue: row.netSales || row.grossSales,
+          margin: 0,
+          netProfit: 0,
+        }))
+        .filter((row) => {
+          const date = new Date(`${row.date}T00:00:00`)
+          return date >= startDate && date <= endDate
+        })
+      return NextResponse.json(importedRows)
     }
 
     // Fetch all data sources

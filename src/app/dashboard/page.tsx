@@ -19,7 +19,12 @@ import { redirect } from 'next/navigation'
 import PnLReminder from '@/components/dashboard/PnLReminder'
 import DailyRevenueMarginChart from '@/components/dashboard/DailyRevenueMarginChart'
 import MenuItemAnalytics from '@/components/dashboard/MenuItemAnalytics'
+import MonthlySalesPdfUploadCard from '@/components/dashboard/MonthlySalesPdfUploadCard'
+import DashboardSalesDataManager from '@/components/dashboard/DashboardSalesDataManager'
 import type { ManagementLocale } from '@/lib/i18n'
+import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
+import { getCurrentMonthlySalesImport, hasCurrentMonthlySalesImport, type ImportedMonthlySalesData } from '@/lib/monthly-sales-import'
+import { buildCostedMenuItems, buildImportedSalesByItem, getImportedCurrentDay, getImportedCurrentWeekTotals } from '@/lib/monthly-sales-derived'
 
 function daysBetweenInclusive(start: Date, end: Date) {
   const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
@@ -87,6 +92,147 @@ function getTimeBucket(date: Date): TimeBucket {
   if (hour < 12) return 'Morning'
   if (hour < 17) return 'Afternoon'
   return 'Evening'
+}
+
+async function getImportedAnalyticsData(
+  restaurantId: string,
+  importData: ImportedMonthlySalesData,
+  locale: ManagementLocale
+) {
+  const translationLang = getDashboardTranslationLanguage(locale)
+  const menuItems = await prisma.menuItem.findMany({
+    where: { restaurantId },
+    include: {
+      category: true,
+      ingredients: { include: { ingredient: true } },
+      ...(translationLang
+        ? {
+            translations: {
+              where: { language: translationLang },
+              select: { translatedName: true },
+            },
+          }
+        : {}),
+    },
+  })
+
+  const costedItems = buildCostedMenuItems(menuItems)
+  const importedByItem = buildImportedSalesByItem(importData, costedItems)
+
+  const itemStatsArray = Array.from(importedByItem.entries()).map(([menuItemId, stats]) => {
+    const menuItem = menuItems.find((item) => item.id === menuItemId)
+    const translatedName = (menuItem as any)?.translations?.[0]?.translatedName
+    return {
+      id: menuItemId,
+      name: translatedName || menuItem?.name || stats.name,
+      quantity: stats.quantity,
+      revenue: stats.revenue,
+      profit: stats.revenue - stats.costSum,
+      margin: stats.revenue > 0 ? ((stats.revenue - stats.costSum) / stats.revenue) * 100 : 0,
+      topTimeOfDay: 'Afternoon' as TimeBucket,
+    }
+  })
+
+  const topSellingItems = [...itemStatsArray].sort((a, b) => b.quantity - a.quantity).slice(0, 10)
+  const worstSellingItems = [...itemStatsArray].filter((item) => item.quantity > 0).sort((a, b) => a.quantity - b.quantity).slice(0, 10)
+  const highestMarginItems = [...itemStatsArray].filter((item) => item.revenue > 0).sort((a, b) => b.margin - a.margin).slice(0, 10)
+  const lowestMarginItems = [...itemStatsArray].filter((item) => item.revenue > 0).sort((a, b) => a.margin - b.margin).slice(0, 10)
+
+  return {
+    topSellingItems,
+    worstSellingItems,
+    highestMarginItems,
+    lowestMarginItems,
+    topCombos: [] as Array<{ items: [string, string]; count: number; margin: number; topTimeOfDay: TimeBucket }>,
+  }
+}
+
+async function getImportedDashboardData(restaurantId: string, importData: ImportedMonthlySalesData) {
+  const now = new Date()
+  const todayData = getImportedCurrentDay(importData, now)
+  const thisWeek = getImportedCurrentWeekTotals(importData, now)
+
+  const menuItems = await prisma.menuItem.findMany({
+    where: { restaurantId },
+    include: {
+      category: true,
+      ingredients: { include: { ingredient: true } },
+    },
+  })
+  const costedItems = buildCostedMenuItems(menuItems)
+  const importedByItem = buildImportedSalesByItem(importData, costedItems)
+  const monthlyRevenue = importData.summary.netSales || importData.summary.totalSales
+  const monthlyCOGS = Array.from(importedByItem.values()).reduce((sum, item) => sum + item.costSum, 0)
+  const monthlyNetProfit = monthlyRevenue - monthlyCOGS
+  const monthlyMargin = monthlyRevenue > 0 ? (monthlyNetProfit / monthlyRevenue) * 100 : 0
+  const foodCostPercent = monthlyRevenue > 0 ? (monthlyCOGS / monthlyRevenue) * 100 : 0
+
+  const topItemsData = Array.from(importedByItem.entries())
+    .map(([id, value]) => ({
+      name: menuItems.find((item) => item.id === id)?.name || value.name,
+      quantity: value.quantity,
+      revenue: value.revenue,
+    }))
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 5)
+
+  const tablesInUse = await prisma.table.count({
+    where: {
+      restaurantId,
+      status: 'OCCUPIED',
+    },
+  })
+
+  const totalTables = await prisma.table.count({
+    where: { restaurantId },
+  })
+
+  return {
+    today: {
+      revenue: todayData?.netSales || todayData?.grossSales || 0,
+      orders: todayData?.orders || 0,
+      margin: monthlyMargin,
+      growth: 0,
+      tablesInUse,
+      totalTables,
+    },
+    week: {
+      revenue: thisWeek.revenue,
+      orders: thisWeek.orders,
+    },
+    weeklyTrend: importData.weeklySales.map((item) => ({
+      date: item.weekLabel,
+      revenue: item.netSales || item.grossSales,
+      orders: item.orders,
+    })),
+    month: {
+      revenue: monthlyRevenue,
+      orders: importData.summary.totalOrders,
+      profit: monthlyNetProfit,
+      margin: monthlyMargin,
+      foodCostPercent,
+    },
+    projectedLossForecast: {
+      projectedNetProfit: monthlyNetProfit,
+      isLoss: monthlyNetProfit < 0,
+      projectedRevenue: monthlyRevenue,
+      daysElapsed: now.getDate(),
+      daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
+      drivers: [] as Array<{ labelKey: string; amount: number }>,
+    },
+    topItems: topItemsData,
+    wastage: {
+      totalCost: 0,
+      recordCount: 0,
+      records: [] as any[],
+    },
+    inventory: {
+      lowStock: 0,
+      critical: 0,
+      lowStockItems: [] as any[],
+    },
+    busiestHour: null as null | { hour: number; orders: number; revenue: number },
+  }
 }
 
 async function getAnalyticsData(restaurantId: string, locale: ManagementLocale) {
@@ -702,10 +848,36 @@ export default async function DashboardPage() {
     redirect('/dashboard/orders')
   }
 
-  const data = await getDashboardData(restaurantId)
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { settings: true },
+  })
+  const settings = (restaurant?.settings as Record<string, unknown>) || {}
+  const currentSalesPdfPeriod = getCurrentSalesPdfPeriod()
+  const importedSales = getCurrentMonthlySalesImport(settings)
+  const dashboardUnlocked = hasCurrentMonthlySalesImport(settings)
 
-  // Get analytics data for menu items
-  const analyticsData = await getAnalyticsData(restaurantId, locale)
+  if (!dashboardUnlocked) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">{t.dashboard_title}</h1>
+          <p className="text-slate-500 mt-1">
+            Upload the {formatSalesPdfPeriod(currentSalesPdfPeriod.year, currentSalesPdfPeriod.month)} sales PDF to activate the dashboard this month.
+          </p>
+        </div>
+        <MonthlySalesPdfUploadCard compact />
+      </div>
+    )
+  }
+
+  const data = importedSales
+    ? await getImportedDashboardData(restaurantId, importedSales)
+    : await getDashboardData(restaurantId)
+
+  const analyticsData = importedSales
+    ? await getImportedAnalyticsData(restaurantId, importedSales, locale)
+    : await getAnalyticsData(restaurantId, locale)
 
   return (
     <div className="space-y-8">
@@ -744,9 +916,14 @@ export default async function DashboardPage() {
           </div>
         </div>
       )}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">{t.dashboard_title}</h1>
-        <p className="text-slate-500 mt-1">{t.dashboard_welcome}, {session!.user.name}</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">{t.dashboard_title}</h1>
+          <p className="text-slate-500 mt-1">{t.dashboard_welcome}, {session!.user.name}</p>
+        </div>
+        <DashboardSalesDataManager
+          currentPeriodLabel={formatSalesPdfPeriod(currentSalesPdfPeriod.year, currentSalesPdfPeriod.month)}
+        />
       </div>
 
       {/* TODAY Metrics */}

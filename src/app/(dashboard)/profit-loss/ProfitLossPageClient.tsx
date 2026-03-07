@@ -23,6 +23,7 @@ import AddExpenseModal from './AddExpenseModal'
 import AddWasteModal from './AddWasteModal'
 import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
 import DatePicker from '@/components/ui/date-picker'
+import MonthlySalesPdfUploadCard from '@/components/dashboard/MonthlySalesPdfUploadCard'
 
 function daysBetweenInclusive(start: Date, end: Date) {
   const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
@@ -856,6 +857,8 @@ export default function ProfitLossPageClient() {
           </Button>
         </div>
       </div>
+
+      <MonthlySalesPdfUploadCard description="Upload a monthly sales PDF here. The current month upload unlocks the dashboard and Smart Profit mode." />
 
       {/* ── COGS incomplete warning ── */}
       {data.summary.revenue > 0 &&
