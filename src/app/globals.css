@@ -4,6 +4,16 @@
 
 @layer base {
   :root {
+    --font-playfair: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+    --font-cormorant: Georgia, "Times New Roman", serif;
+    --font-dm-sans: Inter, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-nunito: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-space-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --font-caveat: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+    --font-barlow-condensed: "Arial Narrow", "Helvetica Neue Condensed", Arial, sans-serif;
+    --font-roboto-slab: Rockwell, "Roboto Slab", "Courier New", serif;
+    --font-display: var(--font-dm-sans);
+    --font-body: var(--font-dm-sans);
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -58,6 +68,7 @@
   }
   body {
     @apply bg-slate-50 text-foreground h-full;
+    font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif;
   }
 }
 
