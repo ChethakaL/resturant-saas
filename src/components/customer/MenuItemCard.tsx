@@ -33,7 +33,8 @@ interface MenuItemCardProps {
   getTagIcon: (tag: string) => React.ReactNode
   onDetail: () => void
   onPairings: () => void
-  onAddToOrder: () => void
+  onAddToOrder?: () => void
+  showOrderAction?: boolean
   /** Localized "Add to order" button text. */
   addToOrderLabel?: string
   pairingsLabel?: string
@@ -85,6 +86,7 @@ export function MenuItemCard({
   onDetail,
   onPairings,
   onAddToOrder,
+  showOrderAction = false,
   addToOrderLabel = 'Add to order',
   pairingsLabel = 'Pairings',
   moreInfoLabel = 'More info',
@@ -193,14 +195,16 @@ export function MenuItemCard({
             <button type="button" onClick={(e) => { e.stopPropagation(); onDetail() }} className={`text-[9px] font-medium ${textMuted} hover:underline`}>
               {moreInfoLabel}
             </button>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onAddToOrder() }}
-              className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold text-white hover:opacity-90 transition-opacity"
-              style={{ backgroundColor: 'var(--menu-accent, #f59e0b)' }}
-            >
-              {addToOrderLabel}
-            </button>
+            {showOrderAction && onAddToOrder ? (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onAddToOrder() }}
+                className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold text-white hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: 'var(--menu-accent, #f59e0b)' }}
+              >
+                {addToOrderLabel}
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

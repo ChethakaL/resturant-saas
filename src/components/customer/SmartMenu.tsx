@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect, useCallback, useRef, useReducer } from 'react'
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import Snowfall from 'react-snowfall'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { formatCurrency, formatMenuPrice, formatMenuPriceWithVariant } from '@/lib/utils'
+import { formatCurrency, formatMenuPriceWithVariant } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -24,13 +24,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
 import { MenuItemCard } from './MenuItemCard'
 import { MoodSelector } from './MoodSelector'
-import { CartDrawer } from './CartDrawer'
-import { SequentialUpsell } from './SequentialUpsell'
-import { BundledUpsell } from './BundledUpsell'
-import { BundleCarousel } from './BundleCarousel'
-import { CheckoutNudge } from './CheckoutNudge'
-import { IdleUpsellPopup } from './IdleUpsellPopup'
-import { getStoredLastOrder, setStoredLastOrder, getOrCreateGuestId } from './MenuPersonalizationWrapper'
+import { getOrCreateGuestId } from './MenuPersonalizationWrapper'
 import { getAllVariants, getVariant } from '@/lib/experiments'
 import { logMenuEvent } from '@/lib/menu-events'
 import type { ItemDisplayHints, BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
@@ -618,54 +612,7 @@ const formatTemplate = (
   }, template)
 }
 
-type CartLine = { menuItemId: string; name: string; price: number; quantity: number }
-type CartAction =
-  | { type: 'ADD_ITEM'; item: MenuItem; quantity?: number }
-  | { type: 'REMOVE_ITEM'; menuItemId: string }
-  | { type: 'UPDATE_QUANTITY'; menuItemId: string; delta: number }
-  | { type: 'ADD_BUNDLE'; itemIds: string[]; items: MenuItem[]; bundlePrice: number }
-  | { type: 'CLEAR' }
-
-function cartReducer(state: CartLine[], action: CartAction): CartLine[] {
-  switch (action.type) {
-    case 'ADD_ITEM': {
-      const q = action.quantity ?? 1
-      const existing = state.find((l) => l.menuItemId === action.item.id)
-      if (existing) {
-        return state.map((l) =>
-          l.menuItemId === action.item.id ? { ...l, quantity: l.quantity + q } : l
-        )
-      }
-      return [...state, { menuItemId: action.item.id, name: action.item.name, price: action.item.price, quantity: q }]
-    }
-    case 'REMOVE_ITEM':
-      return state.filter((l) => l.menuItemId !== action.menuItemId)
-    case 'UPDATE_QUANTITY': {
-      const line = state.find((l) => l.menuItemId === action.menuItemId)
-      if (!line) return state
-      const next = line.quantity + action.delta
-      if (next <= 0) return state.filter((l) => l.menuItemId !== action.menuItemId)
-      return state.map((l) =>
-        l.menuItemId === action.menuItemId ? { ...l, quantity: next } : l
-      )
-    }
-    case 'ADD_BUNDLE': {
-      const byId = new Map(action.items.map((i) => [i.id, i]))
-      const newLines: CartLine[] = []
-      for (const id of action.itemIds) {
-        const item = byId.get(id)
-        if (item) newLines.push({ menuItemId: item.id, name: item.name, price: item.price, quantity: 1 })
-      }
-      return [...state, ...newLines]
-    }
-    case 'CLEAR':
-      return []
-    default:
-      return state
-  }
-}
-
-/** Sign in / My visits next to cart. Icon-only on mobile to avoid header overlap. */
+/** Sign in / My visits control. Icon-only on mobile to avoid header overlap. */
 function CustomerSignInControl({
   isDarkBg,
   signInLabel,
@@ -738,14 +685,9 @@ export default function SmartMenu({
   restaurantName,
   restaurantLogo,
   engineMode = 'classic',
-  bundles = [],
   moods = [],
-  upsellMap = {},
   categoryOrder,
   tableSize,
-  tableNumber,
-  tables = [],
-  categoryAnchorBundle = {},
   maxInitialItemsPerCategory = 3,
   forceShowImages = false,
   snowfallSettings,
@@ -759,7 +701,6 @@ export default function SmartMenu({
     )
   }
 
-  const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(tableNumber ?? null)
   const [search, setSearch] = useState('')
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const searchOverlayInputRef = useRef<HTMLInputElement | null>(null)
@@ -795,15 +736,7 @@ export default function SmartMenu({
     useState<MenuItem | null>(null)
   const { toast } = useToast()
   const isDetailOpen = Boolean(selectedItemForDetail)
-  const [cart, dispatchCart] = useReducer(cartReducer, [])
   const [selectedMoodId, setSelectedMoodId] = useState<string | null>(null)
-  const [upsellAfterAdd, setUpsellAfterAdd] = useState<{ itemId: string } | null>(null)
-  const [upsellIndex, setUpsellIndex] = useState(0)
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false)
-  const [idleUpsellDismissed, setIdleUpsellDismissed] = useState(false)
-  const [lastOrder, setLastOrder] = useState<{ itemIds: string[]; names: string[] } | null>(null)
-  const [nextOrderSuggestion, setNextOrderSuggestion] = useState<{ itemId: string; name: string; message: string } | null>(null)
-  const [nextOrderSuggestionLoading, setNextOrderSuggestionLoading] = useState(false)
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set())
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const menuListRef = useRef<HTMLDivElement | null>(null)
@@ -832,37 +765,6 @@ export default function SmartMenu({
     if (el) sectionRefs.current.set(id, el)
     else sectionRefs.current.delete(id)
   }, [])
-
-  useEffect(() => {
-    setLastOrder(getStoredLastOrder(restaurantId))
-  }, [restaurantId])
-
-  useEffect(() => {
-    if (!lastOrder?.itemIds?.length) {
-      setNextOrderSuggestion(null)
-      return
-    }
-    const uniqueIds = Array.from(new Set(lastOrder.itemIds))
-    setNextOrderSuggestionLoading(true)
-    setNextOrderSuggestion(null)
-    fetch('/api/public/menu/suggest-next-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurantId, lastOrderItemIds: uniqueIds }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.suggestedItemId && data.suggestedItemName && data.message) {
-          setNextOrderSuggestion({
-            itemId: data.suggestedItemId,
-            name: data.suggestedItemName,
-            message: data.message,
-          })
-        }
-      })
-      .catch(() => setNextOrderSuggestion(null))
-      .finally(() => setNextOrderSuggestionLoading(false))
-  }, [restaurantId, lastOrder?.itemIds?.join(',')])
 
   useEffect(() => {
     logMenuEvent(restaurantId, 'menu_view', {}, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
@@ -1446,7 +1348,6 @@ export default function SmartMenu({
 
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
-  const [cartOpen, setCartOpen] = useState(false)
 
   // Theme computation: CSS vars for colors and font pair (display + body)
   const themeStyle = useMemo((): React.CSSProperties => {
@@ -1661,20 +1562,6 @@ export default function SmartMenu({
                   myVisitsLabel={currentCopy.myVisitsLabel}
                   signOutLabel={currentCopy.signOutLabel}
                 />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`relative h-9 w-9 p-0 rounded-lg ${isDarkBg ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-200'}`}
-                  onClick={() => setCartOpen(true)}
-                  aria-label="Open cart"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                  {cart.length > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[var(--menu-accent,#f59e0b)] text-white text-[10px] font-bold flex items-center justify-center">
-                      {cart.reduce((n, line) => n + line.quantity, 0)}
-                    </span>
-                  )}
-                </Button>
                 <Popover open={isLanguageMenuOpen} onOpenChange={setIsLanguageMenuOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -2013,69 +1900,6 @@ export default function SmartMenu({
             </div>
           )}
 
-          {engineMode !== 'classic' && lastOrder && lastOrder.itemIds.length > 0 && (() => {
-            const seen = new Set<string>()
-            const lastOrderDisplayNames: string[] = []
-            for (let i = 0; i < lastOrder.itemIds.length && lastOrderDisplayNames.length < 3; i++) {
-              const id = lastOrder.itemIds[i]
-              if (seen.has(id)) continue
-              seen.add(id)
-              lastOrderDisplayNames.push(translationCache[language]?.[id]?.name ?? lastOrder.names[i] ?? '')
-            }
-            return (
-              <div className="px-4 py-2">
-                <div className={`rounded-xl border p-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}>
-                  <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDarkBg ? 'text-white/70' : 'text-slate-600'}`}>{currentCopy.lastTimeYouOrdered}</p>
-                  <p className={`text-sm mb-3 ${isDarkBg ? 'text-white/90' : 'text-slate-800'}`}>
-                    {lastOrderDisplayNames.join(', ')}
-                    {lastOrder.itemIds.length > 3 ? '…' : ''}
-                  </p>
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const byId = new Map(menuItems.map((m) => [m.id, m]))
-                          for (const id of lastOrder.itemIds) {
-                            const item = byId.get(id)
-                            if (item) dispatchCart({ type: 'ADD_ITEM', item })
-                          }
-                        }}
-                        className={
-                          isDarkBg
-                            ? 'rounded-md border border-white/30 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/25'
-                            : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-100'
-                        }
-                      >
-                        {currentCopy.orderAgain}
-                      </button>
-                      {nextOrderSuggestionLoading && (
-                        <span className={`text-xs py-1.5 ${isDarkBg ? 'text-white/60' : 'text-slate-500'}`}>{currentCopy.suggestingLabel}</span>
-                      )}
-                      {!nextOrderSuggestionLoading && nextOrderSuggestion && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const item = menuItems.find((m) => m.id === nextOrderSuggestion.itemId)
-                            if (item) dispatchCart({ type: 'ADD_ITEM', item })
-                          }}
-                          className="rounded-md bg-[var(--menu-accent,#f59e0b)] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
-                        >
-                          {currentCopy.tryItemLabel} {translationCache[language]?.[nextOrderSuggestion.itemId]?.name ?? nextOrderSuggestion.name}
-                        </button>
-                      )}
-                    </div>
-                    {!nextOrderSuggestionLoading && nextOrderSuggestion && (
-                      <p className={`text-xs leading-snug ${isDarkBg ? 'text-white/70' : 'text-slate-600'}`}>
-                        {nextOrderSuggestion.message}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
-
           {tableSize != null && tableSize > 3 && moods.some((m) => m.id === 'sharing') && (
             <div className="px-4 py-1">
               <button
@@ -2087,31 +1911,6 @@ export default function SmartMenu({
               </button>
             </div>
           )}
-
-          {engineMode !== 'classic' && bundles.length > 0 && (() => {
-            const bundleItemNames = Object.fromEntries(
-              menuItems.map((i) => [i.id, translationCache[language]?.[i.id]?.name ?? i.name])
-            )
-            const bundleNameSeparator = (language === 'ar' || language === 'ar_fusha') ? ' و ' : (language === 'ku' ? ' و ' : ' + ')
-            return (
-              <div className="px-3 sm:px-4">
-                <BundleCarousel
-                  bundles={bundles}
-                  itemNames={bundleItemNames}
-                  itemImageUrls={Object.fromEntries(menuItems.map((i) => [i.id, i.imageUrl]))}
-                  onAddBundle={(bundle) => {
-                    const items = bundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
-                    if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: bundle.itemIds, items, bundlePrice: bundle.bundlePrice })
-                  }}
-                  title={currentEngineCopy.bundlesTitle}
-                  addBundleLabel={currentEngineCopy.addBundleLabel}
-                  bundleNameSeparator={bundleNameSeparator}
-                  getLocalizedSavingsText={getLocalizedSavingsText}
-                  isDarkTheme={isDarkBg}
-                />
-              </div>
-            )
-          })()}
 
           {/* Menu Items — grouped by category with carousels between */}
           <div
@@ -2138,38 +1937,6 @@ export default function SmartMenu({
                       </h2>
                     </div>
                   )}
-
-                  {engineMode !== 'classic' && section.category && categoryAnchorBundle[section.category.id] && (() => {
-                    const anchorBundle = categoryAnchorBundle[section.category!.id]
-                    if (!anchorBundle) return null
-                    const anchorItemNames = Object.fromEntries(
-                      menuItems.map((i) => [i.id, translationCache[language]?.[i.id]?.name ?? i.name])
-                    )
-                    const anchorSeparator = (language === 'ar' || language === 'ar_fusha') ? ' و ' : (language === 'ku' ? ' و ' : ' + ')
-                    const anchorDisplayName = anchorBundle.itemIds.map((id) => anchorItemNames[id]).filter(Boolean).join(anchorSeparator) || anchorBundle.name
-                    return (
-                      <div className="mb-3">
-                        <div
-                          className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${isDarkBg ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}
-                        >
-                          <div>
-                            <p className={`font-semibold ${isDarkBg ? 'text-white/90' : 'text-slate-900'}`}>{anchorDisplayName}</p>
-                            <p className={`text-xs ${isDarkBg ? 'text-white/60' : 'text-slate-600'}`}>{getLocalizedSavingsText(anchorBundle.savingsText)}</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            className="bg-[var(--menu-accent,#f59e0b)] hover:opacity-90 text-white"
-                            onClick={() => {
-                              const items = anchorBundle.itemIds.map((id) => menuItems.find((m) => m.id === id)).filter(Boolean) as MenuItem[]
-                              if (items.length) dispatchCart({ type: 'ADD_BUNDLE', itemIds: anchorBundle.itemIds, items, bundlePrice: anchorBundle.bundlePrice })
-                            }}
-                          >
-                            {currentEngineCopy.addLabel}
-                          </Button>
-                        </div>
-                      </div>
-                    )
-                  })()}
 
                   <div className="grid gap-3">
                     {(() => {
@@ -2207,15 +1974,6 @@ export default function SmartMenu({
                                 badgeText: undefined,
                               } as ItemDisplayHints)
                             : item._hints
-                        const handleAddToOrder = () => {
-                          dispatchCart({ type: 'ADD_ITEM', item })
-                          logMenuEvent(restaurantId, 'add_to_cart', { menuItemId: item.id }, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
-                          const suggestions = upsellMap[item.id]
-                          if (suggestions?.length) {
-                            setUpsellAfterAdd({ itemId: item.id })
-                            setUpsellIndex(0)
-                          }
-                        }
                         return (
                           <MenuItemCard
                             key={item.id}
@@ -2229,8 +1987,6 @@ export default function SmartMenu({
                             getTagIcon={getTagIcon}
                             onDetail={() => setSelectedItemForDetail(item)}
                             onPairings={() => fetchPairingSuggestions(item)}
-                            onAddToOrder={handleAddToOrder}
-                            addToOrderLabel={currentEngineCopy.addToOrder}
                             pairingsLabel={currentCopy.pairingsButtonLabel}
                             moreInfoLabel={currentCopy.moreInfoButtonLabel}
                             limitedTodayLabel={currentCopy.limitedTodayLabel}
@@ -2635,193 +2391,6 @@ export default function SmartMenu({
         </DialogContent>
       </Dialog>
 
-      <CartDrawer
-        open={cartOpen}
-        onOpenChange={setCartOpen}
-        lines={cart}
-        total={cart.reduce((s, l) => s + l.price * l.quantity, 0)}
-        viewOrderLabel={currentEngineCopy.viewOrder}
-        placeOrderLabel={currentEngineCopy.placeOrder}
-        cartTitle={currentEngineCopy.cartTitle}
-        tables={tables}
-        selectedTableNumber={selectedTableNumber}
-        onTableChange={tables.length > 0 ? setSelectedTableNumber : undefined}
-        onUpdateQuantity={(menuItemId, delta) =>
-          dispatchCart({ type: 'UPDATE_QUANTITY', menuItemId, delta })
-        }
-        onRemove={(menuItemId) => dispatchCart({ type: 'REMOVE_ITEM', menuItemId })}
-        formatPrice={(amount) => formatMenuPriceWithVariant(amount, getVariant('price_format'))}
-        closeLabel={currentCopy.closeLabel}
-        removeLabel={currentEngineCopy.removeLabel}
-        tableLabel={currentEngineCopy.tableLabel}
-        selectTableLabel={currentEngineCopy.selectTableLabel}
-        changeLabel={currentEngineCopy.changeLabel}
-        optionalLabel={currentEngineCopy.optionalLabel}
-        selectYourTableLabel={currentEngineCopy.selectYourTableLabel}
-        tableHelperLabel={currentEngineCopy.tableHelperLabel}
-        noTableLabel={currentEngineCopy.noTableLabel}
-        totalLabel={currentEngineCopy.totalLabel}
-        placingLabel={currentEngineCopy.placingLabel}
-        onPlaceOrder={async () => {
-          if (cart.length === 0) return
-          setStoredLastOrder(restaurantId, cart.map((l) => ({ menuItemId: l.menuItemId, name: l.name, quantity: l.quantity })))
-          setIsPlacingOrder(true)
-          try {
-            const res = await fetch('/api/public/orders', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                restaurantId,
-                items: cart.map((l) => ({ menuItemId: l.menuItemId, quantity: l.quantity })),
-                ...(selectedTableNumber && { tableNumber: selectedTableNumber }),
-              }),
-            })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error || 'Order failed')
-            dispatchCart({ type: 'CLEAR' })
-            setLastOrder(getStoredLastOrder(restaurantId))
-            logMenuEvent(restaurantId, 'checkout', { itemCount: cart.length, orderNumber: data.orderNumber }, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
-            toast({ title: 'Order placed', description: data.orderNumber ? `Order ${data.orderNumber}` : undefined })
-          } catch (e: any) {
-            toast({ variant: 'destructive', title: 'Order failed', description: e.message })
-          } finally {
-            setIsPlacingOrder(false)
-          }
-        }}
-        restaurantId={restaurantId}
-        isPlacing={isPlacingOrder}
-      >
-        {engineMode !== 'classic' && cart.length > 0 && (() => {
-          const hasBeverage = cart.some((l) => {
-            const item = menuItems.find((m) => m.id === l.menuItemId)
-            const name = (item?.category?.name ?? '').toLowerCase()
-            return /drink|beverage|coffee/.test(name)
-          })
-          const hasDessert = cart.some((l) => {
-            const item = menuItems.find((m) => m.id === l.menuItemId)
-            const name = (item?.category?.name ?? '').toLowerCase()
-            return name.includes('dessert')
-          })
-          const topBeverage = menuItems.find((m) => /drink|beverage|coffee/.test((m.category?.name ?? '').toLowerCase()))
-          const topDessert = menuItems.find((m) => (m.category?.name ?? '').toLowerCase().includes('dessert'))
-          if (!hasBeverage && topBeverage)
-            return (
-              <CheckoutNudge
-                message={currentEngineCopy.checkoutNudgeBeverage}
-                itemName={topBeverage.name}
-                itemPrice={formatMenuPriceWithVariant(topBeverage.price, getVariant('price_format'))}
-                onAdd={() => dispatchCart({ type: 'ADD_ITEM', item: topBeverage })}
-                addLabel={currentEngineCopy.addLabel}
-                dismissLabel={currentEngineCopy.dismissLabel}
-                onDismiss={() => { }}
-              />
-            )
-          if (!hasDessert && topDessert)
-            return (
-              <CheckoutNudge
-                message={currentEngineCopy.checkoutNudgeDessert}
-                itemName={topDessert.name}
-                itemPrice={formatMenuPriceWithVariant(topDessert.price, getVariant('price_format'))}
-                onAdd={() => dispatchCart({ type: 'ADD_ITEM', item: topDessert })}
-                addLabel={currentEngineCopy.addLabel}
-                dismissLabel={currentEngineCopy.dismissLabel}
-                onDismiss={() => { }}
-              />
-            )
-          return null
-        })()}
-      </CartDrawer>
-
-      {upsellAfterAdd && (() => {
-        const suggestions = upsellMap[upsellAfterAdd.itemId] ?? []
-        const priceVariant = getVariant('price_format')
-        const upsellStrategy = getVariant('upsell_strategy')
-        if (upsellStrategy === 'bundled' && suggestions.length > 0) {
-          const bundledItems = suggestions.map((s) => {
-            const item = menuItems.find((m) => m.id === s.itemId)
-            return {
-              itemId: s.itemId,
-              itemName: item?.name ?? '',
-              itemPrice: item ? formatMenuPriceWithVariant(item.price, priceVariant) : '',
-              itemImageUrl: item?.imageUrl,
-              nudgeText: s.nudgeText,
-            }
-          }).filter((i) => i.itemName)
-          if (bundledItems.length === 0) return null
-          return (
-            <BundledUpsell
-              items={bundledItems}
-              addLabel={currentEngineCopy.addLabel}
-              skipLabel={currentEngineCopy.skipLabel}
-              onAddItem={(id) => {
-                const item = menuItems.find((m) => m.id === id)
-                if (item) dispatchCart({ type: 'ADD_ITEM', item })
-              }}
-              onClose={() => setUpsellAfterAdd(null)}
-            />
-          )
-        }
-        const current = suggestions[upsellIndex]
-        const upsellItem = current ? menuItems.find((m) => m.id === current.itemId) : null
-        if (!current || !upsellItem) return null
-        return (
-          <SequentialUpsell
-            suggestions={suggestions}
-            currentIndex={upsellIndex}
-            itemName={upsellItem.name}
-            itemPrice={formatMenuPriceWithVariant(upsellItem.price, priceVariant)}
-            itemImageUrl={upsellItem.imageUrl}
-            onAccept={() => {
-              dispatchCart({ type: 'ADD_ITEM', item: upsellItem })
-              if (upsellIndex + 1 < suggestions.length) setUpsellIndex((i) => i + 1)
-              else setUpsellAfterAdd(null)
-            }}
-            onSkip={() => {
-              if (upsellIndex + 1 < suggestions.length) setUpsellIndex((i) => i + 1)
-              else setUpsellAfterAdd(null)
-            }}
-            onClose={() => setUpsellAfterAdd(null)}
-            addLabel={currentEngineCopy.addLabel}
-            skipLabel={currentEngineCopy.skipLabel}
-          />
-        )
-      })()}
-
-      {engineMode !== 'classic' && !idleUpsellDismissed && (() => {
-        const cartIds = new Set(cart.map((l) => l.menuItemId))
-        const sectionsWithCategory = categorizedSections.filter((s): s is typeof s & { category: NonNullable<typeof s.category> } => !!s.category)
-        const currentIndex = activeSectionId ? sectionsWithCategory.findIndex((s) => s.category.id === activeSectionId) : 0
-        let suggestedItem: MenuItem | null = null
-        if (currentIndex >= 0 && sectionsWithCategory[currentIndex]) {
-          const section = sectionsWithCategory[currentIndex]
-          suggestedItem = section.items.find((m) => !cartIds.has(m.id)) ?? null
-        }
-        if (!suggestedItem && sectionsWithCategory.length > 0) {
-          for (const section of sectionsWithCategory) {
-            suggestedItem = section.items.find((m) => !cartIds.has(m.id)) ?? null
-            if (suggestedItem) break
-          }
-        }
-        if (!suggestedItem) {
-          suggestedItem = menuItems.find((m) => m._hints?.displayTier === 'hero' || m._hints?.displayTier === 'featured') ?? menuItems[0]
-        }
-        if (!suggestedItem) return null
-        return (
-          <IdleUpsellPopup
-            starItemName={suggestedItem.name}
-            starItemId={suggestedItem.id}
-            message={currentEngineCopy.idleMessage}
-            idleDelayMs={6000}
-            dismissAfterMs={4000}
-            onAddItem={(id) => {
-              const item = menuItems.find((m) => m.id === id)
-              if (item) dispatchCart({ type: 'ADD_ITEM', item })
-            }}
-            onDismiss={() => setIdleUpsellDismissed(true)}
-            show={true}
-          />
-        )
-      })()}
     </div>
   )
 }
