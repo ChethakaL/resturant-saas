@@ -56,6 +56,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const plan = body.plan === 'annual' ? 'annual' : 'monthly'
     const promotionCode = typeof body.promotionCode === 'string' ? body.promotionCode.trim().toUpperCase() : null
+    const requestedReturnPath = typeof body.returnPath === 'string' ? body.returnPath.trim() : ''
+    const returnPath =
+      requestedReturnPath.startsWith('/') && !requestedReturnPath.startsWith('//')
+        ? requestedReturnPath
+        : '/billing'
     const configuredPrice = plan === 'annual' ? PRICE_ANNUAL : PRICE_MONTHLY
     const lineItem = buildLineItem(configuredPrice, plan)
 
@@ -122,8 +127,8 @@ export async function POST(request: NextRequest) {
       customer: customerId,
       mode: 'subscription',
       line_items: [lineItem],
-      success_url: `${origin}/billing?success=true`,
-      cancel_url: `${origin}/billing?canceled=true`,
+      success_url: `${origin}${returnPath}${returnPath.includes('?') ? '&' : '?'}success=true`,
+      cancel_url: `${origin}${returnPath}${returnPath.includes('?') ? '&' : '?'}canceled=true`,
       metadata: { restaurantId: restaurant.id, plan, ...(promotionCode && { promotionCode }) },
       subscription_data: subscriptionData,
     })

@@ -6,14 +6,17 @@ import RestaurantDNAOnboarding from './RestaurantDNAOnboarding'
 interface RestaurantDNAGateProps {
     onboardingComplete: boolean
     restaurantName: string
+    hasActiveSubscription: boolean
 }
 
 export default function RestaurantDNAGate({
     onboardingComplete,
     restaurantName,
+    hasActiveSubscription,
 }: RestaurantDNAGateProps) {
     const [showOnboarding, setShowOnboarding] = useState(!onboardingComplete)
 
+    if (!hasActiveSubscription) return null
     if (!showOnboarding) return null
 
     const handleComplete = async (theme: Record<string, unknown>) => {
