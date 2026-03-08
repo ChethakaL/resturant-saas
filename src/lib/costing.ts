@@ -2,7 +2,16 @@
  * Ingredient names that may legitimately have zero cost (e.g. tap water).
  * Matched case-insensitively with word boundaries (so "water" matches but not "watermelon").
  */
-const ZERO_COST_ALLOWED = ['water']
+const ZERO_COST_ALLOWED = [
+  'water',
+  'filtered water',
+  'tap water',
+  'still water',
+  'sparkling water',
+  'soda water',
+  'ice',
+  'ice cubes',
+]
 
 /**
  * Returns true if this ingredient is allowed to have costPerUnit === 0.

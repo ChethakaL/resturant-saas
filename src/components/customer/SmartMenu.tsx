@@ -131,8 +131,12 @@ type TranslationCache = Partial<Record<LanguageCode, Record<string, MenuItemTran
 const LANGUAGE_OPTIONS_ALL: { value: LanguageCode; label: string }[] = [
   { value: 'en', label: 'English' },
   { value: 'ku', label: 'كوردي' },
-  { value: 'ar_fusha', label: 'Arabic' },
+  { value: 'ar_fusha', label: 'العربية' },
 ]
+
+function isSupportedLanguage(value: string | null): value is LanguageCode {
+  return value === 'en' || value === 'ku' || value === 'ar' || value === 'ar_fusha'
+}
 
 /** Common dietary options always shown in Discover (hardcoded). Menu items can add more. */
 const DISCOVER_DIETARY_OPTIONS: string[] = [
@@ -701,6 +705,9 @@ export default function SmartMenu({
     )
   }
 
+  const pathname = usePathname()
+  const languageStorageKey = `smart-menu-language:${restaurantId}:${pathname || '/'}`
+
   const [search, setSearch] = useState('')
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const searchOverlayInputRef = useRef<HTMLInputElement | null>(null)
@@ -747,6 +754,7 @@ export default function SmartMenu({
   const [menuListFlash, setMenuListFlash] = useState(false)
   const navScrollTargetRef = useRef<string | null>(null)
   const navScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hasLoadedStoredLanguageRef = useRef(false)
 
   const visibleLanguageOptions = useMemo(() => {
     return LANGUAGE_OPTIONS_ALL.filter((o) => {
@@ -760,6 +768,35 @@ export default function SmartMenu({
     if (language === 'ku' && theme?.showKurdishOnMenu === false) setLanguage('en')
     if (language === 'ar_fusha' && theme?.showArabicOnMenu === false) setLanguage('en')
   }, [theme?.showKurdishOnMenu, theme?.showArabicOnMenu, language])
+
+  useEffect(() => {
+    if (hasLoadedStoredLanguageRef.current) {
+      return
+    }
+    hasLoadedStoredLanguageRef.current = true
+
+    try {
+      const storedLanguage = localStorage.getItem(languageStorageKey)
+      if (!isSupportedLanguage(storedLanguage) || storedLanguage === language) {
+        return
+      }
+
+      const isVisibleOption = visibleLanguageOptions.some((option) => option.value === storedLanguage)
+      if (isVisibleOption) {
+        setLanguage(storedLanguage)
+      }
+    } catch {
+      // Ignore storage access issues and keep the server-provided default.
+    }
+  }, [languageStorageKey, visibleLanguageOptions, language])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(languageStorageKey, language)
+    } catch {
+      // Ignore storage write failures.
+    }
+  }, [languageStorageKey, language])
   const hideImages = !forceShowImages && getVariant('photo_visibility') === 'hide'
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)

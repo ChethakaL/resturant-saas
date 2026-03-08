@@ -126,6 +126,9 @@ interface AssistantMessage {
   text: string
 }
 
+const AI_ASSISTANT_WELCOME =
+  "Hi! I'm Smart Chef. Tell me what dish you want to add and I'll handle the name, description, recipe, ingredients, costs, and menu setup. You can also upload a photo, bill, or document to speed things up.\n\nJust describe the dish in English and I'll guide you step by step. When you're ready, click **Fill Form Now** to update the form."
+
 export default function MenuForm({
   categories,
   ingredients,
@@ -193,8 +196,6 @@ export default function MenuForm({
   // AI Assistant tab: free-text → auto-fill form
   const [aiAssistantText, setAiAssistantText] = useState('')
   const [aiParseLoading, setAiParseLoading] = useState(false)
-  const AI_ASSISTANT_WELCOME =
-    "Hi! I'm Smart Chef. Tell me what dish you want to add — I'll handle everything: the name, description, recipe, ingredients, costs, and how it looks on your menu. You can also upload a photo or document and I'll work from that.\n\nI can respond in **English**, **Arabic**, or **Kurdish** — just write in your preferred language.\n\nJust describe your dish and I'll guide you through the rest. When you're happy, hit **Fill Form Now** to save it all automatically."
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
     { role: 'assistant', text: AI_ASSISTANT_WELCOME },
   ])
@@ -1557,6 +1558,47 @@ export default function MenuForm({
     setAttachedImages([])
   }
 
+  useEffect(() => {
+    resetAssistantChat()
+  }, [mode, menuItem?.id])
+
+  const finishAssistantFlow = (options?: { researched?: boolean; recipeOnly?: boolean }) => {
+    const hasExistingImage =
+      Boolean(formData.imageUrl?.trim()) ||
+      Boolean(previewImageUrl?.trim()) ||
+      Boolean(uploadedPhoto?.trim())
+
+    const completionMessage = hasExistingImage
+      ? options?.recipeOnly
+        ? "I'm done with our conversation — I've filled the form with the summary, description, recipe, and ingredients. Your image is already set, so the next step is to review the form and save the menu item."
+        : "I'm done — I've filled the form. Your image is already set, so the next step is to review the form and save the menu item."
+      : options?.recipeOnly
+        ? "I'm done with our conversation — I've filled the form with the summary, description, recipe, and ingredients. **Next step:** generate an image for your dish. I'm opening the image generator for you now; use it to create or upload a photo, then save your menu item when ready."
+        : "I'm done — I've filled the form. **Next step:** generate an image for your dish. I'm opening the image generator for you now; create or upload a photo, then save when ready."
+
+    setInferredItemNameForImage(null)
+    setAssistantMessages((prev) => [
+      ...prev,
+      { role: 'assistant', text: completionMessage },
+    ])
+
+    if (hasExistingImage) {
+      toast({
+        title: options?.researched ? 'Form filled' : 'Smart Chef finished',
+        description: 'Form updated. Review and save when ready.',
+      })
+      setActiveTab('details')
+      return
+    }
+
+    toast({
+      title: options?.researched ? 'Form filled' : 'Smart Chef finished',
+      description: 'Form filled. Image dialog opening next.',
+    })
+    setActiveTab('ai')
+    setTimeout(() => setShowPromptDialog(true), 1200)
+  }
+
   const submitAssistantMessage = async () => {
     const text = aiAssistantText.trim()
     if (!text && attachedDocs.length === 0 && attachedImages.length === 0) return
@@ -1698,19 +1740,7 @@ export default function MenuForm({
             : undefined,
         }
         await applyParsedDataToForm(parsed, { autoCreateIngredients: true, quietToast: true }, createdFromChat)
-        setInferredItemNameForImage(null)
-        setAssistantMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            text: "I'm done with our conversation — I've filled the form with the summary, description, recipe, and ingredients. **Next step:** generate an image for your dish. I'm opening the image generator for you now; use it to create or upload a photo, then save your menu item when ready.",
-          },
-        ])
-        toast({ title: 'Smart Chef finished', description: 'Form filled. Generating image next — the image dialog will open for you.' })
-        setTimeout(() => {
-          setActiveTab('ai')
-          setShowPromptDialog(true)
-        }, 1200)
+        finishAssistantFlow({ recipeOnly: true })
       }
 
     } catch (err) {
@@ -1871,14 +1901,7 @@ export default function MenuForm({
               : undefined,
           }
           await applyParsedDataToForm(parsed, { autoCreateIngredients: true, quietToast: true })
-          setInferredItemNameForImage(null)
-          setAssistantMessages((prev) => [
-            ...prev,
-            { role: 'assistant', text: "I'm done with our conversation — I've filled the form with everything we discussed. **Next step:** generate an image for your dish. I'm opening the image generator for you now; create or upload a photo, then save your menu item when ready." },
-          ])
-          toast({ title: 'Form filled', description: 'Recipe and ingredients filled. Image dialog opening for you.' })
-          setActiveTab('ai')
-          setTimeout(() => setShowPromptDialog(true), 1200)
+          finishAssistantFlow({ researched: true, recipeOnly: true })
         } else {
           // Fallback to research if Smart Chef didn't return finished data
           const researchRes = await fetch('/api/menu/research', {
@@ -1897,14 +1920,7 @@ export default function MenuForm({
           if (!researchRes.ok) throw new Error('Research failed')
           const data = await researchRes.json()
           await applyParsedDataToForm(data, { autoCreateIngredients: true })
-          setInferredItemNameForImage(null)
-          setAssistantMessages((prev) => [
-            ...prev,
-            { role: 'assistant', text: "I'm done — I've researched and filled the form. **Next step:** generate an image for your dish. I'm opening the image generator for you now; create or upload a photo, then save when ready." },
-          ])
-          toast({ title: 'Form filled', description: 'Recipe and details gathered. Image dialog opening for you.' })
-          setActiveTab('ai')
-          setTimeout(() => setShowPromptDialog(true), 1200)
+          finishAssistantFlow({ researched: true })
         }
       } else {
         const response = await fetch('/api/menu/research', {
@@ -1923,14 +1939,7 @@ export default function MenuForm({
         if (!response.ok) throw new Error('Research failed')
         const data = await response.json()
         await applyParsedDataToForm(data, { autoCreateIngredients: true })
-        setInferredItemNameForImage(null)
-        setAssistantMessages((prev) => [
-          ...prev,
-          { role: 'assistant', text: "I'm done — I've researched and filled the full recipe, ingredients, and SOP. **Next step:** generate an image for your dish. I'm opening the image generator for you now; create or upload a photo, then save when ready." },
-        ])
-        toast({ title: 'Form Research Complete', description: 'Recipe and details filled. Image dialog opening for you.' })
-        setActiveTab('ai')
-        setTimeout(() => setShowPromptDialog(true), 1200)
+        finishAssistantFlow({ researched: true })
       }
 
       setAttachedDocs([])
