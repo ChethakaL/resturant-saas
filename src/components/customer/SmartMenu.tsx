@@ -755,6 +755,7 @@ export default function SmartMenu({
   const navScrollTargetRef = useRef<string | null>(null)
   const navScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasLoadedStoredLanguageRef = useRef(false)
+  const [isLanguageReady, setIsLanguageReady] = useState(false)
 
   const visibleLanguageOptions = useMemo(() => {
     return LANGUAGE_OPTIONS_ALL.filter((o) => {
@@ -787,6 +788,8 @@ export default function SmartMenu({
       }
     } catch {
       // Ignore storage access issues and keep the server-provided default.
+    } finally {
+      setIsLanguageReady(true)
     }
   }, [languageStorageKey, visibleLanguageOptions, language])
 
@@ -797,6 +800,7 @@ export default function SmartMenu({
       // Ignore storage write failures.
     }
   }, [languageStorageKey, language])
+
   const hideImages = !forceShowImages && getVariant('photo_visibility') === 'hide'
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)
@@ -1559,6 +1563,12 @@ export default function SmartMenu({
       className={`min-h-screen ${bgClass} ${fontClass}`}
       style={{ ...themeStyle, ...bgImageStyle }}
     >
+      {!isLanguageReady ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <p className={isDarkBg ? 'text-white/70' : 'text-slate-600'}>Loading menu...</p>
+        </div>
+      ) : (
+        <>
       {showSnowfall && (
         <Snowfall
           snowflakeCount={120}
@@ -2427,6 +2437,8 @@ export default function SmartMenu({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </>
+      )}
 
     </div>
   )
