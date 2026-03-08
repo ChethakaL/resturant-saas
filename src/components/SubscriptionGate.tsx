@@ -49,6 +49,7 @@ export function SubscriptionGate({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plan,
+          returnPath: pathname || '/dashboard',
           ...(promoCode.trim() && { promotionCode: promoCode.trim() }),
         }),
       })

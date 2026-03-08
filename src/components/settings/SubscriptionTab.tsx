@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { Button } from '@/components/ui/button'
@@ -22,6 +22,7 @@ export default function SubscriptionTab({
   pricesConfigured,
 }: SubscriptionTabProps) {
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const router = useRouter()
   const { toast } = useToast()
   const { t } = useI18n()
@@ -76,6 +77,7 @@ export default function SubscriptionTab({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plan,
+          returnPath: pathname || '/billing',
           ...(promoCode.trim() && { promotionCode: promoCode.trim() }),
         }),
       })

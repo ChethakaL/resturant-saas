@@ -97,6 +97,7 @@ export default async function DashboardLayout({
           <RestaurantDNAGate
             onboardingComplete={onboardingComplete}
             restaurantName={restaurantName}
+            hasActiveSubscription={!!hasActiveSubscription}
           />
         </div>
       </SubscriptionGate>
