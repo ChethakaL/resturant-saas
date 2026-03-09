@@ -162,14 +162,14 @@ const sortOptions: {
   | 'calories-low'
   label: string
 }[] = [
-    { value: 'popular', label: 'Most Popular' },
-    { value: 'price-low', label: 'Price: Low → High' },
-    { value: 'price-high', label: 'Price: High → Low' },
-    { value: 'protein-high', label: 'Protein: High → Low' },
-    { value: 'carbs-high', label: 'Carbs: High → Low' },
-    { value: 'protein-low', label: 'Protein: Low → High' },
-    { value: 'carbs-low', label: 'Carbs: Low → High' },
-    { value: 'calories-low', label: 'Calories: Low → High' },
+    { value: 'popular', label: 'sortPopular' },
+    { value: 'price-low', label: 'sortPriceLow' },
+    { value: 'price-high', label: 'sortPriceHigh' },
+    { value: 'protein-high', label: 'sortProteinHigh' },
+    { value: 'carbs-high', label: 'sortCarbsHigh' },
+    { value: 'protein-low', label: 'sortProteinLow' },
+    { value: 'carbs-low', label: 'sortCarbsLow' },
+    { value: 'calories-low', label: 'sortCaloriesLow' },
   ]
 
 const tagTranslations: Record<string, Partial<Record<LanguageCode, string>>> = {
@@ -266,6 +266,22 @@ const uiCopyMap: Record<
     myVisitsLabel: string
     signOutLabel: string
     groupDiningLabel: string
+    filterDialogTitle: string
+    filterDialogDescription: string
+    filterCategoriesLabel: string
+    filterAllLabel: string
+    filterDietaryLabel: string
+    filterSortByLabel: string
+    filterClearLabel: string
+    filterApplyLabel: string
+    sortPopular: string
+    sortPriceLow: string
+    sortPriceHigh: string
+    sortProteinHigh: string
+    sortProteinLow: string
+    sortCarbsHigh: string
+    sortCarbsLow: string
+    sortCaloriesLow: string
   }
 > = {
   en: {
@@ -312,6 +328,22 @@ const uiCopyMap: Record<
     myVisitsLabel: 'My visits',
     signOutLabel: 'Sign out',
     groupDiningLabel: 'Dining with a group? Try something to share.',
+    filterDialogTitle: 'Filters',
+    filterDialogDescription: 'Select categories, dietary attributes, and sort order.',
+    filterCategoriesLabel: 'Categories',
+    filterAllLabel: 'All',
+    filterDietaryLabel: 'Dietary',
+    filterSortByLabel: 'Sort by',
+    filterClearLabel: 'Clear filters',
+    filterApplyLabel: 'Apply',
+    sortPopular: 'Most Popular',
+    sortPriceLow: 'Price: Low → High',
+    sortPriceHigh: 'Price: High → Low',
+    sortProteinHigh: 'Protein: High → Low',
+    sortProteinLow: 'Protein: Low → High',
+    sortCarbsHigh: 'Carbs: High → Low',
+    sortCarbsLow: 'Carbs: Low → High',
+    sortCaloriesLow: 'Calories: Low → High',
   },
   ar: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -357,6 +389,22 @@ const uiCopyMap: Record<
     myVisitsLabel: 'زياراتي',
     signOutLabel: 'تسجيل الخروج',
     groupDiningLabel: 'تتناول الطعام مع مجموعة؟ جرّب شيئًا للمشاركة.',
+    filterDialogTitle: 'الفلاتر',
+    filterDialogDescription: 'اختر الفئات والخيارات الغذائية وطريقة الترتيب.',
+    filterCategoriesLabel: 'الفئات',
+    filterAllLabel: 'الكل',
+    filterDietaryLabel: 'خيارات غذائية',
+    filterSortByLabel: 'الترتيب حسب',
+    filterClearLabel: 'مسح الفلاتر',
+    filterApplyLabel: 'تطبيق',
+    sortPopular: 'الأكثر طلبًا',
+    sortPriceLow: 'السعر: من الأقل إلى الأعلى',
+    sortPriceHigh: 'السعر: من الأعلى إلى الأقل',
+    sortProteinHigh: 'البروتين: من الأعلى إلى الأقل',
+    sortProteinLow: 'البروتين: من الأقل إلى الأعلى',
+    sortCarbsHigh: 'الكربوهيدرات: من الأعلى إلى الأقل',
+    sortCarbsLow: 'الكربوهيدرات: من الأقل إلى الأعلى',
+    sortCaloriesLow: 'السعرات: من الأقل إلى الأعلى',
   },
   ar_fusha: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -402,6 +450,22 @@ const uiCopyMap: Record<
     myVisitsLabel: 'زياراتي',
     signOutLabel: 'تسجيل الخروج',
     groupDiningLabel: 'تتناول الطعام مع مجموعة؟ جرّب شيئًا للمشاركة.',
+    filterDialogTitle: 'الفلاتر',
+    filterDialogDescription: 'اختر الفئات والخيارات الغذائية وطريقة الترتيب.',
+    filterCategoriesLabel: 'الفئات',
+    filterAllLabel: 'الكل',
+    filterDietaryLabel: 'الخيارات الغذائية',
+    filterSortByLabel: 'الترتيب حسب',
+    filterClearLabel: 'مسح الفلاتر',
+    filterApplyLabel: 'تطبيق',
+    sortPopular: 'الأكثر طلبًا',
+    sortPriceLow: 'السعر: من الأقل إلى الأعلى',
+    sortPriceHigh: 'السعر: من الأعلى إلى الأقل',
+    sortProteinHigh: 'البروتين: من الأعلى إلى الأقل',
+    sortProteinLow: 'البروتين: من الأقل إلى الأعلى',
+    sortCarbsHigh: 'الكربوهيدرات: من الأعلى إلى الأقل',
+    sortCarbsLow: 'الكربوهيدرات: من الأقل إلى الأعلى',
+    sortCaloriesLow: 'السعرات: من الأقل إلى الأعلى',
   },
   ku: {
     searchPlaceholder: 'ئێستا خواردنەکان بگەڕە…',
@@ -447,6 +511,22 @@ const uiCopyMap: Record<
     myVisitsLabel: 'سەردانەکانم',
     signOutLabel: 'چوونەدەرەوە',
     groupDiningLabel: 'لەگەڵ گروپێک خواردن دەخۆیت؟ شتێک بۆ هاوبەشکردن تاقی بکە.',
+    filterDialogTitle: 'فلتەرەکان',
+    filterDialogDescription: 'هاوپۆلەکان، تایبەتمەندییە خواردنییەکان و شێوازی ڕیزکردن هەڵبژێرە.',
+    filterCategoriesLabel: 'هاوپۆلەکان',
+    filterAllLabel: 'هەموو',
+    filterDietaryLabel: 'تایبەتمەندیی خواردن',
+    filterSortByLabel: 'ڕیزکردن بەپێی',
+    filterClearLabel: 'پاککردنەوەی فلتەرەکان',
+    filterApplyLabel: 'جێبەجێکردن',
+    sortPopular: 'زۆرترین داواکراو',
+    sortPriceLow: 'نرخ: لە کەمەوە بۆ زۆر',
+    sortPriceHigh: 'نرخ: لە زۆرەوە بۆ کەم',
+    sortProteinHigh: 'پڕۆتین: لە زۆرەوە بۆ کەم',
+    sortProteinLow: 'پڕۆتین: لە کەمەوە بۆ زۆر',
+    sortCarbsHigh: 'کاربوهایدرات: لە زۆرەوە بۆ کەم',
+    sortCarbsLow: 'کاربوهایدرات: لە کەمەوە بۆ زۆر',
+    sortCaloriesLow: 'کالۆری: لە کەمەوە بۆ زۆر',
   },
 }
 
@@ -1026,6 +1106,10 @@ export default function SmartMenu({
 
   const currentCopy = uiCopyMap[language]
   const currentEngineCopy = engineCopyMap[language]
+  const localizedSortOptions = sortOptions.map((option) => ({
+    ...option,
+    label: currentCopy[option.label as keyof typeof currentCopy] as string,
+  }))
   const currentLanguageLabel =
     visibleLanguageOptions.find((option) => option.value === language)?.label || ''
   const buildMacroSegments = (
@@ -1565,7 +1649,7 @@ export default function SmartMenu({
     >
       {!isLanguageReady ? (
         <div className="min-h-screen flex items-center justify-center">
-          <p className={isDarkBg ? 'text-white/70' : 'text-slate-600'}>Loading menu...</p>
+          <Loader2 className={`h-7 w-7 animate-spin ${isDarkBg ? 'text-white/70' : 'text-slate-500'}`} />
         </div>
       ) : (
         <>
@@ -1820,16 +1904,16 @@ export default function SmartMenu({
             <DialogContent className="max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
               <DialogHeader>
                 <DialogTitle className="text-lg font-semibold text-slate-900">
-                  Filters
+                  {currentCopy.filterDialogTitle}
                 </DialogTitle>
                 <DialogDescription className="text-sm text-slate-500">
-                  Select categories, dietary attributes, and sort order.
+                  {currentCopy.filterDialogDescription}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-5 pt-3">
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                    Categories
+                    {currentCopy.filterCategoriesLabel}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -1839,7 +1923,7 @@ export default function SmartMenu({
                           : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
-                      All
+                      {currentCopy.filterAllLabel}
                     </button>
                     {categories.map((category) => (
                       <button
@@ -1850,7 +1934,7 @@ export default function SmartMenu({
                             : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
                           }`}
                       >
-                        {category.name}
+                        {getLocalizedCategoryName(category.name)}
                       </button>
                     ))}
                   </div>
@@ -1858,7 +1942,7 @@ export default function SmartMenu({
                 {allTags.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                      Dietary
+                      {currentCopy.filterDietaryLabel}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {allTags.map((tag) => (
@@ -1879,10 +1963,10 @@ export default function SmartMenu({
                 )}
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                    Sort by
+                    {currentCopy.filterSortByLabel}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {sortOptions.map((option) => (
+                    {localizedSortOptions.map((option) => (
                       <button
                         key={option.value}
                         onClick={() => setSortBy(option.value)}
@@ -1906,10 +1990,10 @@ export default function SmartMenu({
                     setSortBy('popular')
                   }}
                 >
-                  Clear filters
+                  {currentCopy.filterClearLabel}
                 </Button>
                 <Button onClick={() => setIsFilterDialogOpen(false)}>
-                  Apply
+                  {currentCopy.filterApplyLabel}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -1924,7 +2008,7 @@ export default function SmartMenu({
                   variant="secondary"
                   className="bg-emerald-500/20 text-emerald-200 border-emerald-500/30"
                 >
-                  {categories.find((c) => c.id === selectedCategory)?.name}
+                  {getLocalizedCategoryName(categories.find((c) => c.id === selectedCategory)?.name)}
                   <X
                     className="h-3 w-3 ml-1 cursor-pointer"
                     onClick={() => setSelectedCategory('all')}
