@@ -207,8 +207,14 @@ export default async function MenuPage({
   const smartProfitUnlocked = hasCurrentMonthlySalesImport(settings)
   const slotTimesRaw = parseSlotTimes(settings.slotTimes)
   const normalizedBaseUrl = (process.env.NEXTAUTH_URL || '').trim().replace(/\/+$/, '')
-  const publicMenuPath = restaurant?.slug ? `/${restaurant.slug}` : '/'
-  const clientFacingMenuUrl = normalizedBaseUrl ? `${normalizedBaseUrl}${publicMenuPath}` : publicMenuPath
+  const rawSlug = (restaurant?.slug || '').trim()
+  const slugIsAbsoluteUrl = /^https?:\/\//i.test(rawSlug)
+  const publicMenuPath = rawSlug ? `/${rawSlug.replace(/^\/+/, '')}` : '/'
+  const clientFacingMenuUrl = slugIsAbsoluteUrl
+    ? rawSlug
+    : normalizedBaseUrl
+      ? `${normalizedBaseUrl}${publicMenuPath}`
+      : publicMenuPath
   const categoryOptions = data.categories.map((c) => ({ id: c.id, name: c.name, displayOrder: c.displayOrder }))
 
   return (
