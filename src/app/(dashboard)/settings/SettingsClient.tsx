@@ -448,8 +448,8 @@ export default function SettingsClient({
             className="flex h-10 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
           >
             <option value="en">English</option>
-            <option value="ku">Kurdish (Kurdî)</option>
-            <option value="ar-fusha">Arabic</option>
+            <option value="ku">كوردي</option>
+            <option value="ar-fusha">العربية</option>
           </select>
         </CardContent>
       </Card>

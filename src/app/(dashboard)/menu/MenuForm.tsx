@@ -121,13 +121,115 @@ interface ParsedAIResponse {
   ingredients?: ParsedAIIngredient[]
 }
 
+interface SmartChefCurrentIngredient {
+  ingredientId?: string
+  name: string
+  quantity: number
+  unit: string
+  pieceCount?: number | null
+  costPerUnit?: number | null
+}
+
+interface SmartChefCurrentData {
+  name: string
+  description: string
+  categoryName: string
+  price: number
+  ingredients: SmartChefCurrentIngredient[]
+  recipeSteps: string[]
+  recipeTips: string[]
+  recipeYield: number
+}
+
 interface AssistantMessage {
   role: 'assistant' | 'user'
   text: string
 }
 
-const AI_ASSISTANT_WELCOME =
-  "Hi! I'm Smart Chef. Tell me what dish you want to add and I'll handle the name, description, recipe, ingredients, costs, and menu setup. You can also upload a photo, bill, or document to speed things up.\n\nJust describe the dish in English and I'll guide you step by step. When you're ready, click **Fill Form Now** to update the form."
+type SmartChefReplyLanguage = 'en' | 'ar' | 'ku'
+
+const ZERO_COST_UTILITY_TERMS = [
+  'water',
+  'filtered water',
+  'tap water',
+  'still water',
+  'sparkling water',
+  'soda water',
+  'hot water',
+  'cold water',
+  'mineral water',
+  'ice',
+  'ice cubes',
+  'crushed ice',
+] as const
+
+const normalizeIngredientName = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const tokenizeIngredientName = (value: string) =>
+  normalizeIngredientName(value)
+    .split(' ')
+    .filter((token) => token.length > 1)
+
+const isZeroCostUtilityIngredient = (value?: string | null) => {
+  const normalized = normalizeIngredientName(value || '')
+  return ZERO_COST_UTILITY_TERMS.some((term) => normalized === term || normalized.endsWith(` ${term}`))
+}
+
+const ingredientNamesStronglyMatch = (left: string, right: string) => {
+  const leftNormalized = normalizeIngredientName(left)
+  const rightNormalized = normalizeIngredientName(right)
+
+  if (!leftNormalized || !rightNormalized) return false
+  if (leftNormalized === rightNormalized) return true
+
+  const leftTokens = tokenizeIngredientName(leftNormalized)
+  const rightTokens = tokenizeIngredientName(rightNormalized)
+  if (leftTokens.length === 0 || rightTokens.length === 0) return false
+
+  const leftSet = new Set(leftTokens)
+  const rightSet = new Set(rightTokens)
+  const overlap = leftTokens.filter((token) => rightSet.has(token)).length
+  const longestCommonToken = leftTokens.find((token) => rightSet.has(token) && token.length > 3)
+
+  const isSubsetMatch =
+    leftTokens.every((token) => rightSet.has(token)) ||
+    rightTokens.every((token) => leftSet.has(token))
+
+  return isSubsetMatch || (overlap >= 2 && Boolean(longestCommonToken))
+}
+
+const ARABIC_SCRIPT_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/
+const LATIN_SCRIPT_REGEX = /[A-Za-z]/
+
+const inferReplyLanguageFromText = (text: string, locale: string): SmartChefReplyLanguage | null => {
+  if (!text.trim()) return null
+  if (LATIN_SCRIPT_REGEX.test(text) && !ARABIC_SCRIPT_REGEX.test(text)) return 'en'
+  if (ARABIC_SCRIPT_REGEX.test(text)) {
+    return locale === 'ku' ? 'ku' : 'ar'
+  }
+  return null
+}
+
+const getDefaultReplyLanguage = (locale: string): SmartChefReplyLanguage => {
+  if (locale === 'ku') return 'ku'
+  if (locale === 'ar-fusha' || locale === 'ar_fusha') return 'ar'
+  return 'en'
+}
+
+const getSmartChefWelcomeMessage = (language: SmartChefReplyLanguage) => {
+  if (language === 'ar') {
+    return 'مرحبًا، أنا Smart Chef. أخبرني ما الطبق الذي تريد إضافته وسأتولى الاسم والوصف والوصفة والمكونات والتكاليف وإعداد العنصر.\n\nيمكنك أيضًا رفع صورة أو فاتورة أو مستند لتسريع العمل. وعندما تصبح جاهزًا اضغط **Fill Form Now** لتحديث النموذج.'
+  }
+  if (language === 'ku') {
+    return 'سڵاو، من Smart Chefم. پێم بڵێ چ خواردنێک دەتەوێت زیاد بکەیت تا ناو، وەسف، ڕەچەتە، پێکهاتەکان، تێچوو و ڕێکخستنی فۆرم بۆت تەواو بکەم.\n\nدەتوانیت وێنە، پسووڵە یان بەڵگەنامەش باربکەیت بۆ ئەوەی خێراتر بێت. کاتێک ئامادە بوویت، دوگمەی **Fill Form Now** بکە بۆ نوێکردنەوەی فۆرم.'
+  }
+  return "Hi! I'm Smart Chef. Tell me what dish you want to add and I'll handle the name, description, recipe, ingredients, costs, and menu setup. You can also upload a photo, bill, or document to speed things up.\n\nJust describe the dish and I'll guide you step by step. When you're ready, click **Fill Form Now** to update the form."
+}
 
 export default function MenuForm({
   categories,
@@ -142,6 +244,8 @@ export default function MenuForm({
   const { toast } = useToast()
   const { locale, t, menuTranslationLanguages } = useI18n()
   const { t: td, fetchTranslation } = useDynamicTranslate()
+  const assistantReplyLanguage = useMemo<SmartChefReplyLanguage>(() => getDefaultReplyLanguage(locale), [locale])
+  const smartChefWelcomeMessage = useMemo(() => getSmartChefWelcomeMessage(assistantReplyLanguage), [assistantReplyLanguage])
 
   /** translationLanguages typed for internal use */
   const translationLanguages = menuTranslationLanguages as { code: LanguageCode; label: string }[]
@@ -197,7 +301,7 @@ export default function MenuForm({
   const [aiAssistantText, setAiAssistantText] = useState('')
   const [aiParseLoading, setAiParseLoading] = useState(false)
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
-    { role: 'assistant', text: AI_ASSISTANT_WELCOME },
+    { role: 'assistant', text: smartChefWelcomeMessage },
   ])
   const [isListening, setIsListening] = useState(false)
   const speechRecognitionRef = useRef<any>(null)
@@ -234,8 +338,14 @@ export default function MenuForm({
   }
 
   const [formData, setFormData] = useState(initialFormData)
+  const [smartChefCategories, setSmartChefCategories] = useState<Category[]>([])
+  const allCategories = useMemo(() => {
+    const existingIds = new Set(categories.map((category) => category.id))
+    const newOnes = smartChefCategories.filter((category) => !existingIds.has(category.id))
+    return [...categories, ...newOnes]
+  }, [categories, smartChefCategories])
 
-  const initialCategoryName = categories.find(
+  const initialCategoryName = allCategories.find(
     (category) => category.id === initialFormData.categoryId
   )?.name
 
@@ -316,7 +426,7 @@ export default function MenuForm({
   }, [activeTranslationDraft, formData.carbs, formData.description, formData.name, formData.protein, isEditingTranslatedFields])
 
   const translationSeed = useMemo(() => {
-    const selectedCategoryName = categories.find(
+    const selectedCategoryName = allCategories.find(
       (category) => category.id === formData.categoryId
     )?.name
 
@@ -330,7 +440,7 @@ export default function MenuForm({
       carbs: formData.carbs,
     })
   }, [
-    categories,
+    allCategories,
     formData.name,
     formData.description,
     formData.categoryId,
@@ -660,6 +770,35 @@ export default function MenuForm({
     const newOnes = newlyCreatedIngredients.filter((i) => !existingIds.has(i.id))
     return [...ingredients, ...newOnes]
   }, [ingredients, newlyCreatedIngredients])
+
+  const buildSmartChefCurrentData = (): SmartChefCurrentData => {
+    const ingredientLookup = new Map(allIngredients.map((ingredient) => [ingredient.id, ingredient]))
+    const normalizedIngredients = recipe
+      .filter((line) => line.ingredientId && line.quantity > 0)
+      .map((line) => {
+        const ingredient = ingredientLookup.get(line.ingredientId)
+        return {
+          ingredientId: line.ingredientId,
+          name: ingredient?.name || '',
+          quantity: line.quantity,
+          unit: ingredient?.unit || line.unit || 'g',
+          pieceCount: line.pieceCount ?? null,
+          costPerUnit: line.unitCostCached ?? ingredient?.costPerUnit ?? null,
+        }
+      })
+      .filter((line) => line.name.trim().length > 0)
+
+    return {
+      name: formData.name,
+      description: formData.description,
+      categoryName: allCategories.find((c) => c.id === formData.categoryId)?.name || '',
+      price: parseFloat(formData.price) || 0,
+      ingredients: normalizedIngredients,
+      recipeSteps,
+      recipeTips,
+      recipeYield,
+    }
+  }
 
   useEffect(() => {
     if (!shouldTranslateEditableContent) {
@@ -1015,7 +1154,7 @@ export default function MenuForm({
     setGeneratingImage(true)
 
     try {
-      const category = categories.find((c) => c.id === formData.categoryId)
+      const category = allCategories.find((c) => c.id === formData.categoryId)
       const promptForGeneration =
         customPromptTrimmed || trimmedSavedBackgroundPrompt
       const response = await fetch('/api/menu/generate-image', {
@@ -1039,7 +1178,6 @@ export default function MenuForm({
       }
 
       setPreviewImageUrl(data.imageUrl)
-      setCustomPrompt('')
       setInferredItemNameForImage(null)
     } catch (error) {
       console.error('Error generating image:', error)
@@ -1214,7 +1352,7 @@ export default function MenuForm({
     setGeneratingDescription(true)
 
     try {
-      const category = categories.find((c) => c.id === formData.categoryId)
+      const category = allCategories.find((c) => c.id === formData.categoryId)
       const response = await fetch('/api/menu/generate-description', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1250,7 +1388,7 @@ export default function MenuForm({
     setEstimatingNutrition(true)
 
     try {
-      const category = categories.find((c) => c.id === formData.categoryId)
+      const category = allCategories.find((c) => c.id === formData.categoryId)
       const response = await fetch('/api/menu/estimate-nutrition', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1288,7 +1426,7 @@ export default function MenuForm({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text,
-        categoryNames: categories.map((c) => c.name),
+        categoryNames: allCategories.map((c) => c.name),
       }),
     })
     const data = await res.json()
@@ -1299,13 +1437,42 @@ export default function MenuForm({
   const findCategoryIdByName = (name?: string) => {
     if (!name) return ''
     const normalized = name.toLowerCase().trim()
-    const exact = categories.find((c) => c.name.toLowerCase().trim() === normalized)
+    const exact = allCategories.find((c) => c.name.toLowerCase().trim() === normalized)
     if (exact) return exact.id
-    const partial = categories.find((c) => {
+    const partial = allCategories.find((c) => {
       const cat = c.name.toLowerCase().trim()
       return cat.includes(normalized) || normalized.includes(cat)
     })
     return partial?.id ?? ''
+  }
+
+  const ensureCategoryExists = async (categoryName?: string) => {
+    const trimmed = categoryName?.trim()
+    if (!trimmed) return ''
+
+    const existingId = findCategoryIdByName(trimmed)
+    if (existingId) return existingId
+
+    const nextDisplayOrder =
+      allCategories.reduce((max, category) => Math.max(max, category.displayOrder ?? 0), -1) + 1
+
+    const response = await fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: trimmed,
+        description: 'Created by Smart Chef',
+        displayOrder: nextDisplayOrder,
+      }),
+    })
+
+    const created = await response.json()
+    if (!response.ok) {
+      throw new Error(created?.error || 'Failed to create category')
+    }
+
+    setSmartChefCategories((prev) => [...prev, created as Category])
+    return (created as Category).id
   }
 
   const applyParsedDataToForm = async (
@@ -1315,7 +1482,7 @@ export default function MenuForm({
   ) => {
     const autoCreateIngredients = options?.autoCreateIngredients === true
     const effectiveIngredients = additionalIngredients?.length ? [...allIngredients, ...additionalIngredients] : allIngredients
-    const categoryId = findCategoryIdByName(data.categoryName)
+    const categoryId = await ensureCategoryExists(data.categoryName).catch(() => findCategoryIdByName(data.categoryName))
     setFormData((prev) => ({
       ...prev,
       name: data.name || prev.name,
@@ -1346,10 +1513,7 @@ export default function MenuForm({
 
       for (const ing of data.ingredients) {
         const nameLower = (ing.name || '').toLowerCase().trim()
-        let match = effectiveIngredients.find((i) => {
-          const n = i.name.toLowerCase().trim()
-          return n === nameLower || n.includes(nameLower) || nameLower.includes(n)
-        })
+        let match = effectiveIngredients.find((i) => ingredientNamesStronglyMatch(i.name, ing.name))
         // Closest match: e.g. "Parmesan" in inventory matches "Fresh Parmesan" or "parmesan cheese" in recipe
         if (!match && nameLower.length > 0) {
           const recipeWords = nameLower.split(/\s+/).filter((w) => w.length > 2)
@@ -1361,7 +1525,13 @@ export default function MenuForm({
         }
         if (match) {
           // If AI has a cost for this ingredient and inventory still shows 0, update it
-          if (typeof ing.costPerUnit === 'number' && ing.costPerUnit > 0 && match.costPerUnit === 0) {
+          if (
+            typeof ing.costPerUnit === 'number' &&
+            ing.costPerUnit > 0 &&
+            match.costPerUnit === 0 &&
+            !isZeroCostUtilityIngredient(match.name) &&
+            !isZeroCostUtilityIngredient(ing.name)
+          ) {
             fetch(`/api/inventory/${match.id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
@@ -1415,7 +1585,11 @@ export default function MenuForm({
             body: JSON.stringify({
               name: ing.name,
               unit: ing.unit || 'kg',
-              costPerUnit: typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0 ? ing.costPerUnit : 0,
+              costPerUnit: isZeroCostUtilityIngredient(ing.name)
+                ? 0
+                : typeof ing.costPerUnit === 'number' && ing.costPerUnit >= 0
+                  ? ing.costPerUnit
+                  : 0,
             }),
           })
           if (!createResponse.ok) {
@@ -1468,7 +1642,7 @@ export default function MenuForm({
     const missingNutrition =
       data.calories == null || data.protein == null || data.carbs == null
     const missingTags = !Array.isArray(data.tags) || data.tags.length === 0
-    const categoryName = categories.find((c) => c.id === categoryId)?.name
+    const categoryName = allCategories.find((c) => c.id === categoryId)?.name
 
     if ((missingNutrition || missingTags) && (data.name || data.description)) {
       try {
@@ -1497,7 +1671,7 @@ export default function MenuForm({
       }
     }
 
-    const needsCategory = !categoryId && categories.length > 0
+    const needsCategory = !categoryId && allCategories.length > 0
     const needsImage = !formData.imageUrl?.trim()
     const hasUnmatchedIngredients = (data.ingredients?.length ?? 0) > 0 && filledRecipeCount < (data.ingredients?.length ?? 0)
     const needsIngredients = filledRecipeCount === 0
@@ -1552,7 +1726,7 @@ export default function MenuForm({
   }
 
   const resetAssistantChat = () => {
-    setAssistantMessages([{ role: 'assistant', text: AI_ASSISTANT_WELCOME }])
+    setAssistantMessages([{ role: 'assistant', text: smartChefWelcomeMessage }])
     setAiAssistantText('')
     setAttachedDocs([])
     setAttachedImages([])
@@ -1561,6 +1735,29 @@ export default function MenuForm({
   useEffect(() => {
     resetAssistantChat()
   }, [mode, menuItem?.id])
+
+  useEffect(() => {
+    setAssistantMessages((prev) => {
+      if (prev.length !== 1 || prev[0]?.role !== 'assistant') return prev
+      const currentText = prev[0]?.text || ''
+      if (currentText === smartChefWelcomeMessage) return prev
+      return [{ role: 'assistant', text: smartChefWelcomeMessage }]
+    })
+  }, [smartChefWelcomeMessage])
+
+  const getPreferredSmartChefReplyLanguage = (draftText?: string): SmartChefReplyLanguage => {
+    const draftLanguage = inferReplyLanguageFromText(draftText || '', locale)
+    if (draftLanguage) return draftLanguage
+
+    for (let index = assistantMessages.length - 1; index >= 0; index -= 1) {
+      const message = assistantMessages[index]
+      if (message.role !== 'user') continue
+      const detected = inferReplyLanguageFromText(message.text || '', locale)
+      if (detected) return detected
+    }
+
+    return getDefaultReplyLanguage(locale)
+  }
 
   const finishAssistantFlow = (options?: { researched?: boolean; recipeOnly?: boolean }) => {
     const hasExistingImage =
@@ -1618,28 +1815,23 @@ export default function MenuForm({
         ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
         ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
       ]
+      const preferredResponseLanguage = getPreferredSmartChefReplyLanguage(text)
 
       const response = await fetch('/api/menu/smart-chef', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: nextMessages,
-          categories: categories.map(c => c.name),
+          categories: allCategories.map(c => c.name),
           inventory: allIngredients.map(i => ({
             name: i.name,
             unit: i.unit,
             costPerUnit: i.costPerUnit
           })),
-          currentData: {
-            name: formData.name,
-            categoryName: categories.find(c => c.id === formData.categoryId)?.name || '',
-            price: parseFloat(formData.price) || 0,
-            ingredients: recipe,
-            recipeSteps,
-            recipeTips,
-            recipeYield
-          },
-          attachments
+          currentData: buildSmartChefCurrentData(),
+          attachments,
+          preferredResponseLanguage,
+          managementLanguage: locale,
         }),
       })
 
@@ -1654,15 +1846,16 @@ export default function MenuForm({
       const existingNames = new Set(allIngredients.map((i) => i.name.toLowerCase().trim()))
       for (const ing of dataIngredients) {
         const name = (ing.name || '').trim()
-        const costPerUnit = typeof ing.costPerUnit === 'number' && ing.costPerUnit > 0 ? ing.costPerUnit : null
+        const costPerUnit =
+          isZeroCostUtilityIngredient(name)
+            ? null
+            : typeof ing.costPerUnit === 'number' && ing.costPerUnit > 0
+              ? ing.costPerUnit
+              : null
         if (!name || costPerUnit == null) continue
 
         // Check if this ingredient already exists (exact or fuzzy match)
-        const nameLower = name.toLowerCase()
-        const existingMatch = allIngredients.find((i) => {
-          const n = i.name.toLowerCase().trim()
-          return n === nameLower || n.includes(nameLower) || nameLower.includes(n)
-        })
+        const existingMatch = allIngredients.find((i) => ingredientNamesStronglyMatch(i.name, name))
 
         if (existingMatch) {
           // Update cost if existing cost is 0 or different
@@ -1829,6 +2022,10 @@ export default function MenuForm({
 
   const fillFormFromAI = async () => {
     let text = aiAssistantText.trim()
+    const pendingUserMessage =
+      text.length > 0
+        ? { role: 'user' as const, text }
+        : null
 
     // If text area is empty, use the whole conversation history for research path
     if (!text && assistantMessages.length > 0) {
@@ -1849,7 +2046,13 @@ export default function MenuForm({
     const dishName = existingName || firstUserMessage || firstLineOfText || ''
 
     // If user has been chatting with Smart Chef, use the conversation to fill the form (so agreed ingredients and costs are included)
-    const hasConversation = assistantMessages.length > 1 && assistantMessages.some((m) => m.role === 'user')
+    const conversationMessages = pendingUserMessage
+      ? [...assistantMessages, pendingUserMessage]
+      : assistantMessages
+    const hasConversation =
+      conversationMessages.length > 1 &&
+      conversationMessages.some((m) => m.role === 'user')
+    const preferredResponseLanguage = getPreferredSmartChefReplyLanguage(text)
 
     setAiParseLoading(true)
     try {
@@ -1858,22 +2061,16 @@ export default function MenuForm({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: assistantMessages,
-            categories: categories.map(c => c.name),
+            messages: conversationMessages,
+            categories: allCategories.map(c => c.name),
             inventory: allIngredients.map(i => ({ name: i.name, unit: i.unit, costPerUnit: i.costPerUnit })),
-            currentData: {
-              name: formData.name,
-              categoryName: categories.find(c => c.id === formData.categoryId)?.name || '',
-              price: parseFloat(formData.price) || 0,
-              ingredients: recipe,
-              recipeSteps,
-              recipeTips,
-              recipeYield
-            },
+            currentData: buildSmartChefCurrentData(),
             attachments: [
               ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
               ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
             ],
+            preferredResponseLanguage,
+            managementLanguage: locale,
             finalize: true
           }),
         })
@@ -1910,7 +2107,7 @@ export default function MenuForm({
             body: JSON.stringify({
               text,
               dishName: dishName || undefined,
-              categoryNames: categories.map(c => c.name),
+              categoryNames: allCategories.map(c => c.name),
               attachments: [
                 ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
                 ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
@@ -1929,7 +2126,7 @@ export default function MenuForm({
           body: JSON.stringify({
             text,
             dishName: dishName || undefined,
-            categoryNames: categories.map(c => c.name),
+            categoryNames: allCategories.map(c => c.name),
             attachments: [
               ...attachedDocs.map(d => ({ name: d.name, type: d.type, base64: d.base64 })),
               ...attachedImages.map(i => ({ name: i.name, type: i.type, base64: i.base64 }))
@@ -2448,7 +2645,7 @@ export default function MenuForm({
                         <div className="p-4 space-y-2">
                           <p className="text-xs uppercase tracking-wider text-slate-500">
                             {(() => {
-                              const cat = categories.find((c) => c.id === formData.categoryId)
+                              const cat = allCategories.find((c) => c.id === formData.categoryId)
                               return cat ? getTranslatedCategoryName(cat.name, t) : t.menu_form_uncategorized
                             })()}
                           </p>
@@ -2812,7 +3009,7 @@ export default function MenuForm({
                               <SelectValue placeholder={t.menu_form_select_category} />
                             </SelectTrigger>
                             <SelectContent>
-                              {categories.map((category) => (
+                              {allCategories.map((category) => (
                                 <SelectItem key={category.id} value={category.id}>
                                   {getTranslatedCategoryName(category.name, t)}
                                 </SelectItem>
@@ -4148,14 +4345,14 @@ export default function MenuForm({
                               : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
                               }`}
                           >
-                            <span className="block text-sm">{option.label}</span>
+                            <span className="block text-sm">{td(option.label)}</span>
                             <span className="text-[10px] text-slate-400">{option.aspect}</span>
                           </button>
                         )
                       })}
                     </div>
                     <p className="text-xs text-slate-500 italic">
-                      {currentOrientationOption.description}
+                      {td(currentOrientationOption.description)}
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -4175,14 +4372,14 @@ export default function MenuForm({
                               : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
                               }`}
                           >
-                            <span className="block text-sm">{option.label}</span>
+                            <span className="block text-sm">{td(option.label)}</span>
                             <span className="text-[10px] text-slate-400">{`${option.pixels}px`}</span>
                           </button>
                         )
                       })}
                     </div>
                     <p className="text-xs text-slate-500 italic">
-                      {currentSizeOption.description}
+                      {td(currentSizeOption.description)}
                     </p>
                   </div>
                 </div>

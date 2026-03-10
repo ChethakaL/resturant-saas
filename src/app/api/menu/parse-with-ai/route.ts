@@ -68,7 +68,7 @@ async function parseWithGemini(text: string, categoryNames: string[]): Promise<P
   const categoryHint =
     categoryNames.length > 0
       ? `Available categories (pick the closest match): ${categoryNames.join(', ')}.`
-      : 'Suggest a short category name like Main Course, Appetizer, Dessert, Drinks, Sides.'
+      : 'Suggest a short category name like Main Course, Sandwiches, Appetizer, Dessert, Drinks, Sides.'
 
   const prompt = `You are helping fill a restaurant menu form. The user provided:
 
@@ -98,7 +98,7 @@ async function parseWithOpenAI(text: string, categoryNames: string[]): Promise<P
   const categoryHint =
     categoryNames.length > 0
       ? `Available categories (pick closest): ${categoryNames.join(', ')}.`
-      : 'Suggest a short category name like Main Course, Appetizer, Dessert.'
+      : 'Suggest a short category name like Main Course, Sandwiches, Appetizer, Dessert, Drinks, Sides.'
 
   const prompt = `You are helping fill a restaurant menu form. The user provided:
 
