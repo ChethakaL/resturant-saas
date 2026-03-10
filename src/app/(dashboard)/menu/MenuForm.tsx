@@ -1846,6 +1846,7 @@ export default function MenuForm({
       const existingNames = new Set(allIngredients.map((i) => i.name.toLowerCase().trim()))
       for (const ing of dataIngredients) {
         const name = (ing.name || '').trim()
+        const nameLower = name.toLowerCase()
         const costPerUnit =
           isZeroCostUtilityIngredient(name)
             ? null

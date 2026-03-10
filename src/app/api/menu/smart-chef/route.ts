@@ -18,6 +18,16 @@ function getReplyLanguageLabel(language: SmartChefReplyLanguage) {
   return 'English'
 }
 
+function getRecipeMessageTemplate(language: SmartChefReplyLanguage) {
+  if (language === 'ar') {
+    return 'اكتب الرسالة بهذا التنسيق داخل حقل "message" مع استخدام \\n حرفياً للفواصل:\n\nإليك الوصفة المقترحة:\\n\\n**المكونات:**\\n• [الكمية والمكوّن]\\n• [الكمية والمكوّن]\\n\\n**الخطوات (SOP):**\\n1. [الخطوة 1]\\n2. [الخطوة 2]\\n\\nهل هذه الوصفة مناسبة، أم تريد أي تعديلات؟'
+  }
+  if (language === 'ku') {
+    return 'پەیامەکە لە ناو خانەی "message" بەو شێوازە بنووسە و \\n وەک نووسین بەکاربهێنە:\n\nئەمە ڕەچەتەی پێشنیارکراوە:\\n\\n**پێکهاتەکان:**\\n• [بڕ و ناوی پێکهاتە]\\n• [بڕ و ناوی پێکهاتە]\\n\\n**هەنگاوەکان (SOP):**\\n1. [هەنگاوی 1]\\n2. [هەنگاوی 2]\\n\\nئایا ئەم ڕەچەتەیە گونجاوە، یان هیچ دەستکاریکردنێکت دەوێت؟'
+  }
+  return 'Write the message using this exact format inside the "message" field and use literal \\n for line breaks:\n\nHere is the suggested recipe:\\n\\n**Ingredients:**\\n• [Quantity and ingredient]\\n• [Quantity and ingredient]\\n\\n**Steps (SOP):**\\n1. [Step 1]\\n2. [Step 2]\\n\\nIs this recipe suitable, or would you like any adjustments?'
+}
+
 const SYSTEM_PROMPT = (
   categories: string[],
   inventory: { name: string, unit: string, costPerUnit: number }[],
@@ -65,13 +75,11 @@ NEVER ASK THE USER:
 THE STRUCTURED FLOW:
 1. **Name**: Ask for the dish name. If a document is uploaded, extract it immediately.
 2. **Category**: Suggest the best category from [${categories.join(', ')}]. Ask "Is this correct, or should it be in a different category?"
-3. **Recipe & Ingredients**: When you suggest a recipe, you MUST display BOTH the ingredient list AND the cooking steps directly INSIDE your "message" chat response. Do NOT just put them in the "data" block. They MUST be written in ENGLISH.
+3. **Recipe & Ingredients**: When you suggest a recipe, you MUST display BOTH the ingredient list AND the cooking steps directly INSIDE your "message" chat response. Do NOT just put them in the "data" block. The "message" must be written in ${getReplyLanguageLabel(replyLanguage)}.
    CRITICAL FOR JSON: Because you are responding in JSON, you MUST use literal \\n for line breaks inside the "message" string instead of actual newlines.
-   Use this exact formatting inside the "message" JSON string:
+   ${getRecipeMessageTemplate(replyLanguage)}
 
-   Here is the suggested recipe:\\n\\n**Ingredients:**\\n• [Quantity and ingredient]\\n• [Quantity and ingredient]\\n\\n**Steps (SOP):**\\n1. [Step 1]\\n2. [Step 2]\\n\\nIs this recipe suitable, or would you like any adjustments?
-
-   The "max 2 sentences" rule does NOT apply to recipe suggestions — the user MUST see both ingredients AND steps IN THE CHAT. Never hide the recipe only in the data block. If the user uploaded a document or message that already contains the full recipe, display those ingredients and steps — do NOT re-suggest. Only suggest a recipe when they did NOT provide one.
+   The "max 2 sentences" rule does NOT apply to recipe suggestions — the user MUST see both ingredients AND steps IN THE CHAT. Never hide the recipe only in the data block. If the user uploaded a document or message that already contains the full recipe, display those ingredients and steps in ${getReplyLanguageLabel(replyLanguage)} — do NOT re-suggest. Only suggest a recipe when they did NOT provide one.
 4. **Grams & Weights**: Summarize the amounts you have (use conversions yourself if user said tsp/cups). Only ask the user about quantities that are genuinely missing or ambiguous (e.g. "how much salt?" if not stated). Do not ask for conversions.
 5. **Yield**: From the ingredient quantities, estimate how many servings the recipe yields. Phrase it in a natural, conversational way, e.g. "This recipe seems like it makes one dish." or "This looks like it makes about 4 servings." Then ask the user to confirm (e.g. "Is that right?"). Do not ask open-ended "how many servings would you expect?" — always give your estimate first in plain language. Once the user confirms (yes/correct/ok/sure), IMMEDIATELY move to step 6 — never pause or ask "how would you like to continue".
 6. **Inventory & Costing** — AUTOMATED RESOLUTION RULES (critical):
