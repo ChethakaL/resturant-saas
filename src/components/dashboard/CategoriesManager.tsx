@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -254,6 +254,10 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
   const [highlightedItems, setHighlightedItems] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
+  useEffect(() => {
+    setCategories(initialCategories)
+  }, [initialCategories])
+
   // Drag and drop sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -453,7 +457,7 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
       // Clear highlights after 10 seconds
       setTimeout(() => setHighlightedItems(new Set()), 10000)
 
-      // DON'T refresh here - let user see the dialog first
+      router.refresh()
     } catch {
       toast({ title: 'Could not run AI categorization', variant: 'destructive' })
     } finally {
@@ -463,8 +467,6 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
 
   const closeAiResultsDialog = () => {
     setAiResultsOpen(false)
-    // Refresh after closing dialog to show updated categories
-    router.refresh()
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
