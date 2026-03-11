@@ -17,6 +17,7 @@ import {
 import { useToast } from '@/components/ui/use-toast'
 import { FileText, Loader2, Lock, Plus, Trash2, Upload } from 'lucide-react'
 import type { ImportedMonthlySalesData } from '@/lib/monthly-sales-import'
+import { useDynamicTranslate } from '@/lib/i18n'
 
 interface UploadRecord {
   year: number
@@ -68,6 +69,7 @@ export default function MonthlySalesPdfUploadCard({
 }: MonthlySalesPdfUploadCardProps) {
   const { toast } = useToast()
   const router = useRouter()
+  const { t: td } = useDynamicTranslate()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const now = useMemo(() => new Date(), [])
   const [year, setYear] = useState(String(now.getFullYear()))
@@ -296,29 +298,29 @@ export default function MonthlySalesPdfUploadCard({
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-slate-900">
             {status.active ? <FileText className="h-5 w-5 text-emerald-600" /> : <Lock className="h-5 w-5 text-amber-600" />}
-            {title}
+            {td(title)}
           </CardTitle>
-          <p className="text-sm text-slate-600">{description}</p>
+          <p className="text-sm text-slate-600">{td(description)}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className={`rounded-lg border p-3 ${status.active ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-white'}`}>
             <p className="text-sm font-medium text-slate-900">
               {status.loading
-                ? 'Checking monthly import status...'
+                ? td('Checking monthly import status...')
                 : status.active
-                  ? `${status.currentPeriodLabel} is unlocked.`
-                  : `${status.currentPeriodLabel || 'This month'} is locked until sales data is imported.`}
+                  ? `${status.currentPeriodLabel} ${td('is unlocked.')}`
+                  : `${status.currentPeriodLabel || td('This month')} ${td('is locked until sales data is imported.')}`}
             </p>
             {status.currentImportSummary ? (
               <p className="mt-1 text-xs text-slate-600">
-                Imported: {status.currentImportSummary.currency} {status.currentImportSummary.netSales.toLocaleString()} net sales, {status.currentImportSummary.totalOrders.toLocaleString()} orders.
+                {td('Imported:')} {status.currentImportSummary.currency} {status.currentImportSummary.netSales.toLocaleString('en-US')} {td('net sales,')} {status.currentImportSummary.totalOrders.toLocaleString('en-US')} {td('orders.')}
               </p>
             ) : null}
           </div>
 
           <div className="grid gap-4 md:grid-cols-[1fr_140px_120px_auto] md:items-end">
             <div className="space-y-2">
-              <Label htmlFor="monthly-sales-pdf">Sales report PDF</Label>
+              <Label htmlFor="monthly-sales-pdf">{td('Sales report PDF')}</Label>
               <Input
                 id="monthly-sales-pdf"
                 ref={fileInputRef}
@@ -328,7 +330,7 @@ export default function MonthlySalesPdfUploadCard({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="monthly-sales-month">Month</Label>
+              <Label htmlFor="monthly-sales-month">{td('Month')}</Label>
               <select
                 id="monthly-sales-month"
                 value={month}
@@ -343,7 +345,7 @@ export default function MonthlySalesPdfUploadCard({
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="monthly-sales-year">Year</Label>
+              <Label htmlFor="monthly-sales-year">{td('Year')}</Label>
               <Input
                 id="monthly-sales-year"
                 inputMode="numeric"
@@ -353,7 +355,7 @@ export default function MonthlySalesPdfUploadCard({
             </div>
             <Button onClick={handleExtract} disabled={isExtracting || isSaving || !file} className="gap-2">
               {isExtracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {isExtracting ? 'Extracting...' : 'Extract Data'}
+              {isExtracting ? td('Extracting...') : td('Extract Data')}
             </Button>
           </div>
 
@@ -361,8 +363,8 @@ export default function MonthlySalesPdfUploadCard({
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-slate-900">Current imported month data</p>
-                  <p className="text-xs text-slate-500">Reopen and edit imported rows without uploading another PDF.</p>
+                  <p className="text-sm font-medium text-slate-900">{td('Current imported month data')}</p>
+                  <p className="text-xs text-slate-500">{td('Reopen and edit imported rows without uploading another PDF.')}</p>
                 </div>
                 <Button
                   type="button"
@@ -377,7 +379,7 @@ export default function MonthlySalesPdfUploadCard({
                     setReviewOpen(true)
                   }}
                 >
-                  Review imported data
+                  {td('Review imported data')}
                 </Button>
               </div>
             </div>
@@ -389,25 +391,25 @@ export default function MonthlySalesPdfUploadCard({
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>
                   {isExtracting
-                    ? 'Reading the PDF and extracting sales data. This can take a few seconds.'
-                    : 'Saving the reviewed sales import and refreshing the dashboard.'}
+                    ? td('Reading the PDF and extracting sales data. This can take a few seconds.')
+                    : td('Saving the reviewed sales import and refreshing the dashboard.')}
                 </span>
               </div>
             </div>
           )}
 
           <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-900">Recommended PDF format</p>
+            <p className="text-sm font-medium text-slate-900">{td('Recommended PDF format')}</p>
             <ul className="space-y-1 text-sm text-slate-600">
               {REQUIREMENTS.map((item) => (
-                <li key={item}>{item}</li>
+                <li key={item}>{td(item)}</li>
               ))}
             </ul>
           </div>
 
           {!compact && status.uploads.length > 0 ? (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-900">Recent uploads</p>
+              <p className="text-sm font-medium text-slate-900">{td('Recent uploads')}</p>
               <div className="space-y-2">
               {status.uploads.slice(0, 6).map((upload) => (
                   <div key={`${upload.year}-${upload.month}`} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
@@ -426,7 +428,7 @@ export default function MonthlySalesPdfUploadCard({
 
         {!compact && status.imports.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-900">Imported months</p>
+            <p className="text-sm font-medium text-slate-900">{td('Imported months')}</p>
             <div className="space-y-2">
               {status.imports.slice(0, 6).map((item) => (
                 <button
@@ -446,7 +448,7 @@ export default function MonthlySalesPdfUploadCard({
                     <p className="text-slate-500">{item.sourceFileName}</p>
                   </div>
                   <div className="text-right text-slate-500">
-                    <p>{item.summary.currency} {item.summary.netSales.toLocaleString()}</p>
+                    <p>{item.summary.currency} {item.summary.netSales.toLocaleString('en-US')}</p>
                     <p>{new Date(item.importedAt).toLocaleDateString()}</p>
                   </div>
                 </button>
@@ -460,9 +462,9 @@ export default function MonthlySalesPdfUploadCard({
       <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Review extracted sales data</DialogTitle>
+            <DialogTitle>{td('Review extracted sales data')}</DialogTitle>
             <DialogDescription>
-              Confirm and edit the extracted values before they update the dashboard and Smart Profit mode.
+              {td('Confirm and edit the extracted values before they update the dashboard and Smart Profit mode.')}
             </DialogDescription>
           </DialogHeader>
 
@@ -470,7 +472,7 @@ export default function MonthlySalesPdfUploadCard({
             <div className="space-y-6">
               <div className="grid gap-3 md:grid-cols-4">
                 <div className="space-y-2">
-                  <Label>Save for month</Label>
+                  <Label>{td('Save for month')}</Label>
                   <select
                     value={month}
                     onChange={(e) => {
@@ -487,7 +489,7 @@ export default function MonthlySalesPdfUploadCard({
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Save for year</Label>
+                  <Label>{td('Save for year')}</Label>
                   <Input
                     value={year}
                     onChange={(e) => {
@@ -498,70 +500,70 @@ export default function MonthlySalesPdfUploadCard({
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Import action</Label>
+                  <Label>{td('Import action')}</Label>
                   <select
                     value={importMode}
                     onChange={(e) => setImportMode(e.target.value === 'append' ? 'append' : 'replace')}
                     className="flex h-10 w-full items-center rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                   >
-                    <option value="replace">Replace existing data for this month</option>
-                    <option value="append">Append to existing data for this month</option>
+                    <option value="replace">{td('Replace existing data for this month')}</option>
+                    <option value="append">{td('Append to existing data for this month')}</option>
                   </select>
                   <p className="text-xs text-slate-500">
                     {importMode === 'append'
-                      ? 'Append will merge this import into any existing data for the selected month.'
-                      : 'Replace will overwrite any existing data for the selected month.'}
+                      ? td('Append will merge this import into any existing data for the selected month.')
+                      : td('Replace will overwrite any existing data for the selected month.')}
                   </p>
                 </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-4">
                 <div className="space-y-2">
-                  <Label>Currency</Label>
+                  <Label>{td('Currency')}</Label>
                   <Input value={previewData.summary.currency} onChange={(e) => updateSummaryField('currency', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Total Sales</Label>
+                  <Label>{td('Total Sales')}</Label>
                   <Input value={toInputNumber(previewData.summary.totalSales)} onChange={(e) => updateSummaryField('totalSales', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Total Orders</Label>
+                  <Label>{td('Total Orders')}</Label>
                   <Input value={toInputNumber(previewData.summary.totalOrders)} onChange={(e) => updateSummaryField('totalOrders', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Net Sales</Label>
+                  <Label>{td('Net Sales')}</Label>
                   <Input value={toInputNumber(previewData.summary.netSales)} onChange={(e) => updateSummaryField('netSales', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Average Order Value</Label>
+                  <Label>{td('Average Order Value')}</Label>
                   <Input value={toInputNumber(previewData.summary.avgOrderValue)} onChange={(e) => updateSummaryField('avgOrderValue', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Tax Collected</Label>
+                  <Label>{td('Tax Collected')}</Label>
                   <Input value={toInputNumber(previewData.summary.taxCollected)} onChange={(e) => updateSummaryField('taxCollected', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Discounts</Label>
+                  <Label>{td('Discounts')}</Label>
                   <Input value={toInputNumber(previewData.summary.discounts)} onChange={(e) => updateSummaryField('discounts', e.target.value)} />
                 </div>
               </div>
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-900">Top-selling items</h3>
+                  <h3 className="font-semibold text-slate-900">{td('Top-selling items')}</h3>
                   <Button type="button" variant="outline" size="sm" onClick={addTopItem} className="gap-2">
                     <Plus className="h-4 w-4" />
-                    Add item
+                    {td('Add item')}
                   </Button>
                 </div>
                 <div className="space-y-3">
                   {previewData.topSellingItems.map((item, index) => (
                     <div key={`top-item-${index}`} className="grid gap-2 rounded-lg border border-slate-200 p-3 md:grid-cols-[2fr_1.2fr_1fr_1fr_1fr_auto]">
-                      <Input placeholder="Item name" value={item.itemName} onChange={(e) => updateTopItem(index, 'itemName', e.target.value)} />
-                      <Input placeholder="Category" value={item.category || ''} onChange={(e) => updateTopItem(index, 'category', e.target.value)} />
-                      <Input placeholder="Qty sold" value={toInputNumber(item.quantitySold)} onChange={(e) => updateTopItem(index, 'quantitySold', e.target.value)} />
-                      <Input placeholder="Unit price" value={toInputNumber(item.unitPrice)} onChange={(e) => updateTopItem(index, 'unitPrice', e.target.value)} />
-                      <Input placeholder="Gross revenue" value={toInputNumber(item.grossRevenue)} onChange={(e) => updateTopItem(index, 'grossRevenue', e.target.value)} />
+                      <Input placeholder={td('Item name')} value={item.itemName} onChange={(e) => updateTopItem(index, 'itemName', e.target.value)} />
+                      <Input placeholder={td('Category')} value={item.category || ''} onChange={(e) => updateTopItem(index, 'category', e.target.value)} />
+                      <Input placeholder={td('Qty sold')} value={toInputNumber(item.quantitySold)} onChange={(e) => updateTopItem(index, 'quantitySold', e.target.value)} />
+                      <Input placeholder={td('Unit price')} value={toInputNumber(item.unitPrice)} onChange={(e) => updateTopItem(index, 'unitPrice', e.target.value)} />
+                      <Input placeholder={td('Gross revenue')} value={toInputNumber(item.grossRevenue)} onChange={(e) => updateTopItem(index, 'grossRevenue', e.target.value)} />
                       <Button type="button" variant="ghost" size="icon" onClick={() => removeTopItem(index)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -572,22 +574,22 @@ export default function MonthlySalesPdfUploadCard({
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-900">Daily sales rows</h3>
+                  <h3 className="font-semibold text-slate-900">{td('Daily sales rows')}</h3>
                   <Button type="button" variant="outline" size="sm" onClick={addDailyRow} className="gap-2">
                     <Plus className="h-4 w-4" />
-                    Add day
+                    {td('Add day')}
                   </Button>
                 </div>
                 <div className="space-y-3">
                   {previewData.dailySales.map((row, index) => (
                     <div key={`daily-row-${index}`} className="grid gap-2 rounded-lg border border-slate-200 p-3 md:grid-cols-[1.2fr_1fr_1fr_1fr_1fr_1fr_1fr_auto]">
                       <Input placeholder="2026-03-01" value={row.date} onChange={(e) => updateDailyRow(index, 'date', e.target.value)} />
-                      <Input placeholder="Day" value={row.day || ''} onChange={(e) => updateDailyRow(index, 'day', e.target.value)} />
-                      <Input placeholder="Orders" value={toInputNumber(row.orders)} onChange={(e) => updateDailyRow(index, 'orders', e.target.value)} />
-                      <Input placeholder="Gross" value={toInputNumber(row.grossSales)} onChange={(e) => updateDailyRow(index, 'grossSales', e.target.value)} />
-                      <Input placeholder="Discounts" value={toInputNumber(row.discounts)} onChange={(e) => updateDailyRow(index, 'discounts', e.target.value)} />
-                      <Input placeholder="Net" value={toInputNumber(row.netSales)} onChange={(e) => updateDailyRow(index, 'netSales', e.target.value)} />
-                      <Input placeholder="Status" value={row.status || ''} onChange={(e) => updateDailyRow(index, 'status', e.target.value)} />
+                      <Input placeholder={td('Day')} value={row.day || ''} onChange={(e) => updateDailyRow(index, 'day', e.target.value)} />
+                      <Input placeholder={td('Orders')} value={toInputNumber(row.orders)} onChange={(e) => updateDailyRow(index, 'orders', e.target.value)} />
+                      <Input placeholder={td('Gross')} value={toInputNumber(row.grossSales)} onChange={(e) => updateDailyRow(index, 'grossSales', e.target.value)} />
+                      <Input placeholder={td('Discounts')} value={toInputNumber(row.discounts)} onChange={(e) => updateDailyRow(index, 'discounts', e.target.value)} />
+                      <Input placeholder={td('Net')} value={toInputNumber(row.netSales)} onChange={(e) => updateDailyRow(index, 'netSales', e.target.value)} />
+                      <Input placeholder={td('Status')} value={row.status || ''} onChange={(e) => updateDailyRow(index, 'status', e.target.value)} />
                       <Button type="button" variant="ghost" size="icon" onClick={() => removeDailyRow(index)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -600,11 +602,11 @@ export default function MonthlySalesPdfUploadCard({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setReviewOpen(false)} disabled={isSaving}>
-              Cancel
+              {td('Cancel')}
             </Button>
             <Button type="button" onClick={handleConfirmImport} disabled={isSaving || !previewData} className="gap-2">
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Save imported data
+              {td('Save imported data')}
             </Button>
           </DialogFooter>
         </DialogContent>

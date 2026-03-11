@@ -72,8 +72,8 @@ export function useDynamicTranslate() {
 
   const fallbackText = useMemo(() => {
     if (locale === 'en') return null
-    if (!loaded) return ''
-    return ''
+    if (!loaded) return null
+    return null
   }, [locale, loaded])
 
   const t = useCallback(
@@ -81,7 +81,7 @@ export function useDynamicTranslate() {
       const key = (sourceText ?? '').trim()
       if (!key) return sourceText ?? ''
       if (locale === 'en') return key
-      if (!loaded) return ''
+      if (!loaded) return key
 
       const staticTranslation = resolveStaticTranslation(key)
       if (staticTranslation) return staticTranslation

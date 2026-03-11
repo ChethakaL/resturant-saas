@@ -43,7 +43,7 @@ import { Category, Ingredient } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
 import { classifyItemType, type DefaultCategoryKey } from '@/lib/category-suggest'
-import { useI18n } from '@/lib/i18n'
+import { useDynamicTranslate, useI18n } from '@/lib/i18n'
 
 interface ParsedIngredient {
   name: string
@@ -76,6 +76,27 @@ interface BulkMenuImportProps {
   ingredients: Ingredient[]
   defaultBackgroundPrompt?: string | null
 }
+
+const POPUP_COPY = {
+  en: {
+    importTitle: 'Import Menu Items from Image',
+    importDescription: "Upload a photo of your menu and we'll extract all items automatically.",
+    uploadHint: 'Click anywhere to upload or drag and drop your menu image',
+    uploadMeta: 'PNG, JPG up to 10MB',
+  },
+  ku: {
+    importTitle: 'هاوردەکردنی خواردنەکانی مینیو لە وێنەوە',
+    importDescription: 'وێنەیەک لە مینیوەکەت باربکە و هەموو خواردنەکان بە خۆکار دەردەهێنین.',
+    uploadHint: 'لە هەر شوێنێک کرتە بکە بۆ بارکردن یان وێنەی مینیوەکەت ڕابکێشە و دابنێ',
+    uploadMeta: 'PNG، JPG تا 10MB',
+  },
+  'ar-fusha': {
+    importTitle: 'استيراد أصناف القائمة من صورة',
+    importDescription: 'حمّل صورة لقائمتك وسنستخرج جميع الأصناف تلقائياً.',
+    uploadHint: 'انقر في أي مكان للرفع أو اسحب وأفلت صورة القائمة',
+    uploadMeta: 'PNG، JPG حتى 10MB',
+  },
+} as const
 
 const TYPE_CATEGORY_NAME_CANDIDATES: Record<DefaultCategoryKey, string[]> = {
   'Signature Dishes': ['signature dishes', 'signature dish', 'signature'],
@@ -195,7 +216,9 @@ function autoAssignCategoryId(item: ExtractedMenuItem, categories: Category[]): 
 
 export default function BulkMenuImport({ categories, ingredients, defaultBackgroundPrompt }: BulkMenuImportProps) {
   const { toast } = useToast()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const { t: td } = useDynamicTranslate()
+  const popupCopy = POPUP_COPY[locale] ?? POPUP_COPY.en
   const [availableCategories, setAvailableCategories] = useState<Category[]>(categories)
   const [availableIngredients, setAvailableIngredients] = useState<Ingredient[]>(ingredients)
   const [isOpen, setIsOpen] = useState(false)
@@ -649,9 +672,9 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetModal(); setIsOpen(open) }}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
-            <DialogTitle>Import Menu Items from Image</DialogTitle>
+            <DialogTitle>{popupCopy.importTitle}</DialogTitle>
             <DialogDescription>
-              Upload a photo of your menu and we&apos;ll extract all items automatically.
+              {popupCopy.importDescription}
             </DialogDescription>
           </DialogHeader>
 
@@ -661,9 +684,9 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                 <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-emerald-400 hover:bg-emerald-50/30 transition-colors">
                   <Upload className="h-12 w-12 mx-auto text-slate-400 mb-4" />
                   <div className="text-sm text-slate-600 mb-2 font-medium">
-                    Click anywhere to upload or drag and drop your menu image
+                    {popupCopy.uploadHint}
                   </div>
-                  <div className="text-xs text-slate-500">PNG, JPG up to 10MB</div>
+                  <div className="text-xs text-slate-500">{popupCopy.uploadMeta}</div>
                 </div>
               </Label>
               <Input
@@ -680,7 +703,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                     <img src={menuImage} alt="Menu" className="max-w-full w-auto max-h-[360px] object-contain" />
                   </div>
                   <Button onClick={() => extractMenuItems()} className="w-full" disabled={isProcessing}>
-                    Extract Menu Items
+                    {td('Extract Menu Items')}
                   </Button>
                 </div>
               )}
@@ -690,8 +713,8 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
           {step === 'extracting' && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="h-16 w-16 animate-spin text-emerald-500" />
-              <p className="text-lg font-medium">Analyzing your menu...</p>
-              <p className="text-sm text-slate-500">This may take a few moments</p>
+              <p className="text-lg font-medium">{td('Analyzing your menu...')}</p>
+              <p className="text-sm text-slate-500">{td('This may take a few moments')}</p>
             </div>
           )}
 
@@ -750,7 +773,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                           </p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                             <span className="text-xs font-medium text-slate-600">
-                              IQD {(item.price || 0).toLocaleString()}
+                              IQD {(item.price || 0).toLocaleString('en-US')}
                             </span>
                             {categoryName ? (
                               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">

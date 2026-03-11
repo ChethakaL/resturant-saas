@@ -34,6 +34,10 @@ import type { EngineMode } from '@/types/menu-engine'
 import { DEFAULT_SLOT_TIMES, buildSlotRangeLabels, formatSlotRange } from '@/lib/time-slots'
 import type { SlotTimes } from '@/lib/time-slots'
 
+function formatAsciiNumber(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value)
+}
+
 interface SimpleMenuItem {
   id: string
   name: string
@@ -805,7 +809,7 @@ export default function MenuOptimizationContent({
             {td('Optimize your menu to increase profit and sales')}
           </CardTitle>
           <p className="text-sm text-slate-500">
-            {td('We offer three options to optimize your menu:')} <strong>{td('1. Classic Mode')}</strong>. <strong>{td('2. Profit Mode')}</strong> — {td('highlight high-margin items')}. <strong>{td('3. Smart Profit Mode')}</strong> — {td('use sales and profit data to order and suggest. Only you see this data; guests never do.')}
+            {td('We offer three options to optimize your menu:')} <strong><span dir="ltr">1.</span> {td('Classic Mode')}</strong>. <strong><span dir="ltr">2.</span> {td('Profit Mode')}</strong> — {td('highlight high-margin items')}. <strong><span dir="ltr">3.</span> {td('Smart Profit Mode')}</strong> — {td('use sales and profit data to order and suggest. Only you see this data; guests never do.')}
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -829,9 +833,9 @@ export default function MenuOptimizationContent({
                   disabled={mode === 'adaptive' && !smartProfitUnlocked}
                 >
                   <span className="font-semibold">
-                    {mode === 'classic' && td('1. Classic Mode')}
-                    {mode === 'profit' && td('2. Profit Mode')}
-                    {mode === 'adaptive' && td('3. Smart Profit Mode')}
+                    {mode === 'classic' && <><span dir="ltr">1.</span> {td('Classic Mode')}</>}
+                    {mode === 'profit' && <><span dir="ltr">2.</span> {td('Profit Mode')}</>}
+                    {mode === 'adaptive' && <><span dir="ltr">3.</span> {td('Smart Profit Mode')}</>}
                   </span>
                   <p className="text-xs text-slate-500 mt-1">
                     {mode === 'classic' && td('Display your menu exactly as you organize it. No automatic reordering or suggestions.')}
@@ -1406,15 +1410,24 @@ export default function MenuOptimizationContent({
                 const count = scheduleDraft[slot]?.itemIds?.length ?? 0
                 const ranges = buildSlotRangeLabels(slotTimes)
                 const label = slot === 'breakfast'
-                  ? `${td('Breakfast')} (${ranges.breakfast})`
+                  ? td('Breakfast')
                   : slot === 'day'
-                    ? `${td('Day')} (${ranges.day})`
+                    ? td('Day')
                     : slot === 'evening'
-                      ? `${td('Evening')} (${ranges.evening})`
-                      : `${td('Night')} (${ranges.night})`
+                      ? td('Evening')
+                      : td('Night')
+                const range = slot === 'breakfast'
+                  ? ranges.breakfast
+                  : slot === 'day'
+                    ? ranges.day
+                    : slot === 'evening'
+                      ? ranges.evening
+                      : ranges.night
                 return (
                   <button key={slot} type="button" onClick={() => setScheduleSlotTab(slot)} className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${scheduleSlotTab === slot ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}>
-                    {label}{count > 0 && <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700">{count}</span>}
+                    <span>{label} </span>
+                    <span dir="ltr" className="inline-block [unicode-bidi:isolate]">({range})</span>
+                    {count > 0 && <span dir="ltr" className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700 [unicode-bidi:isolate]">{formatAsciiNumber(count)}</span>}
                   </button>
                 )
               })}
@@ -1431,7 +1444,7 @@ export default function MenuOptimizationContent({
                 <>
                   {selectedItems.length > 0 && (
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs text-slate-500">{selectedItems.length} {td('selected for this slot')}</p>
+                      <p className="text-xs text-slate-500"><span dir="ltr" className="[unicode-bidi:isolate]">{formatAsciiNumber(selectedItems.length)}</span> {td('selected for this slot')}</p>
                       <Button type="button" variant="ghost" size="sm" className="text-xs text-slate-500" onClick={() => clearScheduleSlot(scheduleSlotTab)}>{td('Clear slot')}</Button>
                     </div>
                   )}
@@ -1520,7 +1533,7 @@ export default function MenuOptimizationContent({
                       />
                     </div>
                     <div className="flex flex-col gap-1 items-end mt-5 shrink-0">
-                      <span className="text-sm text-slate-600 font-medium">{formatSlotRange(slotTimesDraft[slot])}</span>
+                      <span dir="ltr" className="text-sm text-slate-600 font-medium [unicode-bidi:isolate]">{formatSlotRange(slotTimesDraft[slot])}</span>
                     </div>
                   </div>
                 </div>
@@ -1531,7 +1544,7 @@ export default function MenuOptimizationContent({
               {(['breakfast', 'day', 'evening', 'night'] as const).map((slot) => {
                 const ranges = buildSlotRangeLabels(slotTimesDraft)
                 const names = { breakfast: td('Breakfast'), day: td('Day / Lunch'), evening: td('Evening / Dinner'), night: td('Night') }
-                return <p key={slot}><span className="font-medium">{names[slot]}:</span> {ranges[slot]}</p>
+                return <p key={slot}><span className="font-medium">{names[slot]}:</span> <span dir="ltr" className="[unicode-bidi:isolate]">{ranges[slot]}</span></p>
               })}
             </div>
           </div>

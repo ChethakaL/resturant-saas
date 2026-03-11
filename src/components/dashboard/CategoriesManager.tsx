@@ -43,14 +43,143 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { getStaticTranslationForSourceText, getTranslatedCategoryName, useI18n } from '@/lib/i18n'
 
 export interface CategoryWithItems extends Category {
-  menuItems: { id: string; name: string }[]
+  menuItems: { id: string; name: string; translations?: { language: string; translatedName: string }[] }[]
 }
 
 interface CategoriesManagerProps {
   initialCategories: CategoryWithItems[]
+  uiTranslationMap?: Record<string, string>
 }
+
+function normalizeSourceText(value: string) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim()
+}
+
+const CATEGORY_COPY = {
+  en: {
+    aiTitle: 'AI categorization',
+    aiDescription: 'Automatically structures menu items into standardized categories to improve organization, reporting, and customer navigation.',
+    aiAction: 'Run AI categorization',
+    addTitle: 'Add Category',
+    addDescription: 'Give your menu a new section',
+    name: 'Name',
+    description: 'Description',
+    namePlaceholder: 'e.g., Main Courses',
+    descriptionPlaceholder: 'Optional grouping hint for your front-of-house team.',
+    create: 'Create category',
+    currentTitle: 'Current Categories',
+    currentDescription: 'Drag categories to reorder them. The order here controls how they appear on your client-facing menu.',
+    editName: 'Edit name',
+    save: 'Save',
+    dishesInCategory: 'Dishes in this category',
+    noItems: 'No items',
+    moveTo: 'Move to...',
+    noOtherCategories: 'No other categories',
+    order: 'Order',
+    saving: 'Saving...',
+    noCategories: 'No categories yet.',
+    sectionVisible: 'Section visible on menu',
+    sectionHidden: 'Section hidden from menu',
+    couldNotUpdateVisibility: 'Could not update visibility',
+    nameRequired: 'Name is required',
+    categoryAdded: 'Category added',
+    couldNotAddCategory: 'Could not add category',
+    unknownError: 'Unknown error',
+    categoryRemoved: 'Category removed',
+    movedToUncategorized: 'moved to Uncategorized',
+    couldNotRemoveCategory: 'Could not remove category',
+    categoryNameUpdated: 'Category name updated',
+    couldNotUpdateName: 'Could not update name',
+    itemMoved: 'Item moved',
+    couldNotMoveItem: 'Could not move item',
+    couldNotRunAi: 'Could not run AI categorization',
+    categoryOrderUpdated: 'Category order updated',
+    couldNotUpdateOrder: 'Could not update order',
+  },
+  ku: {
+    aiTitle: 'پۆلێنکردنی AI',
+    aiDescription: 'خواردنەکانی مینیو بە شێوەیەکی خۆکار لە پۆلە ستانداردەکاندا ڕێکدەخات بۆ ڕێکخستن، ڕاپۆرتسازی و ئاسانکردنی گەڕان.',
+    aiAction: 'پۆلێنکردنی AI بەڕێوەببە',
+    addTitle: 'زیادکردنی پۆل',
+    addDescription: 'بەشێکی نوێ بۆ مینیوەکەت دروست بکە',
+    name: 'ناو',
+    description: 'وەسف',
+    namePlaceholder: 'وەک: خواردنی سەرەکی',
+    descriptionPlaceholder: 'ئامۆژگارییەکی هەڵبژاردەیی بۆ تیمی خزمەتگوزارییەکەت.',
+    create: 'دروستکردنی پۆل',
+    currentTitle: 'پۆلە ئێستاکان',
+    currentDescription: 'پۆلەکان ڕابکێشە بۆ گۆڕینی ڕیزبەندی. ئەم ڕیزبەندییە دیاری دەکات چۆن لە مینیوی میواناندا پیشان بدرێن.',
+    editName: 'دەستکاری ناو',
+    save: 'پاشەکەوتکردن',
+    dishesInCategory: 'خواردنەکانی ناو ئەم پۆلە',
+    noItems: 'هیچ ئایتمێک نییە',
+    moveTo: 'بگوازەرەوە بۆ...',
+    noOtherCategories: 'پۆلێکی دیکە نییە',
+    order: 'ڕیز',
+    saving: 'پاشەکەوت دەکرێت...',
+    noCategories: 'هێشتا هیچ پۆلێک نییە.',
+    sectionVisible: 'بەشەکە لە مینیودا پیشان دەدرێت',
+    sectionHidden: 'بەشەکە لە مینیودا شاردراوە',
+    couldNotUpdateVisibility: 'نەتوانرا دۆخی پیشاندان نوێ بکرێتەوە',
+    nameRequired: 'ناو پێویستە',
+    categoryAdded: 'پۆلەکە زیاد کرا',
+    couldNotAddCategory: 'نەتوانرا پۆلەکە زیاد بکرێت',
+    unknownError: 'هەڵەیەکی نەناسراو',
+    categoryRemoved: 'پۆلەکە سڕایەوە',
+    movedToUncategorized: 'گوازرایەوە بۆ بێ پۆل',
+    couldNotRemoveCategory: 'نەتوانرا پۆلەکە بسڕدرێتەوە',
+    categoryNameUpdated: 'ناوی پۆلەکە نوێ کرایەوە',
+    couldNotUpdateName: 'نەتوانرا ناوەکە نوێ بکرێتەوە',
+    itemMoved: 'ئایتمەکە گوازرایەوە',
+    couldNotMoveItem: 'نەتوانرا ئایتمەکە بگوازرێتەوە',
+    couldNotRunAi: 'نەتوانرا پۆلێنکردنی AI بەڕێوەببرێت',
+    categoryOrderUpdated: 'ڕیزبەندی پۆلەکان نوێ کرایەوە',
+    couldNotUpdateOrder: 'نەتوانرا ڕیزبەندی نوێ بکرێتەوە',
+  },
+  'ar-fusha': {
+    aiTitle: 'التصنيف بالذكاء الاصطناعي',
+    aiDescription: 'ينظم أصناف القائمة تلقائياً ضمن فئات موحدة لتحسين التنظيم والتقارير وسهولة تصفح العملاء.',
+    aiAction: 'تشغيل التصنيف بالذكاء الاصطناعي',
+    addTitle: 'إضافة فئة',
+    addDescription: 'أنشئ قسماً جديداً في قائمتك',
+    name: 'الاسم',
+    description: 'الوصف',
+    namePlaceholder: 'مثال: الأطباق الرئيسية',
+    descriptionPlaceholder: 'ملاحظة اختيارية تساعد فريق الخدمة على فهم هذا القسم.',
+    create: 'إنشاء الفئة',
+    currentTitle: 'الفئات الحالية',
+    currentDescription: 'اسحب الفئات لإعادة ترتيبها. هذا الترتيب يحدد كيف تظهر في قائمة العملاء.',
+    editName: 'تعديل الاسم',
+    save: 'حفظ',
+    dishesInCategory: 'الأطباق في هذه الفئة',
+    noItems: 'لا توجد أصناف',
+    moveTo: 'نقل إلى...',
+    noOtherCategories: 'لا توجد فئات أخرى',
+    order: 'الترتيب',
+    saving: 'جارٍ الحفظ...',
+    noCategories: 'لا توجد فئات بعد.',
+    sectionVisible: 'أصبح القسم ظاهراً في القائمة',
+    sectionHidden: 'تم إخفاء القسم من القائمة',
+    couldNotUpdateVisibility: 'تعذر تحديث حالة الظهور',
+    nameRequired: 'الاسم مطلوب',
+    categoryAdded: 'تمت إضافة الفئة',
+    couldNotAddCategory: 'تعذرت إضافة الفئة',
+    unknownError: 'خطأ غير معروف',
+    categoryRemoved: 'تم حذف الفئة',
+    movedToUncategorized: 'تم نقلها إلى غير مصنف',
+    couldNotRemoveCategory: 'تعذر حذف الفئة',
+    categoryNameUpdated: 'تم تحديث اسم الفئة',
+    couldNotUpdateName: 'تعذر تحديث الاسم',
+    itemMoved: 'تم نقل الصنف',
+    couldNotMoveItem: 'تعذر نقل الصنف',
+    couldNotRunAi: 'تعذر تشغيل التصنيف بالذكاء الاصطناعي',
+    categoryOrderUpdated: 'تم تحديث ترتيب الفئات',
+    couldNotUpdateOrder: 'تعذر تحديث الترتيب',
+  },
+} as const
 
 // Sortable category item wrapper
 interface SortableCategoryItemProps {
@@ -69,6 +198,11 @@ interface SortableCategoryItemProps {
   onToggleShowOnMenu: (categoryId: string) => void
   onOpenDeleteDialog: (category: CategoryWithItems) => void
   onMoveItemToCategory: (menuItemId: string, categoryId: string) => void
+  copy: typeof CATEGORY_COPY.en
+  locale: string
+  translatedCategoryName: string
+  translateSourceText: (sourceText: string) => string
+  translateCategoryName: (categoryName: string) => string
 }
 
 function SortableCategoryItem({
@@ -87,6 +221,11 @@ function SortableCategoryItem({
   onToggleShowOnMenu,
   onOpenDeleteDialog,
   onMoveItemToCategory,
+  copy,
+  locale,
+  translatedCategoryName,
+  translateSourceText,
+  translateCategoryName,
 }: SortableCategoryItemProps) {
   const {
     attributes,
@@ -129,25 +268,25 @@ function SortableCategoryItem({
                 className="h-8 w-48"
                 autoFocus
               />
-              <Button size="sm" variant="ghost" onClick={onSaveEditName}>Save</Button>
+              <Button size="sm" variant="ghost" onClick={onSaveEditName}>{copy.save}</Button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <p className="font-medium text-slate-900">{category.name}</p>
+              <p className="font-medium text-slate-900">{translatedCategoryName}</p>
               <Button
                 variant="ghost"
                 size="sm"
                 className="text-xs text-slate-500 h-7"
                 onClick={() => onStartEditName(category)}
               >
-                Edit name
+                {copy.editName}
               </Button>
             </div>
           )}
           {category.description && (
-            <p className="text-sm text-slate-500">{category.description}</p>
+            <p className="text-sm text-slate-500">{translateSourceText(category.description)}</p>
           )}
-          <Badge variant="secondary" className="text-[11px]">{`Order ${index + 1}`}</Badge>
+          <Badge variant="secondary" className="text-[11px]">{`${copy.order} ${index + 1}`}</Badge>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -176,9 +315,9 @@ function SortableCategoryItem({
         </div>
       </div>
       <div className="pl-6">
-        <p className="text-xs font-medium text-slate-500 mb-1.5">Dishes in this category</p>
+        <p className="text-xs font-medium text-slate-500 mb-1.5">{copy.dishesInCategory}</p>
         {(!category.menuItems || category.menuItems.length === 0) ? (
-          <p className="text-sm text-slate-400">No items</p>
+          <p className="text-sm text-slate-400">{copy.noItems}</p>
         ) : (
           <ul className="space-y-1.5">
             {category.menuItems.map((item) => (
@@ -189,7 +328,13 @@ function SortableCategoryItem({
                   : ''
                   }`}
               >
-                <span className="text-slate-700">{item.name}</span>
+                <span className="text-slate-700">{
+                  locale === 'ar-fusha'
+                    ? item.translations?.find((t) => t.language === 'ar_fusha' || t.language === 'ar')?.translatedName || translateSourceText(item.name)
+                    : locale === 'ku'
+                      ? item.translations?.find((t) => t.language === 'ku')?.translatedName || translateSourceText(item.name)
+                      : item.name
+                }</span>
                 <Select
                   value=""
                   onValueChange={(val) => val && val !== category.id && onMoveItemToCategory(item.id, val)}
@@ -199,7 +344,7 @@ function SortableCategoryItem({
                     {movingItemId === item.id ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
-                      <SelectValue placeholder="Move to…" />
+                      <SelectValue placeholder={copy.moveTo} />
                     )}
                   </SelectTrigger>
                   <SelectContent>
@@ -207,11 +352,11 @@ function SortableCategoryItem({
                       .filter((c) => c.id !== category.id)
                       .map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.name}
+                          {translateCategoryName(c.name)}
                         </SelectItem>
                       ))}
                     {categories.filter((c) => c.id !== category.id).length === 0 && (
-                      <SelectItem value="__none__" disabled>No other categories</SelectItem>
+                      <SelectItem value="__none__" disabled>{copy.noOtherCategories}</SelectItem>
                     )}
                   </SelectContent>
                 </Select>
@@ -224,8 +369,17 @@ function SortableCategoryItem({
   )
 }
 
-export default function CategoriesManager({ initialCategories }: CategoriesManagerProps) {
+export default function CategoriesManager({ initialCategories, uiTranslationMap = {} }: CategoriesManagerProps) {
   const router = useRouter()
+  const { locale, t } = useI18n()
+  const copy = CATEGORY_COPY[locale] ?? CATEGORY_COPY.en
+  const translateSourceText = (sourceText: string) =>
+    uiTranslationMap[normalizeSourceText(sourceText)] ||
+    getStaticTranslationForSourceText(locale, sourceText) ||
+    sourceText
+  const translateCategoryName = (categoryName: string) =>
+    uiTranslationMap[normalizeSourceText(categoryName)] ||
+    getTranslatedCategoryName(categoryName, t)
   const [categories, setCategories] = useState<CategoryWithItems[]>(initialCategories)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -281,11 +435,9 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
       setCategories((prev) =>
         prev.map((c) => (c.id === categoryId ? { ...c, showOnMenu: next } : c))
       )
-      toast({
-        title: next ? 'Section visible on menu' : 'Section hidden from menu',
-      })
+      toast({ title: next ? copy.sectionVisible : copy.sectionHidden })
     } catch {
-      toast({ title: 'Could not update visibility', variant: 'destructive' })
+      toast({ title: copy.couldNotUpdateVisibility, variant: 'destructive' })
     } finally {
       setUpdatingVisibilityIds((prev) => prev.filter((id) => id !== categoryId))
     }
@@ -294,7 +446,7 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
   const handleAddCategory = async () => {
     const trimmedName = name.trim()
     if (!trimmedName) {
-      toast({ title: 'Name is required', variant: 'destructive' })
+      toast({ title: copy.nameRequired, variant: 'destructive' })
       return
     }
 
@@ -314,12 +466,12 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
       setCategories((prev) => [...prev, { ...data, menuItems: [] }])
       setName('')
       setDescription('')
-      toast({ title: 'Category added' })
+      toast({ title: copy.categoryAdded })
     } catch (error) {
       console.error('Add category failed', error)
       toast({
-        title: 'Could not add category',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: copy.couldNotAddCategory,
+        description: error instanceof Error ? error.message : copy.unknownError,
         variant: 'destructive',
       })
     } finally {
@@ -353,19 +505,19 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
 
       if (result.itemsMoved > 0) {
         toast({
-          title: 'Category removed',
-          description: `${result.itemsMoved} item${result.itemsMoved > 1 ? 's' : ''} moved to Uncategorized`,
+          title: copy.categoryRemoved,
+          description: `${result.itemsMoved} ${copy.movedToUncategorized}`,
         })
       } else {
-        toast({ title: 'Category removed' })
+        toast({ title: copy.categoryRemoved })
       }
 
       // Refresh to show updated categories including Uncategorized if created
       router.refresh()
     } catch (error) {
       toast({
-        title: 'Could not remove category',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: copy.couldNotRemoveCategory,
+        description: error instanceof Error ? error.message : copy.unknownError,
         variant: 'destructive',
       })
     } finally {
@@ -396,9 +548,9 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
       setCategories((prev) =>
         prev.map((c) => (c.id === editingNameId ? { ...c, name: trimmed } : c))
       )
-      toast({ title: 'Category name updated' })
+      toast({ title: copy.categoryNameUpdated })
     } catch {
-      toast({ title: 'Could not update name', variant: 'destructive' })
+      toast({ title: copy.couldNotUpdateName, variant: 'destructive' })
     } finally {
       setEditingNameId(null)
     }
@@ -429,9 +581,9 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
           }
         })
       )
-      toast({ title: 'Item moved' })
+      toast({ title: copy.itemMoved })
     } catch {
-      toast({ title: 'Could not move item', variant: 'destructive' })
+      toast({ title: copy.couldNotMoveItem, variant: 'destructive' })
     } finally {
       setMovingItemId(null)
     }
@@ -459,7 +611,7 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
 
       router.refresh()
     } catch {
-      toast({ title: 'Could not run AI categorization', variant: 'destructive' })
+      toast({ title: copy.couldNotRunAi, variant: 'destructive' })
     } finally {
       setAiSuggestLoading(false)
     }
@@ -504,11 +656,11 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
         throw new Error('Failed to update order')
       }
 
-      toast({ title: 'Category order updated' })
+      toast({ title: copy.categoryOrderUpdated })
     } catch (error) {
       // Revert on error
       setCategories(categories)
-      toast({ title: 'Could not update order', variant: 'destructive' })
+      toast({ title: copy.couldNotUpdateOrder, variant: 'destructive' })
     }
   }
 
@@ -518,14 +670,14 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle>AI categorization</CardTitle>
+              <CardTitle>{copy.aiTitle}</CardTitle>
               <CardDescription>
-                Automatically structures menu items into standardized categories to improve organization, reporting, and customer navigation.
+                {copy.aiDescription}
               </CardDescription>
             </div>
             <Button onClick={runAiSuggest} disabled={aiSuggestLoading} className="gap-2">
               {aiSuggestLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Run AI categorization
+              {copy.aiAction}
             </Button>
           </div>
         </CardHeader>
@@ -533,47 +685,47 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
 
       <Card data-tour="tour-add-category">
         <CardHeader>
-          <CardTitle>Add Category</CardTitle>
-          <CardDescription>Give your menu a new section</CardDescription>
+          <CardTitle>{copy.addTitle}</CardTitle>
+          <CardDescription>{copy.addDescription}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="category-name">Name</Label>
+              <Label htmlFor="category-name">{copy.name}</Label>
               <Input
                 id="category-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Main Courses"
+                placeholder={copy.namePlaceholder}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="category-description">Description</Label>
+              <Label htmlFor="category-description">{copy.description}</Label>
               <Textarea
                 id="category-description"
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional grouping hint for your front-of-house team."
+                placeholder={copy.descriptionPlaceholder}
               />
             </div>
           </div>
           <Button onClick={handleAddCategory} disabled={loading} className="self-start">
-            {loading ? 'Saving…' : 'Create category'}
+            {loading ? copy.saving : copy.create}
           </Button>
         </CardContent>
       </Card>
 
       <Card data-tour="tour-current-categories">
         <CardHeader>
-          <CardTitle>Current Categories</CardTitle>
+          <CardTitle>{copy.currentTitle}</CardTitle>
           <CardDescription>
-            Drag categories to reorder them. The order here controls how they appear on your client-facing menu.
+            {copy.currentDescription}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {categories.length === 0 ? (
-            <p className="text-sm text-slate-500">No categories yet.</p>
+            <p className="text-sm text-slate-500">{copy.noCategories}</p>
           ) : (
             <DndContext
               sensors={sensors}
@@ -588,8 +740,13 @@ export default function CategoriesManager({ initialCategories }: CategoriesManag
                   <SortableCategoryItem
                     key={category.id}
                     category={category}
+                    translatedCategoryName={translateCategoryName(category.name)}
                     index={index}
                     categories={categories}
+                    copy={copy}
+                    locale={locale}
+                    translateSourceText={translateSourceText}
+                    translateCategoryName={translateCategoryName}
                     editingNameId={editingNameId}
                     editingNameValue={editingNameValue}
                     updatingVisibilityIds={updatingVisibilityIds}

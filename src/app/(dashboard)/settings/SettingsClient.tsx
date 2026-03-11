@@ -89,9 +89,50 @@ export default function SettingsClient({
   defaultBackgroundImageData: initialDefaultBackgroundImageData = null,
 }: SettingsClientProps) {
   const { toast } = useToast()
-  const { t: i18n } = useI18n()
+  const { t: i18n, locale } = useI18n()
   const { t: td } = useDynamicTranslate()
   const router = useRouter()
+  const dishPhotoDialogCopy = locale === 'ar-fusha'
+    ? {
+        title: 'معاينة/تحديث خلفيات صور الأطباق',
+        description: 'عاين وطبّق نمط خلفية مناسب لصور أصناف قائمتك.',
+        placeholder: 'اكتب وصفاً لأسلوب الخلفية...',
+        onePhoto: 'سيتم تحديث صورة واحدة.',
+        manyPhotos: 'سيتم تحديث الصور.',
+        slow: 'قد تستغرق هذه العملية بضع دقائق للقوائم الكبيرة.',
+        generate: 'إنشاء معاينة',
+        updating: 'جارٍ التحديث',
+        preparing: 'جارٍ تجهيز التقدير…',
+        skip: 'تخطي',
+        verify: 'تحقق وحدّث الكل',
+      }
+    : locale === 'ku'
+      ? {
+          title: 'پێشبینین/نوێکردنەوەی پاشبنەمای وێنەی خواردن',
+          description: 'پێشبینی بکە و ستایلی پاشبنەمای گونجاو بۆ وێنەکانی ئایتمەکانی مینیوەکەت جێبەجێ بکە.',
+          placeholder: 'وەسفی ستایلی پاشبنەما بنووسە...',
+          onePhoto: 'یەک وێنە نوێ دەکرێتەوە.',
+          manyPhotos: 'وێنەکان نوێ دەکرێنەوە.',
+          slow: 'ئەم پرۆسەیە بۆ مینیوە گەورەکان لەوانەیە چەند خولەکێک بخایەنێت.',
+          generate: 'پێشبینین دروست بکە',
+          updating: 'نوێدەکرێتەوە',
+          preparing: 'هەڵسەنگاندن ئامادە دەکرێت…',
+          skip: 'بازبدە',
+          verify: 'پشکنین و هەمووی نوێ بکەرەوە',
+        }
+      : {
+          title: 'Preview/update dish photo backgrounds',
+          description: 'Preview and apply a matching background style for your menu item photos.',
+          placeholder: 'Background style description…',
+          onePhoto: 'photo will be updated.',
+          manyPhotos: 'photos will be updated.',
+          slow: 'This process may take a few minutes for larger menus.',
+          generate: 'Generate preview',
+          updating: 'Updating',
+          preparing: 'Preparing estimate…',
+          skip: 'Skip',
+          verify: 'Verify & update all',
+        }
 
   // Theme state
   const [restaurantName, setRestaurantName] = useState(currentTheme.restaurantName || '')
@@ -1303,20 +1344,20 @@ export default function SettingsClient({
       <Dialog open={themeSuggestDialogOpen} onOpenChange={setThemeSuggestDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Dish photo background {themeSuggestPresetLabel ? `for ${themeSuggestPresetLabel}` : ''}</DialogTitle>
-            <DialogDescription>Preview and apply a matching background style for your menu item photos.</DialogDescription>
+            <DialogTitle>{dishPhotoDialogCopy.title}</DialogTitle>
+            <DialogDescription>{dishPhotoDialogCopy.description}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <textarea value={themeSuggestPrompt} onChange={(e) => setThemeSuggestPrompt(e.target.value)} placeholder="Background style description…" className="min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" rows={3} />
+            <textarea value={themeSuggestPrompt} onChange={(e) => setThemeSuggestPrompt(e.target.value)} placeholder={dishPhotoDialogCopy.placeholder} className="min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" rows={3} />
             {themeSuggestItemCount !== null && (
-              <p className="text-sm text-slate-600"><strong>{themeSuggestItemCount}</strong> photo{themeSuggestItemCount !== 1 ? 's' : ''} will be updated.</p>
+              <p className="text-sm text-slate-600"><strong>{themeSuggestItemCount}</strong> {themeSuggestItemCount !== 1 ? dishPhotoDialogCopy.manyPhotos : dishPhotoDialogCopy.onePhoto}</p>
             )}
             {themeSuggestItemCount !== null && themeSuggestItemCount > 0 && (
-              <p className="text-xs text-slate-500">This process may take a few minutes for larger menus.</p>
+              <p className="text-xs text-slate-500">{dishPhotoDialogCopy.slow}</p>
             )}
             <div>
               <Button type="button" variant="outline" size="sm" disabled={themePreviewLoading || !!themeSuggestApplyProgress} onClick={generateThemePreview}>
-                {themePreviewLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Generate preview
+                {themePreviewLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}{dishPhotoDialogCopy.generate}
               </Button>
               {themePreviewImageUrl && (
                 <div className="mt-3 rounded-lg border overflow-hidden">
@@ -1326,18 +1367,18 @@ export default function SettingsClient({
             </div>
             {themeSuggestApplyProgress && (
               <div className="space-y-1">
-                <p className="text-sm text-slate-600">Updating {themeSuggestApplyProgress.done}/{themeSuggestApplyProgress.total}…</p>
+                <p className="text-sm text-slate-600">{dishPhotoDialogCopy.updating} {themeSuggestApplyProgress.done}/{themeSuggestApplyProgress.total}…</p>
                 <p className="text-xs text-slate-500">
-                  {getEtaLabel(themeSuggestApplyProgress.done, themeSuggestApplyProgress.total, themeSuggestApplyStartedAt) || 'Preparing estimate…'}
+                  {getEtaLabel(themeSuggestApplyProgress.done, themeSuggestApplyProgress.total, themeSuggestApplyStartedAt) || dishPhotoDialogCopy.preparing}
                 </p>
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setThemeSuggestDialogOpen(false)} disabled={!!themeSuggestApplyProgress}>Skip</Button>
+            <Button variant="outline" onClick={() => setThemeSuggestDialogOpen(false)} disabled={!!themeSuggestApplyProgress}>{dishPhotoDialogCopy.skip}</Button>
             <Button onClick={applyThemeBackground} disabled={themeSuggestApplying}>
               {themeSuggestApplying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-              {themeSuggestApplyProgress ? `Updating ${themeSuggestApplyProgress.done}/${themeSuggestApplyProgress.total}…` : 'Verify & update all'}
+              {themeSuggestApplyProgress ? `${dishPhotoDialogCopy.updating} ${themeSuggestApplyProgress.done}/${themeSuggestApplyProgress.total}…` : dishPhotoDialogCopy.verify}
             </Button>
           </DialogFooter>
         </DialogContent>

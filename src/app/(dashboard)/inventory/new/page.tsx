@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
+import { useI18n } from '@/lib/i18n'
 
 const UNIT_OPTIONS = [
   { value: 'g', label: 'Grams (g)' },
@@ -18,8 +19,79 @@ const UNIT_OPTIONS = [
   { value: 'piece', label: 'Piece / Each' },
 ]
 
+const INVENTORY_COPY = {
+  en: {
+    back: 'Back',
+    title: 'Add New Ingredient',
+    subtitle: 'Add a new ingredient to your inventory',
+    details: 'Ingredient Details',
+    ingredientName: 'Ingredient Name',
+    unit: 'Unit of Measure',
+    costPer: 'Cost Per',
+    supplier: 'Supplier',
+    notes: 'Notes',
+    save: 'Save Ingredient',
+    cancel: 'Cancel',
+    chicken: 'e.g., Chicken Breast',
+    abc: 'e.g., ABC Suppliers',
+    costPlaceholder: 'e.g., 5000',
+    notesPlaceholder: 'Additional notes about this ingredient...',
+    unitHintPrefix: 'Cost per unit will be in IQD per',
+    greater: 'Must be greater than 0.',
+    createFailed: 'Failed to create ingredient. Please try again.',
+    costError: 'Cost per unit must be greater than 0.',
+    units: { g: 'Grams (g)', kg: 'Kilograms (kg)', ml: 'Millilitres (ml)', L: 'Litres (L)', piece: 'Piece / Each' },
+  },
+  ku: {
+    back: 'گەڕانەوە',
+    title: 'زیادکردنی پێکهاتەی نوێ',
+    subtitle: 'پێکهاتەیەکی نوێ زیاد بکە بۆ کۆگاکەت',
+    details: 'وردەکارییەکانی پێکهاتە',
+    ingredientName: 'ناوی پێکهاتە',
+    unit: 'یەکەی پێوانە',
+    costPer: 'تێچوو بۆ هەر',
+    supplier: 'دابینکەر',
+    notes: 'تێبینی',
+    save: 'پاشەکەوتکردنی پێکهاتە',
+    cancel: 'هەڵوەشاندنەوە',
+    chicken: 'وەک: سنگی مریشک',
+    abc: 'وەک: ABC Suppliers',
+    costPlaceholder: 'وەک: 5000',
+    notesPlaceholder: 'تێبینییەکی زیادە لەسەر ئەم پێکهاتەیە...',
+    unitHintPrefix: 'تێچوو بۆ هەر یەکە بە IQD دەبێت بۆ',
+    greater: 'دەبێت لە 0 زیاتر بێت.',
+    createFailed: 'دروستکردنی پێکهاتە سەرکەوتوو نەبوو. تکایە دووبارە هەوڵبدەوە.',
+    costError: 'دەبێت تێچووی هەر یەکە لە 0 زیاتر بێت.',
+    units: { g: 'گرام (g)', kg: 'کیلۆگرام (kg)', ml: 'میلیلیتر (ml)', L: 'لیتر (L)', piece: 'دانە / یەکە' },
+  },
+  'ar-fusha': {
+    back: 'رجوع',
+    title: 'إضافة مكوّن جديد',
+    subtitle: 'أضف مكوّناً جديداً إلى مخزونك',
+    details: 'تفاصيل المكوّن',
+    ingredientName: 'اسم المكوّن',
+    unit: 'وحدة القياس',
+    costPer: 'التكلفة لكل',
+    supplier: 'المورّد',
+    notes: 'ملاحظات',
+    save: 'حفظ المكوّن',
+    cancel: 'إلغاء',
+    chicken: 'مثال: صدر دجاج',
+    abc: 'مثال: ABC Suppliers',
+    costPlaceholder: 'مثال: 5000',
+    notesPlaceholder: 'ملاحظات إضافية حول هذا المكوّن...',
+    unitHintPrefix: 'ستكون تكلفة الوحدة بالدينار العراقي لكل',
+    greater: 'يجب أن تكون أكبر من 0.',
+    createFailed: 'فشل إنشاء المكوّن. يرجى المحاولة مرة أخرى.',
+    costError: 'يجب أن تكون تكلفة الوحدة أكبر من 0.',
+    units: { g: 'غرام (g)', kg: 'كيلوغرام (kg)', ml: 'ملليلتر (ml)', L: 'لتر (L)', piece: 'قطعة / وحدة' },
+  },
+} as const
+
 export default function NewIngredientPage() {
   const router = useRouter()
+  const { locale } = useI18n()
+  const copy = INVENTORY_COPY[locale] ?? INVENTORY_COPY.en
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -36,7 +108,7 @@ export default function NewIngredientPage() {
 
     const cost = parseFloat(formData.costPerUnit)
     if (!cost || cost <= 0) {
-      setError('Cost per unit must be greater than 0.')
+      setError(copy.costError)
       return
     }
 
@@ -63,7 +135,7 @@ export default function NewIngredientPage() {
       router.refresh()
     } catch (err) {
       console.error('Error creating ingredient:', err)
-      setError('Failed to create ingredient. Please try again.')
+      setError(copy.createFailed)
     } finally {
       setLoading(false)
     }
@@ -75,18 +147,18 @@ export default function NewIngredientPage() {
         <Link href="/inventory">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+            {copy.back}
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Add New Ingredient</h1>
-          <p className="text-slate-500 mt-1">Add a new ingredient to your inventory</p>
+          <h1 className="text-3xl font-bold text-slate-900">{copy.title}</h1>
+          <p className="text-slate-500 mt-1">{copy.subtitle}</p>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Ingredient Details</CardTitle>
+          <CardTitle>{copy.details}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -99,20 +171,20 @@ export default function NewIngredientPage() {
             <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="name">
-                  Ingredient Name <span className="text-red-500">*</span>
+                  {copy.ingredientName} <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="name"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Chicken Breast"
+                  placeholder={copy.chicken}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="unit">
-                  Unit of Measure <span className="text-red-500">*</span>
+                  {copy.unit} <span className="text-red-500">*</span>
                 </Label>
                 <select
                   id="unit"
@@ -122,17 +194,17 @@ export default function NewIngredientPage() {
                   className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
                 >
                   {UNIT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    <option key={opt.value} value={opt.value}>{copy.units[opt.value as keyof typeof copy.units]}</option>
                   ))}
                 </select>
                 <p className="text-xs text-slate-500">
-                  Cost per unit will be in IQD per {formData.unit}.
+                  {copy.unitHintPrefix} {formData.unit}.
                 </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="costPerUnit">
-                  Cost Per {formData.unit} (IQD) <span className="text-red-500">*</span>
+                  {copy.costPer} {formData.unit} (IQD) <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="costPerUnit"
@@ -142,29 +214,29 @@ export default function NewIngredientPage() {
                   required
                   value={formData.costPerUnit}
                   onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
-                  placeholder="e.g., 5000"
+                  placeholder={copy.costPlaceholder}
                 />
-                <p className="text-xs text-slate-500">Must be greater than 0.</p>
+                <p className="text-xs text-slate-500">{copy.greater}</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="supplier">Supplier</Label>
+                <Label htmlFor="supplier">{copy.supplier}</Label>
                 <Input
                   id="supplier"
                   value={formData.supplier}
                   onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                  placeholder="e.g., ABC Suppliers"
+                  placeholder={copy.abc}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
+              <Label htmlFor="notes">{copy.notes}</Label>
               <Textarea
                 id="notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Additional notes about this ingredient..."
+                placeholder={copy.notesPlaceholder}
                 rows={3}
               />
             </div>
@@ -172,12 +244,12 @@ export default function NewIngredientPage() {
             <div className="flex gap-3 justify-end">
               <Link href="/inventory">
                 <Button type="button" variant="outline" disabled={loading}>
-                  Cancel
+                  {copy.cancel}
                 </Button>
               </Link>
               <Button type="submit" disabled={loading}>
                 <Save className="h-4 w-4 mr-2" />
-                {loading ? 'Saving...' : 'Save Ingredient'}
+                {loading ? 'Saving...' : copy.save}
               </Button>
             </div>
           </form>

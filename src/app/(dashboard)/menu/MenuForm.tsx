@@ -244,6 +244,56 @@ export default function MenuForm({
   const { toast } = useToast()
   const { locale, t, menuTranslationLanguages } = useI18n()
   const { t: td, fetchTranslation } = useDynamicTranslate()
+  const smartChefCopy = locale === 'ar-fusha'
+    ? {
+        title: 'الشيف الذكي',
+        subtitle: 'صف طبقك وسأملأ كل شيء: الاسم، الوصف، الوصفة، المكونات، والتكاليف. حمّل صورة أو مستنداً للبدء بشكل أسرع.',
+        fill: 'املأ النموذج الآن',
+        newChat: 'محادثة جديدة',
+        trySample: 'جرّب مثالاً',
+        placeholder: 'اسأل عن اسم الصنف أو وصفه، أو حمّل صوراً أو مستندات أو فواتير/إيصالات لاستخراج الأسعار...',
+        document: 'مستند',
+        imageBill: 'صورة / فاتورة',
+        speak: 'تحدث',
+        stop: 'إيقاف',
+        generateImage: 'إنشاء صورة',
+        skip: 'تخطَّ إلى النموذج',
+        powered: 'مشغّل بواسطة Bab Al Ilm AI',
+        uploadTitle: 'حمّل صورة الطبق أو الفاتورة/الإيصال لاستخراج الأسعار',
+      }
+    : locale === 'ku'
+      ? {
+          title: 'شێفی زیرەک',
+          subtitle: 'خواردنەکەت وەسف بکە و من هەموو شتێک پڕ دەکەمەوە: ناو، وەسف، ڕەچەتە، پێکهاتەکان و تێچووەکان. بۆ دەستپێکردنی خێراتر وێنە یان بەڵگەنامە باربکە.',
+          fill: 'ئێستا فۆرم پڕ بکەوە',
+          newChat: 'چاتی نوێ',
+          trySample: 'نمونە تاقی بکەرەوە',
+          placeholder: 'پرسیار لەسەر ناوی ئایتم یان وەسفەکەی بکە، یان وێنە و بەڵگە و پسووڵە/وەسڵ باربکە بۆ دەرهێنانی نرخ...',
+          document: 'بەڵگەنامە',
+          imageBill: 'وێنە / پسووڵە',
+          speak: 'قسە بکە',
+          stop: 'بوەستە',
+          generateImage: 'وێنە دروست بکە',
+          skip: 'بازبدە بۆ فۆرم',
+          powered: 'بەهێزکراوە بە Bab Al Ilm AI',
+          uploadTitle: 'وێنەی خواردن یان پسووڵە/وەسڵ باربکە بۆ دەرهێنانی نرخ',
+        }
+      : {
+          title: 'Smart Chef',
+          subtitle: "Describe your dish and I'll fill in everything - name, description, recipe, ingredients, and costs. Upload a photo or document to get started even faster.",
+          fill: 'Fill Form Now',
+          newChat: 'New Chat',
+          trySample: 'Try sample',
+          placeholder: 'Ask about item name, description, or upload images, documents, or bills/receipts for price extraction...',
+          document: 'Document',
+          imageBill: 'Image / Bill',
+          speak: 'Speak',
+          stop: 'Stop',
+          generateImage: 'Generate Image',
+          skip: 'Skip to form',
+          powered: 'Powered by Bab Al Ilm AI',
+          uploadTitle: 'Upload photo, dish image, or bill/receipt for price extraction',
+        }
   const assistantReplyLanguage = useMemo<SmartChefReplyLanguage>(() => getDefaultReplyLanguage(locale), [locale])
   const smartChefWelcomeMessage = useMemo(() => getSmartChefWelcomeMessage(assistantReplyLanguage), [assistantReplyLanguage])
 
@@ -2734,9 +2784,9 @@ export default function MenuForm({
                     {/* Header: title + subtitle + action buttons (reference style) */}
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 p-6 pb-4 border-b border-slate-200">
                       <div>
-                        <h2 className="text-xl font-bold text-slate-900">Smart Chef</h2>
+                        <h2 className="text-xl font-bold text-slate-900">{smartChefCopy.title}</h2>
                         <p className="text-sm text-slate-500 mt-1">
-                          Describe your dish and I&apos;ll fill in everything — name, description, recipe, ingredients, and costs. Upload a photo or document to get started even faster.
+                          {smartChefCopy.subtitle}
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -2750,11 +2800,11 @@ export default function MenuForm({
                           ) : (
                             <FileText className="h-4 w-4 mr-2" />
                           )}
-                          {aiParseLoading ? 'Researching...' : 'Fill Form Now'}
+                          {aiParseLoading ? td('Researching...') : smartChefCopy.fill}
                         </Button>
                         <Button type="button" variant="outline" onClick={resetAssistantChat} disabled={aiParseLoading}>
                           <Plus className="h-4 w-4 mr-2" />
-                          New Chat
+                          {smartChefCopy.newChat}
                         </Button>
                         <Button
                           type="button"
@@ -2763,7 +2813,7 @@ export default function MenuForm({
                           onClick={() => setAiAssistantText(SAMPLE_AI_PROMPT)}
                           disabled={aiParseLoading}
                         >
-                          Try sample
+                          {smartChefCopy.trySample}
                         </Button>
                       </div>
                     </div>
@@ -2836,7 +2886,7 @@ export default function MenuForm({
                           />
                           <Textarea
                             dir="auto"
-                            placeholder="Ask about item name, description, or upload images, documents, or bills/receipts for price extraction..."
+                            placeholder={smartChefCopy.placeholder}
                             value={aiAssistantText}
                             onChange={(e) => setAiAssistantText(e.target.value)}
                             rows={1}
@@ -2873,7 +2923,7 @@ export default function MenuForm({
                           disabled={aiParseLoading}
                         >
                           <FileText className="h-3.5 w-3 mr-1" />
-                          Document
+                          {smartChefCopy.document}
                         </Button>
                         <Button
                           type="button"
@@ -2882,10 +2932,10 @@ export default function MenuForm({
                           className="h-8 text-slate-500"
                           onClick={() => assistantImageInputRef.current?.click()}
                           disabled={aiParseLoading}
-                          title="Upload photo, dish image, or bill/receipt for price extraction"
+                          title={smartChefCopy.uploadTitle}
                         >
                           <ImagePlus className="h-3.5 w-3 mr-1" />
-                          Image / Bill
+                          {smartChefCopy.imageBill}
                         </Button>
                         <Button
                           type="button"
@@ -2896,7 +2946,7 @@ export default function MenuForm({
                           disabled={aiParseLoading}
                         >
                           {isListening ? <MicOff className="h-3.5 w-3 mr-1" /> : <Mic className="h-3.5 w-3 mr-1" />}
-                          {isListening ? 'Stop' : 'Speak'}
+                          {isListening ? smartChefCopy.stop : smartChefCopy.speak}
                         </Button>
                         <Button
                           type="button"
@@ -2947,17 +2997,17 @@ export default function MenuForm({
                           disabled={aiParseLoading}
                         >
                           <Sparkles className="h-3.5 w-3.5 mr-1" />
-                          Generate Image
+                          {smartChefCopy.generateImage}
                         </Button>
                         <Button type="button" variant="ghost" size="sm" className="h-8 text-slate-500" onClick={() => setActiveTab('details')}>
-                          Skip to form
+                          {smartChefCopy.skip}
                         </Button>
                       </div>
                     </div>
 
                     {/* Footer */}
                     <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/50 text-center text-xs text-slate-400">
-                      Powered by Bab Al Ilm AI
+                      {smartChefCopy.powered}
                     </div>
                   </CardContent>
                 </Card>

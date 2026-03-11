@@ -36,9 +36,10 @@ const TOUR_STEPS = [
 
 interface CategoriesPageClientProps {
   initialCategories: CategoryWithItems[]
+  uiTranslationMap: Record<string, string>
 }
 
-export default function CategoriesPageClient({ initialCategories }: CategoriesPageClientProps) {
+export default function CategoriesPageClient({ initialCategories, uiTranslationMap }: CategoriesPageClientProps) {
   const [tourOpen, setTourOpen] = useState(false)
   const [tourStep, setTourStep] = useState(0)
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
@@ -112,7 +113,7 @@ export default function CategoriesPageClient({ initialCategories }: CategoriesPa
         </Button>
       </div>
 
-      <CategoriesManager initialCategories={initialCategories} />
+      <CategoriesManager initialCategories={initialCategories} uiTranslationMap={uiTranslationMap} />
 
       {/* Tour overlay */}
       {tourOpen && (
