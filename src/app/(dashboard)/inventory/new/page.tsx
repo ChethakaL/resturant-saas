@@ -95,7 +95,7 @@ export default function NewIngredientPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ingredients, setIngredients] = useState<{
-    parentId: any id: string, name: string 
+    parentId: string | null, id: string, name: string 
 }[]>([])
   const [formData, setFormData] = useState({
     name: '',
