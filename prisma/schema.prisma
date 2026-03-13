@@ -148,6 +148,11 @@ model Ingredient {
   restaurantId          String
   globalIngredientId    String?
   preferredSupplierId   String?                  @map("preferred_supplier_id")
+  brand                 String?
+  parentId              String?                  @map("parent_id")
+  purchaseFormat        String?                  @map("purchase_format")
+  packageSize           Float?                   @map("package_size")
+  purchasePrice         Float?                   @map("purchase_price")
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   deliveries            Delivery[]
@@ -155,6 +160,8 @@ model Ingredient {
   restaurant            Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   globalIngredient      GlobalIngredient?       @relation(fields: [globalIngredientId], references: [id], onDelete: SetNull)
   preferredSupplier     Supplier?               @relation(fields: [preferredSupplierId], references: [id], onDelete: SetNull)
+  parent                Ingredient?              @relation("IngredientVariants", fields: [parentId], references: [id])
+  variants              Ingredient[]             @relation("IngredientVariants")
   mealPrepUsages        MealPrepInventoryUsage[]
   menuItemIngredients   MenuItemIngredient[]
   stockAdjustments      StockAdjustment[]
@@ -164,6 +171,7 @@ model Ingredient {
   @@index([stockQuantity])
   @@index([globalIngredientId])
   @@index([preferredSupplierId])
+  @@index([parentId])
   @@map("ingredients")
 }
 

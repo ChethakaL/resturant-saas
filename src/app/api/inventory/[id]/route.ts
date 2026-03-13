@@ -43,6 +43,11 @@ export async function PATCH(
       minStockLevel: data.minStockLevel,
       supplier: data.supplier,
       notes: data.notes,
+      brand: data.brand,
+      parentId: data.parentId === '' || data.parentId == null ? null : data.parentId,
+      purchaseFormat: data.purchaseFormat,
+      packageSize: data.packageSize !== undefined ? (data.packageSize ? parseFloat(data.packageSize) : null) : undefined,
+      purchasePrice: data.purchasePrice !== undefined ? (data.purchasePrice ? parseFloat(data.purchasePrice) : null) : undefined,
     }
     if (data.preferredSupplierId !== undefined) {
       updateData.preferredSupplierId = data.preferredSupplierId === '' || data.preferredSupplierId == null ? null : data.preferredSupplierId

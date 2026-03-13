@@ -20,6 +20,8 @@ type IngredientSelectRow = {
   costPerUnit: number
   supplier: string | null
   preferredSupplierId: string | null
+  brand: string | null
+  parentId: string | null
 }
 
 async function getInventoryData(restaurantId: string, page: number, query?: string) {
@@ -50,6 +52,8 @@ async function getInventoryData(restaurantId: string, page: number, query?: stri
         costPerUnit: true,
         supplier: true,
         preferredSupplierId: true,
+        brand: true,
+        parentId: true,
       } as any,
     }),
   ])
@@ -75,6 +79,8 @@ async function getInventoryData(restaurantId: string, page: number, query?: stri
       preferredSupplier: i.preferredSupplierId
         ? { id: i.preferredSupplierId, name: supplierById[i.preferredSupplierId]?.name ?? '' }
         : null,
+      brand: i.brand,
+      parentId: i.parentId,
     })),
     totalCount,
     totalPages: Math.ceil(totalCount / PAGE_SIZE),

@@ -30,7 +30,7 @@ function getRecipeMessageTemplate(language: SmartChefReplyLanguage) {
 
 const SYSTEM_PROMPT = (
   categories: string[],
-  inventory: { name: string, unit: string, costPerUnit: number }[],
+  inventory: { name: string, unit: string, costPerUnit: number, brand?: string | null, parentId?: string | null }[],
   terminologyPrompt: string,
   replyLanguage: SmartChefReplyLanguage
 ) => `
@@ -84,9 +84,11 @@ THE STRUCTURED FLOW:
 5. **Yield**: From the ingredient quantities, estimate how many servings the recipe yields. Phrase it in a natural, conversational way, e.g. "This recipe seems like it makes one dish." or "This looks like it makes about 4 servings." Then ask the user to confirm (e.g. "Is that right?"). Do not ask open-ended "how many servings would you expect?" — always give your estimate first in plain language. Once the user confirms (yes/correct/ok/sure), IMMEDIATELY move to step 6 — never pause or ask "how would you like to continue".
 6. **Inventory & Costing** — AUTOMATED RESOLUTION RULES (critical):
    - Inventory list:
-${inventory.map(i => `- ${i.name} (${i.unit}, Cost: ${i.costPerUnit} IQD)`).join('\n')}
+${inventory.map(i => `- ${i.name}${i.brand ? ` [Brand: ${i.brand}]` : ''}${i.parentId ? ' (Variant)' : ''} (${i.unit}, Cost: ${i.costPerUnit} IQD)`).join('\n')}
 
-   **For EVERY recipe ingredient, apply exactly one of these three actions:**
+   **For EVERY recipe ingredient, apply exactly one of these actions:**
+   
+   **BRAND & VARIANT RULE**: When the user adds an ingredient, if you see a matching name in inventory but there are multiple brands/variants, ask: "I see several brands for **[Ingredient]** in your inventory (e.g. [Brand A], [Brand B]). Which one should we use for this recipe, or is it a new one?"
 
    **A — SILENT (no message to user)**: The ingredient clearly matches an inventory item AND that item has a non-zero cost. Just use it. Do not mention it. Do not say "this matches". Do not ask "is that correct?". Move to the next unresolved ingredient or the next step.
    - Silent match examples: "fresh tomatoes"→"Fresh Tomato", "fresh parsley"→"Fresh Parsley", "fresh mint"→"Fresh Mint", "bulgur"→"Bulgur (fine grain)", "lemon juice"→"Lemon juice, fresh", "green onion"→"green onions", "olive oil"→"olive oil". Any same-product match differing only by capitalisation, pluralisation, or adjective like "fresh"/"dried" = silent.

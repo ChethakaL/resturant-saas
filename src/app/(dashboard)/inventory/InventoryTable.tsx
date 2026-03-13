@@ -28,6 +28,8 @@ type IngredientRow = {
   costPerUnit: number
   supplier: string | null
   preferredSupplier: { id: string; name: string } | null
+  brand: string | null
+  parentId: string | null
 }
 
 type SupplierProduct = {
@@ -186,6 +188,9 @@ export function InventoryTable({
               {t.inventory_col_unit}
             </th>
             <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Brand
+            </th>
+            <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
               {t.inventory_col_supplier}
             </th>
             <th className="text-center py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
@@ -201,11 +206,17 @@ export function InventoryTable({
         </thead>
         <tbody>
           {ingredients.map((ingredient) => (
-            <tr key={ingredient.id} className="border-b border-slate-100 hover:bg-slate-50">
+            <tr key={ingredient.id} className={`border-b border-slate-100 hover:bg-slate-50 ${ingredient.parentId ? 'bg-slate-50/30' : ''}`}>
               <td className="py-3 px-4">
-                <div className="font-medium text-slate-900">{td(ingredient.name)}</div>
+                <div className="flex items-center gap-2">
+                  {ingredient.parentId && <span className="text-slate-300">└─</span>}
+                  <div className="font-medium text-slate-900">{td(ingredient.name)}</div>
+                </div>
               </td>
               <td className="py-3 px-4 text-slate-600">{td(ingredient.unit)}</td>
+              <td className="py-3 px-4 text-slate-600">
+                {ingredient.brand ? td(ingredient.brand) : '—'}
+              </td>
               <td className="py-3 px-4 text-slate-600">
                 {supplierName(ingredient) === '—' ? '—' : td(supplierName(ingredient))}
               </td>

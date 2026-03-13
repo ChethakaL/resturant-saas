@@ -36,6 +36,11 @@ export async function POST(request: Request) {
         supplier: data.supplier,
         notes: data.notes,
         restaurantId: session.user.restaurantId,
+        brand: data.brand || null,
+        parentId: data.parentId || null,
+        purchaseFormat: data.purchaseFormat || null,
+        packageSize: data.packageSize ? parseFloat(data.packageSize) : null,
+        purchasePrice: data.purchasePrice ? parseFloat(data.purchasePrice) : null,
       },
     })
 

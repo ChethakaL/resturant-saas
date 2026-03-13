@@ -28,6 +28,8 @@ export default async function NewMenuItemPage() {
         minStockLevel: true,
         notes: true,
         preferredSupplierId: true,
+        brand: true,
+        parentId: true,
       },
     }),
     prisma.addOn.findMany({

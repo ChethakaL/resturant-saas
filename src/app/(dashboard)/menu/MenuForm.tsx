@@ -1876,7 +1876,9 @@ export default function MenuForm({
           inventory: allIngredients.map(i => ({
             name: i.name,
             unit: i.unit,
-            costPerUnit: i.costPerUnit
+            costPerUnit: i.costPerUnit,
+            brand: i.brand,
+            parentId: i.parentId,
           })),
           currentData: buildSmartChefCurrentData(),
           attachments,

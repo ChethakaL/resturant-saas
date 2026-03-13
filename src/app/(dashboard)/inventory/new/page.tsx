@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Calculator } from 'lucide-react'
 import Link from 'next/link'
 import { useI18n } from '@/lib/i18n'
 
@@ -94,13 +94,41 @@ export default function NewIngredientPage() {
   const copy = INVENTORY_COPY[locale] ?? INVENTORY_COPY.en
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [ingredients, setIngredients] = useState<{
+    parentId: any id: string, name: string 
+}[]>([])
   const [formData, setFormData] = useState({
     name: '',
     unit: 'g',
     costPerUnit: '',
     supplier: '',
     notes: '',
+    brand: '',
+    parentId: '',
+    purchaseFormat: '',
+    packageSize: '',
+    purchasePrice: '',
   })
+
+  useEffect(() => {
+    fetch('/api/inventory')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setIngredients(data)
+        }
+      })
+      .catch(err => console.error('Error fetching ingredients:', err))
+  }, [])
+
+  useEffect(() => {
+    const size = parseFloat(formData.packageSize)
+    const price = parseFloat(formData.purchasePrice)
+    if (size > 0 && price >= 0) {
+      const calculatedCost = price / size
+      setFormData(prev => ({ ...prev, costPerUnit: calculatedCost.toFixed(3) }))
+    }
+  }, [formData.packageSize, formData.purchasePrice])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -124,6 +152,11 @@ export default function NewIngredientPage() {
           costPerUnit: cost,
           supplier: formData.supplier || null,
           notes: formData.notes || null,
+          brand: formData.brand || null,
+          parentId: formData.parentId || null,
+          purchaseFormat: formData.purchaseFormat || null,
+          packageSize: formData.packageSize || null,
+          purchasePrice: formData.purchasePrice || null,
         }),
       })
 
@@ -183,6 +216,31 @@ export default function NewIngredientPage() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="brand">Brand</Label>
+                <Input
+                  id="brand"
+                  value={formData.brand}
+                  onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                  placeholder="e.g., Lurpak"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="parentId">Parent Ingredient (for Variants)</Label>
+                <select
+                  id="parentId"
+                  value={formData.parentId}
+                  onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                >
+                  <option value="">— None (This is a Parent) —</option>
+                  {ingredients.filter(i => !i.parentId).map((ing) => (
+                    <option key={ing.id} value={ing.id}>{ing.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="unit">
                   {copy.unit} <span className="text-red-500">*</span>
                 </Label>
@@ -227,6 +285,48 @@ export default function NewIngredientPage() {
                   onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
                   placeholder={copy.abc}
                 />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-4 space-y-4 bg-slate-50/50">
+              <div className="flex items-center gap-2 text-slate-900 font-semibold">
+                <Calculator className="h-4 w-4" />
+                <h3>Packaging & Purchase Format</h3>
+              </div>
+              <p className="text-xs text-slate-500">Enter bulk purchase details to auto-calculate the cost per unit.</p>
+              
+              <div className="grid gap-6 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="purchaseFormat">Purchase Format</Label>
+                  <Input
+                    id="purchaseFormat"
+                    value={formData.purchaseFormat}
+                    onChange={(e) => setFormData({ ...formData, purchaseFormat: e.target.value })}
+                    placeholder="e.g., 5kg bag, 6-pack"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="packageSize">Package Size ({formData.unit})</Label>
+                  <Input
+                    id="packageSize"
+                    type="number"
+                    step="any"
+                    value={formData.packageSize}
+                    onChange={(e) => setFormData({ ...formData, packageSize: e.target.value })}
+                    placeholder="e.g., 5000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="purchasePrice">Purchase Price (IQD)</Label>
+                  <Input
+                    id="purchasePrice"
+                    type="number"
+                    step="any"
+                    value={formData.purchasePrice}
+                    onChange={(e) => setFormData({ ...formData, purchasePrice: e.target.value })}
+                    placeholder="e.g., 25000"
+                  />
+                </div>
               </div>
             </div>
 

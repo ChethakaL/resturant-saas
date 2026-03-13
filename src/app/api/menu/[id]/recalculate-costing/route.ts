@@ -60,9 +60,30 @@ export async function POST(
             })
 
             // All ingredients must have costPerUnit > 0, except water and similar (allowed at 0)
+            const resolvedIngredients = await Promise.all(ingredients.map(async (ing) => {
+                if (ing.costPerUnit > 0 || isZeroCostAllowed(ing.name)) {
+                    return ing
+                }
+                
+                // If the ingredient has no cost, check if it's a parent with variants
+                const variants = await prisma.ingredient.findMany({
+                    where: { parentId: ing.id },
+                    select: { costPerUnit: true }
+                })
+                
+                if (variants.length > 0) {
+                    const maxCost = Math.max(...variants.map(v => v.costPerUnit))
+                    if (maxCost > 0) {
+                        return { ...ing, costPerUnit: maxCost }
+                    }
+                }
+                
+                return ing
+            }))
+
             hasCosting =
-                ingredients.length === validIngredients.length &&
-                ingredients.every((ing) => ing.costPerUnit > 0 || isZeroCostAllowed(ing.name))
+                resolvedIngredients.length === validIngredients.length &&
+                resolvedIngredients.every((ing) => ing.costPerUnit > 0 || isZeroCostAllowed(ing.name))
         }
 
         const costingStatus = hasRecipe && hasCosting ? 'COMPLETE' : 'INCOMPLETE'
