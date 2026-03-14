@@ -15,6 +15,13 @@ async function getIngredient(id: string, restaurantId: string) {
         orderBy: { timestamp: 'desc' },
         take: 10,
       },
+      deliveries: {
+        orderBy: { deliveryDate: 'desc' },
+        take: 10,
+        include: {
+          receipt: true
+        }
+      } as any
     },
   })
 

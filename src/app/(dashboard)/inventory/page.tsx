@@ -10,6 +10,7 @@ import { InventoryTable } from '@/app/(dashboard)/inventory/InventoryTable'
 import { InventorySearch } from '@/app/(dashboard)/inventory/InventorySearch'
 import FixUnitsButton from '@/app/(dashboard)/inventory/FixUnitsButton'
 import { isAllowedUnit, canonicalise } from '@/lib/unit-converter'
+import { InventoryPageClient } from './InventoryPageClient'
 
 const PAGE_SIZE = 25
 
@@ -22,6 +23,7 @@ type IngredientSelectRow = {
   preferredSupplierId: string | null
   brand: string | null
   parentId: string | null
+  stockQuantity: number
 }
 
 async function getInventoryData(restaurantId: string, page: number, query?: string) {
@@ -54,6 +56,7 @@ async function getInventoryData(restaurantId: string, page: number, query?: stri
         preferredSupplierId: true,
         brand: true,
         parentId: true,
+        stockQuantity: true,
       } as any,
     }),
   ])
@@ -81,6 +84,7 @@ async function getInventoryData(restaurantId: string, page: number, query?: stri
         : null,
       brand: i.brand,
       parentId: i.parentId,
+      stockQuantity: i.stockQuantity,
     })),
     totalCount,
     totalPages: Math.ceil(totalCount / PAGE_SIZE),
@@ -109,46 +113,13 @@ export default async function InventoryPage({
   const { t } = await getServerTranslations()
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">{t.inventory_title}</h1>
-          <p className="text-slate-500 mt-1">{t.inventory_subtitle}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <InventorySearch />
-          <Link href="/inventory/new">
-            <Button className="shrink-0">
-              <Plus className="h-4 w-4 mr-2" />
-              {t.inventory_add_ingredient}
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* Bad-unit warning banner */}
-      {badUnitCount > 0 && <FixUnitsButton badUnitCount={badUnitCount} />}
-
-      {/* Ingredients Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t.inventory_all_ingredients}</CardTitle>
-          <p className="text-sm text-slate-500 font-normal mt-1">
-            {t.inventory_cost_note}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <InventoryTable
-              ingredients={data.ingredients}
-              totalCount={data.totalCount}
-              totalPages={data.totalPages}
-              currentPage={page}
-            />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    <InventoryPageClient 
+      t={t}
+      badUnitCount={badUnitCount}
+      ingredients={data.ingredients}
+      totalCount={data.totalCount}
+      totalPages={data.totalPages}
+      currentPage={page}
+    />
   )
 }

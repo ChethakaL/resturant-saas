@@ -9,8 +9,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, Save, Trash2, Calculator } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, Calculator, Upload, History, ExternalLink, Calendar } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
 import Link from 'next/link'
+import { format } from 'date-fns'
+import ReceiptUploadModal from '@/components/inventory/ReceiptUploadModal'
 
 const UNIT_OPTIONS = [
   { value: 'g', label: 'Grams (g)' },
@@ -34,6 +37,7 @@ type IngredientWithSupplier = {
   purchaseFormat: string | null
   packageSize: number | null
   purchasePrice: number | null
+  deliveries?: any[]
 }
 
 type SupplierOption = { id: string; name: string }
@@ -50,6 +54,7 @@ export default function IngredientEditForm({
   const [parentOptions, setParentOptions] = useState<{ id: string, name: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [displayName, setDisplayName] = useState(ingredient.name)
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false)
   const [formData, setFormData] = useState({
     name: ingredient.name,
     unit: ingredient.unit,
@@ -182,10 +187,21 @@ export default function IngredientEditForm({
             <p className="text-slate-500 mt-1">{td('Update ingredient details')}</p>
           </div>
         </div>
-        <Button variant="destructive" onClick={handleDelete} disabled={loading}>
-          <Trash2 className="h-4 w-4 mr-2" />
-          {t.inventory_delete_btn}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={() => setIsReceiptModalOpen(true)}
+            className="gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            {td('Upload Receipt')}
+          </Button>
+          <Button variant="destructive" onClick={handleDelete} disabled={loading}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            {t.inventory_delete_btn}
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -364,6 +380,73 @@ export default function IngredientEditForm({
           </form>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5 text-indigo-600" />
+            {td('Purchase & Delivery History')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!ingredient.deliveries || ingredient.deliveries.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 italic">
+              {td('No delivery history found for this ingredient.')}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left py-3 px-2 font-semibold text-slate-700">{td('Date')}</th>
+                    <th className="text-left py-3 px-2 font-semibold text-slate-700">{td('Supplier')}</th>
+                    <th className="text-right py-3 px-2 font-semibold text-slate-700">{td('Quantity')}</th>
+                    <th className="text-right py-3 px-2 font-semibold text-slate-700">{td('Unit Cost')}</th>
+                    <th className="text-right py-3 px-2 font-semibold text-slate-700">{td('Total')}</th>
+                    <th className="text-center py-3 px-2 font-semibold text-slate-700">{td('Receipt')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ingredient.deliveries.map((delivery) => (
+                    <tr key={delivery.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-2 text-slate-600">
+                        <div className="flex items-center gap-1">
+                          <History className="h-3 w-3" />
+                          {format(new Date(delivery.deliveryDate), 'MMM d, yyyy')}
+                        </div>
+                      </td>
+                      <td className="py-3 px-2 font-medium text-slate-900">{td(delivery.supplierName)}</td>
+                      <td className="py-3 px-2 text-right">{delivery.quantity} {td(ingredient.unit)}</td>
+                      <td className="py-3 px-2 text-right font-mono">{formatCurrency(delivery.unitCost)}</td>
+                      <td className="py-3 px-2 text-right font-mono font-semibold">{formatCurrency(delivery.totalCost)}</td>
+                      <td className="py-3 px-2 text-center">
+                        {delivery.receipt?.imageUrl ? (
+                          <a 
+                            href={delivery.receipt.imageUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center p-1.5 bg-indigo-50 text-indigo-600 rounded-md hover:bg-indigo-100 transition-colors"
+                            title={td('View Receipt')}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <ReceiptUploadModal 
+        isOpen={isReceiptModalOpen} 
+        onClose={() => setIsReceiptModalOpen(false)} 
+        ingredientId={ingredient.id} 
+      />
     </div>
   )
 }

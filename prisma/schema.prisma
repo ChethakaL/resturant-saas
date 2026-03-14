@@ -57,6 +57,7 @@ model Restaurant {
   menuEvents          MenuEvent[]
   branches            Branch[]
   promoRedemptions    PromoRedemption[]
+  receipts            Receipt[]
 
   @@map("restaurants")
 }
@@ -200,10 +201,12 @@ model Delivery {
   invoiceNumber        String?
   notes                String?
   expenseTransactionId String?
+  receiptId            String?
   restaurantId         String
   createdAt            DateTime            @default(now())
   transportCost        Float               @default(0)
   expenseTransaction   ExpenseTransaction? @relation(fields: [expenseTransactionId], references: [id])
+  receipt              Receipt?            @relation(fields: [receiptId], references: [id])
   ingredient           Ingredient          @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
   restaurant           Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
@@ -469,11 +472,13 @@ model ExpenseTransaction {
   ingredientId String?
   quantity     Float?
   unitCost     Float?
+  receiptId    String?
   restaurantId String
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   deliveries   Delivery[]
   ingredient   Ingredient?     @relation(fields: [ingredientId], references: [id])
+  receipt      Receipt?        @relation(fields: [receiptId], references: [id])
   restaurant   Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([restaurantId])
@@ -989,4 +994,25 @@ enum PayrollStatus {
 enum ShowcaseType {
   CHEFS_HIGHLIGHTS
   RECOMMENDATIONS
+}
+
+model Receipt {
+  id                  String               @id @default(cuid())
+  restaurantId        String
+  imageUrl            String
+  rawOcrText          String?
+  extractedData       Json?                // Stores the parsed object from AI
+  status              String               @default("PENDING") // PENDING, PROCESSED, ERROR
+  supplier            String?
+  totalAmount         Float?
+  date                DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  
+  restaurant          Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  deliveries          Delivery[]
+  expenseTransactions ExpenseTransaction[]
+
+  @@index([restaurantId])
+  @@map("receipts")
 }

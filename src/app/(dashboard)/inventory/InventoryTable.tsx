@@ -30,6 +30,7 @@ type IngredientRow = {
   preferredSupplier: { id: string; name: string } | null
   brand: string | null
   parentId: string | null
+  stockQuantity: number
 }
 
 type SupplierProduct = {
@@ -197,6 +198,9 @@ export function InventoryTable({
               {t.inventory_col_request}
             </th>
             <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
+              {td('Stock')}
+            </th>
+            <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
               {t.inventory_col_cost_unit}
             </th>
             <th className="text-right py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
@@ -236,6 +240,11 @@ export function InventoryTable({
                 >
                   {t.inventory_request_more}
                 </Button>
+              </td>
+              <td className="py-3 px-4 text-right font-mono text-sm">
+                <span className={`px-2 py-1 rounded ${ingredient.stockQuantity <= 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                  {ingredient.stockQuantity.toLocaleString()} {td(ingredient.unit)}
+                </span>
               </td>
               <td className="py-3 px-4 text-right font-mono">
                 {formatCurrency(ingredient.costPerUnit)}
