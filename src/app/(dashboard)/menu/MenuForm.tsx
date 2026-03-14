@@ -1143,6 +1143,71 @@ export default function MenuForm({
     toast({ title: 'Costs refreshed', description: 'All recipe costs updated to latest supplier prices' })
   }
 
+  const handleCreateAddOn = async () => {
+    const trimmedName = createAddOnName.trim()
+    const trimmedPrice = createAddOnPrice.trim()
+
+    if (!trimmedName || !trimmedPrice) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please enter an add-on name and price.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const parsedPrice = Number(trimmedPrice)
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      toast({
+        title: 'Invalid Price',
+        description: 'Please enter a valid add-on price.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setCreateAddOnLoading(true)
+    try {
+      const response = await fetch('/api/addons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: trimmedName,
+          price: parsedPrice,
+          description: createAddOnDescription.trim() || null,
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to create add-on')
+      }
+
+      setAddOnsList((prev) => {
+        const next = [...prev, data as AddOn]
+        return next.sort((a, b) => a.name.localeCompare(b.name))
+      })
+      setSelectedAddOnIds((prev) => (prev.includes(data.id) ? prev : [...prev, data.id]))
+      setCreateAddOnName('')
+      setCreateAddOnPrice('')
+      setCreateAddOnDescription('')
+      setCreateAddOnOpen(false)
+      toast({
+        title: 'Add-on created',
+        description: `${data.name} is now available for this menu item.`,
+      })
+    } catch (error) {
+      console.error('Error creating add-on:', error)
+      toast({
+        title: 'Create Failed',
+        description: error instanceof Error ? error.message : 'Failed to create add-on. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setCreateAddOnLoading(false)
+    }
+  }
+
   const generateImage = async () => {
     const customPromptTrimmed = customPrompt.trim()
     const promptForUpload =
@@ -4204,6 +4269,77 @@ export default function MenuForm({
           )}
         </div>
       </form>
+
+      <Dialog open={createAddOnOpen} onOpenChange={setCreateAddOnOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{td('Create New Add-on')}</DialogTitle>
+            <DialogDescription>
+              {td('Add a new optional extra that customers can choose')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="inline-addon-name">
+                {td('Name')} <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="inline-addon-name"
+                value={createAddOnName}
+                onChange={(e) => setCreateAddOnName(e.target.value)}
+                placeholder={td('e.g., Extra Cheese')}
+                disabled={createAddOnLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inline-addon-price">
+                {td('Price (IQD)')} <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="inline-addon-price"
+                type="number"
+                step="0.01"
+                min="0"
+                value={createAddOnPrice}
+                onChange={(e) => setCreateAddOnPrice(e.target.value)}
+                placeholder="0.00"
+                disabled={createAddOnLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inline-addon-description">{td('Description (optional)')}</Label>
+              <Textarea
+                id="inline-addon-description"
+                value={createAddOnDescription}
+                onChange={(e) => setCreateAddOnDescription(e.target.value)}
+                placeholder={td('Brief description of the add-on...')}
+                rows={2}
+                disabled={createAddOnLoading}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCreateAddOnOpen(false)}
+              disabled={createAddOnLoading}
+            >
+              {td('Cancel')}
+            </Button>
+            <Button type="button" onClick={handleCreateAddOn} disabled={createAddOnLoading}>
+              {createAddOnLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {td('Saving...')}
+                </>
+              ) : (
+                td('Create Add-on')
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* AI Image Generation Dialog */}
       <Dialog open={showPromptDialog} onOpenChange={(open) => {
