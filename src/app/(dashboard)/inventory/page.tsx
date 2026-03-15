@@ -4,12 +4,14 @@ import { prisma } from '@/lib/prisma'
 import { getServerTranslations } from '@/lib/i18n/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
+import { Plus, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { InventoryTable } from '@/app/(dashboard)/inventory/InventoryTable'
 import { InventorySearch } from '@/app/(dashboard)/inventory/InventorySearch'
 import FixUnitsButton from '@/app/(dashboard)/inventory/FixUnitsButton'
 import { isAllowedUnit, canonicalise } from '@/lib/unit-converter'
+import UploadReceiptModal from './UploadReceiptModal'
+import UploadReceiptButton from './UploadReceiptButton'
 
 const PAGE_SIZE = 25
 
@@ -134,6 +136,9 @@ export default async function InventoryPage({
         </div>
         <div className="flex items-center gap-3">
           <InventorySearch />
+
+          <UploadReceiptButton />
+
           <Link href="/inventory/new">
             <Button className="shrink-0">
               <Plus className="h-4 w-4 mr-2" />
