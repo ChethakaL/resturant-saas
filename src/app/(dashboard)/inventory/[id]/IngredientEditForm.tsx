@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { ArrowLeft, Save, Trash2, Plus, ArrowUp, ArrowDown } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, Plus, ArrowUp, ArrowDown, Upload } from 'lucide-react'
 import Link from 'next/link'
+import UploadReceiptModal from '../UploadReceiptModal'
 
 const UNIT_OPTIONS = [
   { value: 'g', label: 'Grams (g)' },
@@ -64,6 +65,7 @@ export default function IngredientEditForm({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState(ingredient.name)
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false)
   const [formData, setFormData] = useState({
     name: ingredient.name,
     unit: ingredient.unit,
@@ -276,11 +278,24 @@ export default function IngredientEditForm({
             <p className="text-slate-500 mt-1">{td('Update ingredient details')}</p>
           </div>
         </div>
-        <Button variant="destructive" onClick={handleDelete} disabled={loading}>
-          <Trash2 className="h-4 w-4 mr-2" />
-          {t.inventory_delete_btn}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => setReceiptModalOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            {td('Upload Receipt')}
+          </Button>
+
+          <Button variant="destructive" onClick={handleDelete} disabled={loading}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            {t.inventory_delete_btn}
+          </Button>
+        </div>
       </div>
+
+      <UploadReceiptModal
+        open={receiptModalOpen}
+        onOpenChange={setReceiptModalOpen}
+        ingredientId={ingredient.id}
+      />
 
       <Card>
         <CardHeader>
