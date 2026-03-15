@@ -1,15 +1,19 @@
+"use client"
+
+import { useState } from 'react'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getServerTranslations } from '@/lib/i18n/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
+import { Plus, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { InventoryTable } from '@/app/(dashboard)/inventory/InventoryTable'
 import { InventorySearch } from '@/app/(dashboard)/inventory/InventorySearch'
 import FixUnitsButton from '@/app/(dashboard)/inventory/FixUnitsButton'
 import { isAllowedUnit, canonicalise } from '@/lib/unit-converter'
+import UploadReceiptModal from './UploadReceiptModal'
 
 const PAGE_SIZE = 25
 
@@ -108,6 +112,7 @@ export default async function InventoryPage({
 }: {
   searchParams?: { page?: string; q?: string }
 }) {
+  const [modalOpen, setModalOpen] = useState(false)
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
   const page = Math.max(Number(searchParams?.page || 1), 1)
@@ -134,6 +139,15 @@ export default async function InventoryPage({
         </div>
         <div className="flex items-center gap-3">
           <InventorySearch />
+          <Button variant="outline" onClick={() => setModalOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            {'Upload Receipt'}
+          </Button>
+
+          <UploadReceiptModal
+            open={modalOpen}
+            onOpenChange={setModalOpen}
+          />
           <Link href="/inventory/new">
             <Button className="shrink-0">
               <Plus className="h-4 w-4 mr-2" />
