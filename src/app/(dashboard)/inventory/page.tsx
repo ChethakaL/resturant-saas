@@ -20,6 +20,16 @@ type IngredientSelectRow = {
   costPerUnit: number
   supplier: string | null
   preferredSupplierId: string | null
+  variants: {
+    id: number | string
+    brand: string
+    supplier: string | null
+    purchaseFormat: string | null
+    packageQuantity: number | null
+    packageUnit: string
+    bulkPrice: number | null
+    costPerUnit: number
+  }[]
 }
 
 async function getInventoryData(restaurantId: string, page: number, query?: string) {
@@ -50,6 +60,18 @@ async function getInventoryData(restaurantId: string, page: number, query?: stri
         costPerUnit: true,
         supplier: true,
         preferredSupplierId: true,
+        variants: {
+          select: {
+            id: true,
+            brand: true,
+            supplier: true,
+            purchaseFormat: true,
+            packageQuantity: true,
+            packageUnit: true,
+            bulkPrice: true,
+            costPerUnit: true,
+          },
+        },
       } as any,
     }),
   ])
@@ -70,8 +92,8 @@ async function getInventoryData(restaurantId: string, page: number, query?: stri
       id: i.id,
       name: i.name,
       unit: i.unit,
-      costPerUnit: i.costPerUnit,
-      supplier: i.supplier,
+      costPerUnit: i.variants?.length > 0 ? i.variants[0].costPerUnit : i.costPerUnit,
+      supplier: i.variants?.length > 0 ? i.variants[0].supplier : i.supplier,
       preferredSupplier: i.preferredSupplierId
         ? { id: i.preferredSupplierId, name: supplierById[i.preferredSupplierId]?.name ?? '' }
         : null,
