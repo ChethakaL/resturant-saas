@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, Save, Trash2, Plus } from 'lucide-react'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { ArrowLeft, Save, Trash2, Plus, ArrowUp, ArrowDown } from 'lucide-react'
 import Link from 'next/link'
 
 const UNIT_OPTIONS = [
@@ -153,6 +154,24 @@ export default function IngredientEditForm({
         i === index ? { ...v, [field]: value } : v
       ),
     }))
+  }
+
+  const moveUp = (index: number) => {
+    if (index <= 0) return
+    setFormData((prev) => {
+      const newVariants = [...prev.variants]
+        ;[newVariants[index - 1], newVariants[index]] = [newVariants[index], newVariants[index - 1]]
+      return { ...prev, variants: newVariants }
+    })
+  }
+
+  const moveDown = (index: number) => {
+    if (index >= formData.variants.length - 1) return
+    setFormData((prev) => {
+      const newVariants = [...prev.variants]
+        ;[newVariants[index], newVariants[index + 1]] = [newVariants[index + 1], newVariants[index]]
+      return { ...prev, variants: newVariants }
+    })
   }
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -334,113 +353,163 @@ export default function IngredientEditForm({
             <div className="space-y-4">
               <Label className="text-lg font-semibold">{td('Variants (Brands)')}</Label>
 
-              {formData.variants && formData.variants.length === 0 && (
+              {formData.variants.length === 0 ? (
                 <p className="text-slate-500 italic">{td('No variants yet — add your first one below.')}</p>
-              )}
-
-              {formData.variants?.map((variant, index) => {
-                const calcCost = calculateCostPerUnit(variant)
-                return (
-                  <div
-                    key={index}
-                    className="border border-slate-200 rounded-xl p-6 bg-white space-y-6"
-                  >
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium">{td('Variant')} #{index + 1}</h3>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeVariant(index)}
-                        className="text-red-600 hover:text-red-700"
+              ) : (
+                <Accordion type="multiple" defaultValue={['variant-0']} className="space-y-3">
+                  {formData.variants.map((variant, index) => {
+                    const calcCost = calculateCostPerUnit(variant)
+                    return (
+                      <AccordionItem
+                        key={index}
+                        value={`variant-${index}`}
+                        className="border border-slate-200 rounded-xl overflow-hidden bg-white"
                       >
-                        <Trash2 className="h-4 w-4" />
-                        {td('Remove Variant')}
-                      </Button>
-                    </div>
+                        <AccordionTrigger className="px-6 py-4 hover:no-underline items-center">
+                          <div className="flex w-full items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <h3 className="font-medium">
+                                {td('Variant')} #{index + 1}
+                                {variant.brand ? ` - ${variant.brand}` : ''}
+                              </h3>
+                              {calcCost > 0 && (
+                                <span className="text-sm font-semibold text-green-600">
+                                  {calcCost.toFixed(2)} IQD/{formData.unit}
+                                </span>
+                              )}
+                            </div>
 
-                    <div className="grid gap-6 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>
-                          {td('Brand')} <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          value={variant.brand}
-                          onChange={(e) => updateVariant(index, 'brand', e.target.value)}
-                          placeholder={td('e.g. Lurpak, Sadia, Fresh Farm')}
-                        />
-                      </div>
+                            <div className="flex items-center gap-2">
+                              {index > 0 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    moveUp(index)
+                                  }}
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {index < formData.variants.length - 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    moveDown(index)
+                                  }}
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  removeVariant(index)
+                                }}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
 
-                      <div className="space-y-2">
-                        <Label>{td('Supplier (text)')}</Label>
-                        <Input
-                          value={variant.supplier}
-                          onChange={(e) => updateVariant(index, 'supplier', e.target.value)}
-                          placeholder={td('e.g. Al-Anbar Rice Traders')}
-                        />
-                      </div>
-                    </div>
+                        <AccordionContent className="px-6 pb-6 pt-2 border-t">
+                          <div className="space-y-6">
+                            <div className="grid gap-6 md:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label>
+                                  {td('Brand')} <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  value={variant.brand}
+                                  onChange={(e) => updateVariant(index, 'brand', e.target.value)}
+                                  placeholder={td('e.g. Lurpak, Sadia, Fresh Farm')}
+                                />
+                              </div>
 
-                    <div className="space-y-2">
-                      <Label>{td('Purchase Format')}</Label>
-                      <Input
-                        value={variant.purchaseFormat}
-                        onChange={(e) => updateVariant(index, 'purchaseFormat', e.target.value)}
-                        placeholder={td('e.g. bag, pack, crate')}
-                      />
-                    </div>
+                              <div className="space-y-2">
+                                <Label>{td('Supplier (text)')}</Label>
+                                <Input
+                                  value={variant.supplier}
+                                  onChange={(e) => updateVariant(index, 'supplier', e.target.value)}
+                                  placeholder={td('e.g. Al-Anbar Rice Traders')}
+                                />
+                              </div>
+                            </div>
 
-                    <div className="grid gap-6 md:grid-cols-3">
-                      <div className="space-y-2">
-                        <Label>{td('Package Size')}</Label>
-                        <Input
-                          type="number"
-                          step="any"
-                          value={variant.packageQuantity}
-                          onChange={(e) => updateVariant(index, 'packageQuantity', e.target.value)}
-                          placeholder="5"
-                        />
-                      </div>
+                            <div className="space-y-2">
+                              <Label>{td('Purchase Format')}</Label>
+                              <Input
+                                value={variant.purchaseFormat}
+                                onChange={(e) => updateVariant(index, 'purchaseFormat', e.target.value)}
+                                placeholder={td('e.g. 1kg bag, 6-pack, 24-piece crate')}
+                              />
+                            </div>
 
-                      <div className="space-y-2">
-                        <Label>{td('Package Unit')}</Label>
-                        <select
-                          value={variant.packageUnit}
-                          onChange={(e) => updateVariant(index, 'packageUnit', e.target.value)}
-                          className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                        >
-                          {UNIT_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {td(opt.label)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                            <div className="grid gap-6 md:grid-cols-3">
+                              <div className="space-y-2">
+                                <Label>{td('Package Size')}</Label>
+                                <Input
+                                  type="number"
+                                  step="any"
+                                  value={variant.packageQuantity}
+                                  onChange={(e) => updateVariant(index, 'packageQuantity', e.target.value)}
+                                  placeholder="5"
+                                />
+                              </div>
 
-                      <div className="space-y-2">
-                        <Label>{td('Bulk Purchase Price (IQD)')}</Label>
-                        <Input
-                          type="number"
-                          step="any"
-                          value={variant.bulkPrice}
-                          onChange={(e) => updateVariant(index, 'bulkPrice', e.target.value)}
-                          placeholder="25000"
-                        />
-                      </div>
-                    </div>
+                              <div className="space-y-2">
+                                <Label>{td('Package Unit')}</Label>
+                                <select
+                                  value={variant.packageUnit}
+                                  onChange={(e) => updateVariant(index, 'packageUnit', e.target.value)}
+                                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                >
+                                  {UNIT_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {td(opt.label)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
 
-                    <div className="bg-slate-50 border border-slate-100 rounded-lg p-4">
-                      <p className="text-sm text-slate-600">
-                        {td('Calculated cost per')}{' '}
-                        <span className={`font-semibold ${calcCost > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {calcCost > 0 ? calcCost.toFixed(4) : '—'}
-                        </span>{' '}
-                        IQD / {formData.unit}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
+                              <div className="space-y-2">
+                                <Label>{td('Bulk Purchase Price (IQD)')}</Label>
+                                <Input
+                                  type="number"
+                                  step="any"
+                                  value={variant.bulkPrice}
+                                  onChange={(e) => updateVariant(index, 'bulkPrice', e.target.value)}
+                                  placeholder="25000"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="bg-slate-50 border border-slate-100 rounded-lg p-4">
+                              <p className="text-sm text-slate-600">
+                                {td('Calculated cost per')}{' '}
+                                <span className={`font-semibold ${calcCost > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                  {calcCost > 0 ? calcCost.toFixed(4) : '—'}
+                                </span>{' '}
+                                IQD / {formData.unit}
+                              </p>
+                            </div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )
+                  })}
+                </Accordion>
+              )}
 
               <Button type="button" onClick={addVariant} variant="outline" className="w-full">
                 <Plus className="h-4 w-4 mr-2" />
