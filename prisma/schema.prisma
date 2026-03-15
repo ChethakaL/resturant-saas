@@ -160,6 +160,8 @@ model Ingredient {
   stockAdjustments      StockAdjustment[]
   wasteRecords          WasteRecord[]
   variants              IngredientVariant[]
+  receipts              Receipt[]
+  expenses              Expense[]
 
   @@index([restaurantId])
   @@index([stockQuantity])
@@ -182,6 +184,36 @@ model IngredientVariant {
   ingredient      Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 
   @@map("variants")
+}
+
+model Receipt {
+  id            String    @id @default(uuid())
+  restaurantId  String
+  ingredientId  String? 
+  ingredient    Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  imageUrl      String
+  parsedData    Json?
+  extractedData Json?
+
+  supplier      String?   
+  totalAmount   Float?    
+  currency      String?   @default("IQD")
+  date          DateTime?
+
+  status        ReceiptStatus @default(PENDING)
+  confidence    Float?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  expenses      Expense[]
+}
+
+enum ReceiptStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  MANUAL_OVERRIDE
 }
 
 model StockAdjustment {
@@ -454,9 +486,17 @@ model Expense {
   name         String
   category     String?
   amount       Float
+  currency     String
+  date         DateTime
   cadence      ExpenseCadence
   startDate    DateTime
   endDate      DateTime?
+  receiptId    String?       
+  receipt      Receipt?      @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  ingredientId String? 
+  ingredient   Ingredient?   @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  supplier     String?
+  supplierId   String?
   restaurantId String
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -464,7 +504,10 @@ model Expense {
 
   @@index([restaurantId])
   @@index([cadence])
+  @@index([date])
   @@index([startDate])
+  @@index([ingredientId])
+  @@index([receiptId])
   @@map("expenses")
 }
 
