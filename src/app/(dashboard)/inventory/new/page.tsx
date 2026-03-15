@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useI18n } from '@/lib/i18n'
 
@@ -41,6 +41,19 @@ const INVENTORY_COPY = {
     createFailed: 'Failed to create ingredient. Please try again.',
     costError: 'Cost per unit must be greater than 0.',
     units: { g: 'Grams (g)', kg: 'Kilograms (kg)', ml: 'Millilitres (ml)', L: 'Litres (L)', piece: 'Piece / Each' },
+    brand: 'Brand',
+    variants: 'Variants (Brands)',
+    addVariant: 'Add Variant',
+    removeVariant: 'Remove Variant',
+    purchaseFormat: 'Purchase Format (e.g. 1kg bag)',
+    packageSize: 'Package Size',
+    packageUnit: 'Package Unit',
+    bulkPrice: 'Bulk Purchase Price (IQD)',
+    calculatedCostPrefix: 'Calculated cost per',
+    nameRequired: 'Ingredient name is required.',
+    variantRequired: 'At least one variant is required.',
+    costErrorVariant: 'Each variant must have a valid cost > 0 after calculation.',
+    saving: 'Saving...',
   },
   ku: {
     back: 'گەڕانەوە',
@@ -63,6 +76,19 @@ const INVENTORY_COPY = {
     createFailed: 'دروستکردنی پێکهاتە سەرکەوتوو نەبوو. تکایە دووبارە هەوڵبدەوە.',
     costError: 'دەبێت تێچووی هەر یەکە لە 0 زیاتر بێت.',
     units: { g: 'گرام (g)', kg: 'کیلۆگرام (kg)', ml: 'میلیلیتر (ml)', L: 'لیتر (L)', piece: 'دانە / یەکە' },
+    brand: 'براند',
+    variants: 'جۆرەکان (براندەکان)',
+    addVariant: 'زیادکردنی جۆر',
+    removeVariant: 'سڕینەوەی جۆر',
+    purchaseFormat: 'فۆرماتی کڕین (وەک: 1kg bag)',
+    packageSize: 'قەبارەی پاکێج',
+    packageUnit: 'یەکەی پاکێج',
+    bulkPrice: 'نرخی کڕینی گەورە (IQD)',
+    calculatedCostPrefix: 'تێچووی حەسابکراو بۆ هەر',
+    nameRequired: 'ناوی پێکهاتە پێویستە.',
+    variantRequired: 'دەبێت لانیکەم جۆرێک هەبێت.',
+    costErrorVariant: 'دەبێت هەر جۆرێک تێچووی دروست > 0 هەبێت.',
+    saving: 'پاشەکەوت دەکرێت...',
   },
   'ar-fusha': {
     back: 'رجوع',
@@ -85,8 +111,37 @@ const INVENTORY_COPY = {
     createFailed: 'فشل إنشاء المكوّن. يرجى المحاولة مرة أخرى.',
     costError: 'يجب أن تكون تكلفة الوحدة أكبر من 0.',
     units: { g: 'غرام (g)', kg: 'كيلوغرام (kg)', ml: 'ملليلتر (ml)', L: 'لتر (L)', piece: 'قطعة / وحدة' },
+    brand: 'العلامة التجارية',
+    variants: 'المتغيرات (العلامات التجارية)',
+    addVariant: 'إضافة متغير',
+    removeVariant: 'إزالة المتغير',
+    purchaseFormat: 'تنسيق الشراء (مثال: كيس 1 كجم)',
+    packageSize: 'حجم العبوة',
+    packageUnit: 'وحدة العبوة',
+    bulkPrice: 'سعر الشراء بالجملة (د.ع)',
+    calculatedCostPrefix: 'التكلفة المحسوبة لكل',
+    nameRequired: 'اسم المكوّن مطلوب.',
+    variantRequired: 'يجب أن يكون هناك متغير واحد على الأقل.',
+    costErrorVariant: 'يجب أن يكون لكل متغير تكلفة وحدة صالحة أكبر من 0.',
+    saving: 'جاري الحفظ...',
   },
 } as const
+const convertQuantity = (qty: number, fromUnit: string, toUnit: string): number => {
+  if (fromUnit === toUnit) return qty
+
+  if (['g', 'kg'].includes(fromUnit) && ['g', 'kg'].includes(toUnit)) {
+    const inGrams = fromUnit === 'kg' ? qty * 1000 : qty
+    return toUnit === 'kg' ? inGrams / 1000 : inGrams
+  }
+  if (['ml', 'L'].includes(fromUnit) && ['ml', 'L'].includes(toUnit)) {
+    const inMl = fromUnit === 'L' ? qty * 1000 : qty
+    return toUnit === 'L' ? inMl / 1000 : inMl
+  }
+  if (fromUnit === 'piece' && toUnit === 'piece') return qty
+
+  console.warn(`Unit mismatch: ${fromUnit} → ${toUnit}`)
+  return qty
+}
 
 export default function NewIngredientPage() {
   const router = useRouter()
@@ -97,18 +152,86 @@ export default function NewIngredientPage() {
   const [formData, setFormData] = useState({
     name: '',
     unit: 'g',
-    costPerUnit: '',
-    supplier: '',
     notes: '',
+    variants: [] as {
+      brand: string
+      supplier: string
+      purchaseFormat: string
+      packageQuantity: string
+      packageUnit: string
+      bulkPrice: string
+    }[],
   })
+
+  const calculateCostPerUnit = (variant: any) => {
+    const qty = parseFloat(variant.packageQuantity || '0')
+    const price = parseFloat(variant.bulkPrice || '0')
+    if (!qty || !price || qty <= 0) return 0
+    const converted = convertQuantity(qty, variant.packageUnit, formData.unit)
+    return converted > 0 ? price / converted : 0
+  }
+
+  const addVariant = () => {
+    setFormData((prev) => ({
+      ...prev,
+      variants: [
+        ...prev.variants,
+        {
+          brand: '',
+          supplier: '',
+          purchaseFormat: '',
+          packageQuantity: '',
+          packageUnit: prev.unit,
+          bulkPrice: '',
+        },
+      ],
+    }))
+  }
+
+  const removeVariant = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      variants: prev.variants.filter((_, i) => i !== index),
+    }))
+  }
+
+  const updateVariant = (index: number, field: string, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      variants: prev.variants.map((v, i) =>
+        i === index ? { ...v, [field]: value } : v
+      ),
+    }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
 
-    const cost = parseFloat(formData.costPerUnit)
-    if (!cost || cost <= 0) {
-      setError(copy.costError)
+    if (!formData.name.trim()) {
+      setError(copy.nameRequired)
+      return
+    }
+    if (formData.variants.length === 0) {
+      setError(copy.variantRequired)
+      return
+    }
+
+    const processedVariants = formData.variants.map((v) => {
+      const cost = calculateCostPerUnit(v)
+      return {
+        brand: v.brand.trim(),
+        supplier: v.supplier.trim() || null,
+        purchaseFormat: v.purchaseFormat.trim() || null,
+        packageQuantity: v.packageQuantity ? parseFloat(v.packageQuantity) : null,
+        packageUnit: v.packageUnit,
+        bulkPrice: v.bulkPrice ? parseFloat(v.bulkPrice) : null,
+        costPerUnit: cost,
+      }
+    })
+
+    if (processedVariants.some((v) => !v.brand || v.costPerUnit <= 0)) {
+      setError(copy.costErrorVariant)
       return
     }
 
@@ -121,9 +244,8 @@ export default function NewIngredientPage() {
         body: JSON.stringify({
           name: formData.name,
           unit: formData.unit,
-          costPerUnit: cost,
-          supplier: formData.supplier || null,
           notes: formData.notes || null,
+          variants: processedVariants,
         }),
       })
 
@@ -161,7 +283,7 @@ export default function NewIngredientPage() {
           <CardTitle>{copy.details}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-8">
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
@@ -201,33 +323,123 @@ export default function NewIngredientPage() {
                   {copy.unitHintPrefix} {formData.unit}.
                 </p>
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="costPerUnit">
-                  {copy.costPer} {formData.unit} (IQD) <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="costPerUnit"
-                  type="number"
-                  step="any"
-                  min="0.001"
-                  required
-                  value={formData.costPerUnit}
-                  onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
-                  placeholder={copy.costPlaceholder}
-                />
-                <p className="text-xs text-slate-500">{copy.greater}</p>
-              </div>
+            <div className="space-y-4">
+              <Label className="text-lg font-semibold">{copy.variants}</Label>
 
-              <div className="space-y-2">
-                <Label htmlFor="supplier">{copy.supplier}</Label>
-                <Input
-                  id="supplier"
-                  value={formData.supplier}
-                  onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                  placeholder={copy.abc}
-                />
-              </div>
+              {formData.variants.length === 0 && (
+                <p className="text-slate-500 italic">No variants yet — add your first one below.</p>
+              )}
+
+              {formData.variants.map((variant, index) => {
+                const calcCost = calculateCostPerUnit(variant)
+                return (
+                  <div
+                    key={index}
+                    className="border border-slate-200 rounded-xl p-6 bg-white space-y-6"
+                  >
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-medium">Variant #{index + 1}</h3>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeVariant(index)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {copy.removeVariant}
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>
+                          {copy.brand} <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          value={variant.brand}
+                          onChange={(e) => updateVariant(index, 'brand', e.target.value)}
+                          placeholder="e.g. Lurpak, Sadia, Fresh Farm"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>{copy.supplier}</Label>
+                        <Input
+                          value={variant.supplier}
+                          onChange={(e) => updateVariant(index, 'supplier', e.target.value)}
+                          placeholder={copy.abc}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>{copy.purchaseFormat}</Label>
+                      <Input
+                        value={variant.purchaseFormat}
+                        onChange={(e) => updateVariant(index, 'purchaseFormat', e.target.value)}
+                        placeholder="e.g. bag, pack, crate"
+                      />
+                    </div>
+
+                    <div className="grid gap-6 md:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label>{copy.packageSize}</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={variant.packageQuantity}
+                          onChange={(e) => updateVariant(index, 'packageQuantity', e.target.value)}
+                          placeholder="5"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>{copy.packageUnit}</Label>
+                        <select
+                          value={variant.packageUnit}
+                          onChange={(e) => updateVariant(index, 'packageUnit', e.target.value)}
+                          className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                        >
+                          {UNIT_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {copy.units[opt.value as keyof typeof copy.units]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>{copy.bulkPrice}</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={variant.bulkPrice}
+                          onChange={(e) => updateVariant(index, 'bulkPrice', e.target.value)}
+                          placeholder="25000"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-100 rounded-lg p-4">
+                      <p className="text-sm text-slate-600">
+                        {copy.calculatedCostPrefix}{' '}
+                        <span className={`font-semibold ${calcCost > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {calcCost > 0 ? calcCost.toFixed(4) : '—'}
+                        </span>{' '}
+                        IQD / {formData.unit}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+
+              <Button type="button" onClick={addVariant} variant="outline" className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                {copy.addVariant}
+              </Button>
             </div>
 
             <div className="space-y-2">
