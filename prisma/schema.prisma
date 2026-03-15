@@ -159,12 +159,29 @@ model Ingredient {
   menuItemIngredients   MenuItemIngredient[]
   stockAdjustments      StockAdjustment[]
   wasteRecords          WasteRecord[]
+  variants              IngredientVariant[]
 
   @@index([restaurantId])
   @@index([stockQuantity])
   @@index([globalIngredientId])
   @@index([preferredSupplierId])
   @@map("ingredients")
+}
+
+model IngredientVariant {
+  id              Int                            @id @default(autoincrement())
+  brand           String
+  supplier        String?
+  purchaseFormat  String?
+  packageQuantity Float?
+  packageUnit     String
+  bulkPrice       Float?
+  costPerUnit     Float
+
+  ingredientId    String
+  ingredient      Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@map("variants")
 }
 
 model StockAdjustment {

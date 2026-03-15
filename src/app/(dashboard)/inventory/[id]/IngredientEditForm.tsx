@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, Save, Trash2 } from 'lucide-react'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { ArrowLeft, Save, Trash2, Plus, ArrowUp, ArrowDown } from 'lucide-react'
 import Link from 'next/link'
 
 const UNIT_OPTIONS = [
@@ -20,15 +21,33 @@ const UNIT_OPTIONS = [
   { value: 'piece', label: 'Piece / Each' },
 ]
 
-type IngredientWithSupplier = {
+type VariantType = {
+  id?: string
+  brand: string
+  supplier: string
+  purchaseFormat: string
+  packageQuantity: string
+  packageUnit: string
+  bulkPrice: string
+}
+
+type IngredientWithVariants = {
   id: string
   name: string
   unit: string
-  costPerUnit: number
   minStockLevel: number
-  supplier: string | null
   notes: string | null
   preferredSupplierId: string | null
+  variants: {
+    id: number | string
+    brand: string
+    supplier: string | null
+    purchaseFormat: string | null
+    packageQuantity: number | null
+    packageUnit: string
+    bulkPrice: number | null
+    costPerUnit: number
+  }[]
 }
 
 type SupplierOption = { id: string; name: string }
@@ -36,21 +55,29 @@ type SupplierOption = { id: string; name: string }
 export default function IngredientEditForm({
   ingredient,
 }: {
-  ingredient: IngredientWithSupplier
+  ingredient: IngredientWithVariants
 }) {
   const router = useRouter()
   const { t } = useI18n()
   const { t: td, fetchTranslation } = useDynamicTranslate()
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState(ingredient.name)
   const [formData, setFormData] = useState({
     name: ingredient.name,
     unit: ingredient.unit,
-    costPerUnit: ingredient.costPerUnit.toString(),
-    supplier: ingredient.supplier || '',
     preferredSupplierId: ingredient.preferredSupplierId || '',
     notes: ingredient.notes || '',
+    variants: ingredient.variants.map((v) => ({
+      id: v.id,
+      brand: v.brand,
+      supplier: v.supplier || '',
+      purchaseFormat: v.purchaseFormat || '',
+      packageQuantity: v.packageQuantity?.toString() || '',
+      packageUnit: v.packageUnit,
+      bulkPrice: v.bulkPrice?.toString() || '',
+    })) as VariantType[],
   })
 
   useEffect(() => {
@@ -71,13 +98,114 @@ export default function IngredientEditForm({
     }
   }, [fetchTranslation, ingredient.name])
 
+  const convertQuantity = (qty: number, fromUnit: string, toUnit: string): number => {
+    if (fromUnit === toUnit) return qty
+
+    if (['g', 'kg'].includes(fromUnit) && ['g', 'kg'].includes(toUnit)) {
+      const inGrams = fromUnit === 'kg' ? qty * 1000 : qty
+      return toUnit === 'kg' ? inGrams / 1000 : inGrams
+    }
+    if (['ml', 'L'].includes(fromUnit) && ['ml', 'L'].includes(toUnit)) {
+      const inMl = fromUnit === 'L' ? qty * 1000 : qty
+      return toUnit === 'L' ? inMl / 1000 : inMl
+    }
+    if (fromUnit === 'piece' && toUnit === 'piece') return qty
+
+    console.warn(`Unit mismatch: ${fromUnit} → ${toUnit}`)
+    return qty
+  }
+
+  const calculateCostPerUnit = (variant: VariantType) => {
+    const qty = parseFloat(variant.packageQuantity || '0')
+    const price = parseFloat(variant.bulkPrice || '0')
+    if (!qty || !price || qty <= 0) return 0
+    const converted = convertQuantity(qty, variant.packageUnit, formData.unit)
+    return converted > 0 ? price / converted : 0
+  }
+
+  const addVariant = () => {
+    setFormData((prev) => ({
+      ...prev,
+      variants: [
+        ...prev.variants,
+        {
+          brand: '',
+          supplier: '',
+          purchaseFormat: '',
+          packageQuantity: '',
+          packageUnit: prev.unit,
+          bulkPrice: '',
+        },
+      ],
+    }))
+  }
+
+  const removeVariant = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      variants: prev.variants.filter((_, i) => i !== index),
+    }))
+  }
+
+  const updateVariant = (index: number, field: keyof VariantType, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      variants: prev.variants.map((v, i) =>
+        i === index ? { ...v, [field]: value } : v
+      ),
+    }))
+  }
+
+  const moveUp = (index: number) => {
+    if (index <= 0) return
+    setFormData((prev) => {
+      const newVariants = [...prev.variants]
+        ;[newVariants[index - 1], newVariants[index]] = [newVariants[index], newVariants[index - 1]]
+      return { ...prev, variants: newVariants }
+    })
+  }
+
+  const moveDown = (index: number) => {
+    if (index >= formData.variants.length - 1) return
+    setFormData((prev) => {
+      const newVariants = [...prev.variants]
+        ;[newVariants[index], newVariants[index + 1]] = [newVariants[index + 1], newVariants[index]]
+      return { ...prev, variants: newVariants }
+    })
+  }
+
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
-    const cost = parseFloat(formData.costPerUnit)
-    if (!cost || cost <= 0) {
-      alert(td('Cost per unit must be greater than 0.'))
+    setError(null)
+
+    if (!formData.name.trim()) {
+      setError(td('Ingredient name is required.'))
       return
     }
+    if (formData.variants.length === 0) {
+      setError(td('At least one variant is required.'))
+      return
+    }
+
+    const processedVariants = formData.variants.map((v) => {
+      const cost = calculateCostPerUnit(v)
+      return {
+        id: v.id,
+        brand: v.brand.trim(),
+        supplier: v.supplier.trim() || null,
+        purchaseFormat: v.purchaseFormat.trim() || null,
+        packageQuantity: v.packageQuantity ? parseFloat(v.packageQuantity) : null,
+        packageUnit: v.packageUnit,
+        bulkPrice: v.bulkPrice ? parseFloat(v.bulkPrice) : null,
+        costPerUnit: cost,
+      }
+    })
+
+    if (processedVariants.some((v) => !v.brand || v.costPerUnit <= 0)) {
+      setError(td('Each variant must have a brand and valid cost > 0.'))
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -85,12 +213,11 @@ export default function IngredientEditForm({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: formData.name,
+          name: formData.name.trim(),
           unit: formData.unit,
-          costPerUnit: cost,
-          supplier: formData.supplier || null,
           preferredSupplierId: formData.preferredSupplierId || null,
-          notes: formData.notes || null,
+          notes: formData.notes.trim() || null,
+          variants: processedVariants,
         }),
       })
 
@@ -102,7 +229,7 @@ export default function IngredientEditForm({
       router.refresh()
     } catch (error) {
       console.error('Error updating ingredient:', error)
-      alert(td('Failed to update ingredient. Please try again.'))
+      setError(td('Failed to update ingredient. Please try again.'))
     } finally {
       setLoading(false)
     }
@@ -128,7 +255,7 @@ export default function IngredientEditForm({
       router.refresh()
     } catch (error) {
       console.error('Error deleting ingredient:', error)
-      alert(td('Failed to delete ingredient. Please try again.'))
+      setError(td('Failed to delete ingredient. Please try again.'))
     } finally {
       setLoading(false)
     }
@@ -160,7 +287,13 @@ export default function IngredientEditForm({
           <CardTitle>{td('Ingredient Details')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleUpdate} className="space-y-6">
+          <form onSubmit={handleUpdate} className="space-y-8">
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
             <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="name">
@@ -184,60 +317,204 @@ export default function IngredientEditForm({
                 <select
                   id="unit"
                   required
-                  value={UNIT_OPTIONS.some((o) => o.value === formData.unit) ? formData.unit : formData.unit}
+                  value={formData.unit}
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                   className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
                 >
                   {UNIT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{td(opt.label)}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="costPerUnit">
-                  {td('Cost Per')} {td(formData.unit)} (IQD) <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="costPerUnit"
-                  type="number"
-                  step="any"
-                  min="0.001"
-                  required
-                  value={formData.costPerUnit}
-                  onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
-                />
-                <p className="text-xs text-slate-500">{td('Must be greater than 0.')}</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="supplier">{td('Supplier (text)')}</Label>
-                <Input
-                  id="supplier"
-                  value={formData.supplier}
-                  onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                  placeholder={td('e.g. Al-Anbar Rice Traders')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="preferredSupplierId">{td('Preferred supplier (for Request stock)')}</Label>
-                <select
-                  id="preferredSupplierId"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={formData.preferredSupplierId}
-                  onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
-                >
-                  <option value="">{td('— None —')}</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {td(s.name)}
+                    <option key={opt.value} value={opt.value}>
+                      {td(opt.label)}
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-500">
-                  {td('Choose a supplier to enable "Request more" on the inventory page.')}
-                </p>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="preferredSupplierId">{td('Preferred supplier (for Request stock)')}</Label>
+              <select
+                id="preferredSupplierId"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.preferredSupplierId}
+                onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
+              >
+                <option value="">{td('— None —')}</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {td(s.name)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">
+                {td('Choose a supplier to enable "Request more" on the inventory page.')}
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <Label className="text-lg font-semibold">{td('Variants (Brands)')}</Label>
+
+              {formData.variants.length === 0 ? (
+                <p className="text-slate-500 italic">{td('No variants yet — add your first one below.')}</p>
+              ) : (
+                <Accordion type="multiple" defaultValue={['variant-0']} className="space-y-3">
+                  {formData.variants.map((variant, index) => {
+                    const calcCost = calculateCostPerUnit(variant)
+                    return (
+                      <AccordionItem
+                        key={index}
+                        value={`variant-${index}`}
+                        className="border border-slate-200 rounded-xl overflow-hidden bg-white"
+                      >
+                        <AccordionTrigger className="px-6 py-4 hover:no-underline items-center">
+                          <div className="flex w-full items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <h3 className="font-medium">
+                                {td('Variant')} #{index + 1}
+                                {variant.brand ? ` - ${variant.brand}` : ''}
+                              </h3>
+                              {calcCost > 0 && (
+                                <span className="text-sm font-semibold text-green-600">
+                                  {calcCost.toFixed(2)} IQD/{formData.unit}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {index > 0 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    moveUp(index)
+                                  }}
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {index < formData.variants.length - 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    moveDown(index)
+                                  }}
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  removeVariant(index)
+                                }}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+
+                        <AccordionContent className="px-6 pb-6 pt-2 border-t">
+                          <div className="space-y-6">
+                            <div className="grid gap-6 md:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label>
+                                  {td('Brand')} <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  value={variant.brand}
+                                  onChange={(e) => updateVariant(index, 'brand', e.target.value)}
+                                  placeholder={td('e.g. Lurpak, Sadia, Fresh Farm')}
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>{td('Supplier (text)')}</Label>
+                                <Input
+                                  value={variant.supplier}
+                                  onChange={(e) => updateVariant(index, 'supplier', e.target.value)}
+                                  placeholder={td('e.g. Al-Anbar Rice Traders')}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>{td('Purchase Format')}</Label>
+                              <Input
+                                value={variant.purchaseFormat}
+                                onChange={(e) => updateVariant(index, 'purchaseFormat', e.target.value)}
+                                placeholder={td('e.g. 1kg bag, 6-pack, 24-piece crate')}
+                              />
+                            </div>
+
+                            <div className="grid gap-6 md:grid-cols-3">
+                              <div className="space-y-2">
+                                <Label>{td('Package Size')}</Label>
+                                <Input
+                                  type="number"
+                                  step="any"
+                                  value={variant.packageQuantity}
+                                  onChange={(e) => updateVariant(index, 'packageQuantity', e.target.value)}
+                                  placeholder="5"
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>{td('Package Unit')}</Label>
+                                <select
+                                  value={variant.packageUnit}
+                                  onChange={(e) => updateVariant(index, 'packageUnit', e.target.value)}
+                                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                >
+                                  {UNIT_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {td(opt.label)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>{td('Bulk Purchase Price (IQD)')}</Label>
+                                <Input
+                                  type="number"
+                                  step="any"
+                                  value={variant.bulkPrice}
+                                  onChange={(e) => updateVariant(index, 'bulkPrice', e.target.value)}
+                                  placeholder="25000"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="bg-slate-50 border border-slate-100 rounded-lg p-4">
+                              <p className="text-sm text-slate-600">
+                                {td('Calculated cost per')}{' '}
+                                <span className={`font-semibold ${calcCost > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                  {calcCost > 0 ? calcCost.toFixed(4) : '—'}
+                                </span>{' '}
+                                IQD / {formData.unit}
+                              </p>
+                            </div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )
+                  })}
+                </Accordion>
+              )}
+
+              <Button type="button" onClick={addVariant} variant="outline" className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                {td('Add Variant')}
+              </Button>
             </div>
 
             <div className="space-y-2">
