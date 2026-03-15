@@ -156,16 +156,15 @@ Rules:
     }))
 
     // 5. Save pending receipt
-    const receipt = await prisma.receipts.create({
+    const receipt = await prisma.receipt.create({
       data: {
         restaurantId: session.user.restaurantId,
         imageUrl,
-        extractedData, // Json type in Prisma
+        extractedData,
         status: 'PENDING',
         supplier: extractedData.supplier ?? null,
         totalAmount: extractedData.totalAmount ?? 0,
         date: extractedData.date ? new Date(extractedData.date) : null,
-        // ingredientId: ingredientId || null,   // if you want to pre-link
       },
     })
 
