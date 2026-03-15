@@ -40,7 +40,6 @@ export default function UploadReceiptModal({
     const selectedFile = e.target.files?.[0]
     if (!selectedFile) return
 
-    // Basic client-side validation
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(selectedFile.type)) {
       setError(td('Only JPEG, PNG, or WebP images are allowed.'))
       return
@@ -53,7 +52,6 @@ export default function UploadReceiptModal({
     setFile(selectedFile)
     setError(null)
 
-    // Create preview
     const reader = new FileReader()
     reader.onload = () => setPreviewUrl(reader.result as string)
     reader.readAsDataURL(selectedFile)
@@ -98,11 +96,10 @@ export default function UploadReceiptModal({
       setFile(null)
       setPreviewUrl(null)
 
-      // Optional: close modal after short delay or let user decide
       setTimeout(() => {
         onOpenChange(false)
         if (onSuccess) onSuccess(data.receiptId)
-        else router.refresh() // or redirect to review page
+        else router.refresh()
       }, 1800)
 
     } catch (err: any) {
@@ -145,7 +142,6 @@ export default function UploadReceiptModal({
             </div>
           ) : (
             <>
-              {/* Drag & drop area */}
               <div
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
