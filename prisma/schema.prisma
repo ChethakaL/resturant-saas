@@ -57,6 +57,7 @@ model Restaurant {
   menuEvents          MenuEvent[]
   branches            Branch[]
   promoRedemptions    PromoRedemption[]
+  receipts            Receipt[]
 
   @@map("restaurants")
 }
@@ -145,14 +146,14 @@ model Ingredient {
   minStockLevel         Float
   supplier              String?
   notes                 String?
-  restaurantId          String
+  restaurantId          String?
   globalIngredientId    String?
   preferredSupplierId   String?                  @map("preferred_supplier_id")
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   deliveries            Delivery[]
   expenseTransactions   ExpenseTransaction[]
-  restaurant            Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurant            Restaurant?               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   globalIngredient      GlobalIngredient?       @relation(fields: [globalIngredientId], references: [id], onDelete: SetNull)
   preferredSupplier     Supplier?               @relation(fields: [preferredSupplierId], references: [id], onDelete: SetNull)
   mealPrepUsages        MealPrepInventoryUsage[]
@@ -205,8 +206,11 @@ model Receipt {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-
   expenses      Expense[]
+  restaurant    Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, status])
+  @@index([date])
 }
 
 enum ReceiptStatus {
@@ -486,8 +490,7 @@ model Expense {
   name         String
   category     String?
   amount       Float
-  currency     String
-  date         DateTime
+  date         DateTime?
   cadence      ExpenseCadence
   startDate    DateTime
   endDate      DateTime?
@@ -522,6 +525,7 @@ model ExpenseTransaction {
   quantity     Float?
   unitCost     Float?
   restaurantId String
+  receiptId    String?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   deliveries   Delivery[]
