@@ -68,11 +68,19 @@
   }
   body {
     @apply bg-slate-50 text-foreground h-full;
-    font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: var(--font-body, var(--font-dm-sans, Inter, sans-serif));
   }
 }
 
 @layer utilities {
+  /* Dynamic font rendering classes */
+  .font-menu-title { font-family: var(--font-menu-title, inherit) !important; }
+  .font-category { font-family: var(--font-category-header, inherit) !important; }
+  .font-item { font-family: var(--font-item-name, inherit) !important; }
+  .font-desc { font-family: var(--font-description, inherit) !important; }
+  .font-price { font-family: var(--font-price, inherit) !important; }
+  .font-body { font-family: var(--font-body, inherit) !important; }
+  .font-display { font-family: var(--font-display, inherit) !important; }
   .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgba(16, 185, 129, 0.6) rgba(148, 163, 184, 0.3);

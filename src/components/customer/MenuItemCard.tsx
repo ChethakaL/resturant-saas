@@ -143,20 +143,20 @@ export function MenuItemCard({
         <div className="flex h-full flex-col p-3 sm:p-4">
           <div>
             <div className="flex flex-col gap-2">
-              <h3 className="min-w-0 text-sm font-semibold leading-tight line-clamp-2 sm:text-base">
+              <h3 className="font-item min-w-0 text-sm font-semibold leading-tight line-clamp-2 sm:text-base">
                 {displayName}
               </h3>
               <div className="flex items-center justify-between gap-2">
-                <p className={`min-w-0 text-[9px] uppercase tracking-wider ${textMuted} truncate`}>
+                <p className={`font-category min-w-0 text-[9px] uppercase tracking-wider ${textMuted} truncate`}>
                   {getLocalizedCategoryName(item.category?.name)}
                 </p>
-                <span className={`shrink-0 text-sm font-semibold ${textPrice}`}>
+                <span className={`font-price shrink-0 text-sm font-semibold ${textPrice}`}>
                   {priceDisplay}
                 </span>
               </div>
             </div>
             {displayDescription && (
-              <p className={`mt-2 text-xs sm:text-sm ${textMuted} line-clamp-2`}>
+              <p className={`font-desc mt-2 text-xs sm:text-sm ${textMuted} line-clamp-2`}>
                 {displayDescription}
               </p>
             )}
@@ -246,14 +246,14 @@ export function MenuItemCard({
         <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
           <div>
             <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
-              <h3 className="text-sm font-semibold leading-tight line-clamp-2 min-w-0">{displayName}</h3>
-              <span className={`text-sm font-semibold flex-shrink-0 ${textPrice}`}>{priceDisplay}</span>
+              <h3 className="font-item text-sm font-semibold leading-tight line-clamp-2 min-w-0">{displayName}</h3>
+              <span className={`font-price text-sm font-semibold flex-shrink-0 ${textPrice}`}>{priceDisplay}</span>
             </div>
-            <p className={`text-[9px] uppercase tracking-wider ${textMuted} mb-1`}>
+            <p className={`font-category text-[9px] uppercase tracking-wider ${textMuted} mb-1`}>
               {getLocalizedCategoryName(item.category?.name)}
             </p>
             {displayDescription && (
-              <p className={`text-[11px] ${textMuted} line-clamp-2 mb-1`}>
+              <p className={`font-desc text-[11px] ${textMuted} line-clamp-2 mb-1`}>
                 {displayDescription}
               </p>
             )}

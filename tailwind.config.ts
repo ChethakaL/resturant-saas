@@ -21,6 +21,11 @@ const config = {
       fontFamily: {
         display: ['var(--font-display)', 'Georgia', 'serif'],
         body: ['var(--font-body)', 'system-ui', 'sans-serif'],
+        'menu-title': ['var(--font-menu-title)', 'var(--font-display)', 'sans-serif'],
+        'category': ['var(--font-category-header)', 'var(--font-display)', 'sans-serif'],
+        'item': ['var(--font-item-name)', 'var(--font-body)', 'sans-serif'],
+        'desc': ['var(--font-description)', 'var(--font-body)', 'sans-serif'],
+        'price': ['var(--font-price)', 'var(--font-body)', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",

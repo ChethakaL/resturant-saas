@@ -27,6 +27,7 @@ import { MoodSelector } from './MoodSelector'
 import { getOrCreateGuestId } from './MenuPersonalizationWrapper'
 import { getAllVariants, getVariant } from '@/lib/experiments'
 import { logMenuEvent } from '@/lib/menu-events'
+import { googleFontUrl, resolveGoogleFont } from '@/lib/google-fonts'
 import type { ItemDisplayHints, BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
 
 interface MenuItem {
@@ -1475,22 +1476,40 @@ export default function SmartMenu({
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
-  // Theme computation: CSS vars for colors and font pair (display + body)
+  // Theme computation: CSS vars for colors and granular fonts
   const themeStyle = useMemo((): React.CSSProperties => {
-    const displayVar =
-      theme?.fontFamily === 'serif'
-        ? 'var(--font-playfair)'
-        : theme?.fontFamily === 'display'
-          ? 'var(--font-cormorant)'
-          : 'var(--font-dm-sans)'
+    const t = theme as any || {}
+    const getFontStr = (val: string | undefined | null, fallback: string) => `"${resolveGoogleFont(val || fallback)}", sans-serif`
+    
     return {
-      '--menu-primary': theme?.primaryColor || '#10b981',
-      '--menu-accent': theme?.accentColor || '#f59e0b',
-      '--menu-chef-pick': (theme as any)?.chefPickColor || '#dc2626',
-      '--menu-border': (theme as any)?.borderColor || '#1e40af',
-      '--font-display': displayVar,
-      '--font-body': 'var(--font-dm-sans)',
+      '--menu-primary': t.primaryColor || '#10b981',
+      '--menu-accent': t.accentColor || '#f59e0b',
+      '--menu-chef-pick': t.chefPickColor || '#dc2626',
+      '--menu-border': t.borderColor || '#1e40af',
+      '--font-body': getFontStr(t.fontFamily, 'DM Sans'),
+      '--font-display': getFontStr(t.fontFamily, 'DM Sans'), // Legacy fallback
+      '--font-menu-title': getFontStr(t.fontMenuTitle, t.fontFamily || 'DM Sans'),
+      '--font-category-header': getFontStr(t.fontCategoryHeader, t.fontFamily || 'DM Sans'),
+      '--font-item-name': getFontStr(t.fontItemName, t.fontFamily || 'DM Sans'),
+      '--font-description': getFontStr(t.fontDescription, t.fontFamily || 'DM Sans'),
+      '--font-price': getFontStr(t.fontPrice, t.fontFamily || 'DM Sans'),
     } as React.CSSProperties
+  }, [theme])
+
+  const activeFontLinks = useMemo(() => {
+    const t = theme as any || {}
+    const families = [
+      t.fontFamily,
+      t.fontMenuTitle,
+      t.fontCategoryHeader,
+      t.fontItemName,
+      t.fontDescription,
+      t.fontPrice
+    ]
+      .map(f => resolveGoogleFont(f || 'DM Sans'))
+      .filter((v, i, a) => a.indexOf(v) === i) // unique
+
+    return families.map(f => googleFontUrl(f))
   }, [theme])
 
   const fontClass = 'font-body'
@@ -1654,6 +1673,10 @@ export default function SmartMenu({
       className={`min-h-screen ${bgClass} ${fontClass}`}
       style={{ ...themeStyle, ...bgImageStyle }}
     >
+      {activeFontLinks.map(url => (
+        <link key={url} href={url} rel="stylesheet" />
+      ))}
+
       {!isLanguageReady ? (
         <div className="min-h-screen flex items-center justify-center">
           <Loader2 className={`h-7 w-7 animate-spin ${isDarkBg ? 'text-white/70' : 'text-slate-500'}`} />
@@ -1689,7 +1712,7 @@ export default function SmartMenu({
                     {(restaurantName || 'M').slice(0, 2).toUpperCase()}
                   </div>
                 )}
-                <span className={`font-display font-semibold text-sm sm:text-base truncate max-w-[120px] sm:max-w-[140px] ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                <span className={`font-menu-title font-semibold text-sm sm:text-base truncate max-w-[120px] sm:max-w-[140px] ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
                   {restaurantName || 'Menu'}
                 </span>
               </div>
@@ -1809,7 +1832,7 @@ export default function SmartMenu({
               accentColor={theme?.accentColor}
               primaryColor={theme?.primaryColor}
               isDarkTheme={isDarkBg}
-              displayFontClassName="font-display"
+              displayFontClassName="font-item"
               displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
               chefRecommendationLabel={currentCopy.chefRecommendationLabel}
               activeTimeRange={topShowcases[0].activeTimeRange}
@@ -1841,7 +1864,7 @@ export default function SmartMenu({
               accentColor={theme?.accentColor}
               primaryColor={theme?.primaryColor}
               isDarkTheme={isDarkBg}
-              displayFontClassName="font-display"
+              displayFontClassName="font-item"
               displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
               chefRecommendationLabel={currentCopy.chefRecommendationLabel}
               activeTimeRange={showcase.activeTimeRange}
@@ -1852,7 +1875,7 @@ export default function SmartMenu({
           {/* "What do you feel like eating today?" section (mood options) */}
           {engineMode !== 'classic' && moods.length > 0 && (
             <section className="w-full space-y-3" aria-label="What do you feel like eating today?">
-              <h2 className={`text-base sm:text-lg font-semibold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+              <h2 className={`font-category text-base sm:text-lg font-semibold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
                 {language === 'ar' || language === 'ar_fusha'
                   ? 'ماذا تشتهي أن تأكل؟'
                   : language === 'ku'
@@ -2114,7 +2137,7 @@ export default function SmartMenu({
                 >
                   {section.category && (
                     <div className="mb-4 mt-6 sm:mt-4 first:mt-0">
-                      <h2 className={`text-xl sm:text-lg font-bold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
+                      <h2 className={`font-category text-xl sm:text-lg font-bold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
                         {getLocalizedCategoryName(section.category.name)}
                       </h2>
                     </div>
@@ -2232,7 +2255,7 @@ export default function SmartMenu({
                           accentColor={theme?.accentColor}
                           primaryColor={theme?.primaryColor}
                           isDarkTheme={isDarkBg}
-                          displayFontClassName="font-display"
+                          displayFontClassName="font-item"
                           displayMode={theme?.menuCarouselStyle === 'static' ? 'static' : 'sliding'}
                           chefRecommendationLabel={currentCopy.chefRecommendationLabel}
                           activeTimeRange={showcase.activeTimeRange}

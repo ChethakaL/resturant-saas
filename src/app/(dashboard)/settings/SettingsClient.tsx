@@ -27,7 +27,9 @@ import {
   Eye,
   MessageCircle,
 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { useI18n, useDynamicTranslate } from '@/lib/i18n'
+import { GoogleFontPicker } from '@/components/settings/GoogleFontPicker'
 
 /* ============================================
  *  FONT OPTIONS (expanded list)
@@ -141,7 +143,12 @@ export default function SettingsClient({
   const [chefPickColor, setChefPickColor] = useState(currentTheme.chefPickColor || '#dc2626')
   const [borderColor, setBorderColor] = useState(currentTheme.borderColor || '#1e40af')
   const [backgroundStyle, setBackgroundStyle] = useState<string>(currentTheme.backgroundStyle || 'dark')
-  const [fontFamily, setFontFamily] = useState<string>(currentTheme.fontFamily || 'sans')
+  const [fontFamily, setFontFamily] = useState<string>(currentTheme.fontFamily || 'DM Sans')
+  const [fontMenuTitle, setFontMenuTitle] = useState<string>((currentTheme as any).fontMenuTitle || 'DM Sans')
+  const [fontCategoryHeader, setFontCategoryHeader] = useState<string>((currentTheme as any).fontCategoryHeader || 'DM Sans')
+  const [fontItemName, setFontItemName] = useState<string>((currentTheme as any).fontItemName || 'DM Sans')
+  const [fontDescription, setFontDescription] = useState<string>((currentTheme as any).fontDescription || 'DM Sans')
+  const [fontPrice, setFontPrice] = useState<string>((currentTheme as any).fontPrice || 'DM Sans')
   const [logoUrl, setLogoUrl] = useState(currentTheme.logoUrl || '')
   const [menuTimezone, setMenuTimezone] = useState(currentTheme.menuTimezone || 'Asia/Baghdad')
   const [themePreset, setThemePreset] = useState<string | null>(currentTheme.themePreset ?? null)
@@ -260,6 +267,7 @@ export default function SettingsClient({
         body: JSON.stringify({
           primaryColor, accentColor, chefPickColor, borderColor,
           backgroundStyle, fontFamily,
+          fontMenuTitle, fontCategoryHeader, fontItemName, fontDescription, fontPrice,
           logoUrl: logoUrl || null,
           menuTimezone: menuTimezone || 'Asia/Baghdad',
           themePreset: themePreset || null,
@@ -436,7 +444,7 @@ export default function SettingsClient({
   /* =========================================
    *  RENDER
    * ========================================= */
-  const selectedFont = FONT_OPTIONS.find((f) => f.value === fontFamily)
+
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -708,37 +716,105 @@ export default function SettingsClient({
           <p className="text-sm text-slate-500">{td('Choose how text appears on your menu.')}</p>
         </CardHeader>
         <CardContent>
-          <div className="relative max-w-md">
-            <button
-              type="button"
-              onClick={() => setFontDropdownOpen(!fontDropdownOpen)}
-              className="w-full flex items-center justify-between rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-left hover:border-slate-300 transition-colors"
-            >
-              <div>
-                <p className="text-sm font-medium text-slate-800">{selectedFont ? td(selectedFont.label) : td('Select font')}</p>
-                <p className="text-xs text-slate-400">{selectedFont?.family} — {selectedFont ? td(selectedFont.desc) : ''}</p>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-500 font-semibold uppercase">{td('Global/Body Font')}</Label>
+                <div className="flex items-center justify-between text-[10px] text-slate-400 -mt-1 mb-1">
+                  <span>Applies to buttons, plain text, and layout</span>
+                </div>
+                <GoogleFontPicker value={fontFamily} onChange={setFontFamily} />
               </div>
-              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${fontDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {fontDropdownOpen && (
-              <div className="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 bg-white shadow-xl max-h-72 overflow-y-auto">
-                {FONT_OPTIONS.map((font) => (
-                  <button
-                    key={font.value}
-                    onClick={() => { setFontFamily(font.value); setFontDropdownOpen(false) }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors ${fontFamily === font.value ? 'bg-slate-50' : ''
-                      }`}
-                  >
-                    <span className="text-xl font-bold text-slate-600 w-8">Aa</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-slate-700">{td(font.label)}</p>
-                      <p className="text-[10px] text-slate-400">{font.family} — {td(font.desc)}</p>
+
+              <div className="border-t border-slate-100 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-500 font-semibold uppercase">{td('Restaurant Title')}</Label>
+                  <GoogleFontPicker value={fontMenuTitle} onChange={setFontMenuTitle} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-500 font-semibold uppercase">{td('Category Headers')}</Label>
+                  <GoogleFontPicker value={fontCategoryHeader} onChange={setFontCategoryHeader} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-500 font-semibold uppercase">{td('Item Names')}</Label>
+                  <GoogleFontPicker value={fontItemName} onChange={setFontItemName} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-slate-500 font-semibold uppercase">{td('Prices')}</Label>
+                  <GoogleFontPicker value={fontPrice} onChange={setFontPrice} />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="text-xs text-slate-500 font-semibold uppercase">{td('Descriptions')}</Label>
+                  <GoogleFontPicker value={fontDescription} onChange={setFontDescription} />
+                </div>
+              </div>
+            </div>
+
+            {/* Live Visual Preview */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 shadow-inner relative flex flex-col items-center justify-center min-h-[400px]">
+              <div className="absolute top-4 left-4">
+                <Badge variant="outline" className="bg-white text-[10px] uppercase font-bold tracking-wider text-slate-500">Live Preview</Badge>
+              </div>
+              
+              <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl overflow-hidden mt-6" style={{ fontFamily: `"${fontFamily}", sans-serif` }}>
+                {/* Simulated Menu Header */}
+                <div className="bg-slate-900 px-6 py-6 text-center text-white">
+                  <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: `"${fontMenuTitle}", sans-serif` }}>
+                    Al-Rafidain Restaurant
+                  </h1>
+                </div>
+
+                {/* Simulated Category */}
+                <div className="px-6 py-4">
+                  <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2 mb-4" style={{ fontFamily: `"${fontCategoryHeader}", sans-serif` }}>
+                    Appetizers & Starters
+                  </h2>
+                  
+                  {/* Simulated Item Form */}
+                  <div className="flex gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h3 className="text-sm font-semibold leading-tight text-slate-900" style={{ fontFamily: `"${fontItemName}", sans-serif` }}>
+                          Beef Tikka Skewers
+                        </h3>
+                        <span className="text-sm font-bold text-emerald-700 shrink-0" style={{ fontFamily: `"${fontPrice}", sans-serif` }}>
+                          24,500
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 line-clamp-2" style={{ fontFamily: `"${fontDescription}", sans-serif` }}>
+                        Marinated overnight in our chef's special blend of traditional Iraqi spices and carefully charcoal grilled to perfection. Served with freshly baked nan.
+                      </p>
+                      <button className="mt-3 bg-[#f59e0b] text-[10px] font-bold text-white px-3 py-1.5 rounded-lg uppercase tracking-wide">
+                        Add to order
+                      </button>
                     </div>
-                    {fontFamily === font.value && <Check className="w-4 h-4 text-slate-900" />}
-                  </button>
-                ))}
+                    <div className="w-20 h-20 shrink-0 bg-slate-100 rounded-xl overflow-hidden">
+                      <img src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=150&q=80" alt="Beef Tikka" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-6 pb-6 pt-2">
+                 {/* Simulated Item Form 2 */}
+                 <div className="flex gap-4 opacity-50">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h3 className="text-sm font-semibold leading-tight text-slate-900" style={{ fontFamily: `"${fontItemName}", sans-serif` }}>
+                          Classic Hummus
+                        </h3>
+                        <span className="text-sm font-bold text-emerald-700 shrink-0" style={{ fontFamily: `"${fontPrice}", sans-serif` }}>
+                          5,000
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 line-clamp-1" style={{ fontFamily: `"${fontDescription}", sans-serif` }}>
+                        Creamy mixed chickpeas with premium tahini.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
               </div>
-            )}
+            </div>
           </div>
         </CardContent>
       </Card>

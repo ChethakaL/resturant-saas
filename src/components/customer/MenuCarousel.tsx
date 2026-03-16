@@ -151,7 +151,7 @@ export function MenuCarousel({
                     <img src={photo} alt={item.name} className="h-full w-full object-cover" />
                   </div>
                   <div className="rounded-b-2xl px-3 py-3 bg-slate-900/90 text-left">
-                    <p className={`font-body text-sm font-semibold text-white line-clamp-2 ${displayFontClassName ?? ''}`}>
+                    <p className={`text-sm font-semibold text-white line-clamp-2 ${displayFontClassName ?? ''}`}>
                       {displayName}
                     </p>
                     {categoryName && (
@@ -159,7 +159,7 @@ export function MenuCarousel({
                         {categoryName}
                       </p>
                     )}
-                    <p className="mt-1 text-sm font-bold" style={{ color: highlightColor }}>
+                    <p className="font-price mt-1 text-sm font-bold" style={{ color: highlightColor }}>
                       {formatMenuPrice(item.price)}
                     </p>
                   </div>
@@ -308,11 +308,11 @@ export function MenuCarousel({
                   <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
                 </div>
                 <div className="rounded-b-2xl px-3 py-3 sm:py-4 bg-transparent">
-                  <p className={`font-body text-base sm:text-lg font-semibold ${textPrimary} line-clamp-2 leading-tight ${displayFontClassName ?? ''}`}>
+                  <p className={`text-base sm:text-lg font-semibold ${textPrimary} line-clamp-2 leading-tight ${displayFontClassName ?? ''}`}>
                     {displayName}
                   </p>
                   <p
-                    className="mt-1 text-sm sm:text-base font-bold"
+                    className="font-price mt-1 text-sm sm:text-base font-bold"
                     style={{ color: highlightColor }}
                   >
                     {formatMenuPrice(item.price)}
