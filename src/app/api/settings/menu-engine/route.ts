@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic'
 
 const menuEngineSchema = z.object({
   mode: z.enum(['classic', 'profit', 'adaptive']),
+  menuLayout: z.enum(['list', 'grid']).optional(),
   moodFlow: z.boolean().optional(),
   bundles: z.boolean().optional(),
   upsells: z.boolean().optional(),
@@ -48,6 +49,9 @@ export async function GET() {
             suggestionKeys.filter((k) => menuEngine[k] !== undefined).map((k) => [k, menuEngine[k]])
           )
     const merged = { ...resolved, ...overrides } as typeof resolved
+    if (menuEngine.menuLayout === 'grid' || menuEngine.menuLayout === 'list') {
+      ;(merged as Record<string, unknown>).menuLayout = menuEngine.menuLayout
+    }
     return NextResponse.json(merged)
   } catch (error) {
     console.error('Error fetching menu engine settings:', error)
@@ -99,6 +103,7 @@ export async function PUT(request: Request) {
         ? {
             ...currentEngine,
             mode,
+            ...(parsed.data.menuLayout !== undefined && { menuLayout: parsed.data.menuLayout }),
             ...(parsed.data.moodFlow !== undefined && { moodFlow: parsed.data.moodFlow }),
             ...(parsed.data.bundles !== undefined && { bundles: parsed.data.bundles }),
             ...(parsed.data.upsells !== undefined && { upsells: parsed.data.upsells }),
@@ -111,6 +116,7 @@ export async function PUT(request: Request) {
         : {
             ...currentEngine,
             mode,
+            ...(parsed.data.menuLayout !== undefined && { menuLayout: parsed.data.menuLayout }),
             ...(parsed.data.moodFlow !== undefined && { moodFlow: parsed.data.moodFlow }),
             ...(parsed.data.bundles !== undefined && { bundles: parsed.data.bundles }),
             ...(parsed.data.upsells !== undefined && { upsells: parsed.data.upsells }),
@@ -132,6 +138,9 @@ export async function PUT(request: Request) {
             suggestionKeys.filter((k) => menuEngine[k] !== undefined).map((k) => [k, menuEngine[k]])
           )
     const resolved = { ...getSettingsForMode(mode), ...overrides } as ReturnType<typeof getSettingsForMode>
+    if (menuEngine.menuLayout === 'grid' || menuEngine.menuLayout === 'list') {
+      ;(resolved as Record<string, unknown>).menuLayout = menuEngine.menuLayout
+    }
     return NextResponse.json(resolved)
   } catch (error) {
     console.error('Error updating menu engine settings:', error)

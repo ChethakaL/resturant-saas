@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User } from 'lucide-react'
+import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
@@ -83,6 +83,7 @@ interface MenuTheme {
   logoUrl?: string | null
   backgroundImageUrl?: string | null
   menuCarouselStyle?: string
+  menuLayout?: 'list' | 'grid'
   /** When false, Kurdish is hidden from the language selector (default true). */
   showKurdishOnMenu?: boolean
   /** When false, Arabic is hidden from the language selector (default true). */
@@ -1502,6 +1503,8 @@ export default function SmartMenu({
         : 'bg-slate-950 text-white'
 
   const isDarkBg = theme?.backgroundStyle !== 'light'
+  const defaultMenuLayout = theme?.menuLayout === 'grid' ? 'grid' : 'list'
+  const [menuLayout, setMenuLayout] = useState<'list' | 'grid'>(defaultMenuLayout)
   const bgImageStyle = theme?.backgroundImageUrl
     ? {
       backgroundImage: `url(${theme.backgroundImageUrl})`,
@@ -1509,6 +1512,10 @@ export default function SmartMenu({
       backgroundPosition: 'center',
     }
     : undefined
+
+  useEffect(() => {
+    setMenuLayout(defaultMenuLayout)
+  }, [defaultMenuLayout])
 
   // Tier order for placement: hero=0, featured=1, standard=2, minimal=3 (DOG last)
   const tierOrder = (tier: ItemDisplayHints['displayTier']) =>
@@ -1900,6 +1907,50 @@ export default function SmartMenu({
             </div>
           </div>
 
+          <div className="flex justify-end">
+            <div
+              className={`inline-flex rounded-2xl border p-1 ${
+                isDarkBg ? 'border-white/15 bg-white/5 shadow-[0_10px_30px_rgba(0,0,0,0.22)]' : 'border-slate-200 bg-white shadow-sm'
+              }`}
+              aria-label="Menu layout"
+            >
+              <button
+                type="button"
+                onClick={() => setMenuLayout('list')}
+                className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition sm:px-4 ${
+                  menuLayout === 'list'
+                    ? isDarkBg
+                      ? 'bg-white/12 text-white'
+                      : 'bg-slate-900 text-white'
+                    : isDarkBg
+                      ? 'text-white/70 hover:bg-white/8'
+                      : 'text-slate-600 hover:bg-slate-100'
+                }`}
+                aria-pressed={menuLayout === 'list'}
+              >
+                <Rows3 className="h-4 w-4" />
+                <span>List</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMenuLayout('grid')}
+                className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition sm:px-4 ${
+                  menuLayout === 'grid'
+                    ? isDarkBg
+                      ? 'bg-white/12 text-white'
+                      : 'bg-slate-900 text-white'
+                    : isDarkBg
+                      ? 'text-white/70 hover:bg-white/8'
+                      : 'text-slate-600 hover:bg-slate-100'
+                }`}
+                aria-pressed={menuLayout === 'grid'}
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span>Grid</span>
+              </button>
+            </div>
+          </div>
+
           <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
             <DialogContent className="max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
               <DialogHeader>
@@ -2069,7 +2120,7 @@ export default function SmartMenu({
                     </div>
                   )}
 
-                  <div className="grid gap-3">
+                  <div className={menuLayout === 'grid' ? 'grid grid-cols-2 gap-3 xl:grid-cols-3' : 'grid gap-3'}>
                     {(() => {
                       const visibleItems =
                         engineMode === 'classic'
@@ -2133,6 +2184,7 @@ export default function SmartMenu({
                             isDarkTheme={isDarkBg}
                             displayPriceOverride={formatMenuPriceWithVariant(item.price, priceVariant)}
                             forceHideImage={hideImages}
+                            layout={menuLayout}
                           />
                         )
                       })

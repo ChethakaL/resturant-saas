@@ -3,6 +3,18 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { canonicalise, isAllowedUnit, computeConversion } from '@/lib/unit-converter'
+import { DEFAULT_INVENTORY_CATEGORY, isInventoryCategory } from '@/lib/inventory-categories'
+
+const getPrimaryVariantCost = (variants: any[] | undefined, fallback: number) => {
+  if (Array.isArray(variants) && variants.length > 0) {
+    const firstVariantCost = Number(variants[0]?.costPerUnit)
+    if (Number.isFinite(firstVariantCost)) {
+      return firstVariantCost
+    }
+  }
+
+  return fallback
+}
 
 export async function POST(request: Request) {
   try {
@@ -29,11 +41,16 @@ export async function POST(request: Request) {
     const ingredient = await prisma.ingredient.create({
       data: {
         name: data.name,
+        category: isInventoryCategory(data.category) ? data.category : DEFAULT_INVENTORY_CATEGORY,
         unit: resolvedUnit,
         stockQuantity: 999999,
-        costPerUnit: resolvedCostPerUnit,
+        costPerUnit: getPrimaryVariantCost(data.variants, resolvedCostPerUnit),
         minStockLevel: 0,
         notes: data.notes,
+        preferredSupplierId:
+          data.preferredSupplierId === '' || data.preferredSupplierId == null
+            ? null
+            : data.preferredSupplierId,
         restaurantId: session.user.restaurantId,
       },
     })
@@ -80,10 +97,15 @@ export async function GET(request: Request) {
       include: {
         variants: true,
       },
-      orderBy: { name: 'asc' },
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
     })
 
-    return NextResponse.json(ingredients)
+    return NextResponse.json(
+      ingredients.map((ingredient) => ({
+        ...ingredient,
+        costPerUnit: getPrimaryVariantCost(ingredient.variants, ingredient.costPerUnit),
+      }))
+    )
   } catch (error) {
     console.error('Error fetching ingredients:', error)
     return NextResponse.json(

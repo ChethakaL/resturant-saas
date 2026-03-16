@@ -14,6 +14,7 @@ import type { CarouselMenuItem } from '@/lib/carousel-ai'
 import { generateMenuDescription } from '@/lib/menu-description-ai'
 import { getCachedBadgePicks } from '@/lib/menu-badge-ai'
 import { getCurrentTimeSlot as getSlot, getTimeSlotForDate as getSlotForDate, parseSlotTimes, buildSlotRangeLabels } from '@/lib/time-slots'
+import { getPublicMediaAssetUrl } from '@/lib/media-asset-urls'
 
 // Revalidate on every request for DB data; AI carousel suggestions cached 5 min to avoid slow Gemini on every load
 export const revalidate = 0
@@ -158,6 +159,7 @@ async function getMenuData(slug: string) {
     const { ingredients, addOns: menuItemAddOns, ...rest } = item
     return {
       ...rest,
+      imageUrl: item.mediaAssetId ? getPublicMediaAssetUrl(item.mediaAssetId) : item.imageUrl,
       _featuredScore,
       chefPickOrder: chefPickOrderById.get(item.id) ?? null,
       updatedAt: item.updatedAt.toISOString(),
@@ -547,6 +549,7 @@ async function getMenuData(slug: string) {
   const themeFromSettings = (settings.theme as Record<string, unknown>) || {}
   const theme = {
     ...themeFromSettings,
+    menuLayout: stored.menuLayout === 'grid' ? 'grid' : 'list',
     themePreset: settings.themePreset ?? null,
     backgroundImageUrl: settings.backgroundImageUrl ?? null,
   }

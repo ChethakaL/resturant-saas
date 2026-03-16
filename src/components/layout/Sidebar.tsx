@@ -15,6 +15,8 @@ import {
   Zap,
   CreditCard,
   Dna,
+  BarChart3,
+  Images,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -34,9 +36,11 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
   const navigation = [
     { name: t.sidebar_dashboard, href: '/dashboard', icon: Home, disabled: false },
     { name: t.sidebar_add_menu_items, href: '/menu', icon: UtensilsCrossed, disabled: false },
+    { name: 'Media Library', href: '/media-library', icon: Images, disabled: false },
     { name: t.sidebar_optimize_menu, href: '/menu?tab=optimization', icon: Zap, disabled: false },
     { name: t.sidebar_restaurant_dna, href: '/settings', icon: Dna, disabled: false },
     { name: t.sidebar_inventory, href: '/inventory', icon: Package, disabled: false },
+    { name: t.sidebar_sales_reports, href: '/profit-loss', icon: BarChart3, disabled: false },
     { name: t.sidebar_sales_pos, href: '/orders/new', icon: ShoppingCart, disabled: true, comingSoon: true },
     { name: t.sidebar_hr, href: '/hr/employees', icon: Users, disabled: true, comingSoon: true },
     { name: t.sidebar_shifts, href: '/hr/shifts', icon: Clock, disabled: true, comingSoon: true },

@@ -121,6 +121,7 @@ export async function POST(request: Request) {
           description: data.description,
           price: data.price,
           imageUrl: data.imageUrl,
+          mediaAssetId: data.mediaAssetId || null,
           available: data.available,
           status,
           costingStatus,

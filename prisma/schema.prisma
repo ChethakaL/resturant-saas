@@ -58,6 +58,7 @@ model Restaurant {
   branches            Branch[]
   promoRedemptions    PromoRedemption[]
   receipts            Receipt[]
+  mediaAssets         MediaAsset[]
 
   @@map("restaurants")
 }
@@ -140,6 +141,7 @@ model User {
 model Ingredient {
   id                    String                   @id @default(cuid())
   name                  String
+  category              String                   @default("OTHER")
   unit                  String
   stockQuantity         Float
   costPerUnit           Float
@@ -282,6 +284,7 @@ model MenuItem {
   description     String?
   price           Float
   imageUrl        String?
+  mediaAssetId    String?               @map("media_asset_id")
   available       Boolean               @default(true)
   status          MenuItemStatus        @default(DRAFT)
   costingStatus   CostingStatus         @default(INCOMPLETE)
@@ -304,6 +307,7 @@ model MenuItem {
   translations    MenuItemTranslation[]
   category        Category              @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   restaurant      Restaurant            @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  mediaAsset      MediaAsset?           @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
   preppedStock    PreppedDishStock?
   saleItems       SaleItem[]
   chefPicks       ChefPick[]
@@ -313,9 +317,30 @@ model MenuItem {
 
   @@index([restaurantId])
   @@index([categoryId])
+  @@index([mediaAssetId])
   @@index([available])
   @@index([popularityScore])
   @@map("menu_items")
+}
+
+model MediaAsset {
+  id           String      @id @default(cuid())
+  restaurantId String      @map("restaurant_id")
+  url          String
+  storageKey   String      @map("storage_key")
+  mimeType     String?     @map("mime_type")
+  type         String      @default("OTHER")
+  itemNameTag  String?     @map("item_name_tag")
+  categoryTag  String?     @map("category_tag")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItems    MenuItem[]
+
+  @@index([restaurantId])
+  @@index([type])
+  @@index([itemNameTag])
+  @@map("media_assets")
 }
 
 model MenuItemPairing {
@@ -823,10 +848,13 @@ model Supplier {
   name            String
   email           String
   phone           String?
+  whatsapp        String?
   address         String?
   lat             Float?
   lng             Float?
+  leadTimeDays    Int?                   @map("lead_time_days")
   deliveryAreas   String[]               @default([]) @map("delivery_areas")
+  deliveryDays    String[]               @default([]) @map("delivery_days")
   status          SupplierAccountStatus  @default(PENDING)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt

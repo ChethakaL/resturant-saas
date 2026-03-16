@@ -3,6 +3,21 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import MenuForm from '../MenuForm'
 
+const withEffectiveIngredientFields = <
+  T extends {
+    costPerUnit: number
+    supplier?: string | null
+    variants?: { costPerUnit: number; supplier?: string | null }[]
+  }
+>(
+  ingredients: T[]
+) =>
+  ingredients.map((ingredient) => ({
+    ...ingredient,
+    costPerUnit: ingredient.variants?.[0]?.costPerUnit ?? ingredient.costPerUnit,
+    supplier: ingredient.variants?.[0]?.supplier ?? ingredient.supplier ?? null,
+  }))
+
 export default async function NewMenuItemPage() {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
@@ -28,6 +43,16 @@ export default async function NewMenuItemPage() {
         minStockLevel: true,
         notes: true,
         preferredSupplierId: true,
+        variants: {
+          select: {
+            costPerUnit: true,
+            supplier: true,
+          },
+          orderBy: {
+            id: 'asc',
+          },
+          take: 1,
+        },
       },
     }),
     prisma.addOn.findMany({
@@ -44,7 +69,7 @@ export default async function NewMenuItemPage() {
   return (
     <MenuForm
       categories={categories as any}
-      ingredients={ingredients as any}
+      ingredients={withEffectiveIngredientFields(ingredients as any)}
       addOns={addOns as any}
       mode="create"
       defaultBackgroundPrompt={user?.defaultBackgroundPrompt ?? ''}

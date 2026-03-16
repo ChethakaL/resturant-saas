@@ -51,6 +51,7 @@ export interface MoodOption {
 
 export interface MenuEngineSettings {
   mode: EngineMode
+  menuLayout?: 'list' | 'grid'
   moodFlow: boolean
   bundles: boolean
   upsells: boolean

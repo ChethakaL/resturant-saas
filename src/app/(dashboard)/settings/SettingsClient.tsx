@@ -1241,10 +1241,22 @@ export default function SettingsClient({
                 <p className="text-xs opacity-60">{td('Menu Preview')}</p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <div className="h-2 w-8 rounded-full" style={{ backgroundColor: primaryColor }} />
-              <div className="h-2 w-4 rounded-full" style={{ backgroundColor: accentColor }} />
-              <div className="h-2 w-4 rounded-full opacity-30" style={{ backgroundColor: accentColor }} />
+            <div className="mt-4 space-y-3">
+              {[1, 2].map((card) => (
+                <div
+                  key={card}
+                  className={`flex items-center gap-3 rounded-xl border p-3 ${backgroundStyle === 'light' ? 'border-slate-200 bg-white text-slate-900' : 'border-white/10 bg-white/10 text-white'}`}
+                >
+                  <div className="h-16 w-16 rounded-xl" style={{ backgroundColor: accentColor }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{card === 1 ? td('Signature Dish') : td('Chef Special')}</p>
+                    <p className={`text-xs ${backgroundStyle === 'light' ? 'text-slate-500' : 'text-white/70'}`}>
+                      {td('Restaurant DNA controls the overall look and feel of the menu.')}
+                    </p>
+                  </div>
+                  <span className="text-sm font-bold" style={{ color: accentColor }}>{card === 1 ? td('IQD 12,500') : td('IQD 9,000')}</span>
+                </div>
+              ))}
             </div>
           </div>
         </CardContent>

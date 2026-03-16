@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard, Mic, MicOff, Send } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Loader2, ChefHat, Check, AlertCircle, ImagePlus, Search, ChevronLeft, ChevronRight, ChevronDown, BotMessageSquare, FileText, MoreHorizontal, LayoutDashboard, Mic, MicOff, Send, Images } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatCurrency, formatPercentage, cn } from '@/lib/utils'
@@ -36,6 +36,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { buildTranslationSeed, TranslationSeedPayload } from '@/lib/menu-translation-seed'
 import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
 import { useDynamicTranslate } from '@/lib/i18n'
+import { getPrivateMediaAssetPreviewUrl, getPublicMediaAssetUrl } from '@/lib/media-asset-urls'
 import {
   ImageOrientation,
   ImageSizePreset,
@@ -145,6 +146,19 @@ interface AssistantMessage {
   role: 'assistant' | 'user'
   text: string
 }
+
+interface MediaAsset {
+  id: string
+  url: string
+  previewUrl?: string
+  type: string
+  itemNameTag: string | null
+  categoryTag: string | null
+  menuItems?: { id: string; name: string }[]
+}
+
+const MEDIA_LIBRARY_TYPE_OPTIONS = ['ALL', 'FOOD', 'DRINK', 'AMBIANCE', 'OTHER'] as const
+type MediaLibraryTypeFilter = typeof MEDIA_LIBRARY_TYPE_OPTIONS[number]
 
 type SmartChefReplyLanguage = 'en' | 'ar' | 'ku'
 
@@ -310,6 +324,11 @@ export default function MenuForm({
   const [imageSizePreset, setImageSizePreset] = useState<ImageSizePreset>('medium')
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
+  const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false)
+  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([])
+  const [loadingMediaAssets, setLoadingMediaAssets] = useState(false)
+  const [mediaSearch, setMediaSearch] = useState('')
+  const [mediaTypeFilter, setMediaTypeFilter] = useState<MediaLibraryTypeFilter>('ALL')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const translationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -381,6 +400,7 @@ export default function MenuForm({
     categoryId: menuItem?.categoryId || '',
     available: menuItem?.available ?? true,
     imageUrl: menuItem?.imageUrl || '',
+    mediaAssetId: (menuItem as any)?.mediaAssetId || '',
     calories: menuItem?.calories?.toString() || '',
     protein: (menuItem as any)?.protein?.toString() || '',
     carbs: (menuItem as any)?.carbs?.toString() || '',
@@ -388,6 +408,9 @@ export default function MenuForm({
   }
 
   const [formData, setFormData] = useState(initialFormData)
+  const selectedMenuImagePreviewUrl = formData.mediaAssetId
+    ? getPrivateMediaAssetPreviewUrl(formData.mediaAssetId)
+    : formData.imageUrl
   const [smartChefCategories, setSmartChefCategories] = useState<Category[]>([])
   const allCategories = useMemo(() => {
     const existingIds = new Set(categories.map((category) => category.id))
@@ -502,6 +525,49 @@ export default function MenuForm({
 
   const translationPayload = translationSeed?.payload
   const translationSignature = translationSeed?.signature ?? ''
+
+  const loadMediaAssets = async (
+    searchValue?: string,
+    typeValue: MediaLibraryTypeFilter = mediaTypeFilter
+  ) => {
+    setLoadingMediaAssets(true)
+    try {
+      const params = new URLSearchParams()
+      if (typeValue !== 'ALL') params.set('type', typeValue)
+      const q = (searchValue ?? mediaSearch).trim()
+      if (q) params.set('q', q)
+      const res = await fetch(`/api/media-assets?${params.toString()}`)
+      const data = await res.json()
+      setMediaAssets(Array.isArray(data) ? data : [])
+    } catch {
+      setMediaAssets([])
+    } finally {
+      setLoadingMediaAssets(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!mediaLibraryOpen) return
+    void loadMediaAssets()
+  }, [mediaLibraryOpen, mediaTypeFilter])
+
+  useEffect(() => {
+    const name = formData.name.trim()
+    if (!name || formData.imageUrl?.trim()) return
+    const timeout = setTimeout(() => {
+      void loadMediaAssets(name)
+    }, 250)
+    return () => clearTimeout(timeout)
+  }, [formData.name])
+
+  const suggestedMediaAsset = useMemo(() => {
+    const normalizedName = normalizeIngredientName(formData.name || '')
+    if (!normalizedName || formData.imageUrl?.trim()) return null
+    return mediaAssets.find((asset) => {
+      const tag = normalizeIngredientName(asset.itemNameTag || '')
+      return tag && ingredientNamesStronglyMatch(normalizedName, tag)
+    }) || null
+  }, [formData.imageUrl, formData.name, mediaAssets])
 
   const updateTranslationField = (
     language: LanguageCode,
@@ -692,7 +758,7 @@ export default function MenuForm({
       quantity: ing.quantity,
       pieceCount: (ing as any).pieceCount || null,
       unit: (ing as any).unit ?? null,
-      supplierName: null,
+      supplierName: (ing as any).ingredient?.supplier ?? null,
       supplierProductId: (ing as any).supplierProductId ?? null,
       unitCostCached: (ing as any).unitCostCached ?? null,
       currency: (ing as any).currency ?? null,
@@ -1106,6 +1172,7 @@ export default function MenuForm({
     if (!selected) {
       return {
         ...line,
+        supplierName: line.supplierName ?? (ingredient as any).supplier ?? null,
         supplierProductId: null,
         unitCostCached: null,
         currency: null,
@@ -1114,6 +1181,7 @@ export default function MenuForm({
     }
     return {
       ...line,
+      supplierName: line.supplierName?.trim() ? line.supplierName : selected.supplierName,
       supplierProductId: selected.id,
       unitCostCached: selected.unitCost,
       currency: selected.currency,
@@ -2542,7 +2610,10 @@ export default function MenuForm({
           price: parseFloat(formData.price),
           categoryId: formData.categoryId,
           available: formData.available,
-          imageUrl: formData.imageUrl || null,
+          imageUrl: formData.mediaAssetId
+            ? getPublicMediaAssetUrl(formData.mediaAssetId)
+            : formData.imageUrl || null,
+          mediaAssetId: formData.mediaAssetId || null,
           status: saveStatus,
           calories: formData.calories ? parseInt(formData.calories) : null,
           protein: formData.protein ? parseInt(formData.protein) : null,
@@ -3212,13 +3283,24 @@ export default function MenuForm({
                         </p>
                       )}
                       <div className="space-y-2">
-                        <Label htmlFor="imageUrl">{t.menu_form_image_url}</Label>
+                        <div className="flex items-center justify-between gap-3">
+                          <Label htmlFor="imageUrl">{t.menu_form_image_url}</Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setMediaLibraryOpen(true)}
+                          >
+                            <Images className="mr-2 h-4 w-4" />
+                            Choose from Library
+                          </Button>
+                        </div>
                         <div className="flex gap-2">
                           <Input
                             id="imageUrl"
                             value={formData.imageUrl}
                             onChange={(e) => {
-                              setFormData({ ...formData, imageUrl: e.target.value })
+                              setFormData({ ...formData, imageUrl: e.target.value, mediaAssetId: '' })
                               setNextStepHighlight(null)
                             }}
                             placeholder="https://example.com/image.jpg"
@@ -3239,10 +3321,34 @@ export default function MenuForm({
                             )}
                           </Button>
                         </div>
-                        {formData.imageUrl && (
+                        {suggestedMediaAsset && (
+                          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="font-medium">Suggested from your library</p>
+                                <p className="text-xs text-emerald-700">
+                                  Matched to {suggestedMediaAsset.itemNameTag || 'an existing media tag'}.
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setFormData((prev) => ({
+                                  ...prev,
+                                  imageUrl: getPublicMediaAssetUrl(suggestedMediaAsset.id),
+                                  mediaAssetId: suggestedMediaAsset.id,
+                                }))}
+                              >
+                                Use photo
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        {selectedMenuImagePreviewUrl && (
                           <div className="mt-2 border rounded-md p-2">
                             <img
-                              src={formData.imageUrl}
+                              src={selectedMenuImagePreviewUrl}
                               alt="Menu item preview"
                               className="w-full h-48 object-cover rounded"
                               onError={(e) => {
@@ -4808,6 +4914,74 @@ export default function MenuForm({
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={mediaLibraryOpen} onOpenChange={setMediaLibraryOpen}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Choose from Library</DialogTitle>
+            <DialogDescription>
+              Reuse photos from your restaurant media library and filter by media type when needed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex gap-3">
+              <Input
+                value={mediaSearch}
+                onChange={(e) => setMediaSearch(e.target.value)}
+                placeholder="Search by item or category tag"
+              />
+              <select
+                className="h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={mediaTypeFilter}
+                onChange={(e) => setMediaTypeFilter(e.target.value as MediaLibraryTypeFilter)}
+              >
+                {MEDIA_LIBRARY_TYPE_OPTIONS.map((type) => (
+                  <option key={type} value={type}>
+                    {type === 'ALL' ? 'All Types' : type}
+                  </option>
+                ))}
+              </select>
+              <Button type="button" variant="outline" onClick={() => void loadMediaAssets(mediaSearch)} disabled={loadingMediaAssets}>
+                {loadingMediaAssets ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              </Button>
+            </div>
+            {loadingMediaAssets ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <div className="grid max-h-[60vh] gap-4 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
+                {mediaAssets.map((asset) => (
+                  <button
+                    key={asset.id}
+                    type="button"
+                    onClick={() => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        imageUrl: getPublicMediaAssetUrl(asset.id),
+                        mediaAssetId: asset.id,
+                      }))
+                      setMediaLibraryOpen(false)
+                    }}
+                    className="overflow-hidden rounded-xl border border-slate-200 text-left transition hover:border-emerald-400 hover:shadow-md"
+                  >
+                    <img src={asset.previewUrl || asset.url} alt={asset.itemNameTag || 'Library photo'} className="h-48 w-full object-cover" />
+                    <div className="space-y-1 p-3">
+                      <p className="font-medium text-slate-900">{asset.itemNameTag || 'Untitled photo'}</p>
+                      <p className="text-xs text-slate-500">
+                        {asset.type}{asset.categoryTag ? ` • ${asset.categoryTag}` : ''}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {asset.menuItems?.length ? `Linked to: ${asset.menuItems.map((item) => item.name).join(', ')}` : 'Not linked yet'}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

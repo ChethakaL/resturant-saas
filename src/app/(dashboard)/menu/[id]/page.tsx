@@ -4,6 +4,21 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import MenuForm from '../MenuForm'
 
+const withEffectiveIngredientFields = <
+  T extends {
+    costPerUnit: number
+    supplier?: string | null
+    variants?: { costPerUnit: number; supplier?: string | null }[]
+  }
+>(
+  ingredients: T[]
+) =>
+  ingredients.map((ingredient) => ({
+    ...ingredient,
+    costPerUnit: ingredient.variants?.[0]?.costPerUnit ?? ingredient.costPerUnit,
+    supplier: ingredient.variants?.[0]?.supplier ?? ingredient.supplier ?? null,
+  }))
+
 async function getMenuItemData(id: string, restaurantId: string) {
   const menuItem = await prisma.menuItem.findFirst({
     where: {
@@ -37,6 +52,18 @@ async function getMenuItemData(id: string, restaurantId: string) {
     prisma.ingredient.findMany({
       where: { restaurantId },
       orderBy: { name: 'asc' },
+      include: {
+        variants: {
+          select: {
+            costPerUnit: true,
+            supplier: true,
+          },
+          orderBy: {
+            id: 'asc',
+          },
+          take: 1,
+        },
+      },
     }),
     prisma.addOn.findMany({
       where: { restaurantId, available: true },
@@ -73,7 +100,7 @@ export default async function MenuItemEditPage({
   return (
     <MenuForm
       categories={data.categories}
-      ingredients={data.ingredients}
+      ingredients={withEffectiveIngredientFields(data.ingredients as any)}
       addOns={data.addOns}
       menuItem={data.menuItem}
       mode="edit"

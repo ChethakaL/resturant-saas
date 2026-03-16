@@ -136,6 +136,7 @@ export async function PATCH(
           description: data.description,
           price: data.price,
           imageUrl: data.imageUrl,
+          mediaAssetId: data.mediaAssetId || null,
           available: data.available,
           ...(data.status && { status: data.status }),
           costingStatus,

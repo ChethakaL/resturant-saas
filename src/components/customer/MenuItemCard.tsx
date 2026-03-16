@@ -50,6 +50,7 @@ interface MenuItemCardProps {
   displayPriceOverride?: string
   /** When true, hide image (e.g. from photo_visibility experiment). */
   forceHideImage?: boolean
+  layout?: 'list' | 'grid'
 }
 
 const defaultPlaceholderImage =
@@ -97,6 +98,7 @@ export function MenuItemCard({
   isDarkTheme = false,
   displayPriceOverride,
   forceHideImage = false,
+  layout = 'list',
 }: MenuItemCardProps) {
   const tier = hints?.displayTier ?? 'standard'
   const showImage = !forceHideImage && (hints?.showImage ?? true)
@@ -113,6 +115,108 @@ export function MenuItemCard({
   const textMuted = isDarkTheme ? 'text-white/70' : 'text-slate-500'
   const textPrice = isDarkTheme ? 'text-[var(--menu-accent,#f59e0b)]' : 'text-emerald-700'
   const btnLink = isDarkTheme ? 'text-[var(--menu-accent,#f59e0b)] hover:text-white/90' : 'text-emerald-700 hover:text-emerald-800'
+  const isGrid = layout === 'grid'
+
+  if (isGrid) {
+    return (
+      <Card
+        className={`overflow-hidden backdrop-blur hover:shadow-lg transition-all border ${cardBg} ${textMain} h-full`}
+        onClick={onDetail}
+      >
+        {showImage && !isMinimal && (
+          <div className="relative aspect-[4/3] w-full overflow-hidden">
+            <img
+              src={item.imageUrl || defaultPlaceholderImage}
+              alt={item.name}
+              className="h-full w-full object-cover"
+            />
+            {badgeLabel && (
+              <span
+                className="absolute left-3 top-3 text-white text-[9px] font-bold px-2 py-0.5 rounded-md shadow-sm"
+                style={{ backgroundColor: 'var(--menu-chef-pick, #dc2626)' }}
+              >
+                {badgeLabel}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="flex h-full flex-col p-3 sm:p-4">
+          <div>
+            <div className="flex flex-col gap-2">
+              <h3 className="min-w-0 text-sm font-semibold leading-tight line-clamp-2 sm:text-base">
+                {displayName}
+              </h3>
+              <div className="flex items-center justify-between gap-2">
+                <p className={`min-w-0 text-[9px] uppercase tracking-wider ${textMuted} truncate`}>
+                  {getLocalizedCategoryName(item.category?.name)}
+                </p>
+                <span className={`shrink-0 text-sm font-semibold ${textPrice}`}>
+                  {priceDisplay}
+                </span>
+              </div>
+            </div>
+            {displayDescription && (
+              <p className={`mt-2 text-xs sm:text-sm ${textMuted} line-clamp-2`}>
+                {displayDescription}
+              </p>
+            )}
+            {isLimitedToday && (
+              <p className={`mt-2 text-[10px] flex items-center gap-1 ${isDarkTheme ? 'text-white/60' : 'text-slate-500'}`}>
+                <span>ⓘ</span> {limitedTodayLabel}
+              </p>
+            )}
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+              {macroSegments.length > 0 && (
+                <span className={`text-[9px] ${textMuted}`}>{macroSegments.join(' · ')}</span>
+              )}
+              {item.tags && item.tags.length > 0 && (
+                <>
+                  {macroSegments.length > 0 && <span className={textMuted}>|</span>}
+                  {item.tags.slice(0, 2).map((tag) => {
+                    const tagLabel = getLocalizedTagLabel(tag)
+                    return (
+                      <span
+                        key={tag}
+                        className={`inline-flex items-center gap-0.5 text-[9px] ${isDarkTheme ? 'bg-white/10 text-white/80' : 'bg-slate-100 text-slate-600'} px-1.5 py-0.5 rounded-full`}
+                      >
+                        {getTagIcon(tag)}
+                        {tagLabel}
+                      </span>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onPairings() }}
+              disabled={loadingPairings && isSelectedForPairing}
+              className={`flex items-center gap-1 text-[9px] sm:text-[10px] font-medium ${btnLink} transition-colors`}
+            >
+              {loadingPairings && isSelectedForPairing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              <span>{pairingsLabel}</span>
+            </button>
+            <span className={textMuted}>&bull;</span>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onDetail() }} className={`text-[9px] sm:text-[10px] font-medium ${textMuted} hover:underline`}>
+              {moreInfoLabel}
+            </button>
+            {showOrderAction && onAddToOrder ? (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onAddToOrder() }}
+                className="ml-auto rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 transition-opacity sm:px-3"
+                style={{ backgroundColor: 'var(--menu-accent, #f59e0b)' }}
+              >
+                {addToOrderLabel}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </Card>
+    )
+  }
 
   return (
     <Card

@@ -12,10 +12,13 @@ type SupplierProfile = {
   name: string
   email: string
   phone: string | null
+  whatsapp: string | null
   address: string | null
   lat: number | null
   lng: number | null
+  leadTimeDays: number | null
   deliveryAreas: string[]
+  deliveryDays: string[]
   status: 'PENDING' | 'APPROVED' | 'SUSPENDED'
 }
 
@@ -33,8 +36,11 @@ export default function SupplierProfilePage() {
 
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  const [whatsapp, setWhatsapp] = useState('')
   const [address, setAddress] = useState('')
+  const [leadTimeDays, setLeadTimeDays] = useState('')
   const [deliveryAreas, setDeliveryAreas] = useState('')
+  const [deliveryDays, setDeliveryDays] = useState('')
 
   useEffect(() => {
     fetch('/api/supplier/profile')
@@ -46,8 +52,11 @@ export default function SupplierProfilePage() {
         setProfile(data)
         setName(data.name)
         setPhone(data.phone ?? '')
+        setWhatsapp(data.whatsapp ?? '')
         setAddress(data.address ?? '')
+        setLeadTimeDays(data.leadTimeDays?.toString() ?? '')
         setDeliveryAreas(data.deliveryAreas.join(', '))
+        setDeliveryDays(data.deliveryDays.join(', '))
       })
       .catch(() => {
         setMessage({ type: 'error', text: 'Failed to load profile.' })
@@ -72,8 +81,11 @@ export default function SupplierProfilePage() {
         body: JSON.stringify({
           name,
           phone: phone || null,
+          whatsapp: whatsapp || null,
           address: address || null,
+          leadTimeDays: leadTimeDays || null,
           deliveryAreas: areas,
+          deliveryDays: deliveryDays.split(',').map((a) => a.trim()).filter(Boolean),
         }),
       })
 
@@ -83,8 +95,11 @@ export default function SupplierProfilePage() {
       setProfile(updated)
       setName(updated.name)
       setPhone(updated.phone ?? '')
+      setWhatsapp(updated.whatsapp ?? '')
       setAddress(updated.address ?? '')
+      setLeadTimeDays(updated.leadTimeDays?.toString() ?? '')
       setDeliveryAreas(updated.deliveryAreas.join(', '))
+      setDeliveryDays(updated.deliveryDays.join(', '))
       setMessage({ type: 'success', text: 'Profile updated successfully.' })
     } catch {
       setMessage({ type: 'error', text: 'Failed to save changes. Please try again.' })
@@ -160,12 +175,34 @@ export default function SupplierProfilePage() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="whatsapp">WhatsApp</Label>
+              <Input
+                id="whatsapp"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder="+964 770 000 0000"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="address">Address</Label>
               <Input
                 id="address"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="Baghdad, Iraq"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="leadTimeDays">Lead Time (days)</Label>
+              <Input
+                id="leadTimeDays"
+                type="number"
+                min="0"
+                value={leadTimeDays}
+                onChange={(e) => setLeadTimeDays(e.target.value)}
+                placeholder="2"
               />
             </div>
 
@@ -178,6 +215,17 @@ export default function SupplierProfilePage() {
                 placeholder="Baghdad, Erbil, Basra"
               />
               <p className="text-xs text-slate-400">Comma-separated list of areas you deliver to.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="deliveryDays">Delivery Days</Label>
+              <Input
+                id="deliveryDays"
+                value={deliveryDays}
+                onChange={(e) => setDeliveryDays(e.target.value)}
+                placeholder="Sunday, Tuesday, Thursday"
+              />
+              <p className="text-xs text-slate-400">Comma-separated list of delivery days.</p>
             </div>
 
             {message && (

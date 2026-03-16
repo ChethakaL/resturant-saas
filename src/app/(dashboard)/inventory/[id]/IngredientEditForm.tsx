@@ -10,9 +10,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { ArrowLeft, Save, Trash2, Plus, ArrowUp, ArrowDown, Upload } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatCurrency } from '@/lib/utils'
+import { ArrowLeft, Save, Trash2, Plus, ArrowUp, ArrowDown, Upload, ExternalLink, FileText, Building2 } from 'lucide-react'
 import Link from 'next/link'
 import UploadReceiptModal from '../UploadReceiptModal'
+import { SupplierDirectoryModal, type SupplierDirectoryEntry } from '../SupplierDirectoryModal'
+import { DEFAULT_INVENTORY_CATEGORY, INVENTORY_CATEGORY_OPTIONS } from '@/lib/inventory-categories'
 
 const UNIT_OPTIONS = [
   { value: 'g', label: 'Grams (g)' },
@@ -35,6 +39,7 @@ type VariantType = {
 type IngredientWithVariants = {
   id: string
   name: string
+  category?: string | null
   unit: string
   minStockLevel: number
   notes: string | null
@@ -51,12 +56,82 @@ type IngredientWithVariants = {
   }[]
 }
 
-type SupplierOption = { id: string; name: string }
+type SupplierOption = SupplierDirectoryEntry
+type PurchaseHistoryEntry = {
+  id: string
+  source: 'delivery' | 'expense'
+  date: string
+  supplier: string | null
+  quantity: number | null
+  unit: string
+  totalPrice: number
+  unitCost: number
+  notes: string | null
+  receiptImageUrl: string | null
+}
+
+function ReceiptPreview({
+  url,
+  alt,
+  viewLabel,
+  unavailableLabel,
+}: {
+  url: string
+  alt: string
+  viewLabel: string
+  unavailableLabel: string
+}) {
+  const [imageFailed, setImageFailed] = useState(false)
+
+  return (
+    <div className="flex items-start gap-3">
+      {!imageFailed ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="group block"
+          aria-label={viewLabel}
+        >
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition group-hover:border-slate-300 group-hover:shadow">
+            <img
+              src={url}
+              alt={alt}
+              className="h-16 w-16 object-cover"
+              onError={() => setImageFailed(true)}
+            />
+          </div>
+        </a>
+      ) : (
+        <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-400">
+          <FileText className="h-5 w-5" />
+        </div>
+      )}
+
+      <div className="min-w-0 space-y-1">
+        <p className="text-xs font-medium text-slate-700">
+          {imageFailed ? unavailableLabel : alt}
+        </p>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
+        >
+          <span>{viewLabel}</span>
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+    </div>
+  )
+}
 
 export default function IngredientEditForm({
   ingredient,
+  purchaseHistory,
 }: {
   ingredient: IngredientWithVariants
+  purchaseHistory: PurchaseHistoryEntry[]
 }) {
   const router = useRouter()
   const { t } = useI18n()
@@ -66,8 +141,10 @@ export default function IngredientEditForm({
   const [error, setError] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState(ingredient.name)
   const [receiptModalOpen, setReceiptModalOpen] = useState(false)
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false)
   const [formData, setFormData] = useState({
     name: ingredient.name,
+    category: ingredient.category || DEFAULT_INVENTORY_CATEGORY,
     unit: ingredient.unit,
     preferredSupplierId: ingredient.preferredSupplierId || '',
     notes: ingredient.notes || '',
@@ -216,6 +293,7 @@ export default function IngredientEditForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: formData.name.trim(),
+          category: formData.category,
           unit: formData.unit,
           preferredSupplierId: formData.preferredSupplierId || null,
           notes: formData.notes.trim() || null,
@@ -302,7 +380,16 @@ export default function IngredientEditForm({
           <CardTitle>{td('Ingredient Details')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleUpdate} className="space-y-8">
+          <Tabs defaultValue="details" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="details">{td('Details')}</TabsTrigger>
+              <TabsTrigger value="purchase-history">
+                {td('Purchase History')}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="details">
+              <form onSubmit={handleUpdate} className="space-y-8">
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
@@ -323,6 +410,25 @@ export default function IngredientEditForm({
                     setFormData({ ...formData, name: e.target.value })
                   }}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="category">
+                  {td('Category')} <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="category"
+                  required
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                >
+                  {INVENTORY_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {td(option.label)}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-2">
@@ -347,19 +453,25 @@ export default function IngredientEditForm({
 
             <div className="space-y-2">
               <Label htmlFor="preferredSupplierId">{td('Preferred supplier (for Request stock)')}</Label>
-              <select
-                id="preferredSupplierId"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={formData.preferredSupplierId}
-                onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
-              >
-                <option value="">{td('— None —')}</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {td(s.name)}
-                  </option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <select
+                  id="preferredSupplierId"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={formData.preferredSupplierId}
+                  onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
+                >
+                  <option value="">{td('— None —')}</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {td(s.name)}
+                    </option>
+                  ))}
+                </select>
+                <Button type="button" variant="outline" onClick={() => setSupplierModalOpen(true)}>
+                  <Building2 className="mr-2 h-4 w-4" />
+                  {td('Manage')}
+                </Button>
+              </div>
               <p className="text-xs text-slate-500">
                 {td('Choose a supplier to enable "Request more" on the inventory page.')}
               </p>
@@ -453,11 +565,18 @@ export default function IngredientEditForm({
 
                               <div className="space-y-2">
                                 <Label>{td('Supplier (text)')}</Label>
-                                <Input
+                                <select
                                   value={variant.supplier}
                                   onChange={(e) => updateVariant(index, 'supplier', e.target.value)}
-                                  placeholder={td('e.g. Al-Anbar Rice Traders')}
-                                />
+                                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                >
+                                  <option value="">{td('— None —')}</option>
+                                  {suppliers.map((supplier) => (
+                                    <option key={supplier.id} value={supplier.name}>
+                                      {td(supplier.name)}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
                             </div>
 
@@ -553,9 +672,89 @@ export default function IngredientEditForm({
                 {loading ? td('Saving...') : td('Save Changes')}
               </Button>
             </div>
-          </form>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="purchase-history">
+              <div className="space-y-4">
+                {purchaseHistory.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    {td('No purchase history yet. Record deliveries or confirm receipts to track cost changes over time.')}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50">
+                        <tr className="border-b border-slate-200 text-left text-slate-500">
+                          <th className="px-4 py-3 font-medium">{td('Date')}</th>
+                          <th className="px-4 py-3 font-medium">{td('Supplier')}</th>
+                          <th className="px-4 py-3 font-medium">{td('Quantity purchased')}</th>
+                          <th className="px-4 py-3 font-medium">{td('Price paid')}</th>
+                          <th className="px-4 py-3 font-medium">{td('Cost/unit')}</th>
+                          <th className="px-4 py-3 font-medium">{td('Receipt')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {purchaseHistory.map((entry) => (
+                          <tr key={entry.id} className="border-b border-slate-100 align-top">
+                            <td className="px-4 py-3 text-slate-700">
+                              {new Date(entry.date).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700">
+                              <div>{entry.supplier || '—'}</div>
+                              <div className="text-xs text-slate-400 capitalize">{entry.source}</div>
+                            </td>
+                            <td className="px-4 py-3 text-slate-700">
+                              {entry.quantity != null ? `${entry.quantity} ${entry.unit}` : '—'}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-slate-800">
+                              {formatCurrency(entry.totalPrice)}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-slate-800">
+                              {formatCurrency(entry.unitCost)}
+                            </td>
+                            <td className="px-4 py-3">
+                              {entry.receiptImageUrl ? (
+                                <ReceiptPreview
+                                  url={entry.receiptImageUrl}
+                                  alt={td('Receipt preview')}
+                                  viewLabel={td('View receipt')}
+                                  unavailableLabel={td('Preview unavailable')}
+                                />
+                              ) : (
+                                <div className="flex items-start gap-3">
+                                  <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-400">
+                                    <FileText className="h-5 w-5" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-xs font-medium text-slate-700">{td('No receipt image')}</p>
+                                    <p className="text-xs text-slate-400">
+                                      {td('This purchase was saved without an uploaded image.')}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              {entry.notes && (
+                                <p className="mt-2 max-w-xs text-xs text-slate-500">{entry.notes}</p>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
+
+      <SupplierDirectoryModal
+        open={supplierModalOpen}
+        onOpenChange={setSupplierModalOpen}
+        onSuppliersChanged={(nextSuppliers) => setSuppliers(nextSuppliers)}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,9 +8,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { ArrowLeft, Save, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, ArrowUp, ArrowDown, Building2 } from 'lucide-react'
 import Link from 'next/link'
 import { useI18n } from '@/lib/i18n'
+import { SupplierDirectoryModal, type SupplierDirectoryEntry } from '../SupplierDirectoryModal'
+import { DEFAULT_INVENTORY_CATEGORY, INVENTORY_CATEGORY_OPTIONS } from '@/lib/inventory-categories'
 
 const UNIT_OPTIONS = [
   { value: 'g', label: 'Grams (g)' },
@@ -148,11 +150,15 @@ export default function NewIngredientPage() {
   const router = useRouter()
   const { locale } = useI18n()
   const copy = INVENTORY_COPY[locale] ?? INVENTORY_COPY.en
+  const [suppliers, setSuppliers] = useState<SupplierDirectoryEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
+    category: DEFAULT_INVENTORY_CATEGORY,
     unit: 'g',
+    preferredSupplierId: '',
     notes: '',
     variants: [] as {
       brand: string
@@ -163,6 +169,13 @@ export default function NewIngredientPage() {
       bulkPrice: string
     }[],
   })
+
+  useEffect(() => {
+    fetch('/api/suppliers')
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setSuppliers)
+      .catch(() => setSuppliers([]))
+  }, [])
 
   const calculateCostPerUnit = (variant: any) => {
     const qty = parseFloat(variant.packageQuantity || '0')
@@ -262,7 +275,9 @@ export default function NewIngredientPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: formData.name,
+          category: formData.category,
           unit: formData.unit,
+          preferredSupplierId: formData.preferredSupplierId || null,
           notes: formData.notes || null,
           variants: processedVariants,
         }),
@@ -324,6 +339,25 @@ export default function NewIngredientPage() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="category">
+                  Category <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="category"
+                  required
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                >
+                  {INVENTORY_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="unit">
                   {copy.unit} <span className="text-red-500">*</span>
                 </Label>
@@ -345,7 +379,30 @@ export default function NewIngredientPage() {
             </div>
 
             <div className="space-y-4">
-              <Label className="text-lg font-semibold">{copy.variants}</Label>
+              <div className="space-y-2">
+                <Label htmlFor="preferredSupplierId">{copy.supplier}</Label>
+                <div className="flex gap-2">
+                  <select
+                    id="preferredSupplierId"
+                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    value={formData.preferredSupplierId}
+                    onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
+                  >
+                    <option value="">— None —</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button type="button" variant="outline" onClick={() => setSupplierModalOpen(true)}>
+                    <Building2 className="mr-2 h-4 w-4" />
+                    Manage
+                  </Button>
+                </div>
+              </div>
+
+              <Label className="mt-4 block text-lg font-semibold">{copy.variants}</Label>
 
               {formData.variants.length === 0 ? (
                 <p className="text-slate-500 italic">No variants yet — add your first one below.</p>
@@ -432,11 +489,18 @@ export default function NewIngredientPage() {
 
                               <div className="space-y-2">
                                 <Label>{copy.supplier}</Label>
-                                <Input
+                                <select
                                   value={variant.supplier}
                                   onChange={(e) => updateVariant(index, 'supplier', e.target.value)}
-                                  placeholder={copy.abc}
-                                />
+                                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                >
+                                  <option value="">— None —</option>
+                                  {suppliers.map((supplier) => (
+                                    <option key={supplier.id} value={supplier.name}>
+                                      {supplier.name}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
                             </div>
 
@@ -536,6 +600,12 @@ export default function NewIngredientPage() {
           </form>
         </CardContent>
       </Card>
+
+      <SupplierDirectoryModal
+        open={supplierModalOpen}
+        onOpenChange={setSupplierModalOpen}
+        onSuppliersChanged={(nextSuppliers) => setSuppliers(nextSuppliers)}
+      />
     </div>
   )
 }

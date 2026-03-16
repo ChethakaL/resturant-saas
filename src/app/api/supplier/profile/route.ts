@@ -19,10 +19,13 @@ export async function GET() {
         name: true,
         email: true,
         phone: true,
+        whatsapp: true,
         address: true,
         lat: true,
         lng: true,
+        leadTimeDays: true,
         deliveryAreas: true,
+        deliveryDays: true,
         status: true,
       },
     })
@@ -46,15 +49,20 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { name, phone, address, deliveryAreas } = body
+    const { name, phone, whatsapp, address, leadTimeDays, deliveryAreas, deliveryDays } = body
 
     const data: Record<string, unknown> = {}
 
     if (name !== undefined) data.name = String(name)
     if (phone !== undefined) data.phone = phone ? String(phone) : null
+    if (whatsapp !== undefined) data.whatsapp = whatsapp ? String(whatsapp) : null
     if (address !== undefined) data.address = address ? String(address) : null
+    if (leadTimeDays !== undefined) data.leadTimeDays = leadTimeDays === '' || leadTimeDays == null ? null : Number(leadTimeDays)
     if (deliveryAreas !== undefined) {
       data.deliveryAreas = Array.isArray(deliveryAreas) ? deliveryAreas : []
+    }
+    if (deliveryDays !== undefined) {
+      data.deliveryDays = Array.isArray(deliveryDays) ? deliveryDays : []
     }
 
     const updated = await prisma.supplier.update({
@@ -65,10 +73,13 @@ export async function PATCH(request: Request) {
         name: true,
         email: true,
         phone: true,
+        whatsapp: true,
         address: true,
         lat: true,
         lng: true,
+        leadTimeDays: true,
         deliveryAreas: true,
+        deliveryDays: true,
         status: true,
       },
     })

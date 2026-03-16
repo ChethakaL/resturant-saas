@@ -19,15 +19,31 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
-import { Trash2, AlertTriangle } from 'lucide-react'
+import { Trash2, AlertTriangle, TrendingDown, TrendingUp, Mail, MessageCircle } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { getInventoryCategoryLabel } from '@/lib/inventory-categories'
 
 type IngredientRow = {
   id: string
   name: string
+  category: string
   unit: string
   costPerUnit: number
   supplier: string | null
-  preferredSupplier: { id: string; name: string } | null
+  preferredSupplier: {
+    id: string
+    name: string
+    email: string | null
+    phone: string | null
+    whatsapp: string | null
+    leadTimeDays: number | null
+    deliveryDays: string[]
+  } | null
+  purchaseTrend?: {
+    latestUnitCost: number | null
+    previousUnitCost: number | null
+    percentChange: number | null
+  }
 }
 
 type SupplierProduct = {
@@ -174,6 +190,40 @@ export function InventoryTable({
   const supplierName = (ing: IngredientRow) =>
     ing.preferredSupplier?.name ?? ing.supplier ?? '—'
 
+  const buildSupplierMessage = () => {
+    if (!selectedIngredient?.preferredSupplier) return ''
+    const requestedQuantity = quantity.trim() || '[quantity]'
+    return `Hello ${selectedIngredient.preferredSupplier.name}, we need ${requestedQuantity} ${selectedIngredient.unit} of ${selectedIngredient.name}. Please confirm availability and delivery timing.`
+  }
+
+  const whatsappHref = selectedIngredient?.preferredSupplier?.whatsapp
+    ? `https://wa.me/${selectedIngredient.preferredSupplier.whatsapp.replace(/[^\d]/g, '')}?text=${encodeURIComponent(buildSupplierMessage())}`
+    : null
+
+  const emailHref = selectedIngredient?.preferredSupplier?.email
+    ? `mailto:${selectedIngredient.preferredSupplier.email}?subject=${encodeURIComponent(`Stock request for ${selectedIngredient.name}`)}&body=${encodeURIComponent(buildSupplierMessage())}`
+    : null
+
+  const renderTrend = (ingredient: IngredientRow) => {
+    const change = ingredient.purchaseTrend?.percentChange
+    if (change == null) {
+      return <span className="text-xs text-slate-400">{td('No trend yet')}</span>
+    }
+
+    const isUp = change > 0
+    const isDown = change < 0
+    const colorClass = isUp ? 'text-red-600' : isDown ? 'text-green-600' : 'text-slate-500'
+    const Icon = isUp ? TrendingUp : isDown ? TrendingDown : null
+    const formatted = `${isUp ? '+' : ''}${change.toFixed(1)}%`
+
+    return (
+      <div className={`mt-1 flex items-center justify-end gap-1 text-xs ${colorClass}`}>
+        {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+        <span>{formatted}</span>
+      </div>
+    )
+  }
+
   return (
     <>
       <table className="w-full">
@@ -203,7 +253,10 @@ export function InventoryTable({
           {ingredients.map((ingredient) => (
             <tr key={ingredient.id} className="border-b border-slate-100 hover:bg-slate-50">
               <td className="py-3 px-4">
-                <div className="font-medium text-slate-900">{td(ingredient.name)}</div>
+                <div className="space-y-1">
+                  <div className="font-medium text-slate-900">{td(ingredient.name)}</div>
+                  <Badge variant="secondary">{td(getInventoryCategoryLabel(ingredient.category))}</Badge>
+                </div>
               </td>
               <td className="py-3 px-4 text-slate-600">{td(ingredient.unit)}</td>
               <td className="py-3 px-4 text-slate-600">
@@ -227,7 +280,8 @@ export function InventoryTable({
                 </Button>
               </td>
               <td className="py-3 px-4 text-right font-mono">
-                {formatCurrency(ingredient.costPerUnit)}
+                <div>{formatCurrency(ingredient.costPerUnit)}</div>
+                {renderTrend(ingredient)}
               </td>
               <td className="py-3 px-4 text-right">
                 <div className="flex items-center justify-end gap-2">
@@ -300,6 +354,19 @@ export function InventoryTable({
                 <p className="text-sm text-slate-500">{t.inventory_no_preferred_supplier}</p>
               ) : (
                 <>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                    <p className="font-medium text-slate-700">{td(selectedIngredient.preferredSupplier.name)}</p>
+                    <p className="mt-1">
+                      {[selectedIngredient.preferredSupplier.phone, selectedIngredient.preferredSupplier.email]
+                        .filter(Boolean)
+                        .join(' • ') || td('No direct contact details yet')}
+                    </p>
+                    {selectedIngredient.preferredSupplier.deliveryDays.length > 0 && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Delivery days: {selectedIngredient.preferredSupplier.deliveryDays.join(', ')}
+                      </p>
+                    )}
+                  </div>
                   <div className="grid gap-2">
                     <Label>{t.inventory_product}</Label>
                     <select
@@ -326,6 +393,28 @@ export function InventoryTable({
                       placeholder={td('e.g. 50')}
                       disabled={submitting}
                     />
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                    <p className="font-medium text-slate-700">Message preview</p>
+                    <p className="mt-1">{buildSupplierMessage()}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {whatsappHref && (
+                      <a href={whatsappHref} target="_blank" rel="noreferrer">
+                        <Button type="button" variant="outline" size="sm">
+                          <MessageCircle className="mr-2 h-4 w-4" />
+                          WhatsApp
+                        </Button>
+                      </a>
+                    )}
+                    {emailHref && (
+                      <a href={emailHref}>
+                        <Button type="button" variant="outline" size="sm">
+                          <Mail className="mr-2 h-4 w-4" />
+                          Email
+                        </Button>
+                      </a>
+                    )}
                   </div>
                 </>
               )}

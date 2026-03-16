@@ -79,12 +79,23 @@ export async function POST(request: NextRequest) {
 
         let targetIngredientId = providedIngredientId
 
-        if (!targetIngredientId) {
-          const newIngredient = await prisma.ingredient.create({
+        if (targetIngredientId) {
+          const existingIngredient = await tx.ingredient.findFirst({
+            where: {
+              id: targetIngredientId,
+              restaurantId,
+            },
+            select: { id: true },
+          })
+
+          if (!existingIngredient) {
+            throw new Error(`Ingredient not found for receipt item "${name}"`)
+          }
+        } else {
+          const newIngredient = await tx.ingredient.create({
             data: {
               name: name.trim(),
               unit: canonicalise(unit || 'piece'),
-              restaurantId: restaurantId,
               restaurant: {
                 connect: { id: restaurantId },
               },
@@ -117,7 +128,6 @@ export async function POST(request: NextRequest) {
         await tx.ingredient.update({
           where: {
             id: targetIngredientId,
-            restaurantId,
           },
           data: {
             costPerUnit: unitPrice,
@@ -137,6 +147,7 @@ export async function POST(request: NextRequest) {
             ingredientId: targetIngredientId,
             restaurantId,
             receiptId,
+            quantity,
             unitCost: unitPrice,
           },
         })
@@ -159,6 +170,9 @@ export async function POST(request: NextRequest) {
         receiptId,
         processedItems: processed,
       }
+    }, {
+      maxWait: 10000,
+      timeout: 30000,
     })
 
     return NextResponse.json(result)

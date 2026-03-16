@@ -121,11 +121,30 @@ export default function ReceiptUploadModal({
       const data = await res.json()
       setReceiptId(data.receiptId)
 
+      const contextIngredient = ingredientId
+        ? allIngredients.find((ingredient) => ingredient.id === ingredientId)
+        : null
+
       const items = (data.extractedData?.items || []).map((raw: any, idx: number) => {
         const matched = allIngredients.find(ing =>
           ing.name.toLowerCase().includes(raw.name.toLowerCase()) ||
           (raw.brand && ing.brand?.toLowerCase().includes(raw.brand.toLowerCase()))
         )
+
+        const normalizedRawName = String(raw.name || '').trim().toLowerCase()
+        const contextMatchesCurrentIngredient =
+          Boolean(contextIngredient) &&
+          normalizedRawName.length > 0 &&
+          (
+            contextIngredient!.name.toLowerCase().includes(normalizedRawName) ||
+            normalizedRawName.includes(contextIngredient!.name.toLowerCase())
+          )
+
+        const linkedIngredientId = matched?.id
+          ? matched.id
+          : (data.extractedData?.items || []).length === 1 || contextMatchesCurrentIngredient
+            ? ingredientId || ''
+            : ''
 
         return {
           id: `item-${idx}`,
@@ -135,7 +154,7 @@ export default function ReceiptUploadModal({
           unitPrice: raw.unitPrice || 0,
           totalPrice: raw.totalPrice || 0,
           brand: raw.brand,
-          ingredientId: ingredientId || matched?.id || '',
+          ingredientId: linkedIngredientId,
         }
       })
 

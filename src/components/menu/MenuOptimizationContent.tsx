@@ -145,6 +145,9 @@ export default function MenuOptimizationContent({
   const resolvedMode =
     resolvedStoredMode === 'adaptive' && !smartProfitUnlocked ? 'profit' : resolvedStoredMode
   const [engineMode, setEngineMode] = useState<MenuEngineSettings['mode']>(resolvedMode)
+  const [menuLayout, setMenuLayout] = useState<'list' | 'grid'>(
+    initialMenuEngineSettings?.menuLayout === 'grid' ? 'grid' : 'list'
+  )
   const [savingEngine, setSavingEngine] = useState(false)
 
   // Manual mode only: suggestions and numeric overrides (from API when classic)
@@ -543,6 +546,7 @@ export default function MenuOptimizationContent({
         engineMode === 'classic'
           ? {
             mode: 'classic' as const,
+            menuLayout,
             moodFlow,
             bundles,
             upsells,
@@ -554,6 +558,7 @@ export default function MenuOptimizationContent({
           }
           : {
             mode: engineMode,
+            menuLayout,
             moodFlow,
             bundles,
             upsells,
@@ -887,6 +892,50 @@ export default function MenuOptimizationContent({
               )}
             </div>
           )}
+
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="flex items-start gap-3">
+              <LayoutGrid className="mt-0.5 h-4 w-4 text-slate-500" />
+              <div className="flex-1 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{td('Customer menu layout')}</p>
+                  <p className="text-xs text-slate-500">
+                    {td('Set the default item layout guests see on the public menu.')}
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setMenuLayout('list')}
+                    className={`rounded-xl border-2 p-4 text-left transition ${
+                      menuLayout === 'list'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="font-semibold text-slate-900">{td('List View')}</span>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {td('Wide stacked cards with more room for descriptions and details.')}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMenuLayout('grid')}
+                    className={`rounded-xl border-2 p-4 text-left transition ${
+                      menuLayout === 'grid'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="font-semibold text-slate-900">{td('Grid View')}</span>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {td('Photo-forward cards with the item name and price shown below.')}
+                    </p>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <Button onClick={saveMenuEngine} disabled={savingEngine} className="gap-2">{savingEngine && <Loader2 className="h-4 w-4 animate-spin" />}{td('Save optimization settings')}</Button>
         </CardContent>
