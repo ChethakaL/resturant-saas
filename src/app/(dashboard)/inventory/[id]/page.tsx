@@ -11,6 +11,7 @@ async function getIngredient(id: string, restaurantId: string) {
       restaurantId,
     },
     include: {
+      variants: true,
       stockAdjustments: {
         orderBy: { timestamp: 'desc' },
         take: 10,

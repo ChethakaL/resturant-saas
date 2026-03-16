@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { canonicalise, isAllowedUnit, computeConversion } from '@/lib/unit-converter'
 
 export async function PATCH(
   request: Request,
@@ -28,20 +29,26 @@ export async function PATCH(
       return NextResponse.json({ error: 'Ingredient not found' }, { status: 404 })
     }
 
+    let resolvedUnit: string = canonicalise(data.unit ?? '')
+    if (!isAllowedUnit(resolvedUnit)) {
+      const conversion = computeConversion(data.unit ?? '', data.name ?? '')
+      if (conversion) {
+        resolvedUnit = conversion.targetUnit
+      } else {
+        resolvedUnit = 'g'
+      }
+    }
+
     const updateData: {
       name?: string
       unit?: string
-      costPerUnit?: number
       minStockLevel?: number
-      supplier?: string | null
       notes?: string | null
       preferredSupplierId?: string | null
     } = {
       name: data.name,
-      unit: data.unit,
-      costPerUnit: data.costPerUnit,
+      unit: resolvedUnit,
       minStockLevel: data.minStockLevel,
-      supplier: data.supplier,
       notes: data.notes,
     }
     if (data.preferredSupplierId !== undefined) {
@@ -52,7 +59,53 @@ export async function PATCH(
       data: updateData,
     })
 
-    return NextResponse.json(ingredient)
+    if (data.variants && Array.isArray(data.variants)) {
+      const sentVariantIds = data.variants.filter((v: any) => v.id).map((v: any) => v.id)
+
+      await prisma.ingredientVariant.deleteMany({
+        where: {
+          ingredientId: resolvedParams.id,
+          id: { notIn: sentVariantIds },
+        },
+      })
+
+      for (const v of data.variants) {
+        if (v.id) {
+          await prisma.ingredientVariant.update({
+            where: { id: v.id },
+            data: {
+              brand: v.brand?.trim(),
+              supplier: v.supplier?.trim() || null,
+              purchaseFormat: v.purchaseFormat?.trim() || null,
+              packageQuantity: v.packageQuantity || null,
+              packageUnit: v.packageUnit,
+              bulkPrice: v.bulkPrice || null,
+              costPerUnit: v.costPerUnit,
+            },
+          })
+        } else {
+          await prisma.ingredientVariant.create({
+            data: {
+              brand: v.brand?.trim(),
+              supplier: v.supplier?.trim() || null,
+              purchaseFormat: v.purchaseFormat?.trim() || null,
+              packageQuantity: v.packageQuantity || null,
+              packageUnit: v.packageUnit,
+              bulkPrice: v.bulkPrice || null,
+              costPerUnit: v.costPerUnit,
+              ingredientId: resolvedParams.id,
+            },
+          })
+        }
+      }
+    }
+
+    const fullIngredient = await prisma.ingredient.findUnique({
+      where: { id: resolvedParams.id },
+      include: { variants: true },
+    })
+
+    return NextResponse.json(fullIngredient)
   } catch (error) {
     console.error('Error updating ingredient:', error)
     return NextResponse.json(

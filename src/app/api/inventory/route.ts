@@ -33,13 +33,32 @@ export async function POST(request: Request) {
         stockQuantity: 999999,
         costPerUnit: resolvedCostPerUnit,
         minStockLevel: 0,
-        supplier: data.supplier,
         notes: data.notes,
         restaurantId: session.user.restaurantId,
       },
     })
 
-    return NextResponse.json(ingredient)
+    if (data.variants && Array.isArray(data.variants) && data.variants.length > 0) {
+      await prisma.ingredientVariant.createMany({
+        data: data.variants.map((v: any) => ({
+          brand: v.brand.trim(),
+          supplier: v.supplier?.trim() || null,
+          purchaseFormat: v.purchaseFormat?.trim() || null,
+          packageQuantity: v.packageQuantity || null,
+          packageUnit: v.packageUnit,
+          bulkPrice: v.bulkPrice || null,
+          costPerUnit: v.costPerUnit,
+          ingredientId: ingredient.id,
+        })),
+      })
+    }
+
+    const fullIngredient = await prisma.ingredient.findUnique({
+      where: { id: ingredient.id },
+      include: { variants: true },
+    })
+
+    return NextResponse.json(fullIngredient)
   } catch (error) {
     console.error('Error creating ingredient:', error)
     return NextResponse.json(
@@ -58,6 +77,9 @@ export async function GET(request: Request) {
 
     const ingredients = await prisma.ingredient.findMany({
       where: { restaurantId: session.user.restaurantId },
+      include: {
+        variants: true,
+      },
       orderBy: { name: 'asc' },
     })
 
