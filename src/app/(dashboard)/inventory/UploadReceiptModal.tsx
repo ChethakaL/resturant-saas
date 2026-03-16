@@ -478,7 +478,7 @@ export default function ReceiptUploadModal({
 
           {step === 'success' && (
             <Button onClick={closeModal} className="w-full sm:w-auto">
-              {"done"}
+              {t.common_done_editing || 'Done'}
             </Button>
           )}
         </DialogFooter>

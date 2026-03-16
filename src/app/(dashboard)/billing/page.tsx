@@ -2,8 +2,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
-import { stripe } from '@/lib/stripe'
 import BillingClient from './BillingClient'
+import { getBranchCapacityForRestaurant } from '@/lib/billing-branches'
 
 const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
 
@@ -21,6 +21,7 @@ export default async function BillingPage() {
       currentPeriodEnd: true,
       settings: true,
       stripeSubscriptionId: true,
+      stripeCustomerId: true,
     },
   })
 
@@ -36,11 +37,15 @@ export default async function BillingPage() {
         : null
 
   let maxBranches = 1
-  if (restaurant?.stripeSubscriptionId && STRIPE_PRICE_BRANCH) {
+  if (STRIPE_PRICE_BRANCH) {
     try {
-      const subscription = await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)
-      const branchItem = subscription.items.data.find((item) => item.price.id === STRIPE_PRICE_BRANCH)
-      maxBranches = 1 + (branchItem ? (branchItem.quantity ?? 0) : 0)
+      const capacity = await getBranchCapacityForRestaurant({
+        branchPriceId: STRIPE_PRICE_BRANCH,
+        stripeCustomerId: restaurant?.stripeCustomerId,
+        stripeSubscriptionId: restaurant?.stripeSubscriptionId,
+        settings: restaurant?.settings,
+      })
+      maxBranches = capacity.maxBranches
     } catch {
       const settings = (restaurant?.settings as Record<string, unknown>) || {}
       maxBranches = (settings.maxBranches as number) || 1

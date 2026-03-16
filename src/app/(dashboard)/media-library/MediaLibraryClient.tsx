@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { ChevronDown, Loader2, Trash2, Upload } from 'lucide-react'
+import { useI18n, getStaticTranslationForSourceText, useDynamicTranslate } from '@/lib/i18n'
 
 type MediaAsset = {
   id: string
@@ -16,6 +17,16 @@ type MediaAsset = {
   itemNameTag: string | null
   categoryTag: string | null
   menuItems: { id: string; name: string }[]
+}
+
+type MediaAssetFieldDraft = {
+  itemNameTag?: string
+  categoryTag?: string
+}
+
+type MediaAssetFieldTranslation = {
+  itemNameTag?: string
+  categoryTag?: string
 }
 
 const TYPE_OPTIONS = ['FOOD', 'DRINK', 'AMBIANCE', 'OTHER']
@@ -31,6 +42,8 @@ function fileToDataUrl(file: File) {
 
 export default function MediaLibraryClient() {
   const { toast } = useToast()
+  const { locale, t } = useI18n()
+  const { t: td, fetchTranslation } = useDynamicTranslate()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [assets, setAssets] = useState<MediaAsset[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,6 +52,8 @@ export default function MediaLibraryClient() {
   const [typeFilter, setTypeFilter] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [showUploadPanel, setShowUploadPanel] = useState(false)
+  const [drafts, setDrafts] = useState<Record<string, MediaAssetFieldDraft>>({})
+  const [translatedFields, setTranslatedFields] = useState<Record<string, MediaAssetFieldTranslation>>({})
 
   const loadAssets = async () => {
     setLoading(true)
@@ -58,6 +73,44 @@ export default function MediaLibraryClient() {
     void loadAssets()
   }, [query, typeFilter])
 
+  useEffect(() => {
+    let cancelled = false
+
+    if (locale === 'en') {
+      setTranslatedFields({})
+      return
+    }
+
+    const translateFields = async () => {
+      const entries = await Promise.all(
+        assets.map(async (asset) => {
+          const [itemNameTag, categoryTag] = await Promise.all([
+            asset.itemNameTag ? fetchTranslation(asset.itemNameTag) : '',
+            asset.categoryTag ? fetchTranslation(asset.categoryTag) : '',
+          ])
+
+          return [
+            asset.id,
+            {
+              itemNameTag: itemNameTag || asset.itemNameTag || '',
+              categoryTag: categoryTag || asset.categoryTag || '',
+            },
+          ] as const
+        })
+      )
+
+      if (!cancelled) {
+        setTranslatedFields(Object.fromEntries(entries))
+      }
+    }
+
+    void translateFields()
+
+    return () => {
+      cancelled = true
+    }
+  }, [assets, locale, fetchTranslation])
+
   const onFilesSelected = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setUploading(true)
@@ -76,10 +129,10 @@ export default function MediaLibraryClient() {
         body: JSON.stringify({ assets: uploads }),
       })
       if (!res.ok) throw new Error('Upload failed')
-      toast({ title: 'Photos uploaded' })
+      toast({ title: t.media_library_upload_success })
       await loadAssets()
     } catch {
-      toast({ title: 'Upload failed', variant: 'destructive' })
+      toast({ title: t.media_library_upload_failed, variant: 'destructive' })
     } finally {
       setUploading(false)
     }
@@ -92,7 +145,7 @@ export default function MediaLibraryClient() {
       body: JSON.stringify(updates),
     })
     if (!res.ok) {
-      toast({ title: 'Failed to save asset', variant: 'destructive' })
+      toast({ title: t.media_library_save_failed, variant: 'destructive' })
       return
     }
     const updated = await res.json()
@@ -104,13 +157,13 @@ export default function MediaLibraryClient() {
     const linkedCount = asset?.menuItems.length ?? 0
     const confirmed = window.confirm(
       linkedCount > 0
-        ? `This photo is linked to ${linkedCount} menu item${linkedCount === 1 ? '' : 's'}. Delete it and unlink those items?`
-        : 'Delete this photo from the library?'
+        ? t.media_library_delete_confirm_linked.replace('{0}', String(linkedCount))
+        : t.media_library_delete_confirm
     )
     if (!confirmed) return
     const res = await fetch(`/api/media-assets/${id}`, { method: 'DELETE' })
     if (!res.ok) {
-      toast({ title: 'Failed to delete photo', variant: 'destructive' })
+      toast({ title: t.media_library_delete_failed, variant: 'destructive' })
       return
     }
     setAssets((prev) => prev.filter((asset) => asset.id !== id))
@@ -123,6 +176,58 @@ export default function MediaLibraryClient() {
     event.preventDefault()
     setIsDragging(false)
     await onFilesSelected(event.dataTransfer.files)
+  }
+
+  const getDisplayValue = (
+    asset: MediaAsset,
+    field: keyof MediaAssetFieldTranslation
+  ) => {
+    const draftValue = drafts[asset.id]?.[field]
+    if (draftValue != null) return draftValue
+    return translatedFields[asset.id]?.[field] ?? asset[field] ?? ''
+  }
+
+  const setDraftValue = (
+    assetId: string,
+    field: keyof MediaAssetFieldDraft,
+    value: string
+  ) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [assetId]: {
+        ...prev[assetId],
+        [field]: value,
+      },
+    }))
+  }
+
+  const commitDraftValue = async (
+    asset: MediaAsset,
+    field: keyof MediaAssetFieldDraft
+  ) => {
+    const nextValue = drafts[asset.id]?.[field]
+    if (nextValue == null) return
+
+    const trimmedNextValue = nextValue.trim()
+    const currentValue = String(asset[field] || '').trim()
+
+    setDrafts((prev) => {
+      const nextDrafts = { ...prev }
+      const assetDraft = { ...(nextDrafts[asset.id] || {}) }
+      delete assetDraft[field]
+      if (Object.keys(assetDraft).length > 0) {
+        nextDrafts[asset.id] = assetDraft
+      } else {
+        delete nextDrafts[asset.id]
+      }
+      return nextDrafts
+    })
+
+    if (trimmedNextValue === currentValue) {
+      return
+    }
+
+    await updateAsset(asset.id, { [field]: trimmedNextValue } as Partial<MediaAsset>)
   }
 
   return (
@@ -143,7 +248,7 @@ export default function MediaLibraryClient() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by item or category tag"
+                placeholder={t.media_library_search_placeholder}
               />
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -152,9 +257,11 @@ export default function MediaLibraryClient() {
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
               >
-                <option value="">All Types</option>
+                <option value="">{t.media_library_all_types}</option>
                 {TYPE_OPTIONS.map((type) => (
-                  <option key={type} value={type}>{type}</option>
+                  <option key={type} value={type}>
+                    {getStaticTranslationForSourceText(locale, type) || type}
+                  </option>
                 ))}
               </select>
               <Button
@@ -170,7 +277,7 @@ export default function MediaLibraryClient() {
                 }}
               >
                 {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                Upload Photos
+                {t.media_library_upload_photos}
                 {hasAssets && !uploading ? (
                   <ChevronDown className={`ml-2 h-4 w-4 transition ${showUploadPanel ? 'rotate-180' : ''}`} />
                 ) : null}
@@ -195,8 +302,8 @@ export default function MediaLibraryClient() {
             >
               <div className="flex flex-col items-center justify-center gap-2 text-center">
                 <Upload className="h-5 w-5" />
-                <p className="font-medium">Drag and drop multiple photos here</p>
-                <p className="text-xs">or click to select multiple files from your device</p>
+                <p className="font-medium">{t.media_library_drop_zone}</p>
+                <p className="text-xs">{t.media_library_click_to_select}</p>
               </div>
             </div>
           ) : null}
@@ -230,46 +337,52 @@ export default function MediaLibraryClient() {
               <CardContent className="space-y-3 p-4">
                 <div className="grid gap-3">
                   <div>
-                    <Label>Type</Label>
+                    <Label>{t.media_library_type}</Label>
                     <select
                       className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                       value={asset.type}
                       onChange={(e) => void updateAsset(asset.id, { type: e.target.value })}
                     >
                       {TYPE_OPTIONS.map((type) => (
-                        <option key={type} value={type}>{type}</option>
+                        <option key={type} value={type}>
+                          {getStaticTranslationForSourceText(locale, type) || type}
+                        </option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <Label>Item Name Tag</Label>
+                    <Label>{t.media_library_item_tag}</Label>
                     <Input
                       className="mt-1"
-                      defaultValue={asset.itemNameTag || ''}
-                      onBlur={(e) => void updateAsset(asset.id, { itemNameTag: e.target.value })}
+                      value={getDisplayValue(asset, 'itemNameTag')}
+                      placeholder={t.media_library_placeholder_item_tag}
+                      onChange={(e) => setDraftValue(asset.id, 'itemNameTag', e.target.value)}
+                      onBlur={() => void commitDraftValue(asset, 'itemNameTag')}
                     />
                   </div>
                   <div>
-                    <Label>Category Tag</Label>
+                    <Label>{t.media_library_category_tag}</Label>
                     <Input
                       className="mt-1"
-                      defaultValue={asset.categoryTag || ''}
-                      onBlur={(e) => void updateAsset(asset.id, { categoryTag: e.target.value })}
+                      value={getDisplayValue(asset, 'categoryTag')}
+                      placeholder={t.media_library_placeholder_category_tag}
+                      onChange={(e) => setDraftValue(asset.id, 'categoryTag', e.target.value)}
+                      onBlur={() => void commitDraftValue(asset, 'categoryTag')}
                     />
                   </div>
                   <div>
-                    <Label>Linked Menu Items</Label>
+                    <Label>{t.media_library_linked_items}</Label>
                     <p className="mt-1 text-sm text-slate-600">
                       {asset.menuItems.length > 0
-                        ? asset.menuItems.map((item) => item.name).join(', ')
-                        : 'Not linked yet'}
+                        ? asset.menuItems.map((item) => td(item.name)).join(', ')
+                        : t.media_library_not_linked}
                     </p>
                   </div>
                 </div>
                 <div className="flex justify-end">
                   <Button type="button" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => void deleteAsset(asset.id)}>
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
+                    {t.media_library_delete}
                   </Button>
                 </div>
               </CardContent>

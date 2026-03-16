@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
+import { findBranchSubscriptionItem, listCustomerSubscriptions } from '@/lib/billing-branches'
 
 const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
 
@@ -47,18 +48,30 @@ export async function POST(request: NextRequest) {
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
-      select: { stripeSubscriptionId: true },
+      select: { stripeSubscriptionId: true, stripeCustomerId: true },
     })
 
-    if (restaurant?.stripeSubscriptionId && STRIPE_PRICE_BRANCH) {
-      const subscription = await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)
-      const branchItem = subscription.items.data.find((item) => item.price.id === STRIPE_PRICE_BRANCH)
-      if (branchItem) {
-        const currentQty = branchItem.quantity ?? 0
-        if (currentQty > 1) {
-          await stripe.subscriptionItems.update(branchItem.id, { quantity: currentQty - 1 })
+    if ((restaurant?.stripeSubscriptionId || restaurant?.stripeCustomerId) && STRIPE_PRICE_BRANCH) {
+      const subscriptions = restaurant?.stripeCustomerId
+        ? await listCustomerSubscriptions(restaurant.stripeCustomerId)
+        : restaurant?.stripeSubscriptionId
+          ? [await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)]
+          : []
+      const branchSubscription = findBranchSubscriptionItem(
+        subscriptions,
+        STRIPE_PRICE_BRANCH,
+        restaurant?.stripeSubscriptionId
+      )
+      if (branchSubscription) {
+        const currentQty = branchSubscription.item.quantity ?? 0
+        if (branchSubscription.subscription.id === restaurant?.stripeSubscriptionId) {
+          if (currentQty > 1) {
+            await stripe.subscriptionItems.update(branchSubscription.item.id, { quantity: currentQty - 1 })
+          } else {
+            await stripe.subscriptionItems.del(branchSubscription.item.id)
+          }
         } else {
-          await stripe.subscriptionItems.del(branchItem.id)
+          await stripe.subscriptions.cancel(branchSubscription.subscription.id)
         }
       }
     }

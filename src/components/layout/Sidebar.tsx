@@ -21,7 +21,7 @@ import {
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { useI18n } from '@/lib/i18n'
+import { useI18n, getStaticTranslationForSourceText } from '@/lib/i18n'
 
 interface SidebarProps {
   userName: string
@@ -31,12 +31,12 @@ interface SidebarProps {
 export function Sidebar({ userName, userRole }: SidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
 
   const navigation = [
     { name: t.sidebar_dashboard, href: '/dashboard', icon: Home, disabled: false },
     { name: t.sidebar_add_menu_items, href: '/menu', icon: UtensilsCrossed, disabled: false },
-    { name: 'Media Library', href: '/media-library', icon: Images, disabled: false },
+    { name: t.sidebar_media_library, href: '/media-library', icon: Images, disabled: false },
     { name: t.sidebar_optimize_menu, href: '/menu?tab=optimization', icon: Zap, disabled: false },
     { name: t.sidebar_restaurant_dna, href: '/settings', icon: Dna, disabled: false },
     { name: t.sidebar_inventory, href: '/inventory', icon: Package, disabled: false },
@@ -63,7 +63,9 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
           alt="iServe+"
           className="h-12 w-auto rounded-full"
         />
-        <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">{userRole}</p>
+        <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">
+          {getStaticTranslationForSourceText(locale, userRole) || userRole}
+        </p>
       </div>
 
       <Separator className="bg-slate-700" />

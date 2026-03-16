@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { formatPercentage } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
+import MenuQrCodeButton from '@/components/menu/MenuQrCodeButton'
 import BulkMenuImport from '@/components/menu/BulkMenuImport'
 import ImportByDigitalMenu from '@/components/menu/ImportByDigitalMenu'
 import CategoriesButtonWithHelp from '@/components/menu/CategoriesButtonWithHelp'
@@ -17,6 +18,7 @@ import MenuPageTabs from '@/components/menu/MenuPageTabs'
 import { parseSlotTimes } from '@/lib/time-slots'
 import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
 import { hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
+import { buildPublicMenuUrl } from '@/lib/public-menu-url'
 
 const PAGE_SIZE = 20
 
@@ -206,15 +208,8 @@ export default async function MenuPage({
   const currentSalesPdfPeriod = getCurrentSalesPdfPeriod()
   const smartProfitUnlocked = hasCurrentMonthlySalesImport(settings)
   const slotTimesRaw = parseSlotTimes(settings.slotTimes)
-  const normalizedBaseUrl = (process.env.NEXTAUTH_URL || '').trim().replace(/\/+$/, '')
   const rawSlug = (restaurant?.slug || '').trim()
-  const slugIsAbsoluteUrl = /^https?:\/\//i.test(rawSlug)
-  const publicMenuPath = rawSlug ? `/${rawSlug.replace(/^\/+/, '')}` : '/'
-  const clientFacingMenuUrl = slugIsAbsoluteUrl
-    ? rawSlug
-    : normalizedBaseUrl
-      ? `${normalizedBaseUrl}${publicMenuPath}`
-      : publicMenuPath
+  const clientFacingMenuUrl = buildPublicMenuUrl(rawSlug)
   const categoryOptions = data.categories.map((c) => ({ id: c.id, name: c.name, displayOrder: c.displayOrder }))
 
   return (
@@ -232,6 +227,9 @@ export default async function MenuPage({
           >
             {clientFacingMenuUrl}
           </a>
+          {clientFacingMenuUrl ? (
+            <MenuQrCodeButton menuUrl={clientFacingMenuUrl} restaurantSlug={rawSlug} />
+          ) : null}
         </div>
       </div>
       <MenuPageTabs

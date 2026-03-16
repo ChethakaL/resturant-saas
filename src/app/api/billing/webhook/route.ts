@@ -33,6 +33,24 @@ export async function POST(request: NextRequest) {
         const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
         const restaurantId = subscription.metadata?.restaurantId || session.metadata?.restaurantId
         if (!restaurantId) break
+        const isBranchAddon =
+          subscription.metadata?.kind === 'branch_addon' || session.metadata?.kind === 'branch_addon'
+
+        await prisma.restaurant.update({
+          where: { id: restaurantId },
+          data: {
+            stripeCustomerId:
+              typeof session.customer === 'string'
+                ? session.customer
+                : subscription.customer && typeof subscription.customer === 'string'
+                  ? subscription.customer
+                  : undefined,
+          },
+        })
+
+        if (isBranchAddon) {
+          break
+        }
 
         const promotionCode = session.metadata?.promotionCode as string | undefined
         if (promotionCode?.trim()) {
@@ -99,6 +117,9 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription
         const restaurantId = subscription.metadata?.restaurantId
         if (!restaurantId) break
+        if (subscription.metadata?.kind === 'branch_addon') {
+          break
+        }
         const status = event.type === 'customer.subscription.deleted' ? 'canceled' : subscription.status
         const priceMonthly = process.env.STRIPE_PRICE_MONTHLY
         const priceAnnual = process.env.STRIPE_PRICE_ANNUAL

@@ -14,7 +14,7 @@ export default function UploadReceiptButton() {
     <>
       <Button variant="outline" onClick={() => setModalOpen(true)}>
         <Upload className="h-4 w-4 mr-2" />
-        {'Upload Receipt'}
+        {t.common_upload}
       </Button>
 
       <UploadReceiptModal

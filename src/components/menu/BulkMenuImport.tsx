@@ -96,6 +96,12 @@ const POPUP_COPY = {
     uploadHint: 'انقر في أي مكان للرفع أو اسحب وأفلت صورة القائمة',
     uploadMeta: 'PNG، JPG حتى 10MB',
   },
+  'ar_fusha': {
+    importTitle: 'استيراد أصناف القائمة من صورة',
+    importDescription: 'حمّل صورة لقائمتك وسنستخرج جميع الأصناف تلقائياً.',
+    uploadHint: 'انقر في أي مكان للرفع أو اسحب وأفلت صورة القائمة',
+    uploadMeta: 'PNG، JPG حتى 10MB',
+  },
 } as const
 
 const TYPE_CATEGORY_NAME_CANDIDATES: Record<DefaultCategoryKey, string[]> = {
@@ -670,16 +676,21 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
       </Button>
 
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetModal(); setIsOpen(open) }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl max-h-[90vh] flex flex-col overflow-hidden p-0 sm:rounded-lg">
           <DialogHeader className="shrink-0">
-            <DialogTitle>{popupCopy.importTitle}</DialogTitle>
+            <div className="px-6 pt-6">
+              <DialogTitle>{popupCopy.importTitle}</DialogTitle>
+            </div>
             <DialogDescription>
-              {popupCopy.importDescription}
+              <div className="px-6 pb-2">
+                {popupCopy.importDescription}
+              </div>
             </DialogDescription>
           </DialogHeader>
 
           {step === 'upload' && (
-            <div className="space-y-4 py-4">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+              <div className="space-y-4">
               <Label htmlFor="menu-image" className="block cursor-pointer">
                 <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-emerald-400 hover:bg-emerald-50/30 transition-colors">
                   <Upload className="h-12 w-12 mx-auto text-slate-400 mb-4" />
@@ -707,6 +718,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                   </Button>
                 </div>
               )}
+              </div>
             </div>
           )}
 
@@ -769,7 +781,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">
-                            {item.name || <span className="text-red-400 italic">Unnamed item</span>}
+                            {item.name || <span className="text-red-400 italic">{td('Unnamed item')}</span>}
                           </p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                             <span className="text-xs font-medium text-slate-600">
@@ -782,7 +794,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                             ) : (
                               <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
                                 <AlertCircle className="h-2.5 w-2.5" />
-                                No category
+                                {td('No category')}
                               </span>
                             )}
                             {item.tags?.length > 0 && (
@@ -835,7 +847,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                         <div className="border-t border-slate-200 p-4 space-y-4 bg-slate-50/50">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                              <Label className="text-xs">Item Name</Label>
+                              <Label className="text-xs">{t.common_name}</Label>
                               <Input
                                 value={editingItem.name}
                                 onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
@@ -843,7 +855,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs">Price (IQD)</Label>
+                              <Label className="text-xs">{t.common_price} (IQD)</Label>
                               <Input
                                 type="number"
                                 value={editingItem.price}
@@ -854,7 +866,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                           </div>
 
                           <div className="space-y-2">
-                            <Label className="text-xs">Description</Label>
+                            <Label className="text-xs">{t.common_description}</Label>
                             <Textarea
                               value={editingItem.description}
                               onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
@@ -865,13 +877,13 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="space-y-2">
-                              <Label className="text-xs">Category</Label>
+                              <Label className="text-xs">{t.common_category}</Label>
                               <Select
                                 value={editingItem.categoryId || ''}
                                 onValueChange={(value) => setEditingItem({ ...editingItem, categoryId: value })}
                               >
                                 <SelectTrigger className="bg-white">
-                                  <SelectValue placeholder="Select category" />
+                                  <SelectValue placeholder={td('Select category')} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {availableCategories.map((category) => (
@@ -883,7 +895,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                               </Select>
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs">Calories (optional)</Label>
+                              <Label className="text-xs">{td('Calories (optional)')}</Label>
                               <Input
                                 type="number"
                                 value={editingItem.calories ?? ''}
@@ -892,7 +904,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs">Tags (comma-separated)</Label>
+                              <Label className="text-xs">{td('Tags (comma-separated)')}</Label>
                               <Input
                                 value={(editingItem.tags || []).join(', ')}
                                 onChange={(e) => setEditingItem({ ...editingItem, tags: e.target.value.split(',').map((t) => t.trim()) })}
@@ -903,7 +915,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                           </div>
 
                           <div className="space-y-2">
-                            <Label className="text-xs">Image (optional)</Label>
+                            <Label className="text-xs">{td('Image (optional)')}</Label>
                             <div className="flex gap-2 flex-wrap">
                               <Input
                                 value={editingItem.imageUrl?.startsWith('http') ? editingItem.imageUrl : ''}
@@ -921,7 +933,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                                 onClick={() => formUploadRef.current?.click()}
                               >
                                 <ImagePlus className="h-4 w-4 mr-1" />
-                                Upload
+                                {t.common_upload}
                               </Button>
                               <input
                                 type="file"
@@ -947,7 +959,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                                 disabled={isGeneratingImage}
                               >
                                 <Sparkles className="h-4 w-4 mr-1" />
-                                AI Generate
+                                {t.common_ai_generate}
                               </Button>
                             </div>
                             {editingItem.imageUrl && (
@@ -972,7 +984,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                               onClick={() => toggleExpand(index)}
                             >
                               <Check className="h-4 w-4 mr-1" />
-                              Done Editing
+                              {t.common_done_editing}
                             </Button>
                           </div>
                         </div>
@@ -992,7 +1004,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                   }}
                   className="sm:w-auto"
                 >
-                  Back
+                  {t.common_back}
                 </Button>
                 <Button
                   onClick={handleCreateAll}
@@ -1002,15 +1014,15 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                   {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating {extractedItems.length} items...
+                      {td('Creating')} {extractedItems.length} {td('items')}...
                     </>
                   ) : (
                     <>
                       <CheckCircle className="h-4 w-4 mr-2" />
-                      Create All {extractedItems.length} Item{extractedItems.length !== 1 ? 's' : ''}
+                      {td('Create All')} {extractedItems.length} {td('Items')}
                       {itemsWithIssues > 0 && (
                         <span className="ml-2 text-xs bg-white/20 rounded-full px-2 py-0.5">
-                          {itemsWithIssues} need attention
+                          {itemsWithIssues} {td('need attention')}
                         </span>
                       )}
                     </>
@@ -1022,16 +1034,16 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
           {step === 'verifying' && extractedItems.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
-              <p className="text-sm text-slate-500">No items were extracted from this image.</p>
-              <Button variant="outline" onClick={() => setStep('upload')}>Try Another Image</Button>
+              <p className="text-sm text-slate-500">{td('No items were extracted from this image.')}</p>
+              <Button variant="outline" onClick={() => setStep('upload')}>{td('Try Another Image')}</Button>
             </div>
           )}
 
           {step === 'complete' && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <CheckCircle className="h-16 w-16 text-green-500" />
-              <p className="text-lg font-medium">All menu items created successfully!</p>
-              <p className="text-sm text-slate-500">Redirecting...</p>
+              <p className="text-lg font-medium">{td('All menu items created successfully!')}</p>
+              <p className="text-sm text-slate-500">{td('Redirecting...')}</p>
             </div>
           )}
         </DialogContent>
@@ -1048,14 +1060,14 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
           }
         }}
       >
-        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-emerald-500" />
-              Generate Image with AI
+              {t.common_ai_generate}
             </DialogTitle>
             <DialogDescription>
-              Upload your own photo for professional enhancement, or generate a new image from scratch.
+              {td('Upload your own photo for professional enhancement, or generate a new image from scratch.')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4 overflow-y-auto min-h-0 flex-1">
@@ -1063,13 +1075,13 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 <Loader2 className="h-12 w-12 animate-spin text-emerald-500" />
                 <p className="text-sm text-slate-500">
-                  {uploadedPhoto ? 'Enhancing your photo professionally...' : 'Generating your image with AI...'}
+                  {uploadedPhoto ? td('Enhancing your photo professionally...') : td('Generating your image with AI...')}
                 </p>
-                <p className="text-xs text-slate-400">This may take a few moments</p>
+                <p className="text-xs text-slate-400">{td('This may take a few moments')}</p>
               </div>
             ) : previewImageUrl ? (
               <div className="space-y-4">
-                <Label>Image Preview</Label>
+                <Label>{td('Image Preview')}</Label>
                 <div className="border rounded-lg overflow-hidden">
                   <img src={previewImageUrl} alt="Generated preview" className="w-full h-auto" />
                 </div>
@@ -1093,10 +1105,10 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                     }}
                   >
                     <Check className="h-4 w-4 mr-2" />
-                    Use This Image
+                    {td('Use This Image')}
                   </Button>
                   <Button type="button" variant="outline" onClick={() => setPreviewImageUrl(null)}>
-                    Try Again
+                    {td('Try Again')}
                   </Button>
                 </div>
               </div>

@@ -3,15 +3,39 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
+import Stripe from 'stripe'
 
 const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
+const BILLING_CURRENCY = (process.env.STRIPE_BILLING_CURRENCY || 'usd').toLowerCase()
 
-/**
- * POST /api/billing/upgrade-for-branch
- * Adds 1 extra branch slot ($10/mo) to the subscription.
- * Call this when at branch limit; then user can add the branch.
- */
-export async function POST() {
+function buildBranchLineItem(configuredPrice: string): Stripe.Checkout.SessionCreateParams.LineItem {
+  const trimmed = configuredPrice.trim()
+
+  if (/^price_/i.test(trimmed)) {
+    return { price: trimmed, quantity: 1 }
+  }
+
+  const amount = Number(trimmed)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error(
+      `Invalid configured Stripe branch price "${configuredPrice}". Use a Stripe price ID (price_...) or a positive amount.`
+    )
+  }
+
+  return {
+    quantity: 1,
+    price_data: {
+      currency: BILLING_CURRENCY,
+      unit_amount: Math.round(amount * 100),
+      recurring: { interval: 'month' },
+      product_data: {
+        name: 'Restaurant SaaS Branch Add-on',
+      },
+    },
+  }
+}
+
+export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.restaurantId) {
@@ -27,14 +51,47 @@ export async function POST() {
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
-      select: { stripeSubscriptionId: true },
+      select: { id: true, name: true, email: true, stripeSubscriptionId: true, stripeCustomerId: true },
     })
 
-    if (!restaurant?.stripeSubscriptionId) {
-      return NextResponse.json(
-        { error: 'Active subscription required. Subscribe first.' },
-        { status: 403 }
-      )
+    if (!restaurant) {
+      return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
+    }
+
+    let customerId = restaurant.stripeCustomerId
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: restaurant.email || undefined,
+        name: restaurant.name,
+        metadata: { restaurantId: restaurant.id },
+      })
+      customerId = customer.id
+      await prisma.restaurant.update({
+        where: { id: restaurant.id },
+        data: { stripeCustomerId: customerId },
+      })
+    }
+
+    if (!restaurant.stripeSubscriptionId) {
+      const lineItem = buildBranchLineItem(STRIPE_PRICE_BRANCH)
+      const origin = request.headers.get('origin') || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+      const checkoutSession = await stripe.checkout.sessions.create({
+        customer: customerId,
+        mode: 'subscription',
+        line_items: [lineItem],
+        success_url: `${origin}/billing?branchUpgradeSuccess=true`,
+        cancel_url: `${origin}/billing?branchUpgradeCanceled=true`,
+        metadata: { restaurantId: restaurant.id, kind: 'branch_addon' },
+        subscription_data: {
+          metadata: { restaurantId: restaurant.id, kind: 'branch_addon' },
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        mode: 'checkout',
+        url: checkoutSession.url,
+      })
     }
 
     const subscription = await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)
@@ -45,22 +102,15 @@ export async function POST() {
       )
     }
 
-    const branchItem = subscription.items.data.find((item) => item.price.id === STRIPE_PRICE_BRANCH)
-    if (branchItem) {
-      await stripe.subscriptionItems.update(branchItem.id, {
-        quantity: (branchItem.quantity ?? 0) + 1,
-      })
-    } else {
-      await stripe.subscriptionItems.create({
-        subscription: restaurant.stripeSubscriptionId,
-        price: STRIPE_PRICE_BRANCH,
-        quantity: 1,
-      })
-    }
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${request.headers.get('origin') || process.env.NEXTAUTH_URL || 'http://localhost:3000'}/billing`,
+    })
 
     return NextResponse.json({
       success: true,
-      message: 'Subscription updated. You can now add a new branch.',
+      mode: 'portal',
+      url: portalSession.url,
     })
   } catch (error) {
     console.error('Upgrade for branch error:', error)

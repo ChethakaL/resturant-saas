@@ -40,6 +40,14 @@ export function I18nProvider({ children, initialLocale }: I18nProviderProps) {
     const [locale, setLocaleState] = useState<ManagementLocale>(initialLocale ?? 'en')
     const [loaded, setLoaded] = useState(!!initialLocale)
 
+    // Sync state if initialLocale prop changes (e.g. after router.refresh())
+    useEffect(() => {
+        if (initialLocale) {
+            setLocaleState(initialLocale)
+            setLoaded(true)
+        }
+    }, [initialLocale])
+
     // On mount, fetch the management language from the settings API
     useEffect(() => {
         if (initialLocale) return // skip fetch if we already know

@@ -235,16 +235,6 @@ const getDefaultReplyLanguage = (locale: string): SmartChefReplyLanguage => {
   return 'en'
 }
 
-const getSmartChefWelcomeMessage = (language: SmartChefReplyLanguage) => {
-  if (language === 'ar') {
-    return 'مرحبًا، أنا Smart Chef. أخبرني ما الطبق الذي تريد إضافته وسأتولى الاسم والوصف والوصفة والمكونات والتكاليف وإعداد العنصر.\n\nيمكنك أيضًا رفع صورة أو فاتورة أو مستند لتسريع العمل. وعندما تصبح جاهزًا اضغط **Fill Form Now** لتحديث النموذج.'
-  }
-  if (language === 'ku') {
-    return 'سڵاو، من Smart Chefم. پێم بڵێ چ خواردنێک دەتەوێت زیاد بکەیت تا ناو، وەسف، ڕەچەتە، پێکهاتەکان، تێچوو و ڕێکخستنی فۆرم بۆت تەواو بکەم.\n\nدەتوانیت وێنە، پسووڵە یان بەڵگەنامەش باربکەیت بۆ ئەوەی خێراتر بێت. کاتێک ئامادە بوویت، دوگمەی **Fill Form Now** بکە بۆ نوێکردنەوەی فۆرم.'
-  }
-  return "Hi! I'm Smart Chef. Tell me what dish you want to add and I'll handle the name, description, recipe, ingredients, costs, and menu setup. You can also upload a photo, bill, or document to speed things up.\n\nJust describe the dish and I'll guide you step by step. When you're ready, click **Fill Form Now** to update the form."
-}
-
 export default function MenuForm({
   categories,
   ingredients,
@@ -272,9 +262,41 @@ export default function MenuForm({
         stop: 'إيقاف',
         generateImage: 'إنشاء صورة',
         skip: 'تخطَّ إلى النموذج',
-        powered: 'مشغّل بواسطة Bab Al Ilm AI',
-        uploadTitle: 'حمّل صورة الطبق أو الفاتورة/الإيصال لاستخراج الأسعار',
-      }
+          powered: 'مشغّل بواسطة Bab Al Ilm AI',
+          uploadTitle: 'حمّل صورة الطبق أو الفاتورة/الإيصال لاستخراج الأسعار',
+          welcomeMessage:
+            'مرحبًا، أنا Smart Chef. أخبرني ما الطبق الذي تريد إضافته وسأتولى الاسم والوصف والوصفة والمكونات والتكاليف وإعداد العنصر.\n\nيمكنك أيضًا رفع صورة أو فاتورة أو مستند لتسريع العمل. وعندما تصبح جاهزًا اضغط **املأ النموذج الآن** لتحديث النموذج.',
+          completionWithImageRecipeOnly:
+            'انتهيت من محادثتنا. ملأت النموذج بالملخص والوصف والوصفة والمكونات. صورتك موجودة بالفعل، لذا الخطوة التالية هي مراجعة النموذج وحفظ عنصر القائمة.',
+          completionWithImage:
+            'انتهيت. لقد ملأت النموذج. صورتك موجودة بالفعل، لذا الخطوة التالية هي مراجعة النموذج وحفظ عنصر القائمة.',
+          completionNeedsImageRecipeOnly:
+            'انتهيت من محادثتنا. ملأت النموذج بالملخص والوصف والوصفة والمكونات. **الخطوة التالية:** أنشئ صورة لطبقك. سأفتح لك مولد الصور الآن، استخدمه لإنشاء صورة أو رفعها ثم احفظ عنصر القائمة عندما تصبح جاهزًا.',
+          completionNeedsImage:
+            'انتهيت. لقد ملأت النموذج. **الخطوة التالية:** أنشئ صورة لطبقك. سأفتح لك مولد الصور الآن، أنشئ صورة أو ارفعها ثم احفظ العنصر عندما تصبح جاهزًا.',
+          dishNameNeededInitial:
+            'أحتاج إلى معرفة اسم الطبق قبل أن أتمكن من إنشاء صورة له. أخبرني ما الطبق الذي تريد إضافته، وسأستخدم ذلك للصورة.',
+          dishNameNeededBeforeGenerate:
+            'يرجى إكمال اسم الطبق أولاً، أو إنهاء المحادثة والضغط على **املأ النموذج الآن** حتى أتمكن من إنشاء صورة دقيقة لك.',
+          dishNameNeededFallback:
+            'أحتاج إلى اسم الطبق لإنشاء صورة. أخبرني باسم الطبق أو اضغط على **املأ النموذج الآن** بعد أن ننتهي، ثم جرّب إنشاء الصورة مرة أخرى.',
+          finishedTitle: 'اكتمل Smart Chef',
+          filledTitle: 'تم ملء النموذج',
+          formUpdatedDescription: 'تم تحديث النموذج. راجعه واحفظه عندما تصبح جاهزًا.',
+          imageDialogNextDescription: 'تم ملء النموذج. سيتم فتح نافذة الصورة بعد قليل.',
+          smartChefErrorTitle: 'خطأ في Smart Chef',
+          smartChefErrorDescription: 'حدث خطأ ما.',
+          smartChefFailed: 'تعذر على Smart Chef الرد',
+          smartChefFailedShort: 'تعذر على Smart Chef الإكمال',
+          selectCategoryDescription: 'اختر فئة من تبويب التفاصيل للمتابعة.',
+          addImageDescription:
+            'النموذج وSOP جاهزان. أضف الصورة يدويًا من تبويب التفاصيل لأن مساعد الذكاء الاصطناعي لا ينشئ الصور تلقائيًا.',
+          reviewRecipeDescription: 'بعض المكونات لم تُنشأ تلقائيًا. راجع تبويب الوصفة.',
+          addIngredientDescription: 'أضف مكوّنًا واحدًا على الأقل في تبويب الوصفة ثم احفظ.',
+          reviewSaveDescription: 'راجع النموذج واحفظه عندما تصبح جاهزًا.',
+          couldNotResearchTitle: 'تعذر إجراء البحث',
+          researchFailed: 'فشل البحث',
+        }
     : locale === 'ku'
       ? {
           title: 'شێفی زیرەک',
@@ -291,6 +313,38 @@ export default function MenuForm({
           skip: 'بازبدە بۆ فۆرم',
           powered: 'بەهێزکراوە بە Bab Al Ilm AI',
           uploadTitle: 'وێنەی خواردن یان پسووڵە/وەسڵ باربکە بۆ دەرهێنانی نرخ',
+          welcomeMessage:
+            'سڵاو، من Smart Chefم. پێم بڵێ چ خواردنێک دەتەوێت زیاد بکەیت تا ناو، وەسف، ڕەچەتە، پێکهاتەکان، تێچوو و ڕێکخستنی فۆرم بۆت تەواو بکەم.\n\nدەتوانیت وێنە، پسووڵە یان بەڵگەنامەش باربکەیت بۆ ئەوەی خێراتر بێت. کاتێک ئامادە بوویت، دوگمەی **ئێستا فۆرم پڕ بکەوە** بکە بۆ نوێکردنەوەی فۆرم.',
+          completionWithImageRecipeOnly:
+            'گفتوگۆکەمان تەواو بوو. فۆرمم بە کورتەی بابەت، وەسف، ڕەچەتە و پێکهاتەکان پڕکردەوە. وێنەکەت ئامادەیە، بۆیە هەنگاوی داهاتوو تاقیکردنەوەی فۆرمەکە و پاشان پاشەکەوتکردنی ئایتمی مێنیوە.',
+          completionWithImage:
+            'تەواو بووم. فۆرمم پڕکردەوە. وێنەکەت ئامادەیە، بۆیە هەنگاوی داهاتوو پشکنینی فۆرمەکە و پاشەکەوتکردنی ئایتمی مێنیوە.',
+          completionNeedsImageRecipeOnly:
+            'گفتوگۆکەمان تەواو بوو. فۆرمم بە کورتەی بابەت، وەسف، ڕەچەتە و پێکهاتەکان پڕکردەوە. **هەنگاوی داهاتوو:** وێنەی خواردنەکەت دروست بکە. ئێستا بەرهەمهێنەری وێنە بۆت دەکەمەوە؛ بەکاریبهێنە بۆ دروستکردن یان بارکردنی وێنە و دواتر ئایتمی مێنیوەکەت پاشەکەوت بکە.',
+          completionNeedsImage:
+            'تەواو بووم. فۆرمم پڕکردەوە. **هەنگاوی داهاتوو:** وێنەی خواردنەکەت دروست بکە. ئێستا بەرهەمهێنەری وێنە بۆت دەکەمەوە؛ وێنە دروست بکە یان باریکە و دواتر کاتێک ئامادە بوویت پاشەکەوتی بکە.',
+          dishNameNeededInitial:
+            'پێویستم بە ناوی خواردنەکە هەیە پێش ئەوەی بتوانم وێنەی بۆ دروست بکەم. پێم بڵێ چ خواردنێک دەتەوێت زیاد بکەیت تا بۆ وێنەکە بەکاریبهێنم.',
+          dishNameNeededBeforeGenerate:
+            'تکایە سەرەتا ناوی خواردنەکە تەواو بکە، یان گفتوگۆکە تەواو بکە و **ئێستا فۆرم پڕ بکەوە** بکە، تاکو بتوانم وێنەیەکی دروست بۆت دروست بکەم.',
+          dishNameNeededFallback:
+            'بۆ دروستکردنی وێنە پێویستم بە ناوی خواردنەکە هەیە. ناوی خواردنەکە پێم بڵێ یان دوای تەواوبوونی گفتوگۆکە **ئێستا فۆرم پڕ بکەوە** بکە، پاشان دوبارە هەوڵی دروستکردنی وێنە بدە.',
+          finishedTitle: 'Smart Chef تەواو بوو',
+          filledTitle: 'فۆرم پڕکرایەوە',
+          formUpdatedDescription: 'فۆرم نوێکرایەوە. پشکنینی بکە و کاتێک ئامادە بوویت پاشەکەوتی بکە.',
+          imageDialogNextDescription: 'فۆرم پڕکرایەوە. پەنجەرەی وێنە دواتر دەکرێتەوە.',
+          smartChefErrorTitle: 'هەڵەی Smart Chef',
+          smartChefErrorDescription: 'هەڵەیەک ڕوویدا.',
+          smartChefFailed: 'Smart Chef نەیتوانی وەڵام بداتەوە',
+          smartChefFailedShort: 'Smart Chef نەیتوانی تەواو بکات',
+          selectCategoryDescription: 'بۆ بەردەوامبوون، هاوپۆلێک لە تابی وردەکاری هەڵبژێرە.',
+          addImageDescription:
+            'فۆرم و SOP ئامادەن. وێنەکە بە دەستی لە تابی وردەکاری زیاد بکە، چونکە یاریدەدەری AI خۆکارانە وێنە دروست ناکات.',
+          reviewRecipeDescription: 'هەندێک پێکهاتە خۆکارانە دروست نەکراون. تابی ڕەچەتە پشکنە.',
+          addIngredientDescription: 'لانیکەم یەک پێکهاتە لە تابی ڕەچەتە زیاد بکە، پاشان پاشەکەوتی بکە.',
+          reviewSaveDescription: 'پشکنینی بکە و کاتێک ئامادە بوویت پاشەکەوتی بکە.',
+          couldNotResearchTitle: 'نەتوانرا لێکۆڵینەوە بکرێت',
+          researchFailed: 'لێکۆڵینەوە سەرکەوتوو نەبوو',
         }
       : {
           title: 'Smart Chef',
@@ -307,9 +361,41 @@ export default function MenuForm({
           skip: 'Skip to form',
           powered: 'Powered by Bab Al Ilm AI',
           uploadTitle: 'Upload photo, dish image, or bill/receipt for price extraction',
+          welcomeMessage:
+            "Hi! I'm Smart Chef. Tell me what dish you want to add and I'll handle the name, description, recipe, ingredients, costs, and menu setup. You can also upload a photo, bill, or document to speed things up.\n\nJust describe the dish and I'll guide you step by step. When you're ready, click **Fill Form Now** to update the form.",
+          completionWithImageRecipeOnly:
+            "I'm done with our conversation — I've filled the form with the summary, description, recipe, and ingredients. Your image is already set, so the next step is to review the form and save the menu item.",
+          completionWithImage:
+            "I'm done — I've filled the form. Your image is already set, so the next step is to review the form and save the menu item.",
+          completionNeedsImageRecipeOnly:
+            "I'm done with our conversation — I've filled the form with the summary, description, recipe, and ingredients. **Next step:** generate an image for your dish. I'm opening the image generator for you now; use it to create or upload a photo, then save your menu item when ready.",
+          completionNeedsImage:
+            "I'm done — I've filled the form. **Next step:** generate an image for your dish. I'm opening the image generator for you now; create or upload a photo, then save when ready.",
+          dishNameNeededInitial:
+            'I need to know the name of the dish before I can generate an image for it. Tell me what dish you want to add and I will use that for the image.',
+          dishNameNeededBeforeGenerate:
+            'Please complete the dish name first, or finish our chat and click **Fill Form Now** so I can create an accurate image for you.',
+          dishNameNeededFallback:
+            'I need the name of the dish to generate an image. Tell me the dish name or click **Fill Form Now** after we are done, then try Generate Image again.',
+          finishedTitle: 'Smart Chef finished',
+          filledTitle: 'Form filled',
+          formUpdatedDescription: 'Form updated. Review and save when ready.',
+          imageDialogNextDescription: 'Form filled. Image dialog opening next.',
+          smartChefErrorTitle: 'Smart Chef Error',
+          smartChefErrorDescription: 'Something went wrong.',
+          smartChefFailed: 'Smart Chef failed to respond',
+          smartChefFailedShort: 'Smart Chef failed',
+          selectCategoryDescription: 'Select a category in the Details tab to continue.',
+          addImageDescription:
+            'Form and SOP are ready. Add image manually in Details tab (AI Assistant does not auto-generate images).',
+          reviewRecipeDescription: 'Some ingredients were not created automatically. Review Recipe tab.',
+          addIngredientDescription: 'Add at least one ingredient in the Recipe tab, then save.',
+          reviewSaveDescription: 'Review and save when ready.',
+          couldNotResearchTitle: 'Could not research',
+          researchFailed: 'Research failed',
         }
   const assistantReplyLanguage = useMemo<SmartChefReplyLanguage>(() => getDefaultReplyLanguage(locale), [locale])
-  const smartChefWelcomeMessage = useMemo(() => getSmartChefWelcomeMessage(assistantReplyLanguage), [assistantReplyLanguage])
+  const smartChefWelcomeMessage = useMemo(() => smartChefCopy.welcomeMessage, [smartChefCopy])
 
   /** translationLanguages typed for internal use */
   const translationLanguages = menuTranslationLanguages as { code: LanguageCode; label: string }[]
@@ -1864,8 +1950,8 @@ export default function MenuForm({
       setNextStepHighlight('category')
       if (!options?.quietToast) {
         toast({
-          title: 'Form filled',
-          description: 'Select a category in the Details tab to continue.',
+          title: smartChefCopy.filledTitle,
+          description: smartChefCopy.selectCategoryDescription,
         })
       }
     } else if (needsImage) {
@@ -1873,8 +1959,8 @@ export default function MenuForm({
       setNextStepHighlight('image')
       if (!options?.quietToast) {
         toast({
-          title: 'Form filled',
-          description: 'Form and SOP are ready. Add image manually in Details tab (AI Assistant does not auto-generate images).',
+          title: smartChefCopy.filledTitle,
+          description: smartChefCopy.addImageDescription,
         })
       }
     } else if (hasUnmatchedIngredients || needsIngredients) {
@@ -1882,16 +1968,16 @@ export default function MenuForm({
       setNextStepHighlight('recipe')
       if (!options?.quietToast) {
         toast({
-          title: 'Form filled',
+          title: smartChefCopy.filledTitle,
           description: hasUnmatchedIngredients
-            ? 'Some ingredients were not created automatically. Review Recipe tab.'
-            : 'Add at least one ingredient in the Recipe tab, then save.',
+            ? smartChefCopy.reviewRecipeDescription
+            : smartChefCopy.addIngredientDescription,
         })
       }
     } else {
       setActiveTab('details')
       if (!options?.quietToast) {
-        toast({ title: 'Form filled', description: 'Review and save when ready.' })
+        toast({ title: smartChefCopy.filledTitle, description: smartChefCopy.reviewSaveDescription })
       }
     }
   }
@@ -1950,11 +2036,11 @@ export default function MenuForm({
 
     const completionMessage = hasExistingImage
       ? options?.recipeOnly
-        ? "I'm done with our conversation — I've filled the form with the summary, description, recipe, and ingredients. Your image is already set, so the next step is to review the form and save the menu item."
-        : "I'm done — I've filled the form. Your image is already set, so the next step is to review the form and save the menu item."
+        ? smartChefCopy.completionWithImageRecipeOnly
+        : smartChefCopy.completionWithImage
       : options?.recipeOnly
-        ? "I'm done with our conversation — I've filled the form with the summary, description, recipe, and ingredients. **Next step:** generate an image for your dish. I'm opening the image generator for you now; use it to create or upload a photo, then save your menu item when ready."
-        : "I'm done — I've filled the form. **Next step:** generate an image for your dish. I'm opening the image generator for you now; create or upload a photo, then save when ready."
+        ? smartChefCopy.completionNeedsImageRecipeOnly
+        : smartChefCopy.completionNeedsImage
 
     setInferredItemNameForImage(null)
     setAssistantMessages((prev) => [
@@ -1964,16 +2050,16 @@ export default function MenuForm({
 
     if (hasExistingImage) {
       toast({
-        title: options?.researched ? 'Form filled' : 'Smart Chef finished',
-        description: 'Form updated. Review and save when ready.',
+        title: options?.researched ? smartChefCopy.filledTitle : smartChefCopy.finishedTitle,
+        description: smartChefCopy.formUpdatedDescription,
       })
       setActiveTab('details')
       return
     }
 
     toast({
-      title: options?.researched ? 'Form filled' : 'Smart Chef finished',
-      description: 'Form filled. Image dialog opening next.',
+      title: options?.researched ? smartChefCopy.filledTitle : smartChefCopy.finishedTitle,
+      description: smartChefCopy.imageDialogNextDescription,
     })
     setActiveTab('ai')
     setTimeout(() => setShowPromptDialog(true), 1200)
@@ -2018,7 +2104,7 @@ export default function MenuForm({
         }),
       })
 
-      if (!response.ok) throw new Error('Smart Chef failed to respond')
+      if (!response.ok) throw new Error(smartChefCopy.smartChefFailed)
       const result = await response.json()
 
       // When the AI returns an ingredient with costPerUnit (user just provided cost):
@@ -2122,8 +2208,8 @@ export default function MenuForm({
 
     } catch (err) {
       toast({
-        title: 'Smart Chef Error',
-        description: err instanceof Error ? err.message : 'Something went wrong.',
+        title: smartChefCopy.smartChefErrorTitle,
+        description: err instanceof Error ? err.message : smartChefCopy.smartChefErrorDescription,
         variant: 'destructive',
       })
     } finally {
@@ -2258,7 +2344,7 @@ export default function MenuForm({
             finalize: true
           }),
         })
-        if (!response.ok) throw new Error('Smart Chef failed')
+        if (!response.ok) throw new Error(smartChefCopy.smartChefFailedShort)
         const result = await response.json()
         const isFinished = result.data?.isFinished || (result.message || '').toLowerCase().includes('finished')
         if (isFinished && result.data && typeof result.data === 'object') {
@@ -2317,7 +2403,7 @@ export default function MenuForm({
             ]
           }),
         })
-        if (!response.ok) throw new Error('Research failed')
+        if (!response.ok) throw new Error(smartChefCopy.researchFailed)
         const data = await response.json()
         await applyParsedDataToForm(data, { autoCreateIngredients: true })
         finishAssistantFlow({ researched: true })
@@ -2327,8 +2413,8 @@ export default function MenuForm({
       setAttachedImages([])
     } catch (err) {
       toast({
-        title: 'Could not research',
-        description: err instanceof Error ? err.message : 'Something went wrong.',
+        title: smartChefCopy.couldNotResearchTitle,
+        description: err instanceof Error ? err.message : smartChefCopy.smartChefErrorDescription,
         variant: 'destructive',
       })
     } finally {
@@ -3073,7 +3159,7 @@ export default function MenuForm({
                           <ImagePlus className="h-3.5 w-3 mr-1" />
                           {smartChefCopy.imageBill}
                         </Button>
-                        <Button
+                        {/* <Button
                           type="button"
                           variant="ghost"
                           size="sm"
@@ -3083,7 +3169,7 @@ export default function MenuForm({
                         >
                           {isListening ? <MicOff className="h-3.5 w-3 mr-1" /> : <Mic className="h-3.5 w-3 mr-1" />}
                           {isListening ? smartChefCopy.stop : smartChefCopy.speak}
-                        </Button>
+                        </Button> */}
                         <Button
                           type="button"
                           variant="ghost"
@@ -3109,11 +3195,11 @@ export default function MenuForm({
                             }
                             // Don't open the dialog until the user has at least said what dish they're adding (in chat or form)
                             if (!hasStartedChat) {
-                              setAssistantMessages(prev => [...prev, { role: 'assistant', text: 'I need to know the name of the dish before I can generate an image for it. Tell me what dish you want to add (e.g. "Chicken Biryani" or "I want to add Margherita pizza") and I\'ll use that for the image.' }])
+                              setAssistantMessages(prev => [...prev, { role: 'assistant', text: smartChefCopy.dishNameNeededInitial }])
                               return
                             }
                             if (!hasAlreadyAskedForDishName) {
-                              setAssistantMessages(prev => [...prev, { role: 'assistant', text: 'Please complete the dish name first (or finish our chat and click "Fill Form Now") so I can create an accurate image for you.' }])
+                              setAssistantMessages(prev => [...prev, { role: 'assistant', text: smartChefCopy.dishNameNeededBeforeGenerate }])
                               return
                             }
                             const firstUserMessage = assistantMessages.find((m) => m.role === 'user')?.text?.trim()
@@ -3121,7 +3207,7 @@ export default function MenuForm({
                               ? firstUserMessage.split(/\n/)[0]?.trim().slice(0, 80) || null
                               : null
                             if (!inferredName) {
-                              setAssistantMessages(prev => [...prev, { role: 'assistant', text: 'I need the name of the dish to generate an image. Tell me the dish name (e.g. "Chicken Biryani") or click "Fill Form Now" after we\'re done, then try Generate Image again.' }])
+                              setAssistantMessages(prev => [...prev, { role: 'assistant', text: smartChefCopy.dishNameNeededFallback }])
                               return
                             }
                             setInferredItemNameForImage(inferredName)
@@ -3249,7 +3335,7 @@ export default function MenuForm({
                           size="sm"
                           onClick={generateDescription}
                           disabled={generatingDescription || !formData.name}
-                          title={!formData.name ? 'Enter item name first' : 'Generate description with AI (uses your Restaurant DNA tone if set)'}
+                          title={!formData.name ? t.menu_form_enter_name_first : t.menu_form_generate_description_ai}
                           className="h-7 px-2 text-xs"
                         >
                           {generatingDescription ? (
@@ -3292,7 +3378,7 @@ export default function MenuForm({
                             onClick={() => setMediaLibraryOpen(true)}
                           >
                             <Images className="mr-2 h-4 w-4" />
-                            Choose from Library
+                            {t.media_library_choose_from_library}
                           </Button>
                         </div>
                         <div className="flex gap-2">
@@ -3325,9 +3411,9 @@ export default function MenuForm({
                           <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                             <div className="flex items-center justify-between gap-3">
                               <div>
-                                <p className="font-medium">Suggested from your library</p>
+                                <p className="font-medium">{t.media_library_suggested_from_library}</p>
                                 <p className="text-xs text-emerald-700">
-                                  Matched to {suggestedMediaAsset.itemNameTag || 'an existing media tag'}.
+                                  {t.media_library_matched_to} {suggestedMediaAsset.itemNameTag || t.media_library_existing_tag}.
                                 </p>
                               </div>
                               <Button
@@ -3340,7 +3426,7 @@ export default function MenuForm({
                                   mediaAssetId: suggestedMediaAsset.id,
                                 }))}
                               >
-                                Use photo
+                                {t.media_library_use_photo}
                               </Button>
                             </div>
                           </div>
@@ -3376,7 +3462,7 @@ export default function MenuForm({
                           size="sm"
                           onClick={estimateNutrition}
                           disabled={estimatingNutrition || !formData.name}
-                          title={!formData.name ? 'Enter item name first' : 'Estimate nutrition with AI'}
+                          title={!formData.name ? t.menu_form_enter_name_first : t.menu_form_estimate_nutrition_ai}
                           className="h-7 px-2 text-xs"
                         >
                           {estimatingNutrition ? (
@@ -3395,7 +3481,7 @@ export default function MenuForm({
                             type="number"
                             value={formData.calories}
                             onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
-                            placeholder="e.g., 450"
+                            placeholder={`${t.menu_form_placeholder_eg} 450`}
                           />
                         </div>
                         <div className="space-y-2">
@@ -3405,7 +3491,7 @@ export default function MenuForm({
                             type="number"
                             value={localizedFieldValues.protein}
                             onChange={(e) => updateLocalizedField('protein', e.target.value)}
-                            placeholder="e.g., 25"
+                            placeholder={`${t.menu_form_placeholder_eg} 25`}
                           />
                         </div>
                         <div className="space-y-2">
@@ -3415,7 +3501,7 @@ export default function MenuForm({
                             type="number"
                             value={localizedFieldValues.carbs}
                             onChange={(e) => updateLocalizedField('carbs', e.target.value)}
-                            placeholder="e.g., 40"
+                            placeholder={`${t.menu_form_placeholder_eg} 40`}
                           />
                         </div>
                       </div>
@@ -3496,7 +3582,7 @@ export default function MenuForm({
                                     event.target.value
                                   )
                                 }
-                                placeholder={`Auto translated name (${language.label})`}
+                                placeholder={`${t.menu_form_auto_translated_name} (${language.label})`}
                               />
                             </div>
                             <div className="md:col-span-2 space-y-2">
@@ -4230,7 +4316,7 @@ export default function MenuForm({
                                     event.target.value
                                   )
                                 }
-                                placeholder={`Auto translated name (${language.label})`}
+                                placeholder={`${t.menu_form_auto_translated_name} (${language.label})`}
                               />
                             </div>
                             <div className="md:col-span-2 space-y-2">

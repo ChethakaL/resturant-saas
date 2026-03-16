@@ -858,13 +858,19 @@ export default async function DashboardPage() {
   const dashboardUnlocked = hasCurrentMonthlySalesImport(settings)
 
   if (!dashboardUnlocked) {
+    const periodLabel = formatSalesPdfPeriod(currentSalesPdfPeriod.year, currentSalesPdfPeriod.month, locale)
+    const lockedSubtitle =
+      locale === 'ku'
+        ? `PDF ـی فرۆشتنی ${periodLabel} باربکە بۆ ئەوەی داشبۆرد لەم مانگە چالاک ببێت.`
+        : locale === 'ar-fusha'
+          ? `ارفع ملف PDF لمبيعات ${periodLabel} لتفعيل لوحة التحكم لهذا الشهر.`
+          : `Upload the ${periodLabel} sales PDF to activate the dashboard this month.`
+
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">{t.dashboard_title}</h1>
-          <p className="text-slate-500 mt-1">
-            Upload the {formatSalesPdfPeriod(currentSalesPdfPeriod.year, currentSalesPdfPeriod.month)} sales PDF to activate the dashboard this month.
-          </p>
+          <p className="text-slate-500 mt-1">{lockedSubtitle}</p>
         </div>
         <MonthlySalesPdfUploadCard compact />
       </div>

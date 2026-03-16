@@ -98,6 +98,10 @@ const CATEGORY_COPY = {
     couldNotRunAi: 'Could not run AI categorization',
     categoryOrderUpdated: 'Category order updated',
     couldNotUpdateOrder: 'Could not update order',
+    aiWarningTitle: 'Run AI Categorization?',
+    aiWarningDescription: 'Warning: This feature will automatically analyze and reorganize all your menu items. Any categories you\'ve added or manually changed may be modified or removed to match the AI\'s standard structure.',
+    aiWarningConfirm: 'Yes, run categorization',
+    aiWarningCancel: 'Cancel',
   },
   ku: {
     aiTitle: 'پۆلێنکردنی AI',
@@ -138,6 +142,10 @@ const CATEGORY_COPY = {
     couldNotRunAi: 'نەتوانرا پۆلێنکردنی AI بەڕێوەببرێت',
     categoryOrderUpdated: 'ڕیزبەندی پۆلەکان نوێ کرایەوە',
     couldNotUpdateOrder: 'نەتوانرا ڕیزبەندی نوێ بکرێتەوە',
+    aiWarningTitle: 'پۆلێنکردنی AI بەڕێوەببەیت؟',
+    aiWarningDescription: 'ئاگاداری: ئەم تایبەتمەندییە هەموو خواردنەکانی مینیو بە شێوەیەکی خۆکار ڕێکدەخاتەوە. هەر پۆلێک کە خۆت دروستت کردبێت یان دەستکاریت کردبێت، لەوانەیە بگۆڕدرێت یان بسڕدرێتەوە بۆ ئەوەی لەگەڵ ستانداردی AI بگونجێت.',
+    aiWarningConfirm: 'بەڵێ، پۆلێنکردن بکە',
+    aiWarningCancel: 'هەڵوەشاندنەوە',
   },
   'ar-fusha': {
     aiTitle: 'التصنيف بالذكاء الاصطناعي',
@@ -178,8 +186,14 @@ const CATEGORY_COPY = {
     couldNotRunAi: 'تعذر تشغيل التصنيف بالذكاء الاصطناعي',
     categoryOrderUpdated: 'تم تحديث ترتيب الفئات',
     couldNotUpdateOrder: 'تعذر تحديث الترتيب',
+    aiWarningTitle: 'تشغيل التصنيف بالذكاء الاصطناعي؟',
+    aiWarningDescription: 'تحذير: ستقوم هذه الميزة بتحليل وإعادة تنظيم جميع أصناف القائمة تلقائياً. قد يتم تعديل أو حذف أي فئات قمت بإضافتها أو تغييرها يدوياً لتناسب الهيكل الموحد للذكاء الاصطناعي.',
+    aiWarningConfirm: 'نعم، ابدأ التصنيف',
+    aiWarningCancel: 'إلغاء',
   },
 } as const
+
+type CategoryCopy = typeof CATEGORY_COPY.en
 
 // Sortable category item wrapper
 interface SortableCategoryItemProps {
@@ -198,7 +212,7 @@ interface SortableCategoryItemProps {
   onToggleShowOnMenu: (categoryId: string) => void
   onOpenDeleteDialog: (category: CategoryWithItems) => void
   onMoveItemToCategory: (menuItemId: string, categoryId: string) => void
-  copy: typeof CATEGORY_COPY.en
+  copy: CategoryCopy
   locale: string
   translatedCategoryName: string
   translateSourceText: (sourceText: string) => string
@@ -372,7 +386,7 @@ function SortableCategoryItem({
 export default function CategoriesManager({ initialCategories, uiTranslationMap = {} }: CategoriesManagerProps) {
   const router = useRouter()
   const { locale, t } = useI18n()
-  const copy = CATEGORY_COPY[locale] ?? CATEGORY_COPY.en
+  const copy = (CATEGORY_COPY[locale as keyof typeof CATEGORY_COPY] || CATEGORY_COPY.en) as CategoryCopy
   const translateSourceText = (sourceText: string) =>
     uiTranslationMap[normalizeSourceText(sourceText)] ||
     getStaticTranslationForSourceText(locale, sourceText) ||
@@ -391,6 +405,7 @@ export default function CategoriesManager({ initialCategories, uiTranslationMap 
   const [editingNameValue, setEditingNameValue] = useState('')
   const [movingItemId, setMovingItemId] = useState<string | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [showAiWarning, setShowAiWarning] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<CategoryWithItems | null>(null)
   const [aiResultsOpen, setAiResultsOpen] = useState(false)
   const [aiResults, setAiResults] = useState<{
@@ -590,6 +605,7 @@ export default function CategoriesManager({ initialCategories, uiTranslationMap 
   }
 
   const runAiSuggest = async () => {
+    setShowAiWarning(false)
     setAiSuggestLoading(true)
     try {
       const response = await fetch('/api/categories/ai-suggest', { method: 'POST' })
@@ -675,13 +691,37 @@ export default function CategoriesManager({ initialCategories, uiTranslationMap 
                 {copy.aiDescription}
               </CardDescription>
             </div>
-            <Button onClick={runAiSuggest} disabled={aiSuggestLoading} className="gap-2">
+            <Button onClick={() => setShowAiWarning(true)} disabled={aiSuggestLoading} className="gap-2">
               {aiSuggestLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {copy.aiAction}
             </Button>
           </div>
         </CardHeader>
       </Card>
+
+      {/* AI Warning Dialog */}
+      <Dialog open={showAiWarning} onOpenChange={setShowAiWarning}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              {copy.aiWarningTitle}
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {copy.aiWarningDescription}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowAiWarning(false)}>
+              {copy.aiWarningCancel}
+            </Button>
+            <Button onClick={runAiSuggest} className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              {copy.aiWarningConfirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card data-tour="tour-add-category">
         <CardHeader>

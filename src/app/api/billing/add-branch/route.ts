@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
+import {
+  findBranchSubscriptionItem,
+  getBranchCapacityForRestaurant,
+} from '@/lib/billing-branches'
 
 const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
 
@@ -36,24 +40,16 @@ export async function POST(request: NextRequest) {
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
-      select: { id: true, stripeSubscriptionId: true, settings: true },
+      select: { id: true, stripeSubscriptionId: true, stripeCustomerId: true, settings: true },
     })
 
     if (!restaurant) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
 
-    if (!restaurant.stripeSubscriptionId) {
+    if (!restaurant.stripeSubscriptionId && !restaurant.stripeCustomerId) {
       return NextResponse.json(
         { error: 'Active subscription required. Subscribe first to add branches.' },
-        { status: 403 }
-      )
-    }
-
-    const subscription = await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)
-    if (!['active', 'trialing'].includes(subscription.status)) {
-      return NextResponse.json(
-        { error: 'Your subscription is not active. Renew to add branches.' },
         { status: 403 }
       )
     }
@@ -62,9 +58,13 @@ export async function POST(request: NextRequest) {
       where: { restaurantId: session.user.restaurantId },
     })
 
-    const branchItem = subscription.items.data.find((item) => item.price.id === STRIPE_PRICE_BRANCH)
-    const paidExtraBranches = branchItem ? (branchItem.quantity ?? 0) : 0
-    const maxBranches = 1 + paidExtraBranches
+    const capacity = await getBranchCapacityForRestaurant({
+      branchPriceId: STRIPE_PRICE_BRANCH,
+      stripeCustomerId: restaurant.stripeCustomerId,
+      stripeSubscriptionId: restaurant.stripeSubscriptionId,
+      settings: restaurant.settings,
+    })
+    const maxBranches = capacity.maxBranches
 
     if (currentBranchCount >= maxBranches) {
       return NextResponse.json(
@@ -74,9 +74,31 @@ export async function POST(request: NextRequest) {
     }
 
     const requiredPaidForNewBranch = currentBranchCount
-    const delta = requiredPaidForNewBranch - paidExtraBranches
+    const delta = requiredPaidForNewBranch - capacity.extraBranchSlots
 
     if (delta > 0) {
+      if (!restaurant.stripeSubscriptionId) {
+        return NextResponse.json(
+          { error: 'Branch payment is required before you can add this branch.' },
+          { status: 403 }
+        )
+      }
+
+      const mainSubscription = await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)
+      if (!['active', 'trialing'].includes(mainSubscription.status)) {
+        return NextResponse.json(
+          { error: 'Your subscription is not active. Renew to add branches.' },
+          { status: 403 }
+        )
+      }
+
+      const branchSubscription = findBranchSubscriptionItem(
+        [mainSubscription],
+        STRIPE_PRICE_BRANCH,
+        restaurant.stripeSubscriptionId
+      )
+      const branchItem = branchSubscription?.item
+
       if (branchItem) {
         await stripe.subscriptionItems.update(branchItem.id, {
           quantity: (branchItem.quantity ?? 0) + delta,

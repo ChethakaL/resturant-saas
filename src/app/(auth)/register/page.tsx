@@ -14,6 +14,7 @@ function RegisterForm() {
   const [restaurantName, setRestaurantName] = useState('')
   const [referralCode, setReferralCode] = useState('')
   const [slug, setSlug] = useState('')
+  const [isManualSlug, setIsManualSlug] = useState(false)
   const [restaurantEmail, setRestaurantEmail] = useState('')
   const [restaurantPhone, setRestaurantPhone] = useState('')
   const [restaurantAddress, setRestaurantAddress] = useState('')
@@ -22,6 +23,29 @@ function RegisterForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  const generateSlug = (name: string) => {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  }
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setRestaurantName(val)
+    if (!isManualSlug) {
+      setSlug(generateSlug(val))
+    }
+  }
+
+  const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsManualSlug(true)
+    const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')
+    setSlug(val)
+  }
 
   useEffect(() => {
     const ref = searchParams.get('ref')?.trim()
@@ -83,24 +107,33 @@ function RegisterForm() {
                   type="text"
                   placeholder="e.g. Al-Rafidain Restaurant"
                   value={restaurantName}
-                  onChange={(e) => setRestaurantName(e.target.value)}
+                  onChange={handleNameChange}
                   required
                   disabled={isLoading}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="slug">Restaurant page link (optional)</Label>
-                <Input
-                  id="slug"
-                  type="text"
-                  placeholder="e.g. al-rafidain"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  disabled={isLoading}
-                  className="lowercase"
-                />
-                <p className="text-xs text-slate-500">
-                  This becomes your page address (for example: `/al-rafidain`). Leave blank and we&apos;ll create it from your restaurant name.
+                <Label htmlFor="slug">Restaurant page link</Label>
+                <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden transition-all focus-within:ring-2 focus-within:ring-amber-500/20 focus-within:border-amber-600 group">
+                  <span className="bg-slate-50 px-3 py-2.5 text-[11px] font-medium text-slate-400 border-r border-slate-200 whitespace-nowrap hidden sm:block group-focus-within:text-amber-700/60 transition-colors">
+                    https://restaurant.babalilm-ai.com/
+                  </span>
+                  <span className="bg-slate-50 px-2 py-2.5 text-[11px] font-medium text-slate-400 border-r border-slate-200 whitespace-nowrap sm:hidden">
+                    .../
+                  </span>
+                  <Input
+                    id="slug"
+                    type="text"
+                    value={slug}
+                    onChange={handleSlugChange}
+                    disabled={isLoading}
+                    className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none h-11 lowercase font-medium text-slate-700"
+                    placeholder="restaurant-name"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 flex items-center gap-1.5 px-1">
+                  <span className="flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  Your customers will visit this URL to view your menu.
                 </p>
               </div>
               {referralCode && (

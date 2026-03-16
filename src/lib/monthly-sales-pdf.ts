@@ -6,6 +6,12 @@ export interface MonthlySalesPdfRecord {
   uploadedAt: string
 }
 
+export function getMonthlySalesPdfLocale(locale?: string) {
+  if (locale === 'ku') return 'ckb-IQ'
+  if (locale === 'ar-fusha' || locale === 'ar_fusha') return 'ar'
+  return 'en-US'
+}
+
 export function getCurrentSalesPdfPeriod(date = new Date()) {
   return {
     year: date.getFullYear(),
@@ -13,8 +19,8 @@ export function getCurrentSalesPdfPeriod(date = new Date()) {
   }
 }
 
-export function formatSalesPdfPeriod(year: number, month: number) {
-  return new Intl.DateTimeFormat('en-US', {
+export function formatSalesPdfPeriod(year: number, month: number, locale?: string) {
+  return new Intl.DateTimeFormat(getMonthlySalesPdfLocale(locale), {
     month: 'long',
     year: 'numeric',
   }).format(new Date(year, month - 1, 1))

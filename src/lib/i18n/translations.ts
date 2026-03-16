@@ -23,6 +23,7 @@ export interface TranslationStrings {
     sidebar_shifts: string
     sidebar_payroll: string
     sidebar_subscription: string
+    sidebar_media_library: string
     sidebar_sign_out: string
     sidebar_soon: string
 
@@ -175,6 +176,8 @@ export interface TranslationStrings {
     menu_form_carbs_g: string
     menu_form_dietary_tags: string
     menu_form_placeholder_tags: string
+    menu_form_placeholder_eg: string
+    menu_form_auto_translated_name: string
     menu_form_comma_separated: string
     menu_form_add_image_hint: string
     menu_form_configure_background: string
@@ -314,6 +317,44 @@ export interface TranslationStrings {
     hr_shifts_subtitle: string
     hr_payroll_title: string
     hr_payroll_subtitle: string
+ 
+    /* Media Library */
+    media_library_title: string
+    media_library_subtitle: string
+    media_library_search_placeholder: string
+    media_library_all_types: string
+    media_library_upload_photos: string
+    media_library_drop_zone: string
+    media_library_click_to_select: string
+    media_library_type: string
+    media_library_item_tag: string
+    media_library_category_tag: string
+    media_library_linked_items: string
+    media_library_not_linked: string
+    media_library_delete: string
+    media_library_delete_confirm_linked: string
+    media_library_delete_confirm: string
+    media_library_upload_success: string
+    media_library_upload_failed: string
+    media_library_save_failed: string
+    media_library_delete_failed: string
+    media_library_placeholder_item_tag: string
+    media_library_placeholder_category_tag: string
+    media_library_choose_from_library: string
+    media_library_suggested_from_library: string
+    media_library_use_photo: string
+    media_library_matched_to: string
+    media_library_existing_tag: string
+
+    /* Media Types */
+    type_food: string
+    type_drink: string
+    type_ambiance: string
+    type_other: string
+
+    /* Roles */
+    role_owner: string
+    role_staff: string
 
     /* ── Categories ── */
     categories_title: string
@@ -326,6 +367,9 @@ export interface TranslationStrings {
     /* ── Meal Prep ── */
     meal_prep_title: string
     meal_prep_subtitle: string
+    menu_form_enter_name_first: string
+    menu_form_estimate_nutrition_ai: string
+    menu_form_generate_description_ai: string
 
     /* ── Analytics ── */
     analytics_title: string
@@ -426,6 +470,10 @@ export interface TranslationStrings {
     common_edit: string
     common_back: string
     common_actions: string
+    common_upload: string
+    common_ai_generate: string
+    common_done_editing: string
+    common_category: string
     common_name: string
     common_description: string
     common_price: string
@@ -459,6 +507,7 @@ const en: TranslationStrings = {
     sidebar_shifts: 'Shifts',
     sidebar_payroll: 'Payroll',
     sidebar_subscription: 'Subscription',
+    sidebar_media_library: 'Media Library',
     sidebar_sign_out: 'Sign Out',
     sidebar_soon: 'SOON',
 
@@ -611,6 +660,8 @@ const en: TranslationStrings = {
     menu_form_carbs_g: 'Carbs (g)',
     menu_form_dietary_tags: 'Dietary Tags (optional)',
     menu_form_placeholder_tags: 'e.g., vegan, gluten-free, spicy',
+    menu_form_placeholder_eg: 'e.g.,',
+    menu_form_auto_translated_name: 'Auto translated name',
     menu_form_comma_separated: 'Comma-separated tags',
     menu_form_add_image_hint: 'Add an image for this item (paste a URL or generate with AI)',
     menu_form_configure_background: 'Configure background prompt or upload reference image',
@@ -748,6 +799,44 @@ const en: TranslationStrings = {
     hr_shifts_subtitle: 'Manage staff shifts',
     hr_payroll_title: 'Payroll Management',
     hr_payroll_subtitle: 'Manage employee payments',
+ 
+    /* Media Library */
+    media_library_title: 'Media Library',
+    media_library_subtitle: 'Upload, tag, reuse, and manage your restaurant photos in one place.',
+    media_library_search_placeholder: 'Search by item or category tag',
+    media_library_all_types: 'All Types',
+    media_library_upload_photos: 'Upload Photos',
+    media_library_drop_zone: 'Drag and drop multiple photos here',
+    media_library_click_to_select: 'or click to select multiple files from your device',
+    media_library_type: 'Type',
+    media_library_item_tag: 'Item Name Tag',
+    media_library_category_tag: 'Category Tag',
+    media_library_linked_items: 'Linked Menu Items',
+    media_library_not_linked: 'Not linked yet',
+    media_library_delete: 'Delete',
+    media_library_delete_confirm_linked: 'This photo is linked to {0} menu item(s). Delete it and unlink those items?',
+    media_library_delete_confirm: 'Delete this photo from the library?',
+    media_library_upload_success: 'Photos uploaded',
+    media_library_upload_failed: 'Upload failed',
+    media_library_save_failed: 'Failed to save asset',
+    media_library_delete_failed: 'Failed to delete photo',
+    media_library_placeholder_item_tag: 'e.g. Grilled Chicken',
+    media_library_placeholder_category_tag: 'e.g. Main Course',
+    media_library_choose_from_library: 'Choose from Library',
+    media_library_suggested_from_library: 'Suggested from your library',
+    media_library_use_photo: 'Use photo',
+    media_library_matched_to: 'Matched to',
+    media_library_existing_tag: 'an existing media tag',
+
+    /* Media Types */
+    type_food: 'FOOD',
+    type_drink: 'DRINK',
+    type_ambiance: 'AMBIANCE',
+    type_other: 'OTHER',
+
+    /* Roles */
+    role_owner: 'OWNER',
+    role_staff: 'STAFF',
 
     /* Categories */
     categories_title: 'Category Manager',
@@ -760,6 +849,9 @@ const en: TranslationStrings = {
     /* Meal Prep */
     meal_prep_title: 'Meal Prep',
     meal_prep_subtitle: 'Plan and track meal preparations',
+    menu_form_enter_name_first: 'Enter item name first',
+    menu_form_estimate_nutrition_ai: 'Estimate nutrition with AI',
+    menu_form_generate_description_ai: 'Generate description with AI (uses your Restaurant DNA tone if set)',
 
     /* Analytics */
     analytics_title: 'Analytics',
@@ -857,6 +949,10 @@ const en: TranslationStrings = {
     common_edit: 'Edit',
     common_back: 'Back',
     common_actions: 'Actions',
+    common_upload: 'Upload',
+    common_ai_generate: 'AI Generate',
+    common_done_editing: 'Done Editing',
+    common_category: 'Category',
     common_name: 'Name',
     common_description: 'Description',
     common_price: 'Price',
@@ -890,6 +986,7 @@ const ku: TranslationStrings = {
     sidebar_shifts: 'شیفتەکان',
     sidebar_payroll: 'مووچە',
     sidebar_subscription: 'بەشداری',
+    sidebar_media_library: 'کتێبخانەی میدیا',
     sidebar_sign_out: 'چوونە دەرەوە',
     sidebar_soon: 'بەم زووانە',
 
@@ -1042,6 +1139,8 @@ const ku: TranslationStrings = {
     menu_form_carbs_g: 'کاربۆهایدرەیت (گ)',
     menu_form_dietary_tags: 'تاگی خۆراک (ئارەزوومەندانە)',
     menu_form_placeholder_tags: 'وەک، ڤێگان، بێ گلوتن، تامدار',
+    menu_form_placeholder_eg: 'بۆ نموونە:',
+    menu_form_auto_translated_name: 'ناوی وەرگێڕدراوی خۆکار',
     menu_form_comma_separated: 'تاگەکانی جیاکراوە لە کۆما',
     menu_form_add_image_hint: 'وێنەیەک زیاد بکە بۆ ئەم خواردنە (لینکێک بنووسە یان بە AI دروستی بکە)',
     menu_form_configure_background: 'ڕێکخستنی پسپۆڕی پاشبنەما یان هەڵکردنی وێنەی ئاماژە',
@@ -1179,6 +1278,44 @@ const ku: TranslationStrings = {
     hr_shifts_subtitle: 'بەڕێوەبردنی شیفتەکانی کارمەندان',
     hr_payroll_title: 'بەڕێوەبردنی مووچە',
     hr_payroll_subtitle: 'بەڕێوەبردنی پارەدانی کارمەندان',
+ 
+    /* Media Library */
+    media_library_title: 'کتێبخانەی میدیا',
+    media_library_subtitle: 'وێنەکانی چێشتخانەکەت لێرە باربکە، تاگبکە و بەڕێوەیان ببە.',
+    media_library_search_placeholder: 'گەڕان بەپێی تاگی خواردن یان پۆل',
+    media_library_all_types: 'هەموو جۆرەکان',
+    media_library_upload_photos: 'بارکردنی وێنە',
+    media_library_drop_zone: 'وێنەکان لێرە دابنێ',
+    media_library_click_to_select: 'یان کلیک بکە بۆ هەڵبژاردنی وێنە لە ئامێرەکەت',
+    media_library_type: 'جۆر',
+    media_library_item_tag: 'تاگی ناوی خواردن',
+    media_library_category_tag: 'تاگی پۆل',
+    media_library_linked_items: 'خواردنە پەیوەندیدارەکان',
+    media_library_not_linked: 'هێشتا پەیوەست نەکراوە',
+    media_library_delete: 'سڕینەوە',
+    media_library_delete_confirm_linked: 'ئەم وێنەیە پەیوەستە بە {0} خواردن لە مینیو. دڵنیایت لە سڕینەوە و پچڕاندنی پەیوەندییەکان؟',
+    media_library_delete_confirm: 'ئەم وێنەیە لە کتێبخانە دەسڕیتەوە؟',
+    media_library_upload_success: 'وێنەکان بارکران',
+    media_library_upload_failed: 'بارکردن سەرکەوتوو نەبوو',
+    media_library_save_failed: 'پاشەکەوتکردن سەرکەوتوو نەبوو',
+    media_library_delete_failed: 'سڕینەوە سەرکەوتوو نەبوو',
+    media_library_placeholder_item_tag: 'بۆ نموونە: مریشکی برژاو',
+    media_library_placeholder_category_tag: 'بۆ نموونە: خواردنی سەرەکی',
+    media_library_choose_from_library: 'لە کتێبخانە هەڵبژێرە',
+    media_library_suggested_from_library: 'پێشنیار کراوە لە کتێبخانەکەت',
+    media_library_use_photo: 'وێنەکە بەکاربهێنە',
+    media_library_matched_to: 'گونجێندراوە لەگەڵ',
+    media_library_existing_tag: 'تاگێکی مێدیای هەبوو',
+
+    /* Media Types */
+    type_food: 'خواردن',
+    type_drink: 'خواردنەوە',
+    type_ambiance: 'کەشوهەوا',
+    type_other: 'ئەوی تر',
+
+    /* Roles */
+    role_owner: 'خاوەن',
+    role_staff: 'کارمەند',
 
     /* Categories */
     categories_title: 'بەڕێوەبەری پۆل',
@@ -1191,6 +1328,9 @@ const ku: TranslationStrings = {
     /* Meal Prep */
     meal_prep_title: 'ئامادەکردنی خواردن',
     meal_prep_subtitle: 'پلاندانان و شوێنکەوتنی ئامادەکردنی خواردن',
+    menu_form_enter_name_first: 'سەرەتا ناوی خواردنەکە بنووسە',
+    menu_form_estimate_nutrition_ai: 'هەڵسەنگاندنی بەهای خۆراکی بە AI',
+    menu_form_generate_description_ai: 'دروستکردنی وەسف بە AI (بە بەکارهێنانی ستایلی Restaurant DNA)',
 
     /* Analytics */
     analytics_title: 'شیکاری',
@@ -1288,6 +1428,10 @@ const ku: TranslationStrings = {
     common_edit: 'دەستکاری',
     common_back: 'گەڕانەوە',
     common_actions: 'کردارەکان',
+    common_upload: 'بارکردن',
+    common_ai_generate: 'بە AI دروست بکە',
+    common_done_editing: 'تەواو بوو',
+    common_category: 'پۆل',
     common_name: 'ناو',
     common_description: 'وەسف',
     common_price: 'نرخ',
@@ -1321,6 +1465,7 @@ const arFusha: TranslationStrings = {
     sidebar_shifts: 'المناوبات',
     sidebar_payroll: 'الرواتب',
     sidebar_subscription: 'الاشتراك',
+    sidebar_media_library: 'مكتبة الوسائط',
     sidebar_sign_out: 'تسجيل الخروج',
     sidebar_soon: 'قريباً',
 
@@ -1473,6 +1618,8 @@ const arFusha: TranslationStrings = {
     menu_form_carbs_g: 'الكربوهيدرات (غ)',
     menu_form_dietary_tags: 'وسوم الحمية (اختياري)',
     menu_form_placeholder_tags: 'مثال: نباتي، خالٍ من الغلوتين، حار',
+    menu_form_placeholder_eg: 'مثلاً:',
+    menu_form_auto_translated_name: 'الاسم المترجم تلقائياً',
     menu_form_comma_separated: 'وسوم مفصولة بفاصلة',
     menu_form_add_image_hint: 'أضف صورة لهذا الصنف (الصق رابطاً أو أنشئ بالذكاء الاصطناعي)',
     menu_form_configure_background: 'تكوين خلفية الصور أو رفع صورة مرجعية',
@@ -1610,6 +1757,44 @@ const arFusha: TranslationStrings = {
     hr_shifts_subtitle: 'إدارة مناوبات الموظفين',
     hr_payroll_title: 'إدارة الرواتب',
     hr_payroll_subtitle: 'إدارة مدفوعات الموظفين',
+ 
+    /* Media Library */
+    media_library_title: 'مكتبة الوسائط',
+    media_library_subtitle: 'ارفع صور مطعمك، وقم بتصنيفها وإدارتها في مكان واحد.',
+    media_library_search_placeholder: 'البحث حسب الصنف أو وسم الفئة',
+    media_library_all_types: 'جميع الأنواع',
+    media_library_upload_photos: 'رفع صور',
+    media_library_drop_zone: 'اسحب وأفلت الصور هنا',
+    media_library_click_to_select: 'أو انقر لاختيار الملفات من جهازك',
+    media_library_type: 'النوع',
+    media_library_item_tag: 'وسم اسم الصنف',
+    media_library_category_tag: 'وسم الفئة',
+    media_library_linked_items: 'الأصناف المرتبطة',
+    media_library_not_linked: 'غير مرتبط بعد',
+    media_library_delete: 'حذف',
+    media_library_delete_confirm_linked: 'هذه الصورة مرتبطة بـ {0} من أصناف القائمة. هل تريد حذفها وفك الارتباط؟',
+    media_library_delete_confirm: 'هل تريد حذف هذه الصورة من المكتبة؟',
+    media_library_upload_success: 'تم رفع الصور بنجاح',
+    media_library_upload_failed: 'فشل الرفع',
+    media_library_save_failed: 'فشل حفظ الوسيط',
+    media_library_delete_failed: 'فشل حذف الصورة',
+    media_library_placeholder_item_tag: 'مثال: دجاج مشوي',
+    media_library_placeholder_category_tag: 'مثال: الأطباق الرئيسية',
+    media_library_choose_from_library: 'اختر من المكتبة',
+    media_library_suggested_from_library: 'مقترح من مكتبتك',
+    media_library_use_photo: 'استخدام الصورة',
+    media_library_matched_to: 'مطابق لـ',
+    media_library_existing_tag: 'تاغ وسائط موجود',
+
+    /* Media Types */
+    type_food: 'طعام',
+    type_drink: 'مشروب',
+    type_ambiance: 'أجواء',
+    type_other: 'آخر',
+
+    /* Roles */
+    role_owner: 'مالك',
+    role_staff: 'موظف',
 
     /* Categories */
     categories_title: 'مدير الفئات',
@@ -1622,6 +1807,9 @@ const arFusha: TranslationStrings = {
     /* Meal Prep */
     meal_prep_title: 'تحضير الوجبات',
     meal_prep_subtitle: 'التخطيط وتتبع تحضير الوجبات',
+    menu_form_enter_name_first: 'أدخل اسم الصنف أولاً',
+    menu_form_estimate_nutrition_ai: 'تقدير القيمة الغذائية بالذكاء الاصطناعي',
+    menu_form_generate_description_ai: 'إنشاء وصف بالذكاء الاصطناعي (يستخدم أسلوب هويتك إذا تم ضبطه)',
 
     /* Analytics */
     analytics_title: 'التحليلات',
@@ -1719,6 +1907,10 @@ const arFusha: TranslationStrings = {
     common_edit: 'تعديل',
     common_back: 'رجوع',
     common_actions: 'الإجراءات',
+    common_upload: 'رفع',
+    common_ai_generate: 'توليد بالذكاء الاصطناعي',
+    common_done_editing: 'تم التعديل',
+    common_category: 'فئة',
     common_name: 'الاسم',
     common_description: 'الوصف',
     common_price: 'السعر',

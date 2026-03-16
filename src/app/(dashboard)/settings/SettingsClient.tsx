@@ -28,7 +28,7 @@ import {
   MessageCircle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { useI18n, useDynamicTranslate } from '@/lib/i18n'
+import { useI18n, useDynamicTranslate, type ManagementLocale } from '@/lib/i18n'
 import { GoogleFontPicker } from '@/components/settings/GoogleFontPicker'
 
 /* ============================================
@@ -91,7 +91,7 @@ export default function SettingsClient({
   defaultBackgroundImageData: initialDefaultBackgroundImageData = null,
 }: SettingsClientProps) {
   const { toast } = useToast()
-  const { t: i18n, locale } = useI18n()
+  const { t: i18n, locale, setLocale } = useI18n()
   const { t: td } = useDynamicTranslate()
   const router = useRouter()
   const dishPhotoDialogCopy = locale === 'ar-fusha'
@@ -292,8 +292,13 @@ export default function SettingsClient({
       }
       toast({ title: 'Theme saved ✨', description: 'Your Restaurant DNA has been updated.' })
       if (languageChanged) {
+        // Set client-side locale immediately for responsive UI
+        if (managementLanguage) {
+          setLocale(managementLanguage as ManagementLocale)
+        }
+        // Refresh server components to match new setting in DB (like layout, sidebar props etc)
+        // router.refresh() will re-invoke the layout's getServerTranslations()
         router.refresh()
-        window.location.reload()
         return
       }
     } catch (error) {

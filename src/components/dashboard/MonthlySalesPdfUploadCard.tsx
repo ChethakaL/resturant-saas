@@ -17,7 +17,8 @@ import {
 import { useToast } from '@/components/ui/use-toast'
 import { FileText, Loader2, Lock, Plus, Trash2, Upload } from 'lucide-react'
 import type { ImportedMonthlySalesData } from '@/lib/monthly-sales-import'
-import { useDynamicTranslate } from '@/lib/i18n'
+import { useDynamicTranslate, useI18n } from '@/lib/i18n'
+import { getMonthlySalesPdfLocale } from '@/lib/monthly-sales-pdf'
 
 interface UploadRecord {
   year: number
@@ -69,9 +70,11 @@ export default function MonthlySalesPdfUploadCard({
 }: MonthlySalesPdfUploadCardProps) {
   const { toast } = useToast()
   const router = useRouter()
-  const { t: td } = useDynamicTranslate()
+  const { t: td, fetchTranslation } = useDynamicTranslate()
+  const { locale } = useI18n()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const now = useMemo(() => new Date(), [])
+  const localeForDates = useMemo(() => getMonthlySalesPdfLocale(locale), [locale])
   const [year, setYear] = useState(String(now.getFullYear()))
   const [month, setMonth] = useState(String(now.getMonth() + 1))
   const [file, setFile] = useState<File | null>(null)
@@ -81,6 +84,7 @@ export default function MonthlySalesPdfUploadCard({
   const [reviewOpen, setReviewOpen] = useState(false)
   const [previewData, setPreviewData] = useState<ImportedMonthlySalesData | null>(null)
   const [importMode, setImportMode] = useState<'replace' | 'append'>('replace')
+  const [translationsReady, setTranslationsReady] = useState(locale === 'en')
   const [status, setStatus] = useState<{
     loading: boolean
     active: boolean
@@ -96,6 +100,62 @@ export default function MonthlySalesPdfUploadCard({
     imports: [],
     currentImportSummary: null,
   })
+
+  useEffect(() => {
+    let cancelled = false
+    if (locale === 'en') {
+      setTranslationsReady(true)
+      return
+    }
+
+    const warmTranslations = async () => {
+      setTranslationsReady(false)
+      await Promise.all([
+        title,
+        description,
+        ...REQUIREMENTS,
+        'Checking monthly import status...',
+        'is unlocked.',
+        'This month',
+        'is locked until sales data is imported.',
+        'Imported:',
+        'net sales,',
+        'orders.',
+        'Sales report PDF',
+        'Month',
+        'Year',
+        'Extracting...',
+        'Extract Data',
+        'Current imported month data',
+        'Reopen and edit imported rows without uploading another PDF.',
+        'Review imported data',
+        'Reading the PDF and extracting sales data. This can take a few seconds.',
+        'Saving the reviewed sales import and refreshing the dashboard.',
+        'Recommended PDF format',
+        'Recent uploads',
+        'Imported months',
+        'Choose a file',
+        'No file selected',
+        'Choose a PDF first.',
+        'Extraction failed',
+        'Monthly sales imported',
+        'Dashboard and Smart Profit mode are now using the imported sales data.',
+        'Saved for',
+        'that month.',
+        'Import failed',
+      ].map((text) => fetchTranslation(text)))
+
+      if (!cancelled) {
+        setTranslationsReady(true)
+      }
+    }
+
+    void warmTranslations()
+
+    return () => {
+      cancelled = true
+    }
+  }, [description, fetchTranslation, locale, title])
 
   useEffect(() => {
     let cancelled = false
@@ -248,6 +308,18 @@ export default function MonthlySalesPdfUploadCard({
     }
   }
 
+  if (!translationsReady) {
+    return (
+      <Card className={compact ? 'border-amber-200 bg-amber-50' : ''}>
+        <CardContent className="space-y-4 p-6">
+          <div className="h-6 w-56 animate-pulse rounded bg-slate-200" />
+          <div className="h-4 w-80 animate-pulse rounded bg-slate-200" />
+          <div className="h-32 animate-pulse rounded-xl bg-slate-100" />
+        </CardContent>
+      </Card>
+    )
+  }
+
   const handleConfirmImport = async () => {
     if (!file || !previewData) return
 
@@ -321,13 +393,23 @@ export default function MonthlySalesPdfUploadCard({
           <div className="grid gap-4 md:grid-cols-[1fr_140px_120px_auto] md:items-end">
             <div className="space-y-2">
               <Label htmlFor="monthly-sales-pdf">{td('Sales report PDF')}</Label>
-              <Input
+              <input
                 id="monthly-sales-pdf"
                 ref={fileInputRef}
                 type="file"
                 accept="application/pdf,.pdf"
+                className="hidden"
                 onChange={(event) => setFile(event.target.files?.[0] || null)}
               />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  {td('Choose a file')}
+                </Button>
+                <div className="min-h-10 flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                  {file?.name || td('No file selected')}
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="monthly-sales-month">{td('Month')}</Label>
@@ -339,7 +421,7 @@ export default function MonthlySalesPdfUploadCard({
               >
                 {Array.from({ length: 12 }, (_, index) => (
                   <option key={index + 1} value={index + 1}>
-                    {new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(2026, index, 1))}
+                    {new Intl.DateTimeFormat(localeForDates, { month: 'long' }).format(new Date(2026, index, 1))}
                   </option>
                 ))}
               </select>
@@ -418,7 +500,7 @@ export default function MonthlySalesPdfUploadCard({
                       <p className="text-slate-500">{upload.fileName}</p>
                     </div>
                     <span className="text-slate-500">
-                      {new Date(upload.uploadedAt).toLocaleDateString()}
+                      {new Date(upload.uploadedAt).toLocaleDateString(localeForDates)}
                     </span>
                   </div>
               ))}
@@ -449,7 +531,7 @@ export default function MonthlySalesPdfUploadCard({
                   </div>
                   <div className="text-right text-slate-500">
                     <p>{item.summary.currency} {item.summary.netSales.toLocaleString('en-US')}</p>
-                    <p>{new Date(item.importedAt).toLocaleDateString()}</p>
+                    <p>{new Date(item.importedAt).toLocaleDateString(localeForDates)}</p>
                   </div>
                 </button>
               ))}
@@ -483,7 +565,7 @@ export default function MonthlySalesPdfUploadCard({
                   >
                     {Array.from({ length: 12 }, (_, index) => (
                       <option key={index + 1} value={index + 1}>
-                        {new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(2026, index, 1))}
+                        {new Intl.DateTimeFormat(localeForDates, { month: 'long' }).format(new Date(2026, index, 1))}
                       </option>
                     ))}
                   </select>

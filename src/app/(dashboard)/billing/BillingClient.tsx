@@ -9,6 +9,14 @@ import { Building2, Plus, Trash2, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import AddBranchModal, { AddBranchFormData } from '@/components/branches/AddBranchModal'
 import { useI18n } from '@/lib/i18n'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface BillingClientProps {
   isActive: boolean
@@ -42,12 +50,36 @@ export default function BillingClient({
   const [loadingBranches, setLoadingBranches] = useState(true)
   const [showAddBranch, setShowAddBranch] = useState(false)
   const [addingBranch, setAddingBranch] = useState(false)
-  const [upgradingForBranch, setUpgradingForBranch] = useState(false)
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [paymentDialogMode, setPaymentDialogMode] = useState<'subscribe' | 'upgrade'>('subscribe')
+  const [redirectingToStripe, setRedirectingToStripe] = useState<'monthly' | 'annual' | 'portal' | null>(null)
   const upgradeCardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetchBranches()
   }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('branchUpgradeSuccess') === 'true') {
+      toast({
+        title: 'Branch payment approved',
+        description: 'You can now add the new branch.',
+      })
+      setPaymentDialogOpen(false)
+      router.replace('/billing')
+      return
+    }
+
+    if (params.get('branchUpgradeCanceled') === 'true') {
+      toast({
+        title: 'Branch payment canceled',
+        description: 'No extra branch charge was added.',
+      })
+      setPaymentDialogOpen(false)
+      router.replace('/billing')
+    }
+  }, [router, toast])
 
   const fetchBranches = async () => {
     try {
@@ -58,6 +90,60 @@ export default function BillingClient({
       }
     } catch { } finally {
       setLoadingBranches(false)
+    }
+  }
+
+  const openPaymentDialog = (mode: 'subscribe' | 'upgrade') => {
+    setPaymentDialogMode(mode)
+    setPaymentDialogOpen(true)
+  }
+
+  const redirectToSubscriptionCheckout = async (plan: 'monthly' | 'annual') => {
+    setRedirectingToStripe(plan)
+    try {
+      const res = await fetch('/api/billing/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan,
+          returnPath: '/billing',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to start checkout')
+      if (data.url) {
+        window.location.href = data.url
+        return
+      }
+      throw new Error('No checkout URL returned')
+    } catch (error) {
+      toast({
+        title: 'Stripe checkout failed',
+        description: error instanceof Error ? error.message : 'Could not open Stripe checkout.',
+        variant: 'destructive',
+      })
+      setRedirectingToStripe(null)
+    }
+  }
+
+  const redirectToBillingPortal = async () => {
+    setRedirectingToStripe('portal')
+    try {
+      const res = await fetch('/api/billing/upgrade-for-branch', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to open Stripe billing')
+      if (data.url) {
+        window.location.href = data.url
+        return
+      }
+      throw new Error('No billing URL returned')
+    } catch (error) {
+      toast({
+        title: 'Stripe billing failed',
+        description: error instanceof Error ? error.message : 'Could not open Stripe billing.',
+        variant: 'destructive',
+      })
+      setRedirectingToStripe(null)
     }
   }
 
@@ -77,25 +163,22 @@ export default function BillingClient({
       const data = await res.json()
 
       if (!res.ok) {
-        const isLimitReached = res.status === 403 && typeof data.error === 'string' && data.error.toLowerCase().includes('branch limit')
+        const errorText = typeof data.error === 'string' ? data.error.toLowerCase() : ''
+        const isLimitReached = res.status === 403 && errorText.includes('branch limit')
+        const needsSubscription = res.status === 403 && errorText.includes('subscription')
         if (isLimitReached) {
           setShowAddBranch(false)
-          toast({
-            title: 'Add a branch slot first',
-            description: stripePriceBranchConfigured && isActive
-              ? `Add a branch slot ($${additionalBranchCost}/mo) below. Once added, you can add your branch with name and details.`
-              : 'Upgrade your plan below to add more branches. Once upgraded, you can add your branch with name and details.',
-          })
+          openPaymentDialog(stripePriceBranchConfigured && isActive ? 'upgrade' : 'subscribe')
           setTimeout(() => upgradeCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
           fetchBranches()
           router.refresh()
           return
         }
-        toast({
-          title: 'Cannot add branch',
-          description: data.error,
-          variant: 'destructive',
-        })
+        if (needsSubscription) {
+          setShowAddBranch(false)
+          openPaymentDialog(isActive ? 'upgrade' : 'subscribe')
+          return
+        }
         throw new Error(data.error)
       }
 
@@ -147,26 +230,7 @@ export default function BillingClient({
   const extraBranches = Math.max(0, maxBranches - 1)
 
   const handleUpgradeForBranch = async () => {
-    setUpgradingForBranch(true)
-    try {
-      const res = await fetch('/api/billing/upgrade-for-branch', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) {
-        toast({ title: 'Upgrade failed', description: data.error || 'Could not upgrade', variant: 'destructive' })
-        return
-      }
-      toast({
-        title: 'Subscription updated',
-        description: "You can now add a new branch. The $10/mo charge will appear on your next invoice.",
-      })
-      router.refresh()
-      fetchBranches()
-      setShowAddBranch(true)
-    } catch {
-      toast({ title: 'Error', description: 'Failed to upgrade', variant: 'destructive' })
-    } finally {
-      setUpgradingForBranch(false)
-    }
+    openPaymentDialog(isActive ? 'upgrade' : 'subscribe')
   }
 
   const { t } = useI18n()
@@ -219,7 +283,7 @@ export default function BillingClient({
               <Building2 className="h-10 w-10 mb-3 text-slate-300" />
               <p className="text-base font-medium">{t.billing_no_branches}</p>
               <p className="text-sm mt-1">{t.billing_add_first_branch_desc}</p>
-              <Button className="mt-4" onClick={() => setShowAddBranch(true)}>
+              <Button className="mt-4" onClick={() => (isActive ? setShowAddBranch(true) : openPaymentDialog('subscribe'))}>
                 <Plus className="h-4 w-4 mr-2" />
                 {t.billing_add_first_branch}
               </Button>
@@ -270,7 +334,7 @@ export default function BillingClient({
           loading={addingBranch}
         />
         {branches.length > 0 && branches.length < maxBranches && !showAddBranch && (
-          <Button variant="outline" className="mt-4" onClick={() => setShowAddBranch(true)}>
+          <Button variant="outline" className="mt-4" onClick={() => (isActive ? setShowAddBranch(true) : openPaymentDialog('subscribe'))}>
             <Plus className="h-4 w-4 mr-2" />
             {t.billing_add_branch}
           </Button>
@@ -291,11 +355,11 @@ export default function BillingClient({
               </div>
               <Button
                 onClick={handleUpgradeForBranch}
-                disabled={upgradingForBranch}
+                disabled={redirectingToStripe !== null}
                 className="shrink-0"
                 size="lg"
               >
-                {upgradingForBranch ? (
+                {redirectingToStripe !== null ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Plus className="h-4 w-4 mr-2" />
@@ -306,6 +370,54 @@ export default function BillingClient({
           </Card>
         )}
       </div>
+
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {paymentDialogMode === 'subscribe' ? 'Payment required to add a branch' : 'Add another branch for $10/month'}
+            </DialogTitle>
+            <DialogDescription>
+              {paymentDialogMode === 'subscribe'
+                ? 'Branches are a paid feature. Choose a plan below and continue to Stripe checkout before adding your branch.'
+                : `Your current subscription is active. To add another branch, continue to Stripe and approve an extra $${additionalBranchCost}/month branch charge.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {paymentDialogMode === 'subscribe' ? (
+            <DialogFooter className="flex-col gap-2 sm:flex-col">
+              <Button
+                type="button"
+                onClick={() => void redirectToSubscriptionCheckout('monthly')}
+                disabled={redirectingToStripe !== null}
+              >
+                {redirectingToStripe === 'monthly' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Continue with monthly plan
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void redirectToSubscriptionCheckout('annual')}
+                disabled={redirectingToStripe !== null}
+              >
+                {redirectingToStripe === 'annual' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Continue with annual plan
+              </Button>
+            </DialogFooter>
+          ) : (
+            <DialogFooter>
+              <Button
+                type="button"
+                onClick={() => void redirectToBillingPortal()}
+                disabled={redirectingToStripe !== null}
+              >
+                {redirectingToStripe === 'portal' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Continue to Stripe for $10/month
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
