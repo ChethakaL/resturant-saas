@@ -30,6 +30,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { useI18n, useDynamicTranslate, type ManagementLocale } from '@/lib/i18n'
 import { GoogleFontPicker } from '@/components/settings/GoogleFontPicker'
+import { GoogleMapsStreetPicker } from '@/components/settings/GoogleMapsStreetPicker'
+import { IRAQ_CITIES } from '@/lib/iraq-cities'
 
 /* ============================================
  *  FONT OPTIONS (expanded list)
@@ -69,8 +71,45 @@ const PRESET_SUGGESTED_BACKGROUNDS: Record<string, string> = {
 /* ============================================
  *  COMPONENT PROPS
  * ============================================ */
+interface SettingsThemePayload {
+  restaurantName?: string
+  restaurantEmail?: string
+  restaurantPhone?: string
+  restaurantCity?: string
+  restaurantAddress?: string
+  restaurantLat?: string | number
+  restaurantLng?: string | number
+  primaryColor?: string
+  accentColor?: string
+  chefPickColor?: string
+  borderColor?: string
+  backgroundStyle?: string
+  fontFamily?: string
+  fontMenuTitle?: string
+  fontCategoryHeader?: string
+  fontItemName?: string
+  fontDescription?: string
+  fontPrice?: string
+  logoUrl?: string
+  menuTimezone?: string
+  themePreset?: string | null
+  backgroundImageUrl?: string
+  managementLanguage?: string
+  menuCarouselStyle?: string
+  descriptionTone?: string
+  foodTerminologyOverrides?: string
+  restaurantVibeImageKey?: string
+  restaurantVibeImageUrl?: string
+  snowfallEnabled?: string
+  snowfallStart?: string
+  snowfallEnd?: string
+  tableOrderingEnabled?: boolean
+  showKurdishOnMenu?: boolean
+  showArabicOnMenu?: boolean
+}
+
 interface SettingsClientProps {
-  currentTheme: Record<string, string>
+  currentTheme: SettingsThemePayload
   defaultBackgroundPrompt?: string
   hasDefaultBackgroundImage?: boolean
   defaultBackgroundImageData?: string | null
@@ -138,27 +177,39 @@ export default function SettingsClient({
 
   // Theme state
   const [restaurantName, setRestaurantName] = useState(currentTheme.restaurantName || '')
+  const [restaurantEmail, setRestaurantEmail] = useState(currentTheme.restaurantEmail || '')
+  const [restaurantPhone, setRestaurantPhone] = useState(currentTheme.restaurantPhone || '')
+  const [restaurantCity, setRestaurantCity] = useState(currentTheme.restaurantCity || '')
+  const [restaurantAddress, setRestaurantAddress] = useState(currentTheme.restaurantAddress || '')
+  const [restaurantLat, setRestaurantLat] = useState<number | null>(() => {
+    const value = currentTheme.restaurantLat
+    return typeof value === 'string' ? Number(value) || null : typeof value === 'number' ? value : null
+  })
+  const [restaurantLng, setRestaurantLng] = useState<number | null>(() => {
+    const value = currentTheme.restaurantLng
+    return typeof value === 'string' ? Number(value) || null : typeof value === 'number' ? value : null
+  })
   const [primaryColor, setPrimaryColor] = useState(currentTheme.primaryColor || '#10b981')
   const [accentColor, setAccentColor] = useState(currentTheme.accentColor || '#f59e0b')
   const [chefPickColor, setChefPickColor] = useState(currentTheme.chefPickColor || '#dc2626')
   const [borderColor, setBorderColor] = useState(currentTheme.borderColor || '#1e40af')
   const [backgroundStyle, setBackgroundStyle] = useState<string>(currentTheme.backgroundStyle || 'dark')
   const [fontFamily, setFontFamily] = useState<string>(currentTheme.fontFamily || 'DM Sans')
-  const [fontMenuTitle, setFontMenuTitle] = useState<string>((currentTheme as any).fontMenuTitle || 'DM Sans')
-  const [fontCategoryHeader, setFontCategoryHeader] = useState<string>((currentTheme as any).fontCategoryHeader || 'DM Sans')
-  const [fontItemName, setFontItemName] = useState<string>((currentTheme as any).fontItemName || 'DM Sans')
-  const [fontDescription, setFontDescription] = useState<string>((currentTheme as any).fontDescription || 'DM Sans')
-  const [fontPrice, setFontPrice] = useState<string>((currentTheme as any).fontPrice || 'DM Sans')
+  const [fontMenuTitle, setFontMenuTitle] = useState<string>(currentTheme.fontMenuTitle || 'DM Sans')
+  const [fontCategoryHeader, setFontCategoryHeader] = useState<string>(currentTheme.fontCategoryHeader || 'DM Sans')
+  const [fontItemName, setFontItemName] = useState<string>(currentTheme.fontItemName || 'DM Sans')
+  const [fontDescription, setFontDescription] = useState<string>(currentTheme.fontDescription || 'DM Sans')
+  const [fontPrice, setFontPrice] = useState<string>(currentTheme.fontPrice || 'DM Sans')
   const [logoUrl, setLogoUrl] = useState(currentTheme.logoUrl || '')
   const [menuTimezone, setMenuTimezone] = useState(currentTheme.menuTimezone || 'Asia/Baghdad')
   const [themePreset, setThemePreset] = useState<string | null>(currentTheme.themePreset ?? null)
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
   const initialManagementLanguage = currentTheme.managementLanguage || 'en'
   const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
-  const [descriptionTone, setDescriptionTone] = useState<string>((currentTheme as Record<string, unknown>).descriptionTone as string || '')
-  const [foodTerminologyOverrides, setFoodTerminologyOverrides] = useState<string>((currentTheme as Record<string, unknown>).foodTerminologyOverrides as string || '')
-  const [restaurantVibeImageKey, setRestaurantVibeImageKey] = useState<string>((currentTheme as Record<string, unknown>).restaurantVibeImageKey as string || '')
-  const legacyVibeImageUrl = ((currentTheme as Record<string, unknown>).restaurantVibeImageUrl as string) || ''
+  const [descriptionTone, setDescriptionTone] = useState<string>(currentTheme.descriptionTone || '')
+  const [foodTerminologyOverrides, setFoodTerminologyOverrides] = useState<string>(currentTheme.foodTerminologyOverrides || '')
+  const [restaurantVibeImageKey, setRestaurantVibeImageKey] = useState<string>(currentTheme.restaurantVibeImageKey || '')
+  const legacyVibeImageUrl = currentTheme.restaurantVibeImageUrl || ''
   const [vibeImageRemoved, setVibeImageRemoved] = useState(false)
   const [uploadingVibeImage, setUploadingVibeImage] = useState(false)
   const [vibeImageLoadError, setVibeImageLoadError] = useState(false)
@@ -167,9 +218,9 @@ export default function SettingsClient({
     ? `/api/settings/restaurant-vibe-image?key=${encodeURIComponent(restaurantVibeImageKey)}`
     : vibeImageRemoved ? '' : legacyVibeImageUrl
   const [snowfallEnabled, setSnowfallEnabled] = useState<boolean>(currentTheme.snowfallEnabled === 'true')
-  const [tableOrderingEnabled, setTableOrderingEnabled] = useState<boolean>((currentTheme as Record<string, unknown>).tableOrderingEnabled !== false)
-  const [showKurdishOnMenu, setShowKurdishOnMenu] = useState<boolean>((currentTheme as Record<string, unknown>).showKurdishOnMenu !== false)
-  const [showArabicOnMenu, setShowArabicOnMenu] = useState<boolean>((currentTheme as Record<string, unknown>).showArabicOnMenu !== false)
+  const [tableOrderingEnabled, setTableOrderingEnabled] = useState<boolean>(currentTheme.tableOrderingEnabled !== false)
+  const [showKurdishOnMenu, setShowKurdishOnMenu] = useState<boolean>(currentTheme.showKurdishOnMenu !== false)
+  const [showArabicOnMenu, setShowArabicOnMenu] = useState<boolean>(currentTheme.showArabicOnMenu !== false)
   const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
   const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
   const [savingTheme, setSavingTheme] = useState(false)
@@ -277,6 +328,12 @@ export default function SettingsClient({
           snowfallStart: snowfallStart || '12-15',
           snowfallEnd: snowfallEnd || '01-07',
           ...(restaurantName.trim() && { restaurantName: restaurantName.trim() }),
+          restaurantEmail: restaurantEmail.trim() || null,
+          restaurantPhone: restaurantPhone.trim() || null,
+          restaurantCity: restaurantCity || null,
+          restaurantAddress: restaurantAddress.trim() || null,
+          restaurantLat,
+          restaurantLng,
           descriptionTone: descriptionTone.trim(),
           foodTerminologyOverrides: foodTerminologyOverrides.trim(),
           restaurantVibeImageKey: restaurantVibeImageKey.trim() || null,
@@ -838,6 +895,69 @@ export default function SettingsClient({
             placeholder={td('Your restaurant name')}
             className="flex h-10 w-full max-w-sm rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{td('Restaurant Contact & Location')}</CardTitle>
+          <p className="text-sm text-slate-500">
+            {td('Set the single restaurant email and phone here. Choose the city, then pick the street from Google Maps.')}
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="restaurantEmail">{td('Restaurant Email')}</Label>
+            <Input
+              id="restaurantEmail"
+              type="email"
+              value={restaurantEmail}
+              onChange={(event) => setRestaurantEmail(event.target.value)}
+              placeholder="contact@restaurant.com"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="restaurantPhone">{td('Restaurant Phone')}</Label>
+            <Input
+              id="restaurantPhone"
+              type="tel"
+              value={restaurantPhone}
+              onChange={(event) => setRestaurantPhone(event.target.value)}
+              placeholder="+964 770 000 0000"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="restaurantCity">{td('City')}</Label>
+            <select
+              id="restaurantCity"
+              value={restaurantCity}
+              onChange={(event) => setRestaurantCity(event.target.value)}
+              className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">{td('Select a city')}</option>
+              {IRAQ_CITIES.map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="restaurantAddress">{td('Street / Google Maps Address')}</Label>
+            <GoogleMapsStreetPicker
+              value={restaurantAddress}
+              city={restaurantCity}
+              lat={restaurantLat}
+              lng={restaurantLng}
+              onChange={(nextAddress) => setRestaurantAddress(nextAddress)}
+              onPlaceSelected={({ address, lat, lng }) => {
+                setRestaurantAddress(address)
+                setRestaurantLat(lat)
+                setRestaurantLng(lng)
+              }}
+              placeholder={td('Search your street or choose a Google Maps address')}
+            />
+          </div>
         </CardContent>
       </Card>
 

@@ -15,9 +15,6 @@ function RegisterForm() {
   const [referralCode, setReferralCode] = useState('')
   const [slug, setSlug] = useState('')
   const [isManualSlug, setIsManualSlug] = useState(false)
-  const [restaurantEmail, setRestaurantEmail] = useState('')
-  const [restaurantPhone, setRestaurantPhone] = useState('')
-  const [restaurantAddress, setRestaurantAddress] = useState('')
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -64,9 +61,6 @@ function RegisterForm() {
           restaurantName: restaurantName.trim(),
           slug: slug.trim() || undefined,
           referralCode: referralCode || undefined,
-          restaurantEmail: restaurantEmail.trim() || undefined,
-          restaurantPhone: restaurantPhone.trim() || undefined,
-          restaurantAddress: restaurantAddress.trim() || undefined,
           userName: userName.trim(),
           userEmail: userEmail.trim(),
           password,
@@ -141,39 +135,6 @@ function RegisterForm() {
                   Referral code applied: <span className="font-mono font-semibold">{referralCode}</span>
                 </div>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="restaurantEmail">Restaurant email (optional)</Label>
-                <Input
-                  id="restaurantEmail"
-                  type="email"
-                  placeholder="contact@restaurant.com"
-                  value={restaurantEmail}
-                  onChange={(e) => setRestaurantEmail(e.target.value)}
-                  disabled={isLoading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="restaurantPhone">Restaurant phone (optional)</Label>
-                <Input
-                  id="restaurantPhone"
-                  type="tel"
-                  placeholder="+964 770 000 0000"
-                  value={restaurantPhone}
-                  onChange={(e) => setRestaurantPhone(e.target.value)}
-                  disabled={isLoading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="restaurantAddress">Address (optional)</Label>
-                <Input
-                  id="restaurantAddress"
-                  type="text"
-                  placeholder="Baghdad, Iraq"
-                  value={restaurantAddress}
-                  onChange={(e) => setRestaurantAddress(e.target.value)}
-                  disabled={isLoading}
-                />
-              </div>
               <hr className="border-slate-200" />
               <p className="text-sm font-medium text-slate-700">Owner account</p>
               <div className="space-y-2">
@@ -199,6 +160,9 @@ function RegisterForm() {
                   required
                   disabled={isLoading}
                 />
+                <p className="text-[11px] text-slate-500">
+                  Restaurant contact phone, city, and street will be completed later in Restaurant DNA.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password *</Label>

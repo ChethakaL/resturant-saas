@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { IRAQ_CITIES } from '@/lib/iraq-cities'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,12 @@ const themeSchema = z.object({
   menuCarouselStyle: z.enum(['sliding', 'static']).optional(),
   /** Restaurant name displayed on the guest menu */
   restaurantName: z.string().min(1).max(100).optional(),
+  restaurantEmail: z.string().email().nullable().optional(),
+  restaurantPhone: z.string().max(50).nullable().optional(),
+  restaurantCity: z.enum(IRAQ_CITIES).nullable().optional(),
+  restaurantAddress: z.string().max(255).nullable().optional(),
+  restaurantLat: z.number().nullable().optional(),
+  restaurantLng: z.number().nullable().optional(),
   /** Custom time slot boundaries for carousels */
   slotTimes: z.object({
     breakfast: z.object({ start: z.number().int().min(0).max(23), end: z.number().int().min(0).max(24) }),
@@ -61,7 +68,15 @@ export async function GET() {
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
-      select: { settings: true },
+      select: {
+        settings: true,
+        email: true,
+        phone: true,
+        city: true,
+        address: true,
+        lat: true,
+        lng: true,
+      },
     })
 
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
@@ -72,6 +87,12 @@ export async function GET() {
       backgroundImageUrl: settings.backgroundImageUrl ?? null,
       managementLanguage: settings.managementLanguage ?? 'en',
       tableOrderingEnabled: settings.tableOrderingEnabled !== false,
+      restaurantEmail: restaurant?.email ?? null,
+      restaurantPhone: restaurant?.phone ?? null,
+      restaurantCity: restaurant?.city ?? null,
+      restaurantAddress: restaurant?.address ?? null,
+      restaurantLat: restaurant?.lat ?? null,
+      restaurantLng: restaurant?.lng ?? null,
     })
   } catch (error) {
     console.error('Error fetching theme settings:', error)
@@ -104,7 +125,31 @@ export async function PUT(request: Request) {
     })
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const { menuTimezone, themePreset, backgroundImageUrl, managementLanguage, restaurantName, menuCarouselStyle, slotTimes, snowfallEnabled, snowfallStart, snowfallEnd, descriptionTone, restaurantVibeImageKey, restaurantVibeImageUrl, tableOrderingEnabled, showKurdishOnMenu, showArabicOnMenu, ...themeData } = parsed.data
+    const {
+      menuTimezone,
+      themePreset,
+      backgroundImageUrl,
+      managementLanguage,
+      restaurantName,
+      restaurantEmail,
+      restaurantPhone,
+      restaurantCity,
+      restaurantAddress,
+      restaurantLat,
+      restaurantLng,
+      menuCarouselStyle,
+      slotTimes,
+      snowfallEnabled,
+      snowfallStart,
+      snowfallEnd,
+      descriptionTone,
+      restaurantVibeImageKey,
+      restaurantVibeImageUrl,
+      tableOrderingEnabled,
+      showKurdishOnMenu,
+      showArabicOnMenu,
+      ...themeData
+    } = parsed.data
     const newSettings = {
       ...currentSettings,
       theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }), ...(descriptionTone !== undefined && { descriptionTone }), ...(restaurantVibeImageKey !== undefined && { restaurantVibeImageKey }), ...(restaurantVibeImageUrl !== undefined && { restaurantVibeImageUrl }), ...(showKurdishOnMenu !== undefined && { showKurdishOnMenu }), ...(showArabicOnMenu !== undefined && { showArabicOnMenu }) },
@@ -123,6 +168,12 @@ export async function PUT(request: Request) {
     if (restaurantName !== undefined && restaurantName.trim()) {
       updateData.name = restaurantName.trim()
     }
+    if (restaurantEmail !== undefined) updateData.email = restaurantEmail?.trim() || null
+    if (restaurantPhone !== undefined) updateData.phone = restaurantPhone?.trim() || null
+    if (restaurantCity !== undefined) updateData.city = restaurantCity || null
+    if (restaurantAddress !== undefined) updateData.address = restaurantAddress?.trim() || null
+    if (restaurantLat !== undefined) updateData.lat = restaurantLat
+    if (restaurantLng !== undefined) updateData.lng = restaurantLng
 
     await prisma.restaurant.update({
       where: { id: session.user.restaurantId },
@@ -137,6 +188,12 @@ export async function PUT(request: Request) {
       themePreset: themePreset ?? currentSettings.themePreset,
       backgroundImageUrl: backgroundImageUrl ?? currentSettings.backgroundImageUrl,
       managementLanguage: managementLanguage ?? currentSettings.managementLanguage ?? 'en',
+      restaurantEmail: restaurantEmail ?? null,
+      restaurantPhone: restaurantPhone ?? null,
+      restaurantCity: restaurantCity ?? null,
+      restaurantAddress: restaurantAddress ?? null,
+      restaurantLat: restaurantLat ?? null,
+      restaurantLng: restaurantLng ?? null,
     })
   } catch (error) {
     console.error('Error updating theme settings:', error)

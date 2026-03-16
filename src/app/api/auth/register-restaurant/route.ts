@@ -17,9 +17,6 @@ export async function POST(request: Request) {
     const {
       restaurantName,
       slug: slugInput,
-      restaurantEmail,
-      restaurantPhone,
-      restaurantAddress,
       userName,
       userEmail,
       password,
@@ -27,9 +24,6 @@ export async function POST(request: Request) {
     } = body as {
       restaurantName?: string
       slug?: string
-      restaurantEmail?: string
-      restaurantPhone?: string
-      restaurantAddress?: string
       userName?: string
       userEmail?: string
       password?: string
@@ -98,9 +92,7 @@ export async function POST(request: Request) {
       data: {
         name: restaurantName.trim(),
         slug,
-        email: restaurantEmail?.trim() || userEmail.trim(),
-        phone: restaurantPhone?.trim() || null,
-        address: restaurantAddress?.trim() || null,
+        email: userEmail.trim().toLowerCase(),
         ...(referredByRestaurantId && { referredByRestaurantId }),
       },
     })
