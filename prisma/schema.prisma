@@ -57,6 +57,7 @@ model Restaurant {
   menuEvents          MenuEvent[]
   branches            Branch[]
   promoRedemptions    PromoRedemption[]
+  receipts            Receipt[]
 
   @@map("restaurants")
 }
@@ -145,14 +146,14 @@ model Ingredient {
   minStockLevel         Float
   supplier              String?
   notes                 String?
-  restaurantId          String
+  restaurantId          String?
   globalIngredientId    String?
   preferredSupplierId   String?                  @map("preferred_supplier_id")
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   deliveries            Delivery[]
   expenseTransactions   ExpenseTransaction[]
-  restaurant            Restaurant               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurant            Restaurant?               @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   globalIngredient      GlobalIngredient?       @relation(fields: [globalIngredientId], references: [id], onDelete: SetNull)
   preferredSupplier     Supplier?               @relation(fields: [preferredSupplierId], references: [id], onDelete: SetNull)
   mealPrepUsages        MealPrepInventoryUsage[]
@@ -160,6 +161,8 @@ model Ingredient {
   stockAdjustments      StockAdjustment[]
   wasteRecords          WasteRecord[]
   variants              IngredientVariant[]
+  receipts              Receipt[]
+  expenses              Expense[]
 
   @@index([restaurantId])
   @@index([stockQuantity])
@@ -182,6 +185,39 @@ model IngredientVariant {
   ingredient      Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 
   @@map("variants")
+}
+
+model Receipt {
+  id            String    @id @default(uuid())
+  restaurantId  String
+  ingredientId  String? 
+  ingredient    Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  imageUrl      String
+  parsedData    Json?
+  extractedData Json?
+
+  supplier      String?   
+  totalAmount   Float?    
+  currency      String?   @default("IQD")
+  date          DateTime?
+
+  status        ReceiptStatus @default(PENDING)
+  confidence    Float?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  expenses      Expense[]
+  restaurant    Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, status])
+  @@index([date])
+}
+
+enum ReceiptStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  MANUAL_OVERRIDE
 }
 
 model StockAdjustment {
@@ -454,9 +490,16 @@ model Expense {
   name         String
   category     String?
   amount       Float
+  date         DateTime?
   cadence      ExpenseCadence
   startDate    DateTime
   endDate      DateTime?
+  receiptId    String?       
+  receipt      Receipt?      @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  ingredientId String? 
+  ingredient   Ingredient?   @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  supplier     String?
+  supplierId   String?
   restaurantId String
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -464,7 +507,10 @@ model Expense {
 
   @@index([restaurantId])
   @@index([cadence])
+  @@index([date])
   @@index([startDate])
+  @@index([ingredientId])
+  @@index([receiptId])
   @@map("expenses")
 }
 
@@ -479,6 +525,7 @@ model ExpenseTransaction {
   quantity     Float?
   unitCost     Float?
   restaurantId String
+  receiptId    String?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   deliveries   Delivery[]
