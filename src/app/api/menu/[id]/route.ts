@@ -57,9 +57,11 @@ function normalizeMenuIngredients(ingredients: any[] = []) {
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const resolvedParams = params instanceof Promise ? await params : params
+
     const session = await getServerSession(authOptions)
     if (!session?.user?.restaurantId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -67,10 +69,26 @@ export async function PATCH(
 
     const data = await request.json()
 
+    // Validate required fields
+    if (!data?.categoryId) {
+      return NextResponse.json({ error: 'Category is required' }, { status: 400 })
+    }
+
+    // Verify category exists and belongs to restaurant
+    const category = await prisma.category.findFirst({
+      where: {
+        id: data.categoryId,
+        restaurantId: session.user.restaurantId,
+      },
+    })
+    if (!category) {
+      return NextResponse.json({ error: 'Invalid category' }, { status: 400 })
+    }
+
     // Verify menu item belongs to restaurant
     const existing = await prisma.menuItem.findFirst({
       where: {
-        id: params.id,
+        id: resolvedParams.id,
         restaurantId: session.user.restaurantId,
       },
       include: { category: { select: { name: true } } },
@@ -130,13 +148,15 @@ export async function PATCH(
     // Update menu item and ingredients in a transaction
     const menuItem = await prisma.$transaction(async (tx) => {
       const item = await tx.menuItem.update({
-        where: { id: params.id },
+        where: { id: resolvedParams.id },
         data: {
           name: data.name,
           description: data.description,
           price: data.price,
           imageUrl: data.imageUrl,
-          mediaAssetId: data.mediaAssetId || null,
+          ...(data.mediaAssetId
+            ? { mediaAsset: { connect: { id: data.mediaAssetId } } }
+            : { mediaAsset: { disconnect: true } }),
           available: data.available,
           ...(data.status && { status: data.status }),
           costingStatus,
@@ -147,13 +167,13 @@ export async function PATCH(
           tags: data.tags || [],
           prepTime: data.prepTime || null,
           cookTime: data.cookTime || null,
-          recipeSteps: data.recipeSteps || [],
-          recipeTips: data.recipeTips || [],
+          recipeSteps: Array.isArray(data.recipeSteps) ? data.recipeSteps : [],
+          recipeTips: Array.isArray(data.recipeTips) ? data.recipeTips : [],
         },
       })
 
       await tx.menuItemIngredient.deleteMany({
-        where: { menuItemId: params.id },
+        where: { menuItemId: resolvedParams.id },
       })
 
       if (validIngredients.length > 0) {
@@ -174,7 +194,7 @@ export async function PATCH(
 
       // Delete existing add-on associations
       await tx.menuItemAddOn.deleteMany({
-        where: { menuItemId: params.id },
+        where: { menuItemId: resolvedParams.id },
       })
 
       // Create new add-on associations
@@ -222,7 +242,7 @@ export async function PATCH(
                   translatedDescription:
                     translation.description ||
                     translationSeed.payload.description,
-                  aiDescription: translation.aiDescription,
+                  aiDescription: translation.aiDescription ?? '',
                   protein: translation.protein,
                   carbs: translation.carbs,
                   sourceHash,
@@ -233,7 +253,7 @@ export async function PATCH(
                   language: translation.language,
                   translatedName: translation.name,
                   translatedDescription: translation.description,
-                  aiDescription: translation.aiDescription,
+                  aiDescription: translation.aiDescription ?? '',
                   protein: translation.protein,
                   carbs: translation.carbs,
                   sourceHash,
@@ -249,13 +269,23 @@ export async function PATCH(
     })
 
     // Revalidate the public menu page so changes appear immediately
-    revalidatePath('/')
+    try {
+      revalidatePath('/')
+    } catch (revalidateErr) {
+      console.warn('revalidatePath failed:', revalidateErr)
+    }
 
     return NextResponse.json(menuItem)
-  } catch (error) {
-    console.error('Error updating menu item:', error)
+  } catch (error: unknown) {
+    const err = error as Error & { code?: string }
+    console.error('Error updating menu item:', err)
+    const message = err?.message ?? 'Unknown error'
+    const isDev = process.env.NODE_ENV === 'development'
     return NextResponse.json(
-      { error: 'Failed to update menu item' },
+      {
+        error: 'Failed to update menu item',
+        ...(isDev && { detail: message, code: err?.code }),
+      },
       { status: 500 }
     )
   }
@@ -263,9 +293,11 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const resolvedParams = params instanceof Promise ? await params : params
+
     const session = await getServerSession(authOptions)
     if (!session?.user?.restaurantId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -274,7 +306,7 @@ export async function DELETE(
     // Verify menu item belongs to restaurant
     const existing = await prisma.menuItem.findFirst({
       where: {
-        id: params.id,
+        id: resolvedParams.id,
         restaurantId: session.user.restaurantId,
       },
     })
@@ -284,7 +316,7 @@ export async function DELETE(
     }
 
     await prisma.menuItem.delete({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
     })
 
     // Revalidate the public menu page so deleted items disappear immediately

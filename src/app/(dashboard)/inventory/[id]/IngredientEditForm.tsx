@@ -30,7 +30,6 @@ type VariantType = {
   id?: string
   brand: string
   supplier: string
-  purchaseFormat: string
   packageQuantity: string
   packageUnit: string
   bulkPrice: string
@@ -152,7 +151,6 @@ export default function IngredientEditForm({
       id: v.id,
       brand: v.brand,
       supplier: v.supplier || '',
-      purchaseFormat: v.purchaseFormat || '',
       packageQuantity: v.packageQuantity?.toString() || '',
       packageUnit: v.packageUnit,
       bulkPrice: v.bulkPrice?.toString() || '',
@@ -202,7 +200,10 @@ export default function IngredientEditForm({
     return converted > 0 ? price / converted : 0
   }
 
+  const [expandedVariants, setExpandedVariants] = useState<string[]>(['variant-0'])
+
   const addVariant = () => {
+    const newIndex = formData.variants.length
     setFormData((prev) => ({
       ...prev,
       variants: [
@@ -210,13 +211,13 @@ export default function IngredientEditForm({
         {
           brand: '',
           supplier: '',
-          purchaseFormat: '',
           packageQuantity: '',
           packageUnit: prev.unit,
           bulkPrice: '',
         },
       ],
     }))
+    setExpandedVariants((prev) => [...prev, `variant-${newIndex}`])
   }
 
   const removeVariant = (index: number) => {
@@ -224,6 +225,15 @@ export default function IngredientEditForm({
       ...prev,
       variants: prev.variants.filter((_, i) => i !== index),
     }))
+    setExpandedVariants((prev) =>
+      prev
+        .filter((v) => v !== `variant-${index}`)
+        .map((v) => {
+          const num = parseInt(v.replace('variant-', ''), 10)
+          if (Number.isFinite(num) && num > index) return `variant-${num - 1}`
+          return v
+        })
+    )
   }
 
   const updateVariant = (index: number, field: keyof VariantType, value: string) => {
@@ -272,7 +282,6 @@ export default function IngredientEditForm({
         id: v.id,
         brand: v.brand.trim(),
         supplier: v.supplier.trim() || null,
-        purchaseFormat: v.purchaseFormat.trim() || null,
         packageQuantity: v.packageQuantity ? parseFloat(v.packageQuantity) : null,
         packageUnit: v.packageUnit,
         bulkPrice: v.bulkPrice ? parseFloat(v.bulkPrice) : null,
@@ -302,14 +311,16 @@ export default function IngredientEditForm({
       })
 
       if (!response.ok) {
-        throw new Error(td('Failed to update ingredient'))
+        const errData = await response.json().catch(() => ({}))
+        const detail = errData?.detail ?? errData?.error
+        throw new Error(typeof detail === 'string' ? detail : td('Failed to update ingredient'))
       }
 
       router.push('/inventory')
       router.refresh()
     } catch (error) {
       console.error('Error updating ingredient:', error)
-      setError(td('Failed to update ingredient. Please try again.'))
+      setError(error instanceof Error ? error.message : td('Failed to update ingredient. Please try again.'))
     } finally {
       setLoading(false)
     }
@@ -483,7 +494,12 @@ export default function IngredientEditForm({
               {formData.variants.length === 0 ? (
                 <p className="text-slate-500 italic">{td('No variants yet — add your first one below.')}</p>
               ) : (
-                <Accordion type="multiple" defaultValue={['variant-0']} className="space-y-3">
+                <Accordion
+                  type="multiple"
+                  value={expandedVariants}
+                  onValueChange={setExpandedVariants}
+                  className="space-y-3"
+                >
                   {formData.variants.map((variant, index) => {
                     const calcCost = calculateCostPerUnit(variant)
                     return (
@@ -578,15 +594,6 @@ export default function IngredientEditForm({
                                   ))}
                                 </select>
                               </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label>{td('Purchase Format')}</Label>
-                              <Input
-                                value={variant.purchaseFormat}
-                                onChange={(e) => updateVariant(index, 'purchaseFormat', e.target.value)}
-                                placeholder={td('e.g. 1kg bag, 6-pack, 24-piece crate')}
-                              />
                             </div>
 
                             <div className="grid gap-6 md:grid-cols-3">

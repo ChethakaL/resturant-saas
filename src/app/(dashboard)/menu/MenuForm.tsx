@@ -2621,6 +2621,12 @@ export default function MenuForm({
       return
     }
 
+    const price = parseFloat(formData.price)
+    if (!Number.isFinite(price) || price < 0) {
+      toast({ title: 'Invalid Price', description: 'Please enter a valid price', variant: 'destructive' })
+      return
+    }
+
     // Allow save without recipe (draft). Only validate recipe lines when present.
     if (recipe.length > 0 && recipe.some((item) => item.ingredientId && item.quantity <= 0)) {
       toast({ title: 'Invalid Quantities', description: 'Please set valid quantities for all ingredients or remove empty lines', variant: 'destructive' })
@@ -2693,7 +2699,7 @@ export default function MenuForm({
         body: JSON.stringify({
           name: formData.name,
           description: formData.description || null,
-          price: parseFloat(formData.price),
+          price,
           categoryId: formData.categoryId,
           available: formData.available,
           imageUrl: formData.mediaAssetId
@@ -2727,7 +2733,9 @@ export default function MenuForm({
       })
 
       if (!response.ok) {
-        throw new Error('Failed to save menu item')
+        const errData = await response.json().catch(() => ({}))
+        const detail = errData?.detail ?? errData?.error
+        throw new Error(typeof detail === 'string' ? detail : 'Failed to save menu item')
       }
 
       if (saveStatus === 'ACTIVE') {
@@ -2738,7 +2746,8 @@ export default function MenuForm({
       router.refresh()
     } catch (error) {
       console.error('Error saving menu item:', error)
-      toast({ title: 'Save Failed', description: 'Failed to save menu item. Please try again.', variant: 'destructive' })
+      const message = error instanceof Error ? error.message : 'Failed to save menu item. Please try again.'
+      toast({ title: 'Save Failed', description: message, variant: 'destructive' })
     } finally {
       setLoading(false)
     }

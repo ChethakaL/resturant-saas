@@ -91,39 +91,54 @@ export async function PATCH(
     })
 
     if (data.variants && Array.isArray(data.variants)) {
-      const sentVariantIds = data.variants.filter((v: any) => v.id).map((v: any) => v.id)
+      const sentVariantIds = data.variants
+        .filter((v: any) => v.id != null && v.id !== '')
+        .map((v: any) => Number(v.id))
+        .filter((id) => Number.isFinite(id))
 
-      await prisma.ingredientVariant.deleteMany({
-        where: {
-          ingredientId: resolvedParams.id,
-          id: { notIn: sentVariantIds },
-        },
-      })
+      if (sentVariantIds.length > 0) {
+        await prisma.ingredientVariant.deleteMany({
+          where: {
+            ingredientId: resolvedParams.id,
+            id: { notIn: sentVariantIds },
+          },
+        })
+      } else {
+        await prisma.ingredientVariant.deleteMany({
+          where: { ingredientId: resolvedParams.id },
+        })
+      }
 
       for (const v of data.variants) {
-        if (v.id) {
-          await prisma.ingredientVariant.update({
-            where: { id: v.id },
-            data: {
-              brand: v.brand?.trim(),
-              supplier: v.supplier?.trim() || null,
-              purchaseFormat: v.purchaseFormat?.trim() || null,
-              packageQuantity: v.packageQuantity || null,
-              packageUnit: v.packageUnit,
-              bulkPrice: v.bulkPrice || null,
-              costPerUnit: v.costPerUnit,
-            },
+        const variantId = v.id != null && v.id !== '' ? Number(v.id) : null
+        if (Number.isFinite(variantId)) {
+          const existingVariant = await prisma.ingredientVariant.findFirst({
+            where: { id: variantId as number, ingredientId: resolvedParams.id },
           })
+          if (existingVariant) {
+            await prisma.ingredientVariant.update({
+              where: { id: variantId as number },
+              data: {
+                brand: (v.brand ?? '').trim(),
+                supplier: (v.supplier ?? '').trim() || null,
+                purchaseFormat: (v.purchaseFormat ?? '').trim() || null,
+                packageQuantity: v.packageQuantity != null && v.packageQuantity !== '' ? Number(v.packageQuantity) : null,
+                packageUnit: v.packageUnit ?? 'g',
+                bulkPrice: v.bulkPrice != null && v.bulkPrice !== '' ? Number(v.bulkPrice) : null,
+                costPerUnit: Number(v.costPerUnit) || 0,
+              },
+            })
+          }
         } else {
           await prisma.ingredientVariant.create({
             data: {
-              brand: v.brand?.trim(),
-              supplier: v.supplier?.trim() || null,
-              purchaseFormat: v.purchaseFormat?.trim() || null,
-              packageQuantity: v.packageQuantity || null,
-              packageUnit: v.packageUnit,
-              bulkPrice: v.bulkPrice || null,
-              costPerUnit: v.costPerUnit,
+              brand: (v.brand ?? '').trim(),
+              supplier: (v.supplier ?? '').trim() || null,
+              purchaseFormat: (v.purchaseFormat ?? '').trim() || null,
+              packageQuantity: v.packageQuantity != null && v.packageQuantity !== '' ? Number(v.packageQuantity) : null,
+              packageUnit: v.packageUnit ?? 'g',
+              bulkPrice: v.bulkPrice != null && v.bulkPrice !== '' ? Number(v.bulkPrice) : null,
+              costPerUnit: Number(v.costPerUnit) || 0,
               ingredientId: resolvedParams.id,
             },
           })
@@ -137,10 +152,15 @@ export async function PATCH(
     })
 
     return NextResponse.json(fullIngredient)
-  } catch (error) {
-    console.error('Error updating ingredient:', error)
+  } catch (error: unknown) {
+    const err = error as Error & { code?: string }
+    console.error('Error updating ingredient:', err)
+    const isDev = process.env.NODE_ENV === 'development'
     return NextResponse.json(
-      { error: 'Failed to update ingredient' },
+      {
+        error: 'Failed to update ingredient',
+        ...(isDev && { detail: err?.message ?? 'Unknown error' }),
+      },
       { status: 500 }
     )
   }

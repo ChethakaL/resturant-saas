@@ -48,7 +48,6 @@ const INVENTORY_COPY = {
     variants: 'Variants (Brands)',
     addVariant: 'Add Variant',
     removeVariant: 'Remove Variant',
-    purchaseFormat: 'Purchase Format (e.g. 1kg bag)',
     packageSize: 'Package Size',
     packageUnit: 'Package Unit',
     bulkPrice: 'Bulk Purchase Price (IQD)',
@@ -83,7 +82,6 @@ const INVENTORY_COPY = {
     variants: 'جۆرەکان (براندەکان)',
     addVariant: 'زیادکردنی جۆر',
     removeVariant: 'سڕینەوەی جۆر',
-    purchaseFormat: 'فۆرماتی کڕین (وەک: 1kg bag)',
     packageSize: 'قەبارەی پاکێج',
     packageUnit: 'یەکەی پاکێج',
     bulkPrice: 'نرخی کڕینی گەورە (IQD)',
@@ -118,7 +116,6 @@ const INVENTORY_COPY = {
     variants: 'المتغيرات (العلامات التجارية)',
     addVariant: 'إضافة متغير',
     removeVariant: 'إزالة المتغير',
-    purchaseFormat: 'تنسيق الشراء (مثال: كيس 1 كجم)',
     packageSize: 'حجم العبوة',
     packageUnit: 'وحدة العبوة',
     bulkPrice: 'سعر الشراء بالجملة (د.ع)',
@@ -163,7 +160,6 @@ export default function NewIngredientPage() {
     variants: [] as {
       brand: string
       supplier: string
-      purchaseFormat: string
       packageQuantity: string
       packageUnit: string
       bulkPrice: string
@@ -193,7 +189,6 @@ export default function NewIngredientPage() {
         {
           brand: '',
           supplier: '',
-          purchaseFormat: '',
           packageQuantity: '',
           packageUnit: prev.unit,
           bulkPrice: '',
@@ -254,7 +249,6 @@ export default function NewIngredientPage() {
       return {
         brand: v.brand.trim(),
         supplier: v.supplier.trim() || null,
-        purchaseFormat: v.purchaseFormat.trim() || null,
         packageQuantity: v.packageQuantity ? parseFloat(v.packageQuantity) : null,
         packageUnit: v.packageUnit,
         bulkPrice: v.bulkPrice ? parseFloat(v.bulkPrice) : null,
@@ -502,15 +496,6 @@ export default function NewIngredientPage() {
                                   ))}
                                 </select>
                               </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label>{copy.purchaseFormat}</Label>
-                              <Input
-                                value={variant.purchaseFormat}
-                                onChange={(e) => updateVariant(index, 'purchaseFormat', e.target.value)}
-                                placeholder="e.g. 1kg bag, 6-pack, 24-piece crate"
-                              />
                             </div>
 
                             <div className="grid gap-6 md:grid-cols-3">

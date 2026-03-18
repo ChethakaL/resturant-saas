@@ -2539,11 +2539,11 @@ export default function SmartMenu({
                 </div>
               )}
               {selectedItemForDetail.imageUrl && (
-                <div className="rounded-md border border-slate-200 overflow-hidden">
+                <div className="rounded-md border border-slate-200 overflow-hidden bg-slate-50 h-64 flex items-center justify-center">
                   <img
                     src={selectedItemForDetail.imageUrl}
                     alt={selectedItemForDetail.name}
-                    className="w-full h-56 object-cover"
+                    className="max-w-full max-h-64 object-contain"
                   />
                 </div>
               )}
