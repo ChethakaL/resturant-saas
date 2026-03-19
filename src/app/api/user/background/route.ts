@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getImageModelGenerateContentUrl } from '@/lib/image-api-model'
+import { postToImageModel } from '@/lib/retryable-image-api'
 
 async function generateTemplateImageFromPrompt(prompt: string): Promise<string | null> {
   const apiKey = process.env.GOOGLE_AI_KEY
@@ -15,21 +15,14 @@ async function generateTemplateImageFromPrompt(prompt: string): Promise<string |
     'Background only, no food, no plate, no utensils, no text, no logos. ' +
     'Photorealistic lighting and tabletop/studio scene suitable for placing many different dishes consistently.'
 
-  const response = await fetch(
-    getImageModelGenerateContentUrl(apiKey),
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: imagePrompt }] }],
-        generationConfig: {
-          responseModalities: ['image'],
-          temperature: 0.4,
-          topP: 0.8,
-        },
-      }),
-    }
-  )
+  const response = await postToImageModel(apiKey, {
+    contents: [{ parts: [{ text: imagePrompt }] }],
+    generationConfig: {
+      responseModalities: ['image'],
+      temperature: 0.4,
+      topP: 0.8,
+    },
+  })
   if (!response.ok) {
     return null
   }

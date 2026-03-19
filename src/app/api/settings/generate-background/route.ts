@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getImageModelGenerateContentUrl } from '@/lib/image-api-model'
+import { postToImageModel } from '@/lib/retryable-image-api'
 
 /**
  * Generate a menu background image from a vibe description using Gemini.
@@ -33,20 +33,13 @@ export async function POST(request: NextRequest) {
 
     const imagePrompt = `Wide, high-quality ambient background image for a restaurant menu or dining app. Mood and style: ${description}. The image should be suitable as a full-screen background behind menu text - atmospheric, not too busy, with soft lighting. No text, no logos. Photorealistic or tasteful illustration. 16:9 aspect ratio, horizontal.`
 
-    const response = await fetch(
-      getImageModelGenerateContentUrl(process.env.GOOGLE_AI_KEY),
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: imagePrompt }] }],
-          generationConfig: {
-            responseModalities: ['image'],
-            temperature: 0.9,
-          },
-        }),
-      }
-    )
+    const response = await postToImageModel(process.env.GOOGLE_AI_KEY, {
+      contents: [{ parts: [{ text: imagePrompt }] }],
+      generationConfig: {
+        responseModalities: ['image'],
+        temperature: 0.9,
+      },
+    })
 
     if (!response.ok) {
       const err = await response.text()

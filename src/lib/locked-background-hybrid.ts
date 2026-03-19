@@ -1,7 +1,7 @@
 import sharp from 'sharp'
 import { enforceImageDimensions } from '@/lib/image-processor'
 import type { ImageOrientation, ImageSizePreset } from '@/lib/image-format'
-import { getImageModelGenerateContentUrl } from '@/lib/image-api-model'
+import { postToImageModel } from '@/lib/retryable-image-api'
 
 type GeminiPart = {
   inlineData?: {
@@ -44,11 +44,7 @@ async function callGeminiImage(
     },
   }
 
-  const response = await fetch(getImageModelGenerateContentUrl(apiKey), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+  const response = await postToImageModel(apiKey, payload)
 
   if (!response.ok) {
     const errorText = await response.text()

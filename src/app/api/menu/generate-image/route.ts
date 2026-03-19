@@ -9,7 +9,8 @@ import {
   imageSizePrompts,
 } from '@/lib/image-format'
 import { enforceImageDimensions } from '@/lib/image-processor'
-import { getImageModelGenerateContentUrl, DISH_GROUNDING_PROMPT, DISH_SCALE_PROMPT } from '@/lib/image-api-model'
+import { DISH_GROUNDING_PROMPT, DISH_SCALE_PROMPT } from '@/lib/image-api-model'
+import { postToImageModel } from '@/lib/retryable-image-api'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
 export async function POST(request: NextRequest) {
@@ -111,33 +112,23 @@ ${DISH_SCALE_PROMPT}`
       })
     }
 
-    const modelUrl = getImageModelGenerateContentUrl(process.env.GOOGLE_AI_KEY)
     console.log('Generating image with image model:', imagePrompt.slice(0, 200) + '…')
 
-    const response = await fetch(
-      modelUrl,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                ...requestParts,
-              ],
-            },
+    const response = await postToImageModel(process.env.GOOGLE_AI_KEY, {
+      contents: [
+        {
+          parts: [
+            ...requestParts,
           ],
-          generationConfig: {
-            responseModalities: ['image'],
-            temperature: 1,
-            topK: 40,
-            topP: 0.95,
-          },
-        }),
-      }
-    )
+        },
+      ],
+      generationConfig: {
+        responseModalities: ['image'],
+        temperature: 1,
+        topK: 40,
+        topP: 0.95,
+      },
+    })
 
     if (!response.ok) {
       const errorText = await response.text()

@@ -5,12 +5,13 @@ import {
   imageOrientationPrompts,
   imageSizePrompts,
 } from '@/lib/image-format'
-import { getImageModelGenerateContentUrl, DISH_GROUNDING_PROMPT, DISH_SCALE_PROMPT } from '@/lib/image-api-model'
+import { DISH_GROUNDING_PROMPT, DISH_SCALE_PROMPT } from '@/lib/image-api-model'
 import {
   analyzeDishImageForFixes,
   formatAnalysisForPrompt,
   analysisSaysStillFloating,
 } from '@/lib/analyze-dish-image'
+import { postToImageModel } from '@/lib/retryable-image-api'
 
 const ENHANCEMENT_PROMPT = `
 You are editing a real photo of a cooked dish. Create a restaurant-quality menu photo of THE SAME EXACT DISH.
@@ -128,14 +129,7 @@ export async function enhanceDishImage(options: EnhanceDishImageOptions): Promis
     contents: [{ parts }],
     generationConfig: { responseModalities: ['image'], temperature: 0.2, topK: 16, topP: 0.8 },
   }
-  const response = await fetch(
-    getImageModelGenerateContentUrl(apiKey),
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    }
-  )
+  const response = await postToImageModel(apiKey, requestBody)
 
   if (!response.ok) {
     const errorText = await response.text()
@@ -181,11 +175,7 @@ export async function enhanceDishImage(options: EnhanceDishImageOptions): Promis
       contents: [{ parts: fixParts }],
       generationConfig: { responseModalities: ['image'], temperature: 0.15, topK: 10, topP: 0.75 },
     }
-    const fixRes = await fetch(getImageModelGenerateContentUrl(apiKey), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fixBody),
-    })
+    const fixRes = await postToImageModel(apiKey, fixBody)
     if (!fixRes.ok) return false
     const fixData = await fixRes.json()
     const fixCandidates = fixData.candidates
