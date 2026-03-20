@@ -15,7 +15,7 @@ import { ArrowLeft, Save, Plus, Trash2, Building2, CalendarDays, CheckCircle2 } 
 import Link from 'next/link'
 import { useI18n } from '@/lib/i18n'
 import { SupplierDirectoryModal, type SupplierDirectoryEntry } from '../SupplierDirectoryModal'
-import { DEFAULT_INVENTORY_CATEGORY, INVENTORY_CATEGORY_OPTIONS } from '@/lib/inventory-categories'
+import { DEFAULT_INVENTORY_CATEGORY } from '@/lib/inventory-categories'
 
 function PurchaseDateField({
   value,
@@ -372,38 +372,17 @@ export default function NewIngredientPage() {
                 <CardTitle className="text-sm uppercase tracking-[0.2em] text-slate-600">{copy.details}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
-                <div className="grid gap-5 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">
-                      {copy.ingredientName} <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="name"
-                      required
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder={copy.chicken}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="category">
-                      Category <span className="text-red-500">*</span>
-                    </Label>
-                    <select
-                      id="category"
-                      required
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value as typeof DEFAULT_INVENTORY_CATEGORY })}
-                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                    >
-                      {INVENTORY_CATEGORY_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="name">
+                    {copy.ingredientName} <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="name"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder={copy.chicken}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -439,48 +418,6 @@ export default function NewIngredientPage() {
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                    <CalendarDays className="h-4 w-4 text-slate-500" />
-                    Purchase date
-                  </div>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Purchase dates are recorded automatically when you upload a receipt.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200 shadow-none">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm uppercase tracking-[0.2em] text-slate-600">UNIT OF USE</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <div>
-                  <p className="mb-3 text-sm text-slate-600">How is this ingredient measured in recipes?</p>
-                  <div className="flex flex-wrap gap-2">
-                    {UNIT_OPTIONS.map((opt) => {
-                      const active = formData.unit === opt.value
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setFormData({ ...formData, unit: opt.value })}
-                          className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                            active
-                              ? 'border-emerald-600 bg-emerald-600 text-white'
-                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                          }`}
-                        >
-                          {copy.units[opt.value as keyof typeof copy.units]}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                  All package prices below will be converted automatically into cost per {formData.unit}.
-                </div>
               </CardContent>
             </Card>
 
@@ -488,7 +425,7 @@ export default function NewIngredientPage() {
               <div className="space-y-1">
                 <Label className="mt-4 block text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">PURCHASE INFO</Label>
                 <p className="text-sm text-slate-500">
-                  Add the package or brand options you buy from suppliers. The system will calculate the cost per {formData.unit}.
+                  Add the brand you buy, optional purchase date, purchase type, and price. Then choose how this ingredient is used in recipes so the system can calculate the cost correctly.
                 </p>
               </div>
 
@@ -522,30 +459,32 @@ export default function NewIngredientPage() {
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                          <div className="space-y-2">
-                            <Label>
-                              {copy.brand} <span className="text-red-500">*</span>
-                            </Label>
-                            <Input
-                              value={variant.brand}
-                              onChange={(e) => updateVariant(index, 'brand', e.target.value)}
-                              placeholder="e.g. Lurpak, Lavazza, Fresh Farm"
-                            />
-                            <p className="text-xs text-slate-500">
-                              Supplier comes from the main supplier selection above{selectedPreferredSupplier ? `: ${selectedPreferredSupplier.name}.` : '.'}
-                            </p>
-                          </div>
+                          <div className="grid gap-6 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label>
+                                {copy.brand} <span className="text-red-500">*</span>
+                              </Label>
+                              <Input
+                                value={variant.brand}
+                                onChange={(e) => updateVariant(index, 'brand', e.target.value)}
+                                placeholder="e.g. Lurpak, Lavazza, Fresh Farm"
+                              />
+                              <p className="text-xs text-slate-500">
+                                Supplier comes from the main supplier selection above{selectedPreferredSupplier ? `: ${selectedPreferredSupplier.name}.` : '.'}
+                              </p>
+                            </div>
 
-                          <div className="space-y-2">
-                            <Label>Purchase date</Label>
-                            <PurchaseDateField
-                              value={variant.purchaseDate}
-                              onChange={(value) => updateVariant(index, 'purchaseDate', value)}
-                              locale={locale}
-                            />
-                            <p className="text-xs text-slate-500">
-                              Enter it now if you know it, or leave it empty and upload a receipt later to fill purchase details automatically.
-                            </p>
+                            <div className="space-y-2">
+                              <Label>Purchase date (optional)</Label>
+                              <PurchaseDateField
+                                value={variant.purchaseDate}
+                                onChange={(value) => updateVariant(index, 'purchaseDate', value)}
+                                locale={locale}
+                              />
+                              <p className="text-xs text-slate-500">
+                                Leave this empty if you want to upload a receipt later and fill it automatically.
+                              </p>
+                            </div>
                           </div>
 
                           <div className="grid gap-6 md:grid-cols-2">
@@ -573,6 +512,32 @@ export default function NewIngredientPage() {
                                 onChange={(e) => updateVariant(index, 'bulkPrice', e.target.value)}
                                 placeholder="25000"
                               />
+                            </div>
+                          </div>
+
+                          <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div>
+                              <Label className="text-sm font-medium text-slate-800">Unit of use</Label>
+                              <p className="mt-1 text-sm text-slate-600">How is this ingredient measured in recipes? This applies to all package options.</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {UNIT_OPTIONS.map((opt) => {
+                                const active = formData.unit === opt.value
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, unit: opt.value })}
+                                    className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                                      active
+                                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                                    }`}
+                                  >
+                                    {copy.units[opt.value as keyof typeof copy.units]}
+                                  </button>
+                                )
+                              })}
                             </div>
                           </div>
 
