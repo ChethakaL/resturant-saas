@@ -249,7 +249,7 @@ export default function NewIngredientPage() {
         ...prev.variants,
         {
           brand: '',
-          supplier: '',
+          supplier: selectedPreferredSupplier?.name || '',
           purchaseFormat: 'Bag',
           purchaseDate: '',
           packageQuantity: '',
@@ -293,7 +293,7 @@ export default function NewIngredientPage() {
       const cost = calculateCostPerUnit(v)
       return {
         brand: v.brand.trim(),
-        supplier: v.supplier.trim() || null,
+        supplier: selectedPreferredSupplier?.name || null,
         purchaseFormat: v.purchaseFormat || null,
         purchaseDate: v.purchaseDate || null,
         packageQuantity: v.packageQuantity ? parseFloat(v.packageQuantity) : null,
@@ -522,33 +522,18 @@ export default function NewIngredientPage() {
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                          <div className="grid gap-6 md:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label>
-                                {copy.brand} <span className="text-red-500">*</span>
-                              </Label>
-                              <Input
-                                value={variant.brand}
-                                onChange={(e) => updateVariant(index, 'brand', e.target.value)}
-                                placeholder="e.g. Lurpak, Lavazza, Fresh Farm"
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label>Supplier name(s)</Label>
-                              <select
-                                value={variant.supplier}
-                                onChange={(e) => updateVariant(index, 'supplier', e.target.value)}
-                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                              >
-                                <option value="">— None —</option>
-                                {suppliers.map((supplier) => (
-                                  <option key={supplier.id} value={supplier.name}>
-                                    {supplier.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                          <div className="space-y-2">
+                            <Label>
+                              {copy.brand} <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                              value={variant.brand}
+                              onChange={(e) => updateVariant(index, 'brand', e.target.value)}
+                              placeholder="e.g. Lurpak, Lavazza, Fresh Farm"
+                            />
+                            <p className="text-xs text-slate-500">
+                              Supplier comes from the main supplier selection above{selectedPreferredSupplier ? `: ${selectedPreferredSupplier.name}.` : '.'}
+                            </p>
                           </div>
 
                           <div className="space-y-2">
