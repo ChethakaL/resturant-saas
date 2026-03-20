@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -41,10 +42,9 @@ import {
   ImageOrientation,
   ImageSizePreset,
   imageOrientationOptions,
-  imageOrientationPrompts,
   imageSizeOptions,
-  imageSizePrompts,
 } from '@/lib/image-format'
+import { getAutoModePromptCards } from '@/lib/iserve-image-prompts'
 
 interface RecipeIngredient {
   ingredientId: string
@@ -404,6 +404,11 @@ export default function MenuForm({
   const [generatingImage, setGeneratingImage] = useState(false)
   const [showPromptDialog, setShowPromptDialog] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
+  const [imageMode, setImageMode] = useState<'auto' | 'generate' | 'enhance'>('auto')
+  const [imageQualityLevel, setImageQualityLevel] = useState<'standard' | 'premium' | 'luxury'>('premium')
+  const [enhancementBackgroundMode, setEnhancementBackgroundMode] = useState<'soft_bokeh' | 'full_blur' | 'clean_only'>('soft_bokeh')
+  const [selectedPromptPreset, setSelectedPromptPreset] = useState<string | null>(null)
+  const [autoPromptAccordionValue, setAutoPromptAccordionValue] = useState<string>('auto-prompts')
   /** When opening Generate Image from Smart Chef after we already asked for dish name, use name inferred from chat */
   const [inferredItemNameForImage, setInferredItemNameForImage] = useState<string | null>(null)
   const [imageOrientation, setImageOrientation] = useState<ImageOrientation>('landscape')
@@ -503,6 +508,14 @@ export default function MenuForm({
     const newOnes = smartChefCategories.filter((category) => !existingIds.has(category.id))
     return [...categories, ...newOnes]
   }, [categories, smartChefCategories])
+  const autoPromptCards = useMemo(() => {
+    return getAutoModePromptCards({
+      itemName: inferredItemNameForImage?.trim() || formData.name,
+      category: allCategories.find((c) => c.id === formData.categoryId)?.name,
+      description: formData.description,
+      mode: uploadedPhoto ? 'enhance' : 'generate',
+    }).cards
+  }, [allCategories, formData.categoryId, formData.description, formData.name, inferredItemNameForImage, uploadedPhoto])
 
   const initialCategoryName = allCategories.find(
     (category) => category.id === initialFormData.categoryId
@@ -1363,13 +1376,85 @@ export default function MenuForm({
   }
 
   const generateImage = async () => {
+    const itemNameForImage = inferredItemNameForImage?.trim() || formData.name?.trim()
     const customPromptTrimmed = customPrompt.trim()
-    const promptForUpload =
-      customPromptTrimmed || trimmedSavedBackgroundPrompt || undefined
-    const useSavedDefaults = customPromptTrimmed.length === 0
 
-    // If there's an uploaded photo, enhance it instead of generating from scratch
-    if (uploadedPhoto) {
+    if (imageMode === 'auto') {
+      setGeneratingImage(true)
+      try {
+        const category = allCategories.find((c) => c.id === formData.categoryId)
+
+        if (uploadedPhoto) {
+          const response = await fetch('/api/menu/enhance-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageData: uploadedPhoto,
+              prompt: customPromptTrimmed || undefined,
+              orientation: imageOrientation,
+              sizePreset: imageSizePreset,
+            }),
+          })
+
+          const data = await response.json()
+          if (!response.ok) {
+            throw new Error(data.details || data.error || 'Failed to enhance image')
+          }
+
+          setPreviewImageUrl(data.imageUrl)
+          toast({
+            title: 'Image enhanced',
+            description: 'Your photo has been enhanced with the selected prompt options.',
+          })
+          return
+        }
+
+        if (!itemNameForImage) {
+          toast({
+            title: 'Missing Information',
+            description: 'Please enter a menu item name first',
+            variant: 'destructive',
+          })
+          return
+        }
+
+        const response = await fetch('/api/menu/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: customPromptTrimmed || undefined,
+            itemName: itemNameForImage,
+            description: formData.description,
+            category: category?.name,
+            orientation: imageOrientation,
+            sizePreset: imageSizePreset,
+          }),
+        })
+
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to generate image')
+        }
+
+        setPreviewImageUrl(data.imageUrl)
+        setInferredItemNameForImage(null)
+        return
+      } catch (error) {
+        console.error('Error generating image:', error)
+        toast({
+          title: uploadedPhoto ? 'Enhancement Failed' : 'Image Generation Failed',
+          description:
+            error instanceof Error ? error.message : 'Failed to create image',
+          variant: 'destructive',
+        })
+        return
+      } finally {
+        setGeneratingImage(false)
+      }
+    }
+
+    // --- Enhance mode: upload photo required, uses iServe standards ---
+    if (uploadedPhoto && imageMode === 'enhance') {
       setGeneratingImage(true)
       try {
         const response = await fetch('/api/menu/enhance-image', {
@@ -1377,8 +1462,13 @@ export default function MenuForm({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             imageData: uploadedPhoto,
-            prompt: promptForUpload,
-            useSavedDefaults,
+            useIserveStandards: true,
+            itemName: itemNameForImage,
+            description: formData.description,
+            category: allCategories.find((c) => c.id === formData.categoryId)?.name,
+            qualityLevel: imageQualityLevel,
+            backgroundMode: enhancementBackgroundMode,
+            notes: customPromptTrimmed || undefined,
             orientation: imageOrientation,
             sizePreset: imageSizePreset,
           }),
@@ -1410,7 +1500,14 @@ export default function MenuForm({
     }
 
     // Generate from scratch: use form name or name inferred from Smart Chef chat
-    const itemNameForImage = inferredItemNameForImage?.trim() || formData.name?.trim()
+    if (imageMode === 'enhance') {
+      toast({
+        title: 'Missing Photo',
+        description: 'Please upload a real dish photo before using Enhance.',
+        variant: 'destructive',
+      })
+      return
+    }
     if (!itemNameForImage) {
       toast({
         title: 'Missing Information',
@@ -1424,17 +1521,15 @@ export default function MenuForm({
 
     try {
       const category = allCategories.find((c) => c.id === formData.categoryId)
-      const promptForGeneration =
-        customPromptTrimmed || trimmedSavedBackgroundPrompt
       const response = await fetch('/api/menu/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: promptForGeneration || null,
-          useSavedDefaults,
+          useIserveStandards: true,
           itemName: itemNameForImage,
           description: formData.description,
           category: category?.name,
+          notes: customPromptTrimmed || undefined,
           orientation: imageOrientation,
           sizePreset: imageSizePreset,
         }),
@@ -1512,7 +1607,41 @@ export default function MenuForm({
 
     const reader = new FileReader()
     reader.onloadend = () => {
-      setUploadedPhoto(reader.result as string)
+      const dataUrl = reader.result as string
+      setUploadedPhoto(dataUrl)
+      if (imageMode === 'auto') {
+        setImageOrientation('square')
+        setImageSizePreset('medium')
+      }
+
+      const image = new window.Image()
+      image.onload = () => {
+        if (imageMode !== 'enhance') {
+          return
+        }
+        const width = image.naturalWidth || 0
+        const height = image.naturalHeight || 0
+        if (width > 0 && height > 0) {
+          const ratio = width / height
+          if (ratio > 1.18) {
+            setImageOrientation('landscape')
+          } else if (ratio < 0.85) {
+            setImageOrientation('portrait')
+          } else {
+            setImageOrientation('square')
+          }
+
+          const longEdge = Math.max(width, height)
+          if (longEdge <= 1000) {
+            setImageSizePreset('small')
+          } else if (longEdge <= 1800) {
+            setImageSizePreset('medium')
+          } else {
+            setImageSizePreset('large')
+          }
+        }
+      }
+      image.src = dataUrl
     }
     reader.readAsDataURL(file)
     event.target.value = ''
@@ -4548,26 +4677,31 @@ export default function MenuForm({
         if (!open) {
           setUploadedPhoto(null)
           setCustomPrompt('')
+          setImageMode('auto')
+          setSelectedPromptPreset(null)
+          setAutoPromptAccordionValue('auto-prompts')
+          setImageOrientation('square')
+          setImageSizePreset('medium')
           setPreviewImageUrl(null)
           setInferredItemNameForImage(null)
         }
       }}>
-        <DialogContent className="max-w-lg max-h-[80vh]">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-emerald-500" />
               {td('Generate Image with AI')}
             </DialogTitle>
             <DialogDescription>
-              {td('Upload your own photo for professional enhancement, or generate a new image from scratch.')}
+              {td('Choose how to create the image. The dish name, category, and description already come from the menu form.')}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+          <div className="min-h-0 flex-1 space-y-4 py-4 overflow-y-auto pr-1 custom-scrollbar">
             {generatingImage ? (
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 <Loader2 className="h-12 w-12 animate-spin text-emerald-500" />
                 <p className="text-sm text-slate-500">
-                  {uploadedPhoto ? td('Enhancing your photo professionally...') : td('Generating your image with AI...')}
+                  {imageMode === 'enhance' ? td('Enhancing your photo professionally...') : td('Generating your image with AI...')}
                 </p>
                 <p className="text-xs text-slate-400">{td('This may take a few moments')}</p>
               </div>
@@ -4613,164 +4747,366 @@ export default function MenuForm({
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Upload Photo Section */}
-                <div className="space-y-2">
-                  <Label>{td('Upload Your Photo (Recommended)')}</Label>
-                  <p className="text-xs text-slate-500">
-                    {td("Upload a photo of your actual dish and our AI will enhance it to look professionally shot. This helps customers see exactly what they'll receive!")}
-                  </p>
-                  <div className="flex gap-2 items-center">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <ImagePlus className="h-4 w-4 mr-2" />
-                      {td('Select Photo')}
-                    </Button>
-                    {uploadedPhoto && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setUploadedPhoto(null)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        {td('Remove')}
-                      </Button>
-                    )}
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    ref={fileInputRef}
-                    onChange={handlePhotoUpload}
-                  />
-                  {uploadedPhoto && (
-                    <div className="mt-2 rounded-lg border-2 border-emerald-500/50 overflow-hidden">
-                      <img
-                        src={uploadedPhoto}
-                        alt="Uploaded preview"
-                        className="w-full h-48 object-cover"
-                      />
-                      <div className="px-3 py-2 bg-emerald-500/10 text-xs text-emerald-700 flex items-center gap-2">
-                        <Check className="h-3 w-3" />
-                        {td('Photo ready for AI enhancement')}
-                      </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Label className="text-sm font-semibold">{td('Image method')}</Label>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {td('Choose whether you want to enhance a real photo or generate a new image from scratch.')}
+                      </p>
                     </div>
-                  )}
+                    <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-500">
+                      {td('Auto-filled from form')}
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {[
+                      { key: 'auto' as const, title: td('Auto'), desc: td('Choose ready-made prompt cards, then edit the note if needed.'), recommended: true },
+                      { key: 'enhance' as const, title: td('Enhance'), desc: td('Upload a photo and apply full iServe standards.'), recommended: false },
+                      { key: 'generate' as const, title: td('Generate'), desc: td('Create a new image with full iServe standards.'), recommended: false },
+                    ].map((option) => {
+                      const active = imageMode === option.key
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => {
+                            setImageMode(option.key)
+                            if (option.key === 'auto') {
+                              setImageOrientation('square')
+                              setImageSizePreset('medium')
+                              setAutoPromptAccordionValue('auto-prompts')
+                            }
+                          }}
+                          className={`rounded-xl border px-4 py-3 text-left transition ${
+                            active
+                              ? 'border-emerald-500 bg-emerald-50 text-slate-900 shadow-sm'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 text-sm font-semibold">
+                            <span>{option.title}</span>
+                            {option.recommended ? (
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-emerald-700">
+                                {td('Recommended')}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-1 text-xs leading-5 text-slate-500">{option.desc}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
-                {!uploadedPhoto && (
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-slate-200" />
+                <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                      {td('Current item')}
+                    </p>
+                    <div className="mt-3 space-y-2 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500">{td('Name')}</span>
+                        <span className="font-medium text-slate-900 text-right">{localizedFieldValues.name || formData.name || td('Not set')}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500">{td('Category')}</span>
+                        <span className="font-medium text-slate-900 text-right">
+                          {allCategories.find((c) => c.id === formData.categoryId)?.name || td('Not set')}
+                        </span>
+                      </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="text-slate-500">{td('Description')}</span>
+                        <span className="max-w-[60%] text-right text-slate-700">
+                          {formData.description?.trim() || td('Use the menu form description')}
+                        </span>
+                      </div>
                     </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-white px-2 text-slate-500">{td('or generate from scratch')}</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                      {td('What will happen')}
+                    </p>
+                    <div className="mt-3 space-y-2 text-sm text-slate-600">
+                      <p>
+                        {imageMode === 'auto'
+                          ? td('You can pick user-friendly prompt cards, review the text that gets inserted, then edit it before creating the image.')
+                          : imageMode === 'enhance'
+                          ? td('Your uploaded photo will be cleaned up and polished into a restaurant-ready image.')
+                          : td('A new food image will be created from scratch using the current item details.')}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {imageMode === 'auto'
+                          ? td('Auto keeps the format simple with square and medium defaults, so you only focus on choosing a ready-made prompt and editing the text if needed.')
+                          : imageMode === 'enhance'
+                          ? td('Orientation and target size are auto-selected from the uploaded image, but you can still change them below.')
+                          : td('Orientation and target size stay available below so you still control the final format.')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {(imageMode === 'auto' || imageMode === 'enhance' || uploadedPhoto) && (
+                  <div className="space-y-2 rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-4">
+                    <Label className="text-sm font-semibold">{td('Upload photo')}</Label>
+                    <p className="text-xs text-slate-500">
+                      {imageMode === 'enhance'
+                        ? td('Use a real dish photo when you want the AI to enhance an existing image. Orientation and target size will be auto-selected from the uploaded image.')
+                        : td('Optional. Upload a real dish photo if you want the selected prompt cards to enhance an existing image instead of generating a new one.')}
+                    </p>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <ImagePlus className="h-4 w-4 mr-2" />
+                        {td('Select Photo')}
+                      </Button>
+                      {uploadedPhoto && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setUploadedPhoto(null)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          {td('Remove')}
+                        </Button>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      ref={fileInputRef}
+                      onChange={handlePhotoUpload}
+                    />
+                    {uploadedPhoto && (
+                      <div className="mt-2 overflow-hidden rounded-xl border border-emerald-200 bg-white">
+                        <img
+                          src={uploadedPhoto}
+                          alt="Uploaded preview"
+                          className="h-44 w-full object-cover"
+                        />
+                        <div className="flex items-center gap-2 px-3 py-2 text-xs text-emerald-700 bg-emerald-50">
+                          <Check className="h-3 w-3" />
+                          {imageMode === 'auto' ? td('Photo ready for auto mode') : td('Photo ready for enhancement')}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {imageMode === 'auto' && (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
+                    <Accordion
+                      type="single"
+                      collapsible
+                      value={autoPromptAccordionValue}
+                      onValueChange={setAutoPromptAccordionValue}
+                      className="w-full"
+                    >
+                      <AccordionItem value="auto-prompts" className="border-none">
+                        <AccordionTrigger className="px-0 py-0 hover:no-underline">
+                          <div className="text-left">
+                            <div className="text-sm font-semibold">{td('Ready-made prompt cards')}</div>
+                            <div className="mt-1 text-xs font-normal text-slate-500">
+                              {selectedPromptPreset
+                                ? td('A prompt is selected. Open this section again if you want to switch to another ready-made prompt.')
+                                : uploadedPhoto
+                                  ? td('Because a real photo is uploaded, these ready-made prompts switch to enhancement prompts that preserve the dish and improve the existing image.')
+                                  : td('These come from the iServe documents. Pick one, read what it will do, and we will place the full prompt in the box below so you can edit it if needed.')}
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-3">
+                          <div className="flex gap-3 overflow-x-auto pb-2">
+                            {autoPromptCards.map((preset) => {
+                              const active = selectedPromptPreset === preset.id
+                              return (
+                                <button
+                                  key={preset.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPromptPreset(preset.id)
+                                    setCustomPrompt(preset.prompt)
+                                    setAutoPromptAccordionValue('')
+                                  }}
+                                  className={`w-[320px] shrink-0 rounded-2xl border px-4 py-4 text-left transition ${
+                                    active
+                                      ? 'border-emerald-500 bg-emerald-50 text-slate-900 shadow-sm'
+                                      : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/40'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="text-sm font-semibold">{td(preset.title)}</div>
+                                    {preset.id === 'master-template' ? (
+                                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-600">
+                                        {td('Official')}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="mt-2 text-xs leading-5 text-slate-500">{td(preset.description)}</div>
+                                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs leading-5 text-slate-700 line-clamp-6">
+                                    {preset.prompt}
+                                  </div>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </div>
+                )}
+
+                <div className="space-y-2 rounded-2xl border border-slate-200 p-4">
+                  <Label htmlFor="imageNotes" className="text-sm font-semibold">
+                    {imageMode === 'auto' ? td('Prompt text') : td('Optional notes')}
+                  </Label>
+                  <p className="text-xs text-slate-500">
+                    {imageMode === 'auto'
+                      ? td('The selected document-based prompt will appear here. You can still edit anything manually before generating.')
+                      : td('Add any one-time note for this image. This is optional and gives you manual control when you want something specific.')}
+                  </p>
+                  <Textarea
+                    id="imageNotes"
+                    value={customPrompt}
+                    onChange={(e) => {
+                      setSelectedPromptPreset(null)
+                      setCustomPrompt(e.target.value)
+                    }}
+                    placeholder={imageMode === 'auto'
+                      ? td('Tap the ready-made prompt cards above, then edit the text here if you want...')
+                      : td('Write your own optional note here...')}
+                    rows={5}
+                    disabled={generatingImage}
+                  />
+                </div>
+
+                {imageMode === 'enhance' && (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
+                    <div className="space-y-2">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                        {td('Background treatment')}
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {[
+                          { value: 'soft_bokeh' as const, label: td('Soft Bokeh'), desc: td('Keep the setting recognizable.') },
+                          { value: 'full_blur' as const, label: td('Full Blur'), desc: td('Keep only the food sharp.') },
+                          { value: 'clean_only' as const, label: td('Clean Only'), desc: td('Remove distractions without blur.') },
+                        ].map((option) => {
+                          const active = enhancementBackgroundMode === option.value
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setEnhancementBackgroundMode(option.value)}
+                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                                active
+                                  ? 'border-emerald-500 bg-emerald-50 text-slate-900'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="text-sm font-semibold">{option.label}</div>
+                              <div className="mt-1 text-xs text-slate-500">{option.desc}</div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                        {td('Output quality')}
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {[
+                          { value: 'standard' as const, label: td('Standard'), desc: td('Professional and appetizing.') },
+                          { value: 'premium' as const, label: td('Premium'), desc: td('Magazine-ready restaurant quality.') },
+                          { value: 'luxury' as const, label: td('Luxury'), desc: td('Fine dining editorial quality.') },
+                        ].map((option) => {
+                          const active = imageQualityLevel === option.value
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setImageQualityLevel(option.value)}
+                              className={`rounded-xl border px-4 py-3 text-left transition ${
+                                active
+                                  ? 'border-emerald-500 bg-emerald-50 text-slate-900'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="text-sm font-semibold">{option.label}</div>
+                              <div className="mt-1 text-xs text-slate-500">{option.desc}</div>
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="customPrompt">{td('Custom Prompt (optional)')}</Label>
-                  <Textarea
-                    id="customPrompt"
-                    value={customPrompt}
-                    onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder={td('Describe subtle adjustments or recreate the scene from scratch...')}
-                    rows={3}
-                    disabled={generatingImage}
-                  />
-                  {(trimmedSavedBackgroundPrompt || hasDefaultBackgroundImage) && (
-                    <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="leading-relaxed">
-                        {trimmedSavedBackgroundPrompt
-                          ? td('Saved consistent background style is ready and used by default when prompt is empty.')
-                          : td('A saved consistent background image is ready and used by default when prompt is empty.')}
+                {imageMode !== 'auto' && (
+                  <div className="space-y-3 border-t border-dashed border-slate-200 pt-3">
+                    <div className="space-y-2">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                        {td('Orientation')}
                       </p>
-                      {trimmedSavedBackgroundPrompt && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCustomPrompt(trimmedSavedBackgroundPrompt)}
-                          disabled={generatingImage}
-                          className="rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-600"
-                        >
-                          {td('Use default prompt')}
-                        </Button>
-                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {imageOrientationOptions.map((option) => {
+                          const isActive = option.value === imageOrientation
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setImageOrientation(option.value)}
+                              className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
+                                ? 'border-emerald-500 bg-emerald-100 text-slate-900'
+                                : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
+                                }`}
+                            >
+                              <span className="block text-sm">{td(option.label)}</span>
+                              <span className="text-[10px] text-slate-400">{option.aspect}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <p className="text-xs text-slate-500 italic">
+                        {td(currentOrientationOption.description)}
+                      </p>
                     </div>
-                  )}
-                  <div className="text-xs text-slate-500">
-                    <Link href="/settings#dish-photo-background" className="font-medium text-emerald-700 hover:underline">
-                      {td('Configure consistent background prompt or upload a reference image')}
-                    </Link>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {uploadedPhoto
-                      ? td('Leave prompt empty to use your saved consistent background settings. Add text only if you want a one-time custom style.')
-                      : td('Leave prompt empty to use your saved consistent background settings (prompt and/or image).')}
-                  </p>
-                </div>
-                <div className="space-y-3 border-t border-dashed border-slate-200 pt-3">
-                  <div className="space-y-2">
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                      {td('Orientation')}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {imageOrientationOptions.map((option) => {
-                        const isActive = option.value === imageOrientation
-                        return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => setImageOrientation(option.value)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
-                              ? 'border-emerald-500 bg-emerald-100 text-slate-900'
-                              : 'border-slate-200 bg-white/5 text-slate-500 hover:border-slate-400'
-                              }`}
-                          >
-                            <span className="block text-sm">{td(option.label)}</span>
-                            <span className="text-[10px] text-slate-400">{option.aspect}</span>
-                          </button>
-                        )
-                      })}
+                    <div className="space-y-2">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                        {td('Target size')}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {imageSizeOptions.map((option) => {
+                          const isActive = option.value === imageSizePreset
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setImageSizePreset(option.value)}
+                              className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
+                                ? 'border-emerald-500 bg-emerald-100 text-slate-900'
+                                : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
+                                }`}
+                            >
+                              <span className="block text-sm">{td(option.label)}</span>
+                              <span className="text-[10px] text-slate-400">{`${option.pixels}px`}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <p className="text-xs text-slate-500 italic">
+                        {td(currentSizeOption.description)}
+                      </p>
                     </div>
-                    <p className="text-xs text-slate-500 italic">
-                      {td(currentOrientationOption.description)}
-                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                      {td('Target size')}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {imageSizeOptions.map((option) => {
-                        const isActive = option.value === imageSizePreset
-                        return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => setImageSizePreset(option.value)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${isActive
-                              ? 'border-emerald-500 bg-emerald-100 text-slate-900'
-                              : 'border-slate-200 bg-white/5 text-slate-400 hover:border-slate-400'
-                              }`}
-                          >
-                            <span className="block text-sm">{td(option.label)}</span>
-                            <span className="text-[10px] text-slate-400">{`${option.pixels}px`}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                    <p className="text-xs text-slate-500 italic">
-                      {td(currentSizeOption.description)}
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -4782,6 +5118,11 @@ export default function MenuForm({
                 onClick={() => {
                   setShowPromptDialog(false)
                   setCustomPrompt('')
+                  setImageMode('auto')
+                  setSelectedPromptPreset(null)
+                  setAutoPromptAccordionValue('auto-prompts')
+                  setImageOrientation('square')
+                  setImageSizePreset('medium')
                   setPreviewImageUrl(null)
                   setUploadedPhoto(null)
                 }}

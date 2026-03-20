@@ -5,13 +5,11 @@ import { prisma } from '@/lib/prisma'
 import {
   ImageOrientation,
   ImageSizePreset,
-  imageOrientationPrompts,
-  imageSizePrompts,
 } from '@/lib/image-format'
 import { enforceImageDimensions } from '@/lib/image-processor'
-import { DISH_GROUNDING_PROMPT, DISH_SCALE_PROMPT } from '@/lib/image-api-model'
 import { postToImageModel } from '@/lib/retryable-image-api'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
+import { buildIserveGenerationPrompt } from '@/lib/iserve-image-prompts'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +24,8 @@ export async function POST(request: NextRequest) {
       itemName,
       description,
       category,
+      notes,
+      useIserveStandards = false,
       orientation = 'landscape',
       sizePreset = 'medium',
     }: {
@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
       itemName?: string
       description?: string
       category?: string
+      notes?: string
+      useIserveStandards?: boolean
       orientation?: ImageOrientation
       sizePreset?: ImageSizePreset
     } = await request.json()
@@ -62,42 +64,43 @@ export async function POST(request: NextRequest) {
     const backgroundReferenceImageData =
       useSavedDefaults ? savedDefaults?.defaultBackgroundImageData ?? '' : ''
 
-    // Build orientation / size hints
-    const orientationHint = imageOrientationPrompts[orientation] ?? ''
-    const sizeHint = imageSizePrompts[sizePreset] ?? ''
+    let imagePrompt = ''
+    const requestParts: Array<Record<string, unknown>> = []
 
-    // Always describe the dish first (recipe name + details). Custom/saved prompt is only for style/background.
-    const dishPart =
-      itemName?.trim() || 'the dish'
-    const dishDescription = [
-      dishPart,
-      category?.trim() ? `(${category})` : '',
-      description?.trim() ? `: ${description}` : '',
-    ]
-      .filter(Boolean)
-      .join(' ')
+    if (useIserveStandards) {
+      imagePrompt = buildIserveGenerationPrompt({
+        itemName,
+        category,
+        description,
+        notes,
+      }).prompt
+      requestParts.push({ text: imagePrompt })
+    } else {
+      const dishPart =
+        itemName?.trim() || 'the dish'
+      const dishDescription = [
+        dishPart,
+        category?.trim() ? `(${category})` : '',
+        description?.trim() ? `: ${description}` : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
 
-    const corePrompt = `Professional food photography of ${dishDescription}. One dish only, fully visible. CLOSE-UP: the plate and food must FILL the frame (about 80-90% of the image)—little empty table. Do NOT draw the dish small in the middle of empty space. A pizza = large pizza that nearly fills the image; not a mini pizza. CRITICAL: Plate ON the table; no gap, no floating. High-quality, appetizing, photorealistic.
+      const corePrompt = `Professional food photography of ${dishDescription}. One dish only, fully visible. CLOSE-UP: the plate and food must FILL the frame (about 80-90% of the image)—little empty table. Do NOT draw the dish small in the middle of empty space. A pizza = large pizza that nearly fills the image; not a mini pizza. CRITICAL: Plate ON the table; no gap, no floating. High-quality, appetizing, photorealistic.`
 
-${DISH_GROUNDING_PROMPT}
+      const stylePart =
+        effectivePrompt
+          ? ` Background and styling (apply to the dish above): ${effectivePrompt}.`
+          : ''
+      const backgroundImagePart = backgroundReferenceImageData.trim()
+        ? ' Match the provided reference background image exactly (surface, lighting direction, style, mood). Do not add extra background objects/props and do not change the reference background look.'
+          : ''
 
-${DISH_SCALE_PROMPT}`
+      imagePrompt = `${corePrompt}${stylePart}${backgroundImagePart}`
+      requestParts.push({ text: imagePrompt })
+    }
 
-    const stylePart =
-      effectivePrompt
-        ? ` Background and styling (apply to the dish above): ${effectivePrompt}.`
-        : ''
-    const backgroundImagePart = backgroundReferenceImageData.trim()
-      ? ' Match the provided reference background image exactly (surface, lighting direction, style, mood). Do not add extra background objects/props and do not change the reference background look.'
-        : ''
-
-    const hintParts = [orientationHint, sizeHint].filter(Boolean)
-    const imagePrompt = hintParts.length
-      ? `${corePrompt}${stylePart}${backgroundImagePart} ${hintParts.join(' ')}`
-      : `${corePrompt}${stylePart}${backgroundImagePart}`
-
-    const requestParts: Array<Record<string, unknown>> = [{ text: imagePrompt }]
-    if (backgroundReferenceImageData.trim()) {
+    if (!useIserveStandards && backgroundReferenceImageData.trim()) {
       const bgBase64Data = backgroundReferenceImageData.includes(',')
         ? backgroundReferenceImageData.split(',')[1]
         : backgroundReferenceImageData

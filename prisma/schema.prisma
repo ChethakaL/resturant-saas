@@ -178,6 +178,7 @@ model IngredientVariant {
   brand           String
   supplier        String?
   purchaseFormat  String?
+  purchaseDate    DateTime?
   packageQuantity Float?
   packageUnit     String
   bulkPrice       Float?

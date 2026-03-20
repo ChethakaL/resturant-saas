@@ -119,3 +119,17 @@ export async function enhanceDishWithLockedBackground(options: {
   console.log('[locked-bg] done — pure AI result %dx%d', normalizedBg.width, normalizedBg.height)
   return { dataUrl: `data:image/jpeg;base64,${outputBuffer.toString('base64')}` }
 }
+
+export async function composeDishOnLockedBackgroundStrict(options: {
+  dishImageData: string
+  backgroundImageData: string
+  orientation?: ImageOrientation
+  sizePreset?: ImageSizePreset
+}): Promise<{ dataUrl: string }> {
+  return enhanceDishWithLockedBackground({
+    dishImageData: options.dishImageData,
+    backgroundImageData: options.backgroundImageData,
+    orientation: options.orientation,
+    sizePreset: options.sizePreset,
+  })
+}

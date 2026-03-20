@@ -10,6 +10,13 @@ import {
   StrictBackgroundLockError,
 } from '@/lib/locked-background-hybrid'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
+import { postToImageModel } from '@/lib/retryable-image-api'
+import { enforceImageDimensions } from '@/lib/image-processor'
+import {
+  buildIserveEnhancementPrompt,
+  IserveEnhancementBackgroundMode,
+  IserveQualityLevel,
+} from '@/lib/iserve-image-prompts'
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,12 +29,26 @@ export async function POST(request: NextRequest) {
       imageData,
       prompt,
       useSavedDefaults = false,
+      useIserveStandards = false,
+      itemName,
+      description,
+      category,
+      notes,
+      qualityLevel = 'premium',
+      backgroundMode = 'soft_bokeh',
       orientation = 'landscape',
       sizePreset = 'medium',
     }: {
       imageData?: string
       prompt?: string
       useSavedDefaults?: boolean
+      useIserveStandards?: boolean
+      itemName?: string
+      description?: string
+      category?: string
+      notes?: string
+      qualityLevel?: IserveQualityLevel
+      backgroundMode?: IserveEnhancementBackgroundMode
       orientation?: ImageOrientation
       sizePreset?: ImageSizePreset
     } = await request.json()
@@ -44,6 +65,61 @@ export async function POST(request: NextRequest) {
     const originalMime = imageData.includes(',')
       ? imageData.split(',')[0].split(':')[1].split(';')[0]
       : 'image/jpeg'
+
+    if (useIserveStandards) {
+      const apiKey = process.env.GOOGLE_AI_KEY
+      if (!apiKey) {
+        return NextResponse.json({ error: 'Google AI API key not configured' }, { status: 500 })
+      }
+
+      const promptText = buildIserveEnhancementPrompt({
+        itemName,
+        category,
+        description,
+        qualityLevel,
+        backgroundMode,
+        notes,
+      }).prompt
+
+      const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData
+      const mimeType = originalMime?.startsWith('image/') ? originalMime : 'image/jpeg'
+      const response = await postToImageModel(apiKey, {
+        contents: [
+          {
+            parts: [
+              { inlineData: { mimeType, data: base64Data } },
+              { text: promptText },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseModalities: ['image'],
+          temperature: 0.2,
+          topK: 16,
+          topP: 0.8,
+        },
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`AI image service error: ${response.status} - ${errorText}`)
+      }
+
+      const data = await response.json()
+      const parts = data.candidates?.[0]?.content?.parts as Array<Record<string, any>> | undefined
+      const imagePart = parts?.find((part) => part.inlineData?.mimeType?.startsWith('image/'))
+      if (!imagePart?.inlineData?.data) {
+        throw new Error('No image data in AI response')
+      }
+
+      const processed = await enforceImageDimensions(imagePart.inlineData.data, orientation, sizePreset)
+      return NextResponse.json({
+        success: true,
+        imageUrl: `data:${processed.mimeType};base64,${processed.base64}`,
+        originalMimeType: originalMime,
+        prompt: promptText,
+      })
+    }
 
     const customPrompt = (prompt || '').trim()
     const savedDefaults =

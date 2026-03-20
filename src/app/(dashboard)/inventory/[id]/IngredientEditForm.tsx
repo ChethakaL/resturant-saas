@@ -9,14 +9,59 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import Calendar from '@/components/ui/calendar'
 import { formatCurrency } from '@/lib/utils'
-import { ArrowLeft, Save, Trash2, Plus, ArrowUp, ArrowDown, Upload, ExternalLink, FileText, Building2 } from 'lucide-react'
+import { format } from 'date-fns'
+import { ArrowLeft, Save, Trash2, Plus, Upload, ExternalLink, FileText, Building2, CalendarDays, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import UploadReceiptModal from '../UploadReceiptModal'
 import { SupplierDirectoryModal, type SupplierDirectoryEntry } from '../SupplierDirectoryModal'
 import { DEFAULT_INVENTORY_CATEGORY, INVENTORY_CATEGORY_OPTIONS } from '@/lib/inventory-categories'
+
+function PurchaseDateField({
+  value,
+  onChange,
+  locale,
+}: {
+  value: string
+  onChange: (value: string) => void
+  locale: 'en' | 'ku' | 'ar-fusha'
+}) {
+  const selectedDate = value ? new Date(value) : null
+  const [month, setMonth] = useState<Date>(selectedDate ?? new Date())
+
+  useEffect(() => {
+    if (selectedDate) {
+      setMonth(selectedDate)
+    }
+  }, [value])
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-between font-normal"
+        >
+          <span>{selectedDate ? format(selectedDate, 'PPP') : 'Select purchase date'}</span>
+          <CalendarDays className="h-4 w-4 text-slate-500" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="p-0">
+        <Calendar
+          locale={locale}
+          month={month}
+          selected={selectedDate}
+          onSelect={(date) => onChange(format(date, 'yyyy-MM-dd'))}
+          onMonthChange={setMonth}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 const UNIT_OPTIONS = [
   { value: 'g', label: 'Grams (g)' },
@@ -26,10 +71,25 @@ const UNIT_OPTIONS = [
   { value: 'piece', label: 'Piece / Each' },
 ]
 
+const PACKAGE_TYPE_OPTIONS = [
+  'Bag',
+  'Bottle',
+  'Box',
+  'Can',
+  'Carton',
+  'Jar',
+  'Pack',
+  'Piece',
+  'Sack',
+  'Tray',
+]
+
 type VariantType = {
   id?: string
   brand: string
   supplier: string
+  purchaseFormat: string
+  purchaseDate: string
   packageQuantity: string
   packageUnit: string
   bulkPrice: string
@@ -48,6 +108,7 @@ type IngredientWithVariants = {
     brand: string
     supplier: string | null
     purchaseFormat: string | null
+    purchaseDate?: string | Date | null
     packageQuantity: number | null
     packageUnit: string
     bulkPrice: number | null
@@ -133,7 +194,7 @@ export default function IngredientEditForm({
   purchaseHistory: PurchaseHistoryEntry[]
 }) {
   const router = useRouter()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { t: td, fetchTranslation } = useDynamicTranslate()
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
   const [loading, setLoading] = useState(false)
@@ -141,6 +202,7 @@ export default function IngredientEditForm({
   const [displayName, setDisplayName] = useState(ingredient.name)
   const [receiptModalOpen, setReceiptModalOpen] = useState(false)
   const [supplierModalOpen, setSupplierModalOpen] = useState(false)
+  const [purchaseHistoryPage, setPurchaseHistoryPage] = useState(1)
   const [formData, setFormData] = useState({
     name: ingredient.name,
     category: ingredient.category || DEFAULT_INVENTORY_CATEGORY,
@@ -151,6 +213,8 @@ export default function IngredientEditForm({
       id: v.id,
       brand: v.brand,
       supplier: v.supplier || '',
+      purchaseFormat: v.purchaseFormat || 'Bag',
+      purchaseDate: v.purchaseDate ? new Date(v.purchaseDate).toISOString().slice(0, 10) : '',
       packageQuantity: v.packageQuantity?.toString() || '',
       packageUnit: v.packageUnit,
       bulkPrice: v.bulkPrice?.toString() || '',
@@ -200,10 +264,7 @@ export default function IngredientEditForm({
     return converted > 0 ? price / converted : 0
   }
 
-  const [expandedVariants, setExpandedVariants] = useState<string[]>(['variant-0'])
-
   const addVariant = () => {
-    const newIndex = formData.variants.length
     setFormData((prev) => ({
       ...prev,
       variants: [
@@ -211,13 +272,14 @@ export default function IngredientEditForm({
         {
           brand: '',
           supplier: '',
+          purchaseFormat: 'Bag',
+          purchaseDate: '',
           packageQuantity: '',
           packageUnit: prev.unit,
           bulkPrice: '',
         },
       ],
     }))
-    setExpandedVariants((prev) => [...prev, `variant-${newIndex}`])
   }
 
   const removeVariant = (index: number) => {
@@ -225,15 +287,6 @@ export default function IngredientEditForm({
       ...prev,
       variants: prev.variants.filter((_, i) => i !== index),
     }))
-    setExpandedVariants((prev) =>
-      prev
-        .filter((v) => v !== `variant-${index}`)
-        .map((v) => {
-          const num = parseInt(v.replace('variant-', ''), 10)
-          if (Number.isFinite(num) && num > index) return `variant-${num - 1}`
-          return v
-        })
-    )
   }
 
   const updateVariant = (index: number, field: keyof VariantType, value: string) => {
@@ -243,24 +296,6 @@ export default function IngredientEditForm({
         i === index ? { ...v, [field]: value } : v
       ),
     }))
-  }
-
-  const moveUp = (index: number) => {
-    if (index <= 0) return
-    setFormData((prev) => {
-      const newVariants = [...prev.variants]
-        ;[newVariants[index - 1], newVariants[index]] = [newVariants[index], newVariants[index - 1]]
-      return { ...prev, variants: newVariants }
-    })
-  }
-
-  const moveDown = (index: number) => {
-    if (index >= formData.variants.length - 1) return
-    setFormData((prev) => {
-      const newVariants = [...prev.variants]
-        ;[newVariants[index], newVariants[index + 1]] = [newVariants[index + 1], newVariants[index]]
-      return { ...prev, variants: newVariants }
-    })
   }
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -282,6 +317,8 @@ export default function IngredientEditForm({
         id: v.id,
         brand: v.brand.trim(),
         supplier: v.supplier.trim() || null,
+        purchaseFormat: v.purchaseFormat || null,
+        purchaseDate: v.purchaseDate || null,
         packageQuantity: v.packageQuantity ? parseFloat(v.packageQuantity) : null,
         packageUnit: v.packageUnit,
         bulkPrice: v.bulkPrice ? parseFloat(v.bulkPrice) : null,
@@ -352,6 +389,14 @@ export default function IngredientEditForm({
     }
   }
 
+  const selectedPreferredSupplier = suppliers.find((supplier) => supplier.id === formData.preferredSupplierId)
+  const purchaseHistoryPageSize = 5
+  const purchaseHistoryPageCount = Math.max(1, Math.ceil(purchaseHistory.length / purchaseHistoryPageSize))
+  const paginatedPurchaseHistory = purchaseHistory.slice(
+    (purchaseHistoryPage - 1) * purchaseHistoryPageSize,
+    purchaseHistoryPage * purchaseHistoryPageSize
+  )
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -391,270 +436,274 @@ export default function IngredientEditForm({
           <CardTitle>{td('Ingredient Details')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="details" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="details">{td('Details')}</TabsTrigger>
-              <TabsTrigger value="purchase-history">
-                {td('Purchase History')}
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="details">
-              <form onSubmit={handleUpdate} className="space-y-8">
+          <form onSubmit={handleUpdate} className="space-y-8">
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
 
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">
-                  {td('Ingredient Name')} <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="name"
-                  required
-                  value={displayName}
-                  onChange={(e) => {
-                    setDisplayName(e.target.value)
-                    setFormData({ ...formData, name: e.target.value })
-                  }}
-                />
-              </div>
+            <Card className="border-slate-200 shadow-none">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm uppercase tracking-[0.2em] text-slate-600">{td('Ingredient Details')}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">
+                      {td('Ingredient Name')} <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="name"
+                      required
+                      value={displayName}
+                      onChange={(e) => {
+                        setDisplayName(e.target.value)
+                        setFormData({ ...formData, name: e.target.value })
+                      }}
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="category">
-                  {td('Category')} <span className="text-red-500">*</span>
-                </Label>
-                <select
-                  id="category"
-                  required
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                >
-                  {INVENTORY_CATEGORY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {td(option.label)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category">
+                      {td('Category')} <span className="text-red-500">*</span>
+                    </Label>
+                    <select
+                      id="category"
+                      required
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    >
+                      {INVENTORY_CATEGORY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {td(option.label)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-              <div className="space-y-2">
-                <Label htmlFor="unit">
-                  {td('Unit of Measure')} <span className="text-red-500">*</span>
-                </Label>
-                <select
-                  id="unit"
-                  required
-                  value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                >
-                  {UNIT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {td(opt.label)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <Card className="border-slate-200 shadow-none">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm uppercase tracking-[0.2em] text-slate-600">SUPPLIER</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="preferredSupplierId">Supplier name(s)</Label>
+                  <div className="flex gap-2">
+                    <select
+                      id="preferredSupplierId"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={formData.preferredSupplierId}
+                      onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
+                    >
+                      <option value="">{td('— None —')}</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {td(s.name)}
+                        </option>
+                      ))}
+                    </select>
+                    <Button type="button" variant="outline" onClick={() => setSupplierModalOpen(true)}>
+                      <Building2 className="mr-2 h-4 w-4" />
+                      + Add
+                    </Button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {selectedPreferredSupplier ? `${td('Current')}: ${td(selectedPreferredSupplier.name)}` : td('Choose the supplier you normally buy from.')}
+                  </p>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="preferredSupplierId">{td('Preferred supplier (for Request stock)')}</Label>
-              <div className="flex gap-2">
-                <select
-                  id="preferredSupplierId"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={formData.preferredSupplierId}
-                  onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
-                >
-                  <option value="">{td('— None —')}</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {td(s.name)}
-                    </option>
-                  ))}
-                </select>
-                <Button type="button" variant="outline" onClick={() => setSupplierModalOpen(true)}>
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {td('Manage')}
-                </Button>
-              </div>
-              <p className="text-xs text-slate-500">
-                {td('Choose a supplier to enable "Request more" on the inventory page.')}
-              </p>
-            </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                    <CalendarDays className="h-4 w-4 text-slate-500" />
+                    {td('Purchase date')}
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {td('Enter it now if you know it, or leave it empty and upload a receipt later to fill purchase details automatically.')}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-none">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm uppercase tracking-[0.2em] text-slate-600">UNIT OF USE</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div>
+                  <p className="mb-3 text-sm text-slate-600">{td('How is this ingredient measured in recipes?')}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {UNIT_OPTIONS.map((opt) => {
+                      const active = formData.unit === opt.value
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, unit: opt.value })}
+                          className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                            active
+                              ? 'border-emerald-600 bg-emerald-600 text-white'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                          }`}
+                        >
+                          {td(opt.label)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  {td('All package prices below will be converted automatically into cost per')} {formData.unit}.
+                </div>
+              </CardContent>
+            </Card>
 
             <div className="space-y-4">
-              <Label className="text-lg font-semibold">{td('Variants (Brands)')}</Label>
+              <div className="space-y-1">
+                <Label className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">PURCHASE INFO</Label>
+                <p className="text-sm text-slate-500">
+                  {td('Add the package or brand options you buy from suppliers. The system will calculate the cost per')} {formData.unit}.
+                </p>
+              </div>
 
               {formData.variants.length === 0 ? (
-                <p className="text-slate-500 italic">{td('No variants yet — add your first one below.')}</p>
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  {td('No package options yet. Add your first one below to continue.')}
+                </div>
               ) : (
-                <Accordion
-                  type="multiple"
-                  value={expandedVariants}
-                  onValueChange={setExpandedVariants}
-                  className="space-y-3"
-                >
+                <div className="space-y-4">
                   {formData.variants.map((variant, index) => {
                     const calcCost = calculateCostPerUnit(variant)
                     return (
-                      <AccordionItem
-                        key={index}
-                        value={`variant-${index}`}
-                        className="border border-slate-200 rounded-xl overflow-hidden bg-white"
-                      >
-                        <AccordionTrigger className="px-6 py-4 hover:no-underline items-center">
-                          <div className="flex w-full items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <h3 className="font-medium">
-                                {td('Variant')} #{index + 1}
-                                {variant.brand ? ` - ${variant.brand}` : ''}
-                              </h3>
-                              {calcCost > 0 && (
-                                <span className="text-sm font-semibold text-green-600">
-                                  {calcCost.toFixed(2)} IQD/{formData.unit}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {index > 0 && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    moveUp(index)
-                                  }}
-                                >
-                                  <ArrowUp className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {index < formData.variants.length - 1 && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    moveDown(index)
-                                  }}
-                                >
-                                  <ArrowDown className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  removeVariant(index)
-                                }}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </AccordionTrigger>
-
-                        <AccordionContent className="px-6 pb-6 pt-2 border-t">
-                          <div className="space-y-6">
-                            <div className="grid gap-6 md:grid-cols-2">
-                              <div className="space-y-2">
-                                <Label>
-                                  {td('Brand')} <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                  value={variant.brand}
-                                  onChange={(e) => updateVariant(index, 'brand', e.target.value)}
-                                  placeholder={td('e.g. Lurpak, Sadia, Fresh Farm')}
-                                />
-                              </div>
-
-                              <div className="space-y-2">
-                                <Label>{td('Supplier (text)')}</Label>
-                                <select
-                                  value={variant.supplier}
-                                  onChange={(e) => updateVariant(index, 'supplier', e.target.value)}
-                                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                                >
-                                  <option value="">{td('— None —')}</option>
-                                  {suppliers.map((supplier) => (
-                                    <option key={supplier.id} value={supplier.name}>
-                                      {td(supplier.name)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-
-                            <div className="grid gap-6 md:grid-cols-3">
-                              <div className="space-y-2">
-                                <Label>{td('Package Size')}</Label>
-                                <Input
-                                  type="number"
-                                  step="any"
-                                  value={variant.packageQuantity}
-                                  onChange={(e) => updateVariant(index, 'packageQuantity', e.target.value)}
-                                  placeholder="5"
-                                />
-                              </div>
-
-                              <div className="space-y-2">
-                                <Label>{td('Package Unit')}</Label>
-                                <select
-                                  value={variant.packageUnit}
-                                  onChange={(e) => updateVariant(index, 'packageUnit', e.target.value)}
-                                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                                >
-                                  {UNIT_OPTIONS.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                      {td(opt.label)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div className="space-y-2">
-                                <Label>{td('Bulk Purchase Price (IQD)')}</Label>
-                                <Input
-                                  type="number"
-                                  step="any"
-                                  value={variant.bulkPrice}
-                                  onChange={(e) => updateVariant(index, 'bulkPrice', e.target.value)}
-                                  placeholder="25000"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="bg-slate-50 border border-slate-100 rounded-lg p-4">
-                              <p className="text-sm text-slate-600">
-                                {td('Calculated cost per')}{' '}
-                                <span className={`font-semibold ${calcCost > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                  {calcCost > 0 ? calcCost.toFixed(4) : '—'}
-                                </span>{' '}
-                                IQD / {formData.unit}
+                      <Card key={index} className="border-slate-200 shadow-none">
+                        <CardHeader className="pb-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <CardTitle className="text-base">
+                                {td('Package Option')} #{index + 1}
+                              </CardTitle>
+                              <p className="mt-1 text-sm text-slate-500">
+                                {variant.brand ? `${td('Brand')}: ${variant.brand}` : td('Fill the details below for this package option.')}
                               </p>
                             </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeVariant(index)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
-                        </AccordionContent>
-                      </AccordionItem>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          <div className="grid gap-6 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label>
+                                {td('Brand')} <span className="text-red-500">*</span>
+                              </Label>
+                              <Input
+                                value={variant.brand}
+                                onChange={(e) => updateVariant(index, 'brand', e.target.value)}
+                                placeholder={td('e.g. Lurpak, Lavazza, Fresh Farm')}
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>Supplier name(s)</Label>
+                              <select
+                                value={variant.supplier}
+                                onChange={(e) => updateVariant(index, 'supplier', e.target.value)}
+                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                              >
+                                <option value="">{td('— None —')}</option>
+                                {suppliers.map((supplier) => (
+                                  <option key={supplier.id} value={supplier.name}>
+                                    {td(supplier.name)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Purchase date</Label>
+                            <PurchaseDateField
+                              value={variant.purchaseDate}
+                              onChange={(value) => updateVariant(index, 'purchaseDate', value)}
+                              locale={locale}
+                            />
+                            <p className="text-xs text-slate-500">
+                              Enter it now if you know it, or leave it empty and upload a receipt later to fill purchase details automatically.
+                            </p>
+                          </div>
+
+                          <div className="grid gap-6 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label>Package type</Label>
+                              <select
+                                value={variant.purchaseFormat}
+                                onChange={(e) => updateVariant(index, 'purchaseFormat', e.target.value)}
+                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                              >
+                                {PACKAGE_TYPE_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>Package price (IQD)</Label>
+                              <Input
+                                type="number"
+                                step="any"
+                                value={variant.bulkPrice}
+                                onChange={(e) => updateVariant(index, 'bulkPrice', e.target.value)}
+                                placeholder="25000"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Total {formData.unit} in package</Label>
+                            <Input
+                              type="number"
+                              step="any"
+                              value={variant.packageQuantity}
+                              onChange={(e) => updateVariant(index, 'packageQuantity', e.target.value)}
+                              placeholder="1000"
+                            />
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <span className="text-sm font-medium text-slate-700">
+                                {formData.unit === 'g' ? 'Cost per 100g' : `${td('Calculated cost per')} ${formData.unit}`}
+                              </span>
+                              <Badge variant="secondary" className="bg-white px-3 py-1 text-sm text-slate-900">
+                                {calcCost > 0
+                                  ? `${((formData.unit === 'g' ? calcCost * 100 : calcCost)).toFixed(0)} IQD`
+                                  : td('Waiting for complete price details')}
+                              </Badge>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
                     )
                   })}
-                </Accordion>
+                </div>
               )}
 
               <Button type="button" onClick={addVariant} variant="outline" className="w-full">
                 <Plus className="h-4 w-4 mr-2" />
-                {td('Add Variant')}
+                {td('Add Package Option')}
               </Button>
             </div>
 
@@ -679,81 +728,114 @@ export default function IngredientEditForm({
                 {loading ? td('Saving...') : td('Save Changes')}
               </Button>
             </div>
-              </form>
-            </TabsContent>
+          </form>
+        </CardContent>
+      </Card>
 
-            <TabsContent value="purchase-history">
-              <div className="space-y-4">
-                {purchaseHistory.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                    {td('No purchase history yet. Record deliveries or confirm receipts to track cost changes over time.')}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr className="border-b border-slate-200 text-left text-slate-500">
-                          <th className="px-4 py-3 font-medium">{td('Date')}</th>
-                          <th className="px-4 py-3 font-medium">{td('Supplier')}</th>
-                          <th className="px-4 py-3 font-medium">{td('Quantity purchased')}</th>
-                          <th className="px-4 py-3 font-medium">{td('Price paid')}</th>
-                          <th className="px-4 py-3 font-medium">{td('Cost/unit')}</th>
-                          <th className="px-4 py-3 font-medium">{td('Receipt')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {purchaseHistory.map((entry) => (
-                          <tr key={entry.id} className="border-b border-slate-100 align-top">
-                            <td className="px-4 py-3 text-slate-700">
-                              {new Date(entry.date).toLocaleDateString()}
-                            </td>
-                            <td className="px-4 py-3 text-slate-700">
-                              <div>{entry.supplier || '—'}</div>
-                              <div className="text-xs text-slate-400 capitalize">{entry.source}</div>
-                            </td>
-                            <td className="px-4 py-3 text-slate-700">
-                              {entry.quantity != null ? `${entry.quantity} ${entry.unit}` : '—'}
-                            </td>
-                            <td className="px-4 py-3 font-mono text-slate-800">
-                              {formatCurrency(entry.totalPrice)}
-                            </td>
-                            <td className="px-4 py-3 font-mono text-slate-800">
-                              {formatCurrency(entry.unitCost)}
-                            </td>
-                            <td className="px-4 py-3">
-                              {entry.receiptImageUrl ? (
-                                <ReceiptPreview
-                                  url={entry.receiptImageUrl}
-                                  alt={td('Receipt preview')}
-                                  viewLabel={td('View receipt')}
-                                  unavailableLabel={td('Preview unavailable')}
-                                />
-                              ) : (
-                                <div className="flex items-start gap-3">
-                                  <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-400">
-                                    <FileText className="h-5 w-5" />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <p className="text-xs font-medium text-slate-700">{td('No receipt image')}</p>
-                                    <p className="text-xs text-slate-400">
-                                      {td('This purchase was saved without an uploaded image.')}
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
-                              {entry.notes && (
-                                <p className="mt-2 max-w-xs text-xs text-slate-500">{entry.notes}</p>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+      <Card>
+        <CardHeader>
+          <CardTitle>{td('Purchase History')}</CardTitle>
+          <p className="text-sm text-slate-500">
+            {td('Purchase dates are added automatically from deliveries and receipts.')}
+          </p>
+        </CardHeader>
+        <CardContent>
+          {purchaseHistory.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              {td('No purchase history yet. Record deliveries or confirm receipts to track cost changes over time.')}
+            </div>
+          ) : (
+            <>
+            <div className="max-h-[420px] overflow-auto rounded-xl border border-slate-200">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr className="border-b border-slate-200 text-left text-slate-500">
+                    <th className="px-4 py-3 font-medium">{td('Date')}</th>
+                    <th className="px-4 py-3 font-medium">{td('Supplier')}</th>
+                    <th className="px-4 py-3 font-medium">{td('Quantity purchased')}</th>
+                    <th className="px-4 py-3 font-medium">{td('Price paid')}</th>
+                    <th className="px-4 py-3 font-medium">{td('Cost/unit')}</th>
+                    <th className="px-4 py-3 font-medium">{td('Receipt')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedPurchaseHistory.map((entry) => (
+                    <tr key={entry.id} className="border-b border-slate-100 align-top">
+                      <td className="px-4 py-3 text-slate-700">
+                        {new Date(entry.date).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        <div>{entry.supplier || '—'}</div>
+                        <div className="text-xs text-slate-400 capitalize">{entry.source}</div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {entry.quantity != null ? `${entry.quantity} ${entry.unit}` : '—'}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-slate-800">
+                        {formatCurrency(entry.totalPrice)}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-slate-800">
+                        {formatCurrency(entry.unitCost)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {entry.receiptImageUrl ? (
+                          <ReceiptPreview
+                            url={entry.receiptImageUrl}
+                            alt={td('Receipt preview')}
+                            viewLabel={td('View receipt')}
+                            unavailableLabel={td('Preview unavailable')}
+                          />
+                        ) : (
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-400">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-slate-700">{td('No receipt image')}</p>
+                              <p className="text-xs text-slate-400">
+                                {td('This purchase was saved without an uploaded image.')}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        {entry.notes && (
+                          <p className="mt-2 max-w-xs text-xs text-slate-500">{entry.notes}</p>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-sm text-slate-500">
+                {td('Showing')} {(purchaseHistoryPage - 1) * purchaseHistoryPageSize + 1}
+                {' - '}
+                {Math.min(purchaseHistoryPage * purchaseHistoryPageSize, purchaseHistory.length)}
+                {' '}
+                {td('of')} {purchaseHistory.length}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={purchaseHistoryPage === 1}
+                  onClick={() => setPurchaseHistoryPage((prev) => Math.max(1, prev - 1))}
+                >
+                  {td('Previous')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={purchaseHistoryPage === purchaseHistoryPageCount}
+                  onClick={() => setPurchaseHistoryPage((prev) => Math.min(purchaseHistoryPageCount, prev + 1))}
+                >
+                  {td('Next')}
+                </Button>
               </div>
-            </TabsContent>
-          </Tabs>
+            </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

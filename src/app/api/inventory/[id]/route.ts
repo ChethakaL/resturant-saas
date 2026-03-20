@@ -122,11 +122,12 @@ export async function PATCH(
                 brand: (v.brand ?? '').trim(),
                 supplier: (v.supplier ?? '').trim() || null,
                 purchaseFormat: (v.purchaseFormat ?? '').trim() || null,
+                purchaseDate: v.purchaseDate ? new Date(v.purchaseDate) : null,
                 packageQuantity: v.packageQuantity != null && v.packageQuantity !== '' ? Number(v.packageQuantity) : null,
                 packageUnit: v.packageUnit ?? 'g',
                 bulkPrice: v.bulkPrice != null && v.bulkPrice !== '' ? Number(v.bulkPrice) : null,
                 costPerUnit: Number(v.costPerUnit) || 0,
-              },
+              } as any,
             })
           }
         } else {
@@ -135,12 +136,13 @@ export async function PATCH(
               brand: (v.brand ?? '').trim(),
               supplier: (v.supplier ?? '').trim() || null,
               purchaseFormat: (v.purchaseFormat ?? '').trim() || null,
+              purchaseDate: v.purchaseDate ? new Date(v.purchaseDate) : null,
               packageQuantity: v.packageQuantity != null && v.packageQuantity !== '' ? Number(v.packageQuantity) : null,
               packageUnit: v.packageUnit ?? 'g',
               bulkPrice: v.bulkPrice != null && v.bulkPrice !== '' ? Number(v.bulkPrice) : null,
               costPerUnit: Number(v.costPerUnit) || 0,
               ingredientId: resolvedParams.id,
-            },
+            } as any,
           })
         }
       }

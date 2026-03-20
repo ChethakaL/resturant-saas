@@ -61,12 +61,13 @@ export async function POST(request: Request) {
           brand: v.brand.trim(),
           supplier: v.supplier?.trim() || null,
           purchaseFormat: v.purchaseFormat?.trim() || null,
+          purchaseDate: v.purchaseDate ? new Date(v.purchaseDate) : null,
           packageQuantity: v.packageQuantity || null,
           packageUnit: v.packageUnit,
           bulkPrice: v.bulkPrice || null,
           costPerUnit: v.costPerUnit,
           ingredientId: ingredient.id,
-        })),
+        })) as any,
       })
     }
 
