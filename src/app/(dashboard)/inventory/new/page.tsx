@@ -555,11 +555,11 @@ export default function NewIngredientPage() {
                           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <span className="text-sm font-medium text-slate-700">
-                                {formData.unit === 'g' ? 'Cost per 100g' : `Cost per ${formData.unit}`}
+                                {`Cost per ${formData.unit}`}
                               </span>
                               <Badge variant="secondary" className="bg-white px-3 py-1 text-sm text-slate-900">
                                 {calcCost > 0
-                                  ? `${((formData.unit === 'g' ? calcCost * 100 : calcCost)).toFixed(0)} IQD`
+                                  ? `${calcCost.toFixed(2)} IQD`
                                   : 'Waiting for complete price details'}
                               </Badge>
                             </div>
