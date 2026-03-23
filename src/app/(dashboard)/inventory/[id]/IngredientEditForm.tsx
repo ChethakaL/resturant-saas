@@ -24,10 +24,12 @@ function PurchaseDateField({
   value,
   onChange,
   locale,
+  placeholder,
 }: {
   value: string
   onChange: (value: string) => void
   locale: 'en' | 'ku' | 'ar-fusha'
+  placeholder: string
 }) {
   const selectedDate = value ? new Date(value) : null
   const [month, setMonth] = useState<Date>(selectedDate ?? new Date())
@@ -46,7 +48,7 @@ function PurchaseDateField({
           variant="outline"
           className="w-full justify-between font-normal"
         >
-          <span>{selectedDate ? format(selectedDate, 'PPP') : 'Select purchase date'}</span>
+          <span>{selectedDate ? format(selectedDate, 'PPP') : placeholder}</span>
           <CalendarDays className="h-4 w-4 text-slate-500" />
         </Button>
       </PopoverTrigger>
@@ -467,11 +469,11 @@ export default function IngredientEditForm({
 
             <Card className="border-slate-200 shadow-none">
               <CardHeader className="pb-4">
-                <CardTitle className="text-sm uppercase tracking-[0.2em] text-slate-600">SUPPLIER</CardTitle>
+                <CardTitle className="text-sm uppercase tracking-[0.2em] text-slate-600">{td('SUPPLIER')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="preferredSupplierId">Supplier name(s)</Label>
+                  <Label htmlFor="preferredSupplierId">{td('Supplier name(s)')}</Label>
                   <div className="flex gap-2">
                     <select
                       id="preferredSupplierId"
@@ -488,7 +490,7 @@ export default function IngredientEditForm({
                     </select>
                     <Button type="button" variant="outline" onClick={() => setSupplierModalOpen(true)}>
                       <Building2 className="mr-2 h-4 w-4" />
-                      + Add
+                      {td('+ Add')}
                     </Button>
                   </div>
                   <p className="text-xs text-slate-500">
@@ -501,7 +503,7 @@ export default function IngredientEditForm({
 
             <div className="space-y-4">
               <div className="space-y-1">
-                <Label className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">PURCHASE INFO</Label>
+                <Label className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">{td('PURCHASE INFO')}</Label>
                 <p className="text-sm text-slate-500">
                   {td('Add the brand you buy, optional purchase date, purchase type, and price. Then choose how this ingredient is used in recipes so the system can calculate the cost correctly.')}
                 </p>
@@ -550,26 +552,27 @@ export default function IngredientEditForm({
                                 placeholder={td('e.g. Lurpak, Lavazza, Fresh Farm')}
                               />
                               <p className="text-xs text-slate-500">
-                                Supplier comes from the main supplier selection above{selectedPreferredSupplier ? `: ${selectedPreferredSupplier.name}.` : '.'}
+                                {td('Supplier comes from the main supplier selection above')}{selectedPreferredSupplier ? `: ${td(selectedPreferredSupplier.name)}.` : '.'}
                               </p>
                             </div>
 
                             <div className="space-y-2">
-                              <Label>Purchase date (optional)</Label>
+                              <Label>{td('Purchase date (optional)')}</Label>
                               <PurchaseDateField
                                 value={variant.purchaseDate}
                                 onChange={(value) => updateVariant(index, 'purchaseDate', value)}
                                 locale={locale}
+                                placeholder={td('Select purchase date')}
                               />
                               <p className="text-xs text-slate-500">
-                                Leave this empty if you want to upload a receipt later and fill it automatically.
+                                {td('Leave this empty if you want to upload a receipt later and fill it automatically.')}
                               </p>
                             </div>
                           </div>
 
                           <div className="grid gap-6 md:grid-cols-2">
                             <div className="space-y-2">
-                              <Label>Package type</Label>
+                              <Label>{td('Package type')}</Label>
                               <select
                                 value={variant.purchaseFormat}
                                 onChange={(e) => updateVariant(index, 'purchaseFormat', e.target.value)}
@@ -577,27 +580,27 @@ export default function IngredientEditForm({
                               >
                                 {PACKAGE_TYPE_OPTIONS.map((option) => (
                                   <option key={option} value={option}>
-                                    {option}
+                                    {td(option)}
                                   </option>
                                 ))}
                               </select>
                             </div>
 
                             <div className="space-y-2">
-                              <Label>Package price (IQD)</Label>
+                              <Label>{td('Package price (IQD)')}</Label>
                               <Input
                                 type="number"
                                 step="any"
                                 value={variant.bulkPrice}
                                 onChange={(e) => updateVariant(index, 'bulkPrice', e.target.value)}
-                                placeholder="25000"
+                                placeholder={td('25000')}
                               />
                             </div>
                           </div>
 
                           <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                             <div>
-                              <Label className="text-sm font-medium text-slate-800">Unit of use</Label>
+                              <Label className="text-sm font-medium text-slate-800">{td('Unit of use')}</Label>
                               <p className="mt-1 text-sm text-slate-600">{td('How is this ingredient measured in recipes? This applies to all package options.')}</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -622,13 +625,13 @@ export default function IngredientEditForm({
                           </div>
 
                           <div className="space-y-2">
-                            <Label>Total {formData.unit} in package</Label>
+                            <Label>{td('Total')} {formData.unit} {td('in package')}</Label>
                             <Input
                               type="number"
                               step="any"
                               value={variant.packageQuantity}
                               onChange={(e) => updateVariant(index, 'packageQuantity', e.target.value)}
-                              placeholder="1000"
+                              placeholder={td('1000')}
                             />
                           </div>
 

@@ -2,7 +2,7 @@
 
 import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
-import { useI18n } from '@/lib/i18n'
+import { useDynamicTranslate, useI18n } from '@/lib/i18n'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useEffect, useState } from 'react'
 import { INVENTORY_CATEGORY_OPTIONS } from '@/lib/inventory-categories'
@@ -10,6 +10,7 @@ import { INVENTORY_CATEGORY_OPTIONS } from '@/lib/inventory-categories'
 export function InventorySearch() {
   const router = useRouter()
   const { t } = useI18n()
+  const { t: td } = useDynamicTranslate()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const [value, setValue] = useState(searchParams.get('q') || '')
@@ -75,10 +76,10 @@ export function InventorySearch() {
         value={category}
         onChange={(e) => setCategory(e.target.value)}
       >
-        <option value="">All Categories</option>
+        <option value="">{td('All Categories')}</option>
         {INVENTORY_CATEGORY_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
-            {option.label}
+            {td(option.label)}
           </option>
         ))}
       </select>
@@ -88,10 +89,10 @@ export function InventorySearch() {
         value={sort}
         onChange={(e) => setSort(e.target.value)}
       >
-        <option value="category_name">Sort: Category + Name</option>
-        <option value="name_desc">Sort: Name Z-A</option>
-        <option value="cost_desc">Sort: Cost High-Low</option>
-        <option value="cost_asc">Sort: Cost Low-High</option>
+        <option value="category_name">{td('Sort: Category + Name')}</option>
+        <option value="name_desc">{td('Sort: Name Z-A')}</option>
+        <option value="cost_desc">{td('Sort: Cost High-Low')}</option>
+        <option value="cost_asc">{td('Sort: Cost Low-High')}</option>
       </select>
     </div>
   )

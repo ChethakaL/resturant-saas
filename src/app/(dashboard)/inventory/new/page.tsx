@@ -13,7 +13,7 @@ import Calendar from '@/components/ui/calendar'
 import { format } from 'date-fns'
 import { ArrowLeft, Save, Plus, Trash2, Building2, CalendarDays, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
-import { useI18n } from '@/lib/i18n'
+import { useDynamicTranslate, useI18n } from '@/lib/i18n'
 import { SupplierDirectoryModal, type SupplierDirectoryEntry } from '../SupplierDirectoryModal'
 import { DEFAULT_INVENTORY_CATEGORY } from '@/lib/inventory-categories'
 
@@ -21,10 +21,12 @@ function PurchaseDateField({
   value,
   onChange,
   locale,
+  placeholder,
 }: {
   value: string
   onChange: (value: string) => void
   locale: 'en' | 'ku' | 'ar-fusha'
+  placeholder: string
 }) {
   const selectedDate = value ? new Date(value) : null
   const [month, setMonth] = useState<Date>(selectedDate ?? new Date())
@@ -43,7 +45,7 @@ function PurchaseDateField({
           variant="outline"
           className="w-full justify-between font-normal"
         >
-          <span>{selectedDate ? format(selectedDate, 'PPP') : 'Select purchase date'}</span>
+          <span>{selectedDate ? format(selectedDate, 'PPP') : placeholder}</span>
           <CalendarDays className="h-4 w-4 text-slate-500" />
         </Button>
       </PopoverTrigger>
@@ -205,6 +207,7 @@ const convertQuantity = (qty: number, fromUnit: string, toUnit: string): number 
 export default function NewIngredientPage() {
   const router = useRouter()
   const { locale } = useI18n()
+  const { t: td } = useDynamicTranslate()
   const copy = INVENTORY_COPY[locale] ?? INVENTORY_COPY.en
   const [suppliers, setSuppliers] = useState<SupplierDirectoryEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -389,11 +392,11 @@ export default function NewIngredientPage() {
 
             <Card className="border-slate-200 shadow-none">
               <CardHeader className="pb-4">
-                <CardTitle className="text-sm uppercase tracking-[0.2em] text-slate-600">SUPPLIER</CardTitle>
+                <CardTitle className="text-sm uppercase tracking-[0.2em] text-slate-600">{td('SUPPLIER')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="preferredSupplierId">Supplier name(s)</Label>
+                  <Label htmlFor="preferredSupplierId">{td('Supplier name(s)')}</Label>
                   <div className="flex gap-2">
                     <select
                       id="preferredSupplierId"
@@ -401,20 +404,20 @@ export default function NewIngredientPage() {
                       value={formData.preferredSupplierId}
                       onChange={(e) => setFormData({ ...formData, preferredSupplierId: e.target.value })}
                     >
-                      <option value="">— None —</option>
+                      <option value="">{td('— None —')}</option>
                       {suppliers.map((supplier) => (
                         <option key={supplier.id} value={supplier.id}>
-                          {supplier.name}
+                          {td(supplier.name)}
                         </option>
                       ))}
                     </select>
                     <Button type="button" variant="outline" onClick={() => setSupplierModalOpen(true)}>
                       <Building2 className="mr-2 h-4 w-4" />
-                      + Add
+                      {td('+ Add')}
                     </Button>
                   </div>
                   <p className="text-xs text-slate-500">
-                    {selectedPreferredSupplier ? `Current: ${selectedPreferredSupplier.name}` : 'Choose the supplier you normally buy from.'}
+                    {selectedPreferredSupplier ? `${td('Current')}: ${td(selectedPreferredSupplier.name)}` : td('Choose the supplier you normally buy from.')}
                   </p>
                 </div>
 
@@ -423,15 +426,15 @@ export default function NewIngredientPage() {
 
             <div className="space-y-4">
               <div className="space-y-1">
-                <Label className="mt-4 block text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">PURCHASE INFO</Label>
+                <Label className="mt-4 block text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">{td('PURCHASE INFO')}</Label>
                 <p className="text-sm text-slate-500">
-                  Add the brand you buy, optional purchase date, purchase type, and price. Then choose how this ingredient is used in recipes so the system can calculate the cost correctly.
+                  {td('Add the brand you buy, optional purchase date, purchase type, and price. Then choose how this ingredient is used in recipes so the system can calculate the cost correctly.')}
                 </p>
               </div>
 
               {formData.variants.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                  No package options yet. Add your first one below to continue.
+                  {td('No package options yet. Add your first one below to continue.')}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -442,9 +445,9 @@ export default function NewIngredientPage() {
                         <CardHeader className="pb-4">
                           <div className="flex items-center justify-between gap-4">
                             <div>
-                              <CardTitle className="text-base">Package Option #{index + 1}</CardTitle>
+                              <CardTitle className="text-base">{td('Package Option')} #{index + 1}</CardTitle>
                               <p className="mt-1 text-sm text-slate-500">
-                                {variant.brand ? `${copy.brand}: ${variant.brand}` : 'Fill the details below for this package option.'}
+                                {variant.brand ? `${td(copy.brand)}: ${variant.brand}` : td('Fill the details below for this package option.')}
                               </p>
                             </div>
                             <Button
@@ -467,29 +470,30 @@ export default function NewIngredientPage() {
                               <Input
                                 value={variant.brand}
                                 onChange={(e) => updateVariant(index, 'brand', e.target.value)}
-                                placeholder="e.g. Lurpak, Lavazza, Fresh Farm"
+                                placeholder={td('e.g. Lurpak, Lavazza, Fresh Farm')}
                               />
                               <p className="text-xs text-slate-500">
-                                Supplier comes from the main supplier selection above{selectedPreferredSupplier ? `: ${selectedPreferredSupplier.name}.` : '.'}
+                                {td('Supplier comes from the main supplier selection above')}{selectedPreferredSupplier ? `: ${td(selectedPreferredSupplier.name)}.` : '.'}
                               </p>
                             </div>
 
                             <div className="space-y-2">
-                              <Label>Purchase date (optional)</Label>
+                              <Label>{td('Purchase date (optional)')}</Label>
                               <PurchaseDateField
                                 value={variant.purchaseDate}
                                 onChange={(value) => updateVariant(index, 'purchaseDate', value)}
                                 locale={locale}
+                                placeholder={td('Select purchase date')}
                               />
                               <p className="text-xs text-slate-500">
-                                Leave this empty if you want to upload a receipt later and fill it automatically.
+                                {td('Leave this empty if you want to upload a receipt later and fill it automatically.')}
                               </p>
                             </div>
                           </div>
 
                           <div className="grid gap-6 md:grid-cols-2">
                             <div className="space-y-2">
-                              <Label>Package type</Label>
+                              <Label>{td('Package type')}</Label>
                               <select
                                 value={variant.purchaseFormat}
                                 onChange={(e) => updateVariant(index, 'purchaseFormat', e.target.value)}
@@ -497,28 +501,28 @@ export default function NewIngredientPage() {
                               >
                                 {PACKAGE_TYPE_OPTIONS.map((option) => (
                                   <option key={option} value={option}>
-                                    {option}
+                                    {td(option)}
                                   </option>
                                 ))}
                               </select>
                             </div>
 
                             <div className="space-y-2">
-                              <Label>Package price (IQD)</Label>
+                              <Label>{td('Package price (IQD)')}</Label>
                               <Input
                                 type="number"
                                 step="any"
                                 value={variant.bulkPrice}
                                 onChange={(e) => updateVariant(index, 'bulkPrice', e.target.value)}
-                                placeholder="25000"
+                                placeholder={td('25000')}
                               />
                             </div>
                           </div>
 
                           <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                             <div>
-                              <Label className="text-sm font-medium text-slate-800">Unit of use</Label>
-                              <p className="mt-1 text-sm text-slate-600">How is this ingredient measured in recipes? This applies to all package options.</p>
+                              <Label className="text-sm font-medium text-slate-800">{td('Unit of use')}</Label>
+                              <p className="mt-1 text-sm text-slate-600">{td('How is this ingredient measured in recipes? This applies to all package options.')}</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               {UNIT_OPTIONS.map((opt) => {
@@ -542,25 +546,25 @@ export default function NewIngredientPage() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label>Total {formData.unit} in package</Label>
+                            <Label>{td('Total')} {formData.unit} {td('in package')}</Label>
                             <Input
                               type="number"
                               step="any"
                               value={variant.packageQuantity}
                               onChange={(e) => updateVariant(index, 'packageQuantity', e.target.value)}
-                              placeholder="1000"
+                              placeholder={td('1000')}
                             />
                           </div>
 
                           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <span className="text-sm font-medium text-slate-700">
-                                {`Cost per ${formData.unit}`}
+                                {td('Cost per')} {formData.unit}
                               </span>
                               <Badge variant="secondary" className="bg-white px-3 py-1 text-sm text-slate-900">
                                 {calcCost > 0
                                   ? `${calcCost.toFixed(2)} IQD`
-                                  : 'Waiting for complete price details'}
+                                  : td('Waiting for complete price details')}
                               </Badge>
                             </div>
                           </div>
@@ -573,7 +577,7 @@ export default function NewIngredientPage() {
 
               <Button type="button" onClick={addVariant} variant="outline" className="w-full">
                 <Plus className="h-4 w-4 mr-2" />
-                Add Package Option
+                {td('Add Package Option')}
               </Button>
             </div>
 
@@ -596,7 +600,7 @@ export default function NewIngredientPage() {
               </Link>
               <Button type="submit" disabled={loading}>
                 <Save className="h-4 w-4 mr-2" />
-                {loading ? 'Saving...' : copy.save}
+                {loading ? td('Saving...') : copy.save}
               </Button>
             </div>
           </form>

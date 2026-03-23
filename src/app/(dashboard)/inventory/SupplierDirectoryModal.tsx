@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { Mail, MessageCircle, Pencil, Plus, Save, Trash2, Truck } from 'lucide-react'
+import { useDynamicTranslate } from '@/lib/i18n'
 
 export type SupplierDirectoryEntry = {
   id: string
@@ -67,6 +68,7 @@ export function SupplierDirectoryModal({
   onOpenChange: (open: boolean) => void
   onSuppliersChanged?: (suppliers: SupplierDirectoryEntry[]) => void
 }) {
+  const { t: td } = useDynamicTranslate()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -85,14 +87,14 @@ export function SupplierDirectoryModal({
       const response = await fetch('/api/suppliers')
       const data = await response.json()
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to load suppliers')
+        throw new Error(data.error || td('Failed to load suppliers'))
       }
       setSuppliers(data)
       onSuppliersChanged?.(data)
     } catch (error) {
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to load suppliers',
+        title: td('Error'),
+        description: error instanceof Error ? error.message : td('Failed to load suppliers'),
         variant: 'destructive',
       })
     } finally {
@@ -133,8 +135,8 @@ export function SupplierDirectoryModal({
   const saveSupplier = async () => {
     if (!form.name.trim() || !form.email.trim()) {
       toast({
-        title: 'Missing information',
-        description: 'Supplier name and email are required.',
+        title: td('Missing information'),
+        description: td('Supplier name and email are required.'),
         variant: 'destructive',
       })
       return
@@ -164,7 +166,7 @@ export function SupplierDirectoryModal({
 
       const data = await response.json()
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to save supplier')
+        throw new Error(data.error || td('Failed to save supplier'))
       }
 
       const nextSuppliers = form.id
@@ -175,13 +177,13 @@ export function SupplierDirectoryModal({
       onSuppliersChanged?.(nextSuppliers)
       resetForm()
       toast({
-        title: form.id ? 'Supplier updated' : 'Supplier added',
-        description: `${data.name} is now available in the supplier directory.`,
+        title: form.id ? td('Supplier updated') : td('Supplier added'),
+        description: `${td(data.name)} ${td('is now available in the supplier directory.')}`,
       })
     } catch (error) {
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to save supplier',
+        title: td('Error'),
+        description: error instanceof Error ? error.message : td('Failed to save supplier'),
         variant: 'destructive',
       })
     } finally {
@@ -190,7 +192,7 @@ export function SupplierDirectoryModal({
   }
 
   const removeSupplier = async (supplier: SupplierDirectoryEntry) => {
-    const confirmed = window.confirm(`Remove ${supplier.name} from this restaurant?`)
+    const confirmed = window.confirm(`${td('Remove')} ${supplier.name} ${td('from this restaurant?')}`)
     if (!confirmed) return
 
     try {
@@ -199,7 +201,7 @@ export function SupplierDirectoryModal({
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to remove supplier')
+        throw new Error(data.error || td('Failed to remove supplier'))
       }
 
       const nextSuppliers = suppliers.filter((entry) => entry.id !== supplier.id)
@@ -209,13 +211,13 @@ export function SupplierDirectoryModal({
         resetForm()
       }
       toast({
-        title: 'Supplier removed',
-        description: `${supplier.name} was removed from your supplier directory.`,
+        title: td('Supplier removed'),
+        description: `${td(supplier.name)} ${td('was removed from your supplier directory.')}`,
       })
     } catch (error) {
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to remove supplier',
+        title: td('Error'),
+        description: error instanceof Error ? error.message : td('Failed to remove supplier'),
         variant: 'destructive',
       })
     }
@@ -225,30 +227,30 @@ export function SupplierDirectoryModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl">
         <DialogHeader>
-          <DialogTitle>Supplier Directory</DialogTitle>
+          <DialogTitle>{td('Supplier Directory')}</DialogTitle>
           <DialogDescription>
-            Manage linked suppliers, contact details, delivery schedules, and the ingredients they support.
+            {td('Manage linked suppliers, contact details, delivery schedules, and the ingredients they support.')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700">Linked Suppliers</h3>
+              <h3 className="text-sm font-semibold text-slate-700">{td('Linked Suppliers')}</h3>
               <Button type="button" variant="outline" size="sm" onClick={resetForm}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Supplier
+                {td('Add Supplier')}
               </Button>
             </div>
 
             <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
               {loading ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                  Loading suppliers...
+                  {td('Loading suppliers...')}
                 </div>
               ) : suppliers.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                  No suppliers yet. Add your first supplier to start linking ingredients and sending stock requests.
+                  {td('No suppliers yet. Add your first supplier to start linking ingredients and sending stock requests.')}
                 </div>
               ) : (
                 suppliers.map((supplier) => (
@@ -259,18 +261,18 @@ export function SupplierDirectoryModal({
                           <div className="flex flex-wrap items-center gap-2">
                             <h4 className="font-semibold text-slate-900">{supplier.name}</h4>
                             <Badge variant={supplier.linkedToRestaurant ? 'default' : 'secondary'}>
-                              {supplier.linkedToRestaurant ? 'Linked' : supplier.status}
+                              {supplier.linkedToRestaurant ? td('Linked') : td(supplier.status)}
                             </Badge>
                             {supplier.leadTimeDays != null && (
                               <Badge variant="outline">
                                 <Truck className="mr-1 h-3 w-3" />
-                                {supplier.leadTimeDays} day lead
+                                {supplier.leadTimeDays} {td('day lead')}
                               </Badge>
                             )}
                           </div>
                           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-                            <span>{supplier.phone || 'No phone'}</span>
-                            <span>{supplier.whatsapp || 'No WhatsApp'}</span>
+                            <span>{supplier.phone || td('No phone')}</span>
+                            <span>{supplier.whatsapp || td('No WhatsApp')}</span>
                             <span>{supplier.email}</span>
                           </div>
                         </div>
@@ -287,30 +289,30 @@ export function SupplierDirectoryModal({
 
                       <div className="grid gap-3 text-sm md:grid-cols-2">
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Delivery Days</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{td('Delivery Days')}</p>
                           <p className="mt-1 text-slate-600">
-                            {supplier.deliveryDays.length > 0 ? supplier.deliveryDays.join(', ') : 'Not set'}
+                            {supplier.deliveryDays.length > 0 ? supplier.deliveryDays.map((day) => td(day)).join(', ') : td('Not set')}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Delivery Areas</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{td('Delivery Areas')}</p>
                           <p className="mt-1 text-slate-600">
-                            {supplier.deliveryAreas.length > 0 ? supplier.deliveryAreas.join(', ') : 'Not set'}
+                            {supplier.deliveryAreas.length > 0 ? supplier.deliveryAreas.map((area) => td(area)).join(', ') : td('Not set')}
                           </p>
                         </div>
                       </div>
 
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Ingredients Supplied</p>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{td('Ingredients Supplied')}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {supplier.suppliedIngredients.length > 0 ? (
                             supplier.suppliedIngredients.map((ingredient) => (
                               <Badge key={ingredient.id} variant="secondary">
-                                {ingredient.name}
+                                {td(ingredient.name)}
                               </Badge>
                             ))
                           ) : (
-                            <span className="text-sm text-slate-500">No ingredients linked yet.</span>
+                            <span className="text-sm text-slate-500">{td('No ingredients linked yet.')}</span>
                           )}
                         </div>
                       </div>
@@ -324,20 +326,20 @@ export function SupplierDirectoryModal({
           <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <div>
               <h3 className="text-sm font-semibold text-slate-700">
-                {form.id ? 'Edit Supplier' : 'Add Supplier'}
+                {form.id ? td('Edit Supplier') : td('Add Supplier')}
               </h3>
               <p className="mt-1 text-sm text-slate-500">
-                Save supplier contact details and delivery preferences for quick ordering.
+                {td('Save supplier contact details and delivery preferences for quick ordering.')}
               </p>
             </div>
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Supplier Name</Label>
+                <Label>{td('Supplier Name')}</Label>
                 <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Email</Label>
+                <Label>{td('Email')}</Label>
                 <Input
                   type="email"
                   value={form.email}
@@ -346,16 +348,16 @@ export function SupplierDirectoryModal({
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Contact Number</Label>
+                  <Label>{td('Contact Number')}</Label>
                   <Input value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label>WhatsApp</Label>
+                  <Label>{td('WhatsApp')}</Label>
                   <Input value={form.whatsapp} onChange={(event) => setForm((prev) => ({ ...prev, whatsapp: event.target.value }))} />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Address</Label>
+                <Label>{td('Address')}</Label>
                 <Textarea
                   rows={2}
                   value={form.address}
@@ -364,7 +366,7 @@ export function SupplierDirectoryModal({
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Lead Time (days)</Label>
+                  <Label>{td('Lead Time (days)')}</Label>
                   <Input
                     type="number"
                     min="0"
@@ -373,7 +375,7 @@ export function SupplierDirectoryModal({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Delivery Days</Label>
+                  <Label>{td('Delivery Days')}</Label>
                   <div className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-white p-2">
                     {DELIVERY_DAY_OPTIONS.map((day) => {
                       const selected = form.deliveryDays.includes(day)
@@ -395,7 +397,7 @@ export function SupplierDirectoryModal({
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
                         >
-                          {day.slice(0, 3)}
+                          {td(day.slice(0, 3))}
                         </button>
                       )
                     })}
@@ -403,11 +405,11 @@ export function SupplierDirectoryModal({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Delivery Areas</Label>
+                <Label>{td('Delivery Areas')}</Label>
                 <Input
                   value={form.deliveryAreas}
                   onChange={(event) => setForm((prev) => ({ ...prev, deliveryAreas: event.target.value }))}
-                  placeholder="Baghdad, Karada, Mansour"
+                  placeholder={td('Baghdad, Karada, Mansour')}
                 />
               </div>
             </div>
@@ -423,7 +425,7 @@ export function SupplierDirectoryModal({
                   >
                     <Button type="button" variant="outline" size="sm">
                       <MessageCircle className="mr-2 h-4 w-4" />
-                      WhatsApp
+                      {td('WhatsApp')}
                     </Button>
                   </a>
                 )}
@@ -431,7 +433,7 @@ export function SupplierDirectoryModal({
                   <a href={`mailto:${form.email}`} className="inline-flex">
                     <Button type="button" variant="outline" size="sm">
                       <Mail className="mr-2 h-4 w-4" />
-                      Email
+                      {td('Email')}
                     </Button>
                   </a>
                 )}
@@ -440,12 +442,12 @@ export function SupplierDirectoryModal({
               <div className="flex gap-2">
                 {form.id && (
                   <Button type="button" variant="ghost" onClick={resetForm}>
-                    Cancel
+                    {td('Cancel')}
                   </Button>
                 )}
                 <Button type="button" onClick={() => void saveSupplier()} disabled={saving}>
                   <Save className="mr-2 h-4 w-4" />
-                  {saving ? 'Saving...' : form.id ? 'Save Changes' : 'Add Supplier'}
+                  {saving ? td('Saving...') : form.id ? td('Save Changes') : td('Add Supplier')}
                 </Button>
               </div>
             </DialogFooter>

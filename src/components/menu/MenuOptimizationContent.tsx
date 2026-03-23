@@ -28,7 +28,7 @@ import {
   Settings2,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
-import { useDynamicTranslate } from '@/lib/i18n'
+import { useDynamicTranslate, useI18n } from '@/lib/i18n'
 import type { MenuEngineSettings } from '@/types/menu-engine'
 import type { EngineMode } from '@/types/menu-engine'
 import { DEFAULT_SLOT_TIMES, buildSlotRangeLabels, formatSlotRange } from '@/lib/time-slots'
@@ -138,7 +138,8 @@ export default function MenuOptimizationContent({
   smartProfitRequiredPeriodLabel,
 }: MenuOptimizationContentProps) {
   const { toast } = useToast()
-  const { t: td } = useDynamicTranslate()
+  const { loaded } = useI18n()
+  const { t: td, fetchTranslation } = useDynamicTranslate()
   const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'profit'
   const resolvedStoredMode =
     storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'profit'
@@ -606,6 +607,7 @@ export default function MenuOptimizationContent({
   const [autoFillingCarousels, setAutoFillingCarousels] = useState(false)
 
   const autoFillCarousels = async () => {
+    if (!loaded) return
     if (engineMode !== 'profit' && engineMode !== 'adaptive') return
     setAutoFillingCarousels(true)
     try {
@@ -784,26 +786,35 @@ export default function MenuOptimizationContent({
       setShowcases(list)
 
       if (engineMode === 'adaptive' && !suggested.usedSalesData) {
+        const [title, description] = await Promise.all([
+          fetchTranslation('Smart Profit fallback used'),
+          fetchTranslation('No sales history yet; used high-margin fallback for all three featured sections.'),
+        ])
         toast({
-          title: td('Smart Profit fallback used'),
-          description: td('No sales history yet; used high-margin fallback for all three featured sections.'),
+          title,
+          description,
         })
       } else {
+        const [title, description] = await Promise.all([
+          fetchTranslation('Featured sections ready'),
+          fetchTranslation('Three featured sections are ready for breakfast, lunch, and dinner. Each shows only in its time period (menu timezone).'),
+        ])
         toast({
-          title: td('Featured sections ready'),
-          description: td('Three featured sections are ready for breakfast, lunch, and dinner. Each shows only in its time period (menu timezone).'),
+          title,
+          description,
         })
       }
     } catch {
-      toast({ title: td('Failed to auto-fill featured sections'), variant: 'destructive' })
+      toast({ title: await fetchTranslation('Failed to auto-fill featured sections'), variant: 'destructive' })
     } finally {
       setAutoFillingCarousels(false)
     }
   }
 
   useEffect(() => {
+    if (!loaded) return
     if (engineMode === 'profit' || engineMode === 'adaptive') void autoFillCarousels()
-  }, [engineMode])
+  }, [engineMode, loaded])
 
   return (
     <div className="space-y-6">
