@@ -8,6 +8,7 @@ import { buildSourceFingerprint } from '@/lib/menu-translations'
 import { normalizeTranslationInputs } from '@/lib/menu-translation-input'
 import { generateMenuDescription } from '@/lib/menu-description-ai'
 import { isZeroCostAllowed } from '@/lib/costing'
+import { inferMenuTags } from '@/lib/menu-tags-ai'
 
 function normalizeMenuIngredients(ingredients: any[] = []) {
   const mergedByIngredient = new Map<string, any>()
@@ -63,13 +64,28 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json()
+    const categoryRecord = data.categoryId
+      ? await prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } })
+      : null
+    const inferredTags = await inferMenuTags({
+      itemName: String(data.name ?? ''),
+      description: typeof data.description === 'string' ? data.description : null,
+      categoryName: categoryRecord?.name ?? null,
+      ingredientNames: Array.isArray(data.ingredients)
+        ? data.ingredients
+            .map((ingredient: any) => (typeof ingredient?.name === 'string' ? ingredient.name : null))
+            .filter((name: string | null): name is string => Boolean(name))
+        : [],
+      existingTags: Array.isArray(data.tags) ? data.tags : [],
+      protein: typeof data.protein === 'number' ? data.protein : null,
+      carbs: typeof data.carbs === 'number' ? data.carbs : null,
+    })
+    data.tags = inferredTags
 
     // Generate description once when missing (max 18 words; sensory, texture, heat, origin, scarcity; tone from DNA)
     if (data.name && !(data.description && String(data.description).trim())) {
       const [category, restaurant] = await Promise.all([
-        data.categoryId
-          ? prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } })
-          : null,
+        Promise.resolve(categoryRecord),
         prisma.restaurant.findUnique({
           where: { id: session.user.restaurantId! },
           select: { settings: true },

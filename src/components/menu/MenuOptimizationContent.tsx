@@ -97,6 +97,20 @@ interface CategoryOption {
   displayOrder: number
 }
 
+function mergeShowcasesWithMenuItems(showcases: Showcase[], menuItems: SimpleMenuItem[]): Showcase[] {
+  const menuItemById = new Map(menuItems.map((item) => [item.id, item]))
+
+  return showcases.map((showcase) => ({
+    ...showcase,
+    items: showcase.items.map((item) => {
+      const translatedMenuItem = menuItemById.get(item.menuItemId)
+      return translatedMenuItem
+        ? { ...item, menuItem: { ...item.menuItem, ...translatedMenuItem } }
+        : item
+    }),
+  }))
+}
+
 interface ShowcaseSettingsDraft {
   type: 'CHEFS_HIGHLIGHTS' | 'RECOMMENDATIONS'
   displayVariant: 'hero' | 'cards'
@@ -192,7 +206,7 @@ export default function MenuOptimizationContent({
       const refreshRes = await fetch('/api/menu-showcases').catch(() => null)
       if (refreshRes?.ok) {
         const refreshed = await refreshRes.json()
-        if (Array.isArray(refreshed)) setShowcases(refreshed)
+        if (Array.isArray(refreshed)) setShowcases(mergeShowcasesWithMenuItems(refreshed, menuItems))
       }
       toast({
         title: `${td('Christmas backgrounds applied to')} ${data.count} ${data.count === 1 ? td('dish') : td('dishes')}`,
@@ -226,7 +240,7 @@ export default function MenuOptimizationContent({
   const [slotTimesDraft, setSlotTimesDraft] = useState<SlotTimes>(initialSlotTimes ?? DEFAULT_SLOT_TIMES)
   const [savingSlotTimes, setSavingSlotTimes] = useState(false)
 
-  const [showcases, setShowcases] = useState<Showcase[]>(initialShowcases)
+  const [showcases, setShowcases] = useState<Showcase[]>(() => mergeShowcasesWithMenuItems(initialShowcases, menuItems))
   const [savingShowcase, setSavingShowcase] = useState<string | null>(null)
   const [deletingShowcase, setDeletingShowcase] = useState<string | null>(null)
   const [itemPickerOpen, setItemPickerOpen] = useState(false)
@@ -255,6 +269,10 @@ export default function MenuOptimizationContent({
   const [settingsSaving, setSettingsSaving] = useState(false)
   const prevEngineModeRef = useRef<EngineMode>(resolvedMode)
   const maxCarouselItems = (engineMode === 'profit' || engineMode === 'adaptive') ? 6 : 999
+
+  useEffect(() => {
+    setShowcases(mergeShowcasesWithMenuItems(initialShowcases, menuItems))
+  }, [initialShowcases, menuItems])
 
   const getShowcasePlacementLabel = (showcase: Showcase): string => {
     if (showcase.position === 'top') return td('Top of menu')
@@ -326,7 +344,7 @@ export default function MenuOptimizationContent({
       })
       if (!response.ok) throw new Error('Failed to create featured section')
       const newShowcase = await response.json()
-      setShowcases((prev) => [...prev, { ...newShowcase, items: [] }])
+      setShowcases((prev) => mergeShowcasesWithMenuItems([...prev, { ...newShowcase, items: [] }], menuItems))
       toast({ title: td('Featured section created'), description: td('You can now customize it.') })
     } catch {
       toast({ title: td('Error'), description: td('Failed to create featured section'), variant: 'destructive' })
@@ -353,7 +371,7 @@ export default function MenuOptimizationContent({
         }),
       })
       const showcase2 = await res2.json()
-      setShowcases([{ ...showcase1, items: [] }, { ...showcase2, items: [] }])
+      setShowcases(mergeShowcasesWithMenuItems([{ ...showcase1, items: [] }, { ...showcase2, items: [] }], menuItems))
       toast({ title: td('Default featured sections created'), description: td('Two featured sections have been set up. Items will be auto-populated.') })
     } catch {
       toast({ title: td('Error'), description: td('Failed to create default featured sections'), variant: 'destructive' })
@@ -614,7 +632,9 @@ export default function MenuOptimizationContent({
       // Refetch current showcases so we don't create duplicates (e.g. two tabs or two users).
       const listRes = await fetch('/api/menu-showcases')
       const currentShowcases = listRes.ok ? await listRes.json() : []
-      let list = Array.isArray(currentShowcases) ? [...currentShowcases] : [...showcases]
+      let list = Array.isArray(currentShowcases)
+        ? mergeShowcasesWithMenuItems([...currentShowcases], menuItems)
+        : [...showcases]
 
       const res = await fetch(`/api/menu-showcases/suggested-items?mode=${engineMode}`)
       if (!res.ok) throw new Error('Failed to load suggestions')
@@ -783,7 +803,7 @@ export default function MenuOptimizationContent({
         schedule: { displayForSlot: 'night' },
       })
 
-      setShowcases(list)
+      setShowcases(mergeShowcasesWithMenuItems(list, menuItems))
 
       if (engineMode === 'adaptive' && !suggested.usedSalesData) {
         const [title, description] = await Promise.all([

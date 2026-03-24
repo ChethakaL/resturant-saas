@@ -8,6 +8,7 @@ import { buildSourceFingerprint } from '@/lib/menu-translations'
 import { normalizeTranslationInputs } from '@/lib/menu-translation-input'
 import { generateMenuDescription } from '@/lib/menu-description-ai'
 import { isZeroCostAllowed } from '@/lib/costing'
+import { inferMenuTags } from '@/lib/menu-tags-ai'
 
 function normalizeMenuIngredients(ingredients: any[] = []) {
   const mergedByIngredient = new Map<string, any>()
@@ -91,19 +92,49 @@ export async function PATCH(
         id: resolvedParams.id,
         restaurantId: session.user.restaurantId,
       },
-      include: { category: { select: { name: true } } },
+      include: {
+        category: { select: { name: true } },
+        ingredients: { include: { ingredient: { select: { name: true } } } },
+      },
     })
 
     if (!existing) {
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 })
     }
 
+    const categoryName =
+      category?.name ??
+      existing.category?.name ??
+      null
+    data.tags = await inferMenuTags({
+      itemName: typeof data.name === 'string' ? data.name : existing.name,
+      description:
+        typeof data.description === 'string'
+          ? data.description
+          : existing.description,
+      categoryName,
+      ingredientNames: Array.isArray(data.ingredients)
+        ? data.ingredients
+            .map((ingredient: any) => (typeof ingredient?.name === 'string' ? ingredient.name : null))
+            .filter((name: string | null): name is string => Boolean(name))
+        : existing.ingredients.map((ingredient) => ingredient.ingredient.name),
+      existingTags: Array.isArray(data.tags) ? data.tags : existing.tags,
+      protein:
+        typeof data.protein === 'number'
+          ? data.protein
+          : existing.protein,
+      carbs:
+        typeof data.carbs === 'number'
+          ? data.carbs
+          : existing.carbs,
+    })
+
     // Generate description once when saving with no description and item has none (max 18 words)
     const hasDescriptionInPayload = data.description !== undefined
     const payloadDescription = hasDescriptionInPayload ? String(data.description ?? '').trim() : null
     if (hasDescriptionInPayload && !payloadDescription && !(existing.description && existing.description.trim())) {
       const [categoryName, restaurant] = await Promise.all([
-        existing.category?.name ?? (data.categoryId ? (await prisma.category.findUnique({ where: { id: data.categoryId }, select: { name: true } }))?.name : null) ?? null,
+        Promise.resolve(category?.name ?? existing.category?.name ?? null),
         prisma.restaurant.findUnique({
           where: { id: session.user.restaurantId! },
           select: { settings: true },
