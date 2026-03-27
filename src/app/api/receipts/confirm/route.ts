@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { canonicalise } from '@/lib/unit-converter'
+import { canonicalise, convertQuantityValue } from '@/lib/unit-converter'
 
 interface ConfirmItem {
   name: string
@@ -14,6 +14,97 @@ interface ConfirmItem {
   brand?: string
   supplier?: string
   date?: string
+}
+
+type IngredientWithVariants = {
+  id: string
+  name: string
+  unit: string
+  stockQuantity: number
+  costPerUnit: number
+  variants: Array<{
+    id: number
+    brand: string
+    supplier: string | null
+    packageQuantity: number | null
+    packageUnit: string
+  }>
+}
+
+function normalizeText(value?: string | null) {
+  return (value || '').trim().toLowerCase()
+}
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+function pickBestVariant(
+  ingredient: IngredientWithVariants,
+  brand?: string,
+  supplier?: string
+) {
+  const desiredBrand = normalizeText(brand)
+  const desiredSupplier = normalizeText(supplier)
+
+  const byBrand = desiredBrand
+    ? ingredient.variants.find((variant) => normalizeText(variant.brand).includes(desiredBrand))
+    : null
+  if (byBrand) return byBrand
+
+  const bySupplier = desiredSupplier
+    ? ingredient.variants.find((variant) => normalizeText(variant.supplier).includes(desiredSupplier))
+    : null
+  if (bySupplier) return bySupplier
+
+  return ingredient.variants.find((variant) => (variant.packageQuantity ?? 0) > 0) || null
+}
+
+function resolveReceiptToIngredientBaseUnits(
+  ingredient: IngredientWithVariants,
+  item: ConfirmItem
+) {
+  const ingredientUnit = canonicalise(ingredient.unit || 'piece')
+  const receiptUnit = canonicalise(item.unit || 'piece')
+  const receiptQuantity = Number(item.quantity)
+  const totalPrice = Number(item.totalPrice)
+
+  if (!Number.isFinite(receiptQuantity) || receiptQuantity <= 0) {
+    throw new Error(`Invalid quantity for receipt item "${item.name}"`)
+  }
+
+  if (!Number.isFinite(totalPrice) || totalPrice < 0) {
+    throw new Error(`Invalid total price for receipt item "${item.name}"`)
+  }
+
+  const directlyConvertedQuantity = convertQuantityValue(receiptQuantity, receiptUnit, ingredientUnit)
+  if (directlyConvertedQuantity != null && directlyConvertedQuantity > 0) {
+    return {
+      stockIncrement: directlyConvertedQuantity,
+      unitCost: totalPrice / directlyConvertedQuantity,
+    }
+  }
+
+  const matchedVariant = pickBestVariant(ingredient, item.brand, item.supplier)
+  if (matchedVariant?.packageQuantity && matchedVariant.packageQuantity > 0) {
+    const packageBaseQuantity = convertQuantityValue(
+      matchedVariant.packageQuantity,
+      matchedVariant.packageUnit,
+      ingredientUnit
+    )
+
+    if (packageBaseQuantity != null && packageBaseQuantity > 0) {
+      const stockIncrement = receiptQuantity * packageBaseQuantity
+      return {
+        stockIncrement,
+        unitCost: totalPrice / stockIncrement,
+      }
+    }
+  }
+
+  throw new Error(
+    `Cannot convert receipt unit "${item.unit || 'unknown'}" to ingredient unit "${ingredient.unit}" for "${item.name}". Add package size details to the linked ingredient first.`
+  )
 }
 
 export async function POST(request: NextRequest) {
@@ -78,6 +169,8 @@ export async function POST(request: NextRequest) {
         }
 
         let targetIngredientId = providedIngredientId
+        let expenseQuantity = Number(quantity)
+        let expenseUnitCost = roundCurrency(Number(unitPrice))
 
         if (targetIngredientId) {
           const existingIngredient = await tx.ingredient.findFirst({
@@ -85,25 +178,66 @@ export async function POST(request: NextRequest) {
               id: targetIngredientId,
               restaurantId,
             },
-            select: { id: true },
+            select: {
+              id: true,
+              name: true,
+              unit: true,
+              stockQuantity: true,
+              costPerUnit: true,
+              variants: {
+                select: {
+                  id: true,
+                  brand: true,
+                  supplier: true,
+                  packageQuantity: true,
+                  packageUnit: true,
+                },
+                orderBy: { id: 'asc' },
+              },
+            },
           })
 
           if (!existingIngredient) {
             throw new Error(`Ingredient not found for receipt item "${name}"`)
           }
+
+          const { stockIncrement, unitCost } = resolveReceiptToIngredientBaseUnits(existingIngredient, item)
+          const currentTotalValue = existingIngredient.stockQuantity * existingIngredient.costPerUnit
+          const newTotalValue = stockIncrement * unitCost
+          const newTotalQuantity = existingIngredient.stockQuantity + stockIncrement
+          const newAverageCost =
+            newTotalQuantity > 0
+              ? (currentTotalValue + newTotalValue) / newTotalQuantity
+              : unitCost
+
+          await tx.ingredient.update({
+            where: {
+              id: targetIngredientId,
+            },
+            data: {
+              costPerUnit: roundCurrency(newAverageCost),
+              stockQuantity: newTotalQuantity,
+              supplier: supplier?.trim() || undefined,
+            },
+          })
+
+          expenseQuantity = stockIncrement
+          expenseUnitCost = roundCurrency(unitCost)
         } else {
+          const baseUnit = canonicalise(unit || 'piece')
+          const roundedUnitCost = roundCurrency(Number(unitPrice))
+
           const newIngredient = await tx.ingredient.create({
             data: {
               name: name.trim(),
-              unit: canonicalise(unit || 'piece'),
+              unit: baseUnit,
               restaurant: {
                 connect: { id: restaurantId },
               },
-              costPerUnit: unitPrice,
+              costPerUnit: roundedUnitCost,
               supplier: supplier?.trim() || null,
               stockQuantity: 0,
               minStockLevel: 0,
-              // variants: brand?.trim() || null,
               variants: {
                 create: [{
                   brand: brand?.trim() || 'Generic',
@@ -112,7 +246,7 @@ export async function POST(request: NextRequest) {
                   packageQuantity: quantity,
                   packageUnit: unit,
                   bulkPrice: totalPrice,
-                  costPerUnit: unitPrice,
+                  costPerUnit: roundedUnitCost,
                 }],
               },
             },
@@ -122,21 +256,18 @@ export async function POST(request: NextRequest) {
           })
 
           targetIngredientId = newIngredient.id
-        }
 
-        // 2. Update existing ingredient (cost + stock)
-        await tx.ingredient.update({
-          where: {
-            id: targetIngredientId,
-          },
-          data: {
-            costPerUnit: unitPrice,
-            stockQuantity: {
-              increment: quantity,
+          await tx.ingredient.update({
+            where: {
+              id: targetIngredientId,
             },
-            supplier: supplier?.trim() || undefined,
-          },
-        })
+            data: {
+              stockQuantity: {
+                increment: quantity,
+              },
+            },
+          })
+        }
 
         const expense = await tx.expenseTransaction.create({
           data: {
@@ -147,8 +278,8 @@ export async function POST(request: NextRequest) {
             ingredientId: targetIngredientId,
             restaurantId,
             receiptId,
-            quantity,
-            unitCost: unitPrice,
+            quantity: expenseQuantity,
+            unitCost: expenseUnitCost,
           },
         })
 

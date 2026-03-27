@@ -149,6 +149,38 @@ export function computeConversion(
 }
 
 /**
+ * Convert a quantity between compatible metric/count units.
+ * Returns null when the units are incompatible or unsupported.
+ */
+export function convertQuantityValue(
+  quantity: number,
+  fromUnit: string,
+  toUnit: string
+): number | null {
+  if (!Number.isFinite(quantity)) return null
+
+  const from = canonicalise(fromUnit)
+  const to = canonicalise(toUnit)
+
+  if (from === to) return quantity
+
+  if (['g', 'kg'].includes(from) && ['g', 'kg'].includes(to)) {
+    const inGrams = from === 'kg' ? quantity * 1000 : quantity
+    return to === 'kg' ? inGrams / 1000 : inGrams
+  }
+
+  if (['ml', 'L'].includes(from) && ['ml', 'L'].includes(to)) {
+    const inMl = from === 'L' ? quantity * 1000 : quantity
+    return to === 'L' ? inMl / 1000 : inMl
+  }
+
+  if (from === 'piece' && (to === 'piece' || to === 'pieces')) return quantity
+  if (to === 'piece' && (from === 'piece' || from === 'pieces')) return quantity
+
+  return null
+}
+
+/**
  * Convert a recipe unit/quantity to the best matching inventory unit.
  * Returns the converted quantity and the target inventory unit.
  * Used by Smart Chef when a recipe mentions cups/tbsp/tsp.
