@@ -19,6 +19,7 @@ const config = {
     },
     extend: {
       fontFamily: {
+        sans: ['var(--font-outfit)', 'Inter', 'system-ui', 'sans-serif'],
         display: ['var(--font-display)', 'Georgia', 'serif'],
         body: ['var(--font-body)', 'system-ui', 'sans-serif'],
         'menu-title': ['var(--font-menu-title)', 'var(--font-display)', 'sans-serif'],

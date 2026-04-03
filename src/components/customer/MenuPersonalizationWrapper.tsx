@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation'
 import SmartMenu from './SmartMenu'
 import type { BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
+import type { MenuFeelingContext } from '@/lib/menu-feeling-message'
 
 const LAST_ORDER_KEY = 'iserve_last_order'
 
@@ -27,10 +28,12 @@ export interface MenuPersonalizationWrapperProps {
   moods?: MoodOption[]
   upsellMap?: Record<string, UpsellSuggestion[]>
   categoryOrder?: string[]
+  menuTimezone?: string
   categoryAnchorBundle?: Record<string, BundleHint>
   maxInitialItemsPerCategory?: number
   tables?: { id: string; number: string }[]
   tableOrderingEnabled?: boolean
+  smartSearchFeelingContext?: MenuFeelingContext
   forceShowImages?: boolean
   snowfallSettings?: { enabled: boolean; start: string; end: string } | null
 }
@@ -50,6 +53,7 @@ export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProp
       forceShowImages={props.forceShowImages}
       initialLanguage={props.initialLanguage}
       initialTranslationCache={props.initialTranslationCache}
+      menuTimezone={props.menuTimezone}
       tableSize={validTableSize}
       tableNumber={tableNumber}
       tables={props.tables}

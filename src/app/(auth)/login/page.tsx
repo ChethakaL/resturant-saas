@@ -111,9 +111,9 @@ function LoginPageContent() {
               <p className="text-center text-sm text-slate-500">
                 Supplier? <a href="/supplier/login" className="text-amber-600 hover:underline">Sign in to Supplier Portal</a>
               </p>
-              {/* <p className="text-center text-sm text-slate-500">
-                Waiter? <a href="/waiter/login" className="text-amber-600 hover:underline">Sign in to Waiter Portal</a>
-              </p> */}
+              <p className="text-center text-sm text-slate-500">
+                Need the staff floor view? <Link href="/waiter/login" className="text-amber-600 hover:underline">Sign in as a waiter</Link>
+              </p>
             </form>
           </CardContent>
         </Card>

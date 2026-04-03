@@ -30,6 +30,7 @@ export interface EngineMenuItem {
   price: number
   categoryId: string
   categoryName?: string
+  tags?: string[]
   _cost: number
   _marginPercent: number
   _unitsSold: number
@@ -438,7 +439,7 @@ function mapMoods(
     { id: 'filling', label: MOOD_LABELS.filling, itemIds: fillingIds },
     { id: 'sharing', label: MOOD_LABELS.sharing, itemIds: sharingIds },
     { id: 'premium', label: MOOD_LABELS.premium, itemIds: premiumIds },
-  ]
+  ].filter((mood) => mood.itemIds.length > 0)
 }
 
 function buildUpsellSequence(

@@ -2,14 +2,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { classifyItemType, type DefaultCategoryKey } from '@/lib/category-suggest'
-import type { ItemForSuggest } from '@/lib/category-suggest'
 import { getCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
 import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
+import { buildContextShowcaseSuggestions } from '@/lib/context-showcase-ranking'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_CAROUSEL_ITEMS = 6
 type Slot = 'breakfast' | 'day' | 'evening' | 'night'
 
 /** Get time slot for a date in tz: breakfast 6–10, day 10–14, evening 14–18, night 18–6. */
@@ -45,7 +43,7 @@ export async function GET(request: Request) {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-    const [restaurant, menuItems, categories, salesLast30d] = await Promise.all([
+    const [restaurant, menuItems, salesLast30d] = await Promise.all([
       prisma.restaurant.findUnique({
         where: { id: restaurantId },
         select: { settings: true, timezone: true },
@@ -57,10 +55,6 @@ export async function GET(request: Request) {
           ingredients: { include: { ingredient: true } },
         },
       }) as Promise<any[]>,
-      prisma.category.findMany({
-        where: { restaurantId },
-        orderBy: { displayOrder: 'asc' },
-      }),
       prisma.sale.findMany({
         where: { restaurantId, timestamp: { gte: thirtyDaysAgo } },
         include: { items: true },
@@ -75,7 +69,7 @@ export async function GET(request: Request) {
     const unitsBySlot = new Map<string, Record<Slot, number>>()
     if (importedSales) {
       const importedByItem = buildImportedSalesByItem(importedSales, buildCostedMenuItems(menuItems))
-      for (const [menuItemId, value] of importedByItem.entries()) {
+      for (const [menuItemId, value] of Array.from(importedByItem.entries())) {
         salesByItem.set(menuItemId, { quantity: value.quantity, costSum: value.costSum })
         unitsBySlot.set(menuItemId, {
           breakfast: 0,
@@ -99,7 +93,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const rawItems: (ItemForSuggest & { price: number })[] = menuItems.map((item: any) => {
+    const rawItems = menuItems.map((item: any) => {
       const ingredientTotal = item.ingredients?.reduce(
         (sum: number, ing: any) => sum + ing.quantity * ing.ingredient.costPerUnit,
         0
@@ -112,130 +106,15 @@ export async function GET(request: Request) {
         id: item.id,
         name: item.name,
         categoryName: item.category?.name ?? null,
+        description: item.description ?? null,
+        tags: item.tags ?? [],
         marginPercent,
-        unitsSold,
+        totalUnitsSold: unitsSold,
+        slotUnits: unitsBySlot.get(item.id) ?? { breakfast: 0, day: 0, evening: 0, night: 0 },
         price: item.price ?? 0,
       }
     })
-    const itemsForSuggest = rawItems.filter((item) => classifyItemType(item) !== 'Drinks')
-
-    const byPriceDesc = (ids: string[]) => {
-      const map = new Map(itemsForSuggest.map((i) => [i.id, i.price]))
-      return [...ids].sort((a, b) => (map.get(b) ?? 0) - (map.get(a) ?? 0))
-    }
-
-    if (mode === 'profit') {
-      const mains = itemsForSuggest.filter((i) => classifyItemType(i) === 'Main Dishes')
-      const shareables = itemsForSuggest.filter((i) => classifyItemType(i) === 'Shareables')
-      mains.sort((a, b) => b.marginPercent - a.marginPercent || b.price - a.price)
-      shareables.sort((a, b) => b.marginPercent - a.marginPercent || b.price - a.price)
-      const selected: string[] = []
-      for (const item of mains) {
-        if (selected.length >= MAX_CAROUSEL_ITEMS) break
-        selected.push(item.id)
-      }
-      for (const item of shareables) {
-        if (selected.length >= MAX_CAROUSEL_ITEMS) break
-        if (!selected.includes(item.id)) selected.push(item.id)
-      }
-      if (selected.length < MAX_CAROUSEL_ITEMS) {
-        const remaining = [...itemsForSuggest]
-          .filter((i) => !selected.includes(i.id))
-          .sort((a, b) => b.marginPercent - a.marginPercent || b.price - a.price)
-        for (const item of remaining) {
-          if (selected.length >= MAX_CAROUSEL_ITEMS) break
-          selected.push(item.id)
-        }
-      }
-      return NextResponse.json({
-        mode,
-        usedSalesData: false,
-        recommended: byPriceDesc(selected),
-        breakfast: byPriceDesc(selected),
-        day: byPriceDesc(selected),
-        evening: byPriceDesc(selected),
-        night: byPriceDesc(selected),
-      })
-    }
-
-    const SCORE_WEIGHT_MARGIN = 0.6
-    const SCORE_WEIGHT_POPULARITY = 0.4
-    const score = (item: ItemForSuggest & { price: number }, slot: Slot) => {
-      const pop = unitsBySlot.get(item.id)?.[slot] ?? 0
-      return item.marginPercent * SCORE_WEIGHT_MARGIN + Math.min(100, pop) * SCORE_WEIGHT_POPULARITY
-    }
-    const prioritizeForSlot = (
-      sorted: (ItemForSuggest & { price: number })[]
-    ): string[] => {
-      const priority: DefaultCategoryKey[] = [
-        'Main Dishes',
-        'Shareables',
-        'Add-ons',
-        'Sides',
-        'Desserts',
-        'Kids',
-      ]
-      const result: string[] = []
-      const seen = new Set<string>()
-      const addItem = (item: ItemForSuggest & { price: number }) => {
-        if (result.length >= MAX_CAROUSEL_ITEMS) return
-        if (seen.has(item.id)) return
-        if (classifyItemType(item) === 'Drinks') return
-        result.push(item.id)
-        seen.add(item.id)
-      }
-
-      for (const type of priority) {
-        for (const item of sorted) {
-          if (classifyItemType(item) === type) {
-            addItem(item)
-            if (result.length >= MAX_CAROUSEL_ITEMS) break
-          }
-        }
-        if (result.length >= MAX_CAROUSEL_ITEMS) break
-      }
-
-      if (result.length < MAX_CAROUSEL_ITEMS) {
-        for (const item of sorted) {
-          if (classifyItemType(item) === 'Drinks') continue
-          addItem(item)
-          if (result.length >= MAX_CAROUSEL_ITEMS) break
-        }
-      }
-
-      return byPriceDesc(result)
-    }
-    const result: Record<Slot, string[]> = { breakfast: [], day: [], evening: [], night: [] }
-    const hasAnySalesData = Array.from(unitsBySlot.values()).some(
-      (slotMap) => Object.values(slotMap).some((v: number) => v > 0)
-    )
-    const byHighMargin = [...itemsForSuggest].sort(
-      (a, b) => b.marginPercent - a.marginPercent || b.price - a.price
-    )
-
-    if (!hasAnySalesData) {
-      const selected = prioritizeForSlot(byHighMargin)
-      return NextResponse.json({
-        mode,
-        usedSalesData: false,
-        recommended: selected,
-        breakfast: selected,
-        day: selected,
-        evening: selected,
-        night: selected,
-      })
-    }
-
-    for (const slot of ['breakfast', 'day', 'evening', 'night'] as const) {
-      const sorted = [...itemsForSuggest].sort((a, b) => score(b, slot) - score(a, slot))
-      result[slot] = prioritizeForSlot(sorted)
-    }
-    return NextResponse.json({
-      mode,
-      usedSalesData: true,
-      recommended: result.day,
-      ...result,
-    })
+    return NextResponse.json(buildContextShowcaseSuggestions(rawItems, mode))
   } catch (error) {
     console.error('Error fetching suggested carousel items:', error)
     return NextResponse.json(

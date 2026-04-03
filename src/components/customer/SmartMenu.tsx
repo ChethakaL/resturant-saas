@@ -18,17 +18,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3 } from 'lucide-react'
+import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3, ShoppingBag, Minus, Plus, Clock3, ChefHat, GlassWater, Handshake, IceCreamCone } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
 import { MenuItemCard } from './MenuItemCard'
 import { MoodSelector } from './MoodSelector'
-import { getOrCreateGuestId } from './MenuPersonalizationWrapper'
+import { getOrCreateGuestId, setStoredLastOrder } from './MenuPersonalizationWrapper'
 import { getAllVariants, getVariant } from '@/lib/experiments'
 import { logMenuEvent } from '@/lib/menu-events'
 import { googleFontUrl, resolveGoogleFont } from '@/lib/google-fonts'
 import type { ItemDisplayHints, BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
+import type { MenuFeelingContext } from '@/lib/menu-feeling-message'
 
 interface MenuItem {
   id: string
@@ -79,6 +80,8 @@ interface CategorySection {
 interface MenuTheme {
   primaryColor?: string
   accentColor?: string
+  chefPickColor?: string
+  borderColor?: string
   backgroundStyle?: 'dark' | 'light' | 'gradient'
   fontFamily?: 'sans' | 'serif' | 'display'
   logoUrl?: string | null
@@ -106,13 +109,15 @@ interface SmartMenuProps {
   moods?: MoodOption[]
   upsellMap?: Record<string, UpsellSuggestion[]>
   categoryOrder?: string[]
+  menuTimezone?: string
   tableSize?: number
   /** When menu is opened from a table (e.g. QR code), pass table number so the order is assigned to that table. */
   tableNumber?: string
   /** Tables available for guest to select (e.g. for order assignment). */
-  tables?: { id: string; number: string }[]
+  tables?: { id: string; number: string; status?: string }[]
   categoryAnchorBundle?: Record<string, BundleHint>
   maxInitialItemsPerCategory?: number
+  smartSearchFeelingContext?: MenuFeelingContext
   /** Snowfall / seasonal effects settings */
   snowfallSettings?: { enabled: boolean; start: string; end: string } | null
   forceShowImages?: boolean
@@ -135,6 +140,36 @@ const LANGUAGE_OPTIONS_ALL: { value: LanguageCode; label: string }[] = [
   { value: 'ku', label: 'كوردي' },
   { value: 'ar_fusha', label: 'العربية' },
 ]
+
+function getAutoContextForTimeZone(timeZone?: string | null, preferBrowserTimeZone = false): 'morning' | 'lunch' | 'evening' {
+  try {
+    const browserTimeZone =
+      preferBrowserTimeZone && typeof window !== 'undefined'
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : null
+    const effectiveTimeZone = browserTimeZone || timeZone || 'Asia/Baghdad'
+    const hour = parseInt(
+      new Intl.DateTimeFormat('en-GB', {
+        hour: 'numeric',
+        hour12: false,
+        timeZone: effectiveTimeZone,
+      }).format(new Date()),
+      10
+    )
+
+    if (hour >= 6 && hour < 11) return 'morning'
+    if (hour >= 11 && hour < 16) return 'lunch'
+    return 'evening'
+  } catch {
+    return 'morning'
+  }
+}
+
+function getTimeContextForHour(hour: number): 'morning' | 'lunch' | 'evening' {
+  if (hour >= 6 && hour < 11) return 'morning'
+  if (hour >= 11 && hour < 16) return 'lunch'
+  return 'evening'
+}
 
 function isSupportedLanguage(value: string | null): value is LanguageCode {
   return value === 'en' || value === 'ku' || value === 'ar' || value === 'ar_fusha'
@@ -698,6 +733,17 @@ const formatTemplate = (
   }, template)
 }
 
+function hexToRgba(hex: string | undefined | null, alpha: number): string {
+  if (!hex || !/^#?[0-9a-fA-F]{6}$/.test(hex)) {
+    return `rgba(0,0,0,${alpha})`
+  }
+  const normalized = hex.startsWith('#') ? hex.slice(1) : hex
+  const r = parseInt(normalized.slice(0, 2), 16)
+  const g = parseInt(normalized.slice(2, 4), 16)
+  const b = parseInt(normalized.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 /** Sign in / My visits control. Icon-only on mobile to avoid header overlap. */
 function CustomerSignInControl({
   isDarkBg,
@@ -773,8 +819,12 @@ export default function SmartMenu({
   engineMode = 'classic',
   moods = [],
   categoryOrder,
+  menuTimezone,
   tableSize,
+  tableNumber,
+  tables,
   maxInitialItemsPerCategory = 3,
+  smartSearchFeelingContext,
   forceShowImages = false,
   snowfallSettings,
 }: SmartMenuProps) {
@@ -821,6 +871,13 @@ export default function SmartMenu({
     ar_fusha: 0,
     ku: 0,
   })
+  const [cart, setCart] = useState<Record<string, number>>({})
+  const [basketOpen, setBasketOpen] = useState(false)
+  const [tablePickerOpen, setTablePickerOpen] = useState(false)
+  const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(tableNumber ?? null)
+  const [liveTables, setLiveTables] = useState(() => tables ?? [])
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false)
+  const [orderSuccessMessage, setOrderSuccessMessage] = useState<string | null>(null)
   const [selectedItemForDetail, setSelectedItemForDetail] =
     useState<MenuItem | null>(null)
   const { toast } = useToast()
@@ -883,10 +940,104 @@ export default function SmartMenu({
     }
   }, [languageStorageKey, language])
 
+  useEffect(() => {
+    setSelectedTableNumber(tableNumber ?? null)
+  }, [tableNumber])
+
+  useEffect(() => {
+    setLiveTables(tables ?? [])
+  }, [tables])
+
+  const refreshTables = useCallback(async () => {
+    if (!restaurantId) return
+
+    try {
+      const res = await fetch(`/api/public/tables?restaurantId=${encodeURIComponent(restaurantId)}`, {
+        cache: 'no-store',
+      })
+      if (!res.ok) return
+
+      const data = await res.json()
+      setLiveTables(data)
+    } catch {
+      // Silent fail for background sync.
+    }
+  }, [restaurantId])
+
+  useEffect(() => {
+    if (!tables || tables.length === 0) return
+
+    void refreshTables()
+
+    const interval = window.setInterval(() => {
+      void refreshTables()
+    }, 2000)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshTables()
+      }
+    }
+
+    window.addEventListener('focus', refreshTables)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshTables)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [refreshTables, tables])
+
+  useEffect(() => {
+    if (!selectedTableNumber) return
+
+    const selectedTable = liveTables.find((table) => table.number === selectedTableNumber)
+    if (selectedTable && selectedTable.status && selectedTable.status !== 'AVAILABLE') {
+      setSelectedTableNumber(null)
+      toast({
+        title: 'Table no longer available',
+        description: `Table ${selectedTable.number} was updated by staff. Please choose another table.`,
+        variant: 'destructive',
+      })
+    }
+  }, [liveTables, selectedTableNumber, toast])
+
+  const selectableTables = useMemo(
+    () => liveTables.filter((table) => (table.status ?? 'AVAILABLE') === 'AVAILABLE'),
+    [liveTables]
+  )
+
   const hideImages = !forceShowImages && getVariant('photo_visibility') === 'hide'
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)
     else sectionRefs.current.delete(id)
+  }, [])
+
+  const addToCart = useCallback((itemId: string) => {
+    setCart((prev) => ({
+      ...prev,
+      [itemId]: (prev[itemId] ?? 0) + 1,
+    }))
+    setOrderSuccessMessage(null)
+  }, [])
+
+  const updateCartQuantity = useCallback((itemId: string, delta: number) => {
+    setCart((prev) => {
+      const next = { ...prev }
+      const qty = (next[itemId] ?? 0) + delta
+      if (qty <= 0) delete next[itemId]
+      else next[itemId] = qty
+      return next
+    })
+  }, [])
+
+  const removeFromCart = useCallback((itemId: string) => {
+    setCart((prev) => {
+      const next = { ...prev }
+      delete next[itemId]
+      return next
+    })
   }, [])
 
   useEffect(() => {
@@ -1140,6 +1291,14 @@ export default function SmartMenu({
     return segments
   }
 
+  const getDisplayNameForItem = useCallback((item: MenuItem) => {
+    return translationCache[language]?.[item.id]?.name || item.name
+  }, [language, translationCache])
+
+  const getDisplayDescriptionForItem = useCallback((item: MenuItem) => {
+    return translationCache[language]?.[item.id]?.description || item.description || ''
+  }, [language, translationCache])
+
   // Extract unique categories
   const categories = useMemo(() => {
     const uniqueCategories = new Map<string, { id: string; name: string }>()
@@ -1214,8 +1373,133 @@ export default function SmartMenu({
     return Array.from(new Set(out))
   }
 
-  // Filter and sort menu items
-  const filteredItems = useMemo(() => {
+  const cartItems = useMemo(() => {
+    return Object.entries(cart)
+      .map(([itemId, quantity]) => {
+        const item = menuItems.find((entry) => entry.id === itemId)
+        if (!item) return null
+        return {
+          item,
+          quantity,
+          translation: translationCache[language]?.[item.id],
+        }
+      })
+      .filter(Boolean) as Array<{
+        item: MenuItem
+        quantity: number
+        translation?: MenuItemTranslation
+      }>
+  }, [cart, language, menuItems, translationCache])
+
+  const cartCount = useMemo(
+    () => cartItems.reduce((sum, line) => sum + line.quantity, 0),
+    [cartItems]
+  )
+
+  const cartTotal = useMemo(
+    () => cartItems.reduce((sum, line) => sum + line.item.price * line.quantity, 0),
+    [cartItems]
+  )
+
+  const availableMoods = useMemo<MoodOption[]>(() => {
+    const keywordMap: Record<string, string[]> = {
+      light: ['salad', 'soup', 'appetizer', 'starter', 'light', 'juice', 'drink', 'beverage', 'tea', 'coffee'],
+      filling: ['main', 'grill', 'burger', 'pasta', 'rice', 'dish', 'sandwich', 'wrap', 'kebab', 'steak', 'meal'],
+      sharing: ['platter', 'share', 'sharing', 'starter', 'appetizer', 'family', 'combo'],
+      drinks: ['drink', 'beverage', 'juice', 'coffee', 'tea', 'smoothie', 'latte', 'espresso', 'mocha', 'lemonade', 'water', 'mocktail', 'soda', 'ayran'],
+      sweet: ['dessert', 'sweet', 'cake', 'cookie', 'ice cream', 'icecream', 'kunafa', 'baklava', 'pudding', 'brownie', 'chocolate'],
+    }
+
+    const isDrinkLike = (item: MenuItem) => {
+      const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+      return keywordMap.drinks.some((keyword) => bucket.includes(keyword))
+    }
+
+    const isLightLike = (item: MenuItem) => {
+      const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+      return keywordMap.light.some((keyword) => bucket.includes(keyword))
+    }
+
+    const isSharingLike = (item: MenuItem) => {
+      const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+      return keywordMap.sharing.some((keyword) => bucket.includes(keyword))
+    }
+
+    const isFillingLike = (item: MenuItem) => {
+      const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+      return keywordMap.filling.some((keyword) => bucket.includes(keyword))
+    }
+
+    const inferMoodIds = (moodId: keyof typeof keywordMap) =>
+      menuItems
+        .filter((item) => {
+          const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+          return keywordMap[moodId].some((keyword) => bucket.includes(keyword))
+        })
+        .map((item) => item.id)
+
+    const serverMoodMap = new Map(moods.map((mood) => [mood.id, mood]))
+    const fallbackDefinitions: MoodOption[] = [
+      { id: 'light', label: { en: 'Light', ar: 'خفيف', ku: 'سووک' }, itemIds: inferMoodIds('light') },
+      { id: 'filling', label: { en: 'Filling', ar: 'مشبع', ku: 'تێرکەر' }, itemIds: inferMoodIds('filling') },
+      { id: 'sharing', label: { en: 'Sharing', ar: 'للمشاركة', ku: 'هاوبەشکردن' }, itemIds: inferMoodIds('sharing') },
+      { id: 'drinks', label: { en: 'Drinks', ar: 'مشروبات', ku: 'خواردنەوە' }, itemIds: inferMoodIds('drinks') },
+      { id: 'sweet', label: { en: 'Sweet', ar: 'حلويات', ku: 'شیرین' }, itemIds: inferMoodIds('sweet') },
+    ]
+
+    const resolved = fallbackDefinitions
+      .map((fallbackMood) => {
+        const serverMood = serverMoodMap.get(fallbackMood.id)
+        let itemIds = serverMood?.itemIds?.length ? serverMood.itemIds : fallbackMood.itemIds
+
+        if (fallbackMood.id === 'sharing' && itemIds.length === 0) {
+          itemIds = menuItems
+            .filter((item) => isSharingLike(item) || (!isDrinkLike(item) && !isFillingLike(item)))
+            .map((item) => item.id)
+            .slice(0, 8)
+        }
+
+        if (fallbackMood.id === 'light' && itemIds.length === 0) {
+          itemIds = menuItems
+            .filter((item) => isLightLike(item) || isDrinkLike(item))
+            .map((item) => item.id)
+            .slice(0, 8)
+        }
+
+        if (fallbackMood.id === 'filling' && itemIds.length === 0) {
+          itemIds = menuItems
+            .filter((item) => isFillingLike(item) || (!isDrinkLike(item) && !isLightLike(item)))
+            .map((item) => item.id)
+            .slice(0, 8)
+        }
+
+        if (fallbackMood.id === 'drinks' && itemIds.length === 0) {
+          itemIds = menuItems
+            .filter((item) => isDrinkLike(item))
+            .map((item) => item.id)
+            .slice(0, 8)
+        }
+
+        if (fallbackMood.id === 'sweet' && itemIds.length === 0) {
+          itemIds = menuItems
+            .filter((item) => {
+              const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+              return keywordMap.sweet.some((keyword) => bucket.includes(keyword))
+            })
+            .map((item) => item.id)
+            .slice(0, 8)
+        }
+
+        return {
+          ...fallbackMood,
+          itemIds,
+        }
+      })
+    return resolved
+  }, [menuItems, moods])
+
+  // Filter and sort menu items before mood selection.
+  const baseFilteredItems = useMemo(() => {
     let items = menuItems
 
     // Search filter
@@ -1258,33 +1542,6 @@ export default function SmartMenu({
       })
     }
 
-    // Mood filter (engine)
-    if (selectedMoodId && moods.length > 0) {
-      const mood = moods.find((m) => m.id === selectedMoodId)
-      if (mood) {
-        if (mood.itemIds.length > 0) {
-          const moodIds = new Set(mood.itemIds)
-          items = items.filter((item) => moodIds.has(item.id))
-        } else {
-          // Fallback: filter by tags or category keywords if itemIds not populated
-          const moodKeywords: Record<string, string[]> = {
-            light: ['salad', 'soup', 'appetizer', 'starter', 'light'],
-            filling: ['main', 'grill', 'burger', 'pasta', 'rice', 'dish'],
-            sharing: ['platter', 'share', 'sharing', 'appetizer', 'starter'],
-            premium: ['premium', 'special', 'signature'],
-          }
-          const keywords = moodKeywords[mood.id] ?? []
-          if (keywords.length > 0) {
-            items = items.filter((item) => {
-              const cat = (item.category?.name ?? '').toLowerCase()
-              const tags = (item.tags ?? []).join(' ').toLowerCase()
-              return keywords.some((k) => cat.includes(k) || tags.includes(k))
-            })
-          }
-        }
-      }
-    }
-
     // Sort
     const macroValue = (item: MenuItem, key: 'protein' | 'carbs') => {
       const translation = translationCache[language]?.[item.id]
@@ -1324,26 +1581,43 @@ export default function SmartMenu({
     searchTokens,
     selectedCategory,
     selectedTags,
-    selectedMoodId,
-    moods,
     sortBy,
     language,
     translationCache,
   ])
 
-  const summaryTemplate =
-    filteredItems.length === 1
-      ? currentCopy.resultsSummarySingular
-      : currentCopy.resultsSummaryPlural
-  const smartSearchSummary = trimmedSearch
-    ? formatTemplate(summaryTemplate, {
-      count: filteredItems.length.toString(),
-      query: trimmedSearch,
+  const filteredItems = useMemo(() => {
+    let items = baseFilteredItems
+    if (!selectedMoodId) return items
+
+    const mood = availableMoods.find((entry) => entry.id === selectedMoodId)
+    if (!mood) return items
+
+    if (mood.itemIds.length > 0) {
+      const moodIds = new Set(mood.itemIds)
+      items = items.filter((item) => moodIds.has(item.id))
+      return items
+    }
+
+    const moodKeywords: Record<string, string[]> = {
+      light: ['salad', 'soup', 'appetizer', 'starter', 'light'],
+      filling: ['main', 'grill', 'burger', 'pasta', 'rice', 'dish'],
+      sharing: ['platter', 'share', 'sharing', 'appetizer', 'starter', 'combo'],
+      drinks: ['drink', 'beverage', 'juice', 'coffee', 'tea', 'smoothie', 'latte', 'espresso'],
+      sweet: ['dessert', 'sweet', 'cake', 'cookie', 'ice cream', 'baklava', 'pudding'],
+    }
+    const keywords = moodKeywords[mood.id] ?? []
+    if (keywords.length === 0) return items
+
+    return items.filter((item) => {
+      const bucket = `${item.name} ${item.category?.name ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+      return keywords.some((keyword) => bucket.includes(keyword))
     })
-    : currentCopy.smartSearchDescription
+  }, [availableMoods, baseFilteredItems, selectedMoodId])
+
   const selectedMood = useMemo(
-    () => (selectedMoodId ? moods.find((m) => m.id === selectedMoodId) ?? null : null),
-    [moods, selectedMoodId]
+    () => (selectedMoodId ? availableMoods.find((m) => m.id === selectedMoodId) ?? null : null),
+    [availableMoods, selectedMoodId]
   )
   const selectedMoodLabel = selectedMood
     ? (selectedMood.label[language === 'ar_fusha' ? 'ar' : language] ?? selectedMood.label.en)
@@ -1520,6 +1794,7 @@ export default function SmartMenu({
       : theme?.backgroundStyle === 'gradient'
         ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white'
         : 'bg-slate-950 text-white'
+  const priceVariant = getVariant('price_format')
 
   const isDarkBg = theme?.backgroundStyle !== 'light'
   const defaultMenuLayout = theme?.menuLayout === 'grid' ? 'grid' : 'list'
@@ -1652,6 +1927,16 @@ export default function SmartMenu({
     [showcases]
   )
 
+  const heroItems = useMemo(() => {
+    const showcaseItems = topShowcases.flatMap((showcase) => showcase.items)
+    const source = showcaseItems.length > 0 ? showcaseItems : baseFilteredItems
+    const unique = new Map<string, MenuItem>()
+    source.forEach((item) => {
+      if (!unique.has(item.id)) unique.set(item.id, item)
+    })
+    return Array.from(unique.values())
+  }, [baseFilteredItems, topShowcases])
+
   const logoSrc = theme?.logoUrl || restaurantLogo || '/logo.png'
 
   // Snowfall: active when enabled and today is within the configured date range
@@ -1667,6 +1952,1094 @@ export default function SmartMenu({
     if (start <= end) return today >= start && today <= end
     return today >= start || today <= end
   }, [snowfallSettings])
+
+  const placeOrder = useCallback(async () => {
+    if (cartItems.length === 0 || isPlacingOrder) return
+
+    setIsPlacingOrder(true)
+    setOrderSuccessMessage(null)
+
+    try {
+      const response = await fetch('/api/public/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          restaurantId,
+          tableNumber: selectedTableNumber ?? undefined,
+          items: cartItems.map((line) => ({
+            menuItemId: line.item.id,
+            quantity: line.quantity,
+          })),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to place order')
+      }
+
+      setStoredLastOrder(
+        restaurantId,
+        cartItems.map((line) => ({
+          menuItemId: line.item.id,
+          name: getDisplayNameForItem(line.item),
+          quantity: line.quantity,
+        }))
+      )
+
+      setCart({})
+      setBasketOpen(false)
+      setOrderSuccessMessage(
+        data?.orderNumber
+          ? `Order ${data.orderNumber} sent. Your waiter has been notified.`
+          : 'Order sent. Your waiter has been notified.'
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to place order'
+      toast({
+        title: 'Order failed',
+        description: message,
+        variant: 'destructive',
+      })
+    } finally {
+      setIsPlacingOrder(false)
+    }
+  }, [cartItems, getDisplayNameForItem, isPlacingOrder, restaurantId, selectedTableNumber, toast])
+
+  const getMoodLabel = (mood: MoodOption) =>
+    mood.label[language === 'ar_fusha' ? 'ar' : language] ?? mood.label.en
+
+  const contextOptions = [
+    { key: 'morning', label: 'Morning', tone: 'Good Morning' },
+    { key: 'lunch', label: 'Lunch', tone: 'Good Afternoon' },
+    { key: 'hot', label: 'Hot Day', tone: 'Hot Day' },
+    { key: 'evening', label: 'Evening', tone: 'Good Evening' },
+    { key: 'rainy', label: 'Rainy', tone: 'Rainy Evening' },
+    { key: 'cold', label: 'Cold', tone: 'Cold Night' },
+  ] as const
+  type ContextKey = (typeof contextOptions)[number]['key']
+
+  const resolveAutoContext = useCallback(
+    (preferBrowserTimeZone = false): ContextKey => {
+      const weatherLabel = smartSearchFeelingContext?.weatherLabel
+      const temperatureFeel = smartSearchFeelingContext?.temperatureFeel
+
+      if (weatherLabel === 'rain' || weatherLabel === 'storm' || weatherLabel === 'snow') return 'rainy'
+      if (temperatureFeel === 'cold') return 'cold'
+      if (temperatureFeel === 'hot') return 'hot'
+
+      try {
+        const browserTimeZone =
+          preferBrowserTimeZone && typeof window !== 'undefined'
+            ? Intl.DateTimeFormat().resolvedOptions().timeZone
+            : null
+        const effectiveTimeZone = browserTimeZone || menuTimezone || 'Asia/Baghdad'
+        const hour = parseInt(
+          new Intl.DateTimeFormat('en-GB', {
+            hour: 'numeric',
+            hour12: false,
+            timeZone: effectiveTimeZone,
+          }).format(new Date()),
+          10
+        )
+        return getTimeContextForHour(hour)
+      } catch {
+        return getAutoContextForTimeZone(menuTimezone)
+      }
+    },
+    [menuTimezone, smartSearchFeelingContext]
+  )
+
+  const autoContext = useMemo<ContextKey>(() => resolveAutoContext(false), [resolveAutoContext])
+  const selectedContext = autoContext
+  const currentContext = contextOptions.find((option) => option.key === autoContext) ?? contextOptions[0]
+  const contextHeroMessageMap: Record<ContextKey, string> = {
+    morning: 'It is a fresh morning.',
+    lunch: 'It is a lively afternoon.',
+    hot: 'It is a warm day.',
+    evening: 'It is a relaxed evening.',
+    rainy: 'It is a rainy moment.',
+    cold: 'It is a cool moment.',
+  }
+  const contextHeroTailMap: Record<ContextKey, string> = {
+    morning: 'A light breakfast and a smooth coffee would feel just right.',
+    lunch: 'This is a good time for a satisfying meal with a refreshing cold drink.',
+    hot: 'Crisp flavors and an icy drink would feel especially refreshing.',
+    evening: 'A rich meal and a satisfying drink would suit the mood well.',
+    rainy: 'A comforting meal and a soothing drink would feel especially welcome.',
+    cold: 'A warm meal and a cozy drink would feel especially comforting.',
+  }
+  const activeHeroMessage = `${contextHeroMessageMap[selectedContext]} ${smartSearchFeelingContext?.aiTail || contextHeroTailMap[selectedContext]}`
+  const summaryTemplate =
+    filteredItems.length === 1
+      ? currentCopy.resultsSummarySingular
+      : currentCopy.resultsSummaryPlural
+  const smartSearchSummary = trimmedSearch
+    ? formatTemplate(summaryTemplate, {
+      count: filteredItems.length.toString(),
+      query: trimmedSearch,
+    })
+    : activeHeroMessage || currentCopy.smartSearchDescription
+
+  const isDrinkItem = useCallback((item: MenuItem) => {
+    const category = (item.category?.name || '').toLowerCase()
+    const name = item.name.toLowerCase()
+    const tags = (item.tags || []).join(' ').toLowerCase()
+    return /drink|beverage|juice|coffee|tea|smoothie|soda|cocktail|mocktail|water|lemonade|espresso|latte|mocha|ayran/.test(`${category} ${name} ${tags}`)
+  }, [])
+
+  const isDessertItem = useCallback((item: MenuItem) => {
+    const category = (item.category?.name || '').toLowerCase()
+    const name = item.name.toLowerCase()
+    return /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding/.test(`${category} ${name}`)
+  }, [])
+
+  const isMainItem = useCallback((item: MenuItem) => {
+    if (isDrinkItem(item) || isDessertItem(item)) return false
+    const category = (item.category?.name || '').toLowerCase()
+    const name = item.name.toLowerCase()
+    const tags = (item.tags || []).join(' ').toLowerCase()
+    if (/main|grill|burger|steak|pasta|rice|dish|kebab|shawarma|platter|seafood|chicken|beef|lamb|fish/.test(`${category} ${name} ${tags}`)) {
+      return true
+    }
+    return !/appetizer|starter|share|side|dip|salad|soup/.test(`${category} ${name} ${tags}`)
+  }, [isDessertItem, isDrinkItem])
+
+  const contextRankedItems = useMemo(() => {
+    const scoreItem = (item: MenuItem) => {
+      let score = 0
+      const name = item.name.toLowerCase()
+      const category = (item.category?.name || '').toLowerCase()
+      const tags = (item.tags || []).join(' ').toLowerCase()
+      const bucket = `${name} ${category} ${tags}`
+      const isDrink = isDrinkItem(item)
+      const isMain = isMainItem(item)
+      const isHeavyMain = /steak|beef|lamb|platter|mixed grill|grill|kebab|shawarma|burger|pasta|rice/.test(bucket)
+      const isLightFood = /light|salad|soup|starter|appetizer|toast|egg|falafel|croissant|yogurt|granola/.test(bucket)
+
+      if (item._hints?.isAnchor) score += 30
+      if (item._hints?.displayTier === 'hero') score += 24
+      if (item._hints?.displayTier === 'featured') score += 18
+      if (item._hints?.displayTier === 'standard') score += 10
+      if (item._hints?.subGroup?.toLowerCase().includes('chef')) score += 16
+      if (item._hints?.subGroup?.toLowerCase().includes('signature')) score += 12
+      score += Math.min(item.popularityScore || 0, 40)
+      score += Math.min(item.price / 1000, 18)
+
+      if (selectedContext === 'morning') {
+        if (isDrink) score += 38
+        if (isLightFood) score += 28
+        if (/coffee|tea|espresso|latte|cappuccino|americano|juice/.test(bucket)) score += 30
+        if (/breakfast|egg|toast|falafel|pastry/.test(bucket)) score += 18
+        if (isHeavyMain) score -= 70
+        if (isMain && !isLightFood) score -= 30
+      }
+      if (selectedContext === 'lunch') {
+        if (/juice|lemonade|ayran|tea/.test(bucket)) score += 18
+        if (/grill|rice|burger|kebab|shawarma|platter|main|fish|chicken|beef|lamb/.test(bucket)) score += 34
+      }
+      if (selectedContext === 'hot') {
+        if (/juice|lemonade|iced|cold|ayran|smoothie|water/.test(bucket)) score += 32
+        if (/salad|grill|fish|light|chicken/.test(bucket)) score += 20
+      }
+      if (selectedContext === 'evening') {
+        if (/tea|coffee|juice|mocktail|ayran/.test(bucket)) score += 18
+        if (/grill|steak|kebab|fish|lamb|beef|main/.test(bucket)) score += 30
+      }
+      if (selectedContext === 'rainy' || selectedContext === 'cold') {
+        if (isDrink) score += 18
+        if (/coffee|tea|espresso|americano|cappuccino|hot chocolate|hot|mocha|latte/.test(bucket)) score += 42
+        if (/soup|stew|grill|kebab|lamb|beef|pasta|rice/.test(bucket)) score += 28
+      }
+
+      return score
+    }
+
+    return baseFilteredItems
+      .map((item) => ({ item, score: scoreItem(item) }))
+      .sort((a, b) => b.score - a.score)
+  }, [baseFilteredItems, isDrinkItem, isMainItem, selectedContext])
+
+  const contextSuggestedItems = useMemo(() => {
+    const drinks = contextRankedItems.filter(({ item }) => isDrinkItem(item))
+    const mains = contextRankedItems.filter(({ item }) => isMainItem(item))
+    return {
+      drink: drinks[0]?.item ?? null,
+      main: mains[0]?.item ?? null,
+    }
+  }, [contextRankedItems, isDrinkItem, isMainItem])
+
+  const contextHeroItems = useMemo(() => {
+    if (selectedContext === 'rainy' || selectedContext === 'cold') {
+      const topWarmDrink = contextRankedItems.find(({ item }) =>
+        isDrinkItem(item) &&
+        /coffee|tea|espresso|americano|cappuccino|hot chocolate|mocha|latte/.test(
+          `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+        )
+      )?.item
+      const topMain = contextRankedItems.find(({ item }) => isMainItem(item))?.item
+      const ordered = [
+        ...(topWarmDrink ? [topWarmDrink] : []),
+        ...(topMain ? [topMain] : []),
+        ...contextRankedItems.map(({ item }) => item),
+      ]
+      const unique = new Map<string, MenuItem>()
+      ordered.forEach((item) => {
+        if (!unique.has(item.id)) unique.set(item.id, item)
+      })
+      return Array.from(unique.values())
+    }
+
+    const unique = new Map<string, MenuItem>()
+    contextRankedItems.forEach(({ item }) => {
+      if (!unique.has(item.id)) unique.set(item.id, item)
+    })
+    return Array.from(unique.values()).slice(0, 8)
+  }, [contextRankedItems, isDrinkItem, isMainItem, selectedContext])
+  const heroTitleMap: Record<ContextKey, string> = {
+    morning: "Chef's Recommendation for Breakfast",
+    lunch: "Lunch Chef Selection",
+    hot: 'Hot Day Selections',
+    evening: "Chef's Selection Tonight",
+    rainy: 'Rainy Day Selection',
+    cold: 'Cold Weather Selection',
+  }
+  const contextPicksTitleMap: Record<ContextKey, string> = {
+    morning: 'Excellent Morning Picks',
+    lunch: 'Smart Lunch Picks',
+    hot: 'Brilliant Hot-Day Picks',
+    evening: 'Excellent Evening Picks',
+    rainy: 'Smart Rainy-Day Picks',
+    cold: 'Brilliant Cold-Day Picks',
+  }
+  const selectedContextShowcase = useMemo(() => {
+    const matchesTitle = (showcase: ShowcaseSection) => {
+      const title = `${showcase.title} ${showcase.activeTimeRange || ''} ${showcase.label || ''}`.toLowerCase()
+      if (selectedContext === 'morning') return /breakfast|morning/.test(title)
+      if (selectedContext === 'lunch') return /lunch/.test(title)
+      if (selectedContext === 'evening') return /evening|dinner|night/.test(title)
+      if (selectedContext === 'hot') return /hot|summer|cold drink|cool/.test(title)
+      if (selectedContext === 'rainy') return /rain|rainy|warm|comfort/.test(title)
+      if (selectedContext === 'cold') return /cold|winter|warm/.test(title)
+      return false
+    }
+
+    if (selectedContext === 'hot') {
+      return topShowcases.find(matchesTitle) || topShowcases.find((showcase) => /lunch|day/.test(showcase.title.toLowerCase())) || null
+    }
+    if (selectedContext === 'rainy' || selectedContext === 'cold') {
+      return topShowcases.find(matchesTitle) || topShowcases.find((showcase) => /evening|dinner|night/.test(showcase.title.toLowerCase())) || null
+    }
+    return topShowcases.find(matchesTitle) || null
+  }, [selectedContext, topShowcases])
+
+  const activeHeroItems = selectedContextShowcase?.items?.length
+    ? selectedContextShowcase.items
+    : contextHeroItems.length > 0
+      ? contextHeroItems
+      : heroItems
+
+  const featuredItems = useMemo(() => {
+    const excluded = new Set(activeHeroItems.map((item) => item.id))
+    const source = baseFilteredItems.filter((item) => !excluded.has(item.id))
+    return source.slice(0, 3)
+  }, [activeHeroItems, baseFilteredItems])
+
+  const pairingItems = useMemo(() => {
+    const source = baseFilteredItems.filter((item) => !activeHeroItems.some((hero) => hero.id === item.id))
+    return source.slice(0, 5)
+  }, [activeHeroItems, baseFilteredItems])
+
+  const heroTitle = selectedContextShowcase?.title || heroTitleMap[selectedContext] || topShowcases[0]?.title || currentCopy.chefRecommendationLabel
+  const realStandingOutItems = useMemo(() => {
+    const candidates = activeHeroItems.filter((item) => {
+      const hints = item._hints
+      const isHighPriority =
+        hints?.isAnchor ||
+        hints?.displayTier === 'hero' ||
+        hints?.displayTier === 'featured'
+      return isHighPriority && (item.popularityScore || 0) > 0
+    })
+
+    return [...candidates]
+      .sort((a, b) => (b.popularityScore || 0) - (a.popularityScore || 0))
+      .slice(0, 2)
+  }, [activeHeroItems])
+
+  const recommendationLead = realStandingOutItems[0] ? getDisplayNameForItem(realStandingOutItems[0]) : ''
+  const scarcityItem = baseFilteredItems.find((item) => item._hints?.badgeText === 'Limited Today') || null
+  const themePrimary = theme?.primaryColor || '#1c1c1e'
+  const themeAccent = theme?.accentColor || '#E8440A'
+  const themeChef = theme?.chefPickColor || themeAccent
+  const themeBorder = theme?.borderColor || '#d7c9bf'
+  const pageBg = theme?.backgroundStyle === 'dark' ? '#151515' : '#fff7f2'
+  const surfaceBg = theme?.backgroundStyle === 'dark' ? '#211d1b' : '#ffffff'
+  const surfaceSoft = theme?.backgroundStyle === 'dark' ? '#2d2826' : '#fff3ec'
+  const textMain = theme?.backgroundStyle === 'dark' ? '#fff8f3' : '#1a0a06'
+  const textMuted = theme?.backgroundStyle === 'dark' ? 'rgba(255,248,243,0.68)' : '#9A6A58'
+  const headerBg = theme?.backgroundStyle === 'light' ? themePrimary : themePrimary
+  const dividerColor = hexToRgba(themeBorder, theme?.backgroundStyle === 'dark' ? 0.28 : 0.45)
+  const accentSoft = hexToRgba(themeAccent, theme?.backgroundStyle === 'dark' ? 0.16 : 0.1)
+  const accentBorder = hexToRgba(themeAccent, theme?.backgroundStyle === 'dark' ? 0.35 : 0.24)
+
+  return (
+    <div
+      className="min-h-screen"
+      style={
+        {
+          ...themeStyle,
+          backgroundColor: pageBg,
+          color: textMain,
+        } as React.CSSProperties
+      }
+    >
+      {activeFontLinks.map((url) => (
+        <link key={url} href={url} rel="stylesheet" />
+      ))}
+
+      <div className="mx-auto min-h-screen max-w-6xl px-4 py-4 sm:px-6 lg:px-8">
+        <div
+          className="overflow-hidden rounded-[28px] shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_24px_70px_rgba(0,0,0,0.14)]"
+          style={{ backgroundColor: pageBg }}
+        >
+        <header className="sticky top-0 z-40 text-white" style={{ backgroundColor: headerBg }}>
+          <div className="px-5 pb-3 pt-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-menu-title truncate text-[1.3rem] font-bold sm:text-[1.7rem]">
+                  {restaurantName || 'Menu'}
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-[0.62rem] uppercase tracking-[0.14em] text-white/55">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  <span>{currentContext.tone}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTablePickerOpen(true)}
+                  className="flex items-center gap-1 rounded-full border px-3 py-1.5"
+                  style={{ borderColor: hexToRgba('#ffffff', 0.12), backgroundColor: hexToRgba('#ffffff', 0.05) }}
+                >
+                  <span className="text-[0.66rem] text-white/55">{currentEngineCopy.tableLabel}</span>
+                  <span className="text-[0.8rem] font-bold" style={{ color: themeAccent }}>
+                    {selectedTableNumber || '--'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBasketOpen(true)}
+                  className="relative flex h-11 w-11 items-center justify-center rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.24)]"
+                  style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                  aria-label={currentEngineCopy.viewOrder}
+                >
+                  <ShoppingBag className="h-4.5 w-4.5 text-white" />
+                  {cartCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex min-h-[20px] min-w-[20px] items-center justify-center rounded-full border-2 bg-white px-1 text-[0.65rem] font-bold" style={{ borderColor: headerBg, color: themeChef }}>
+                      {cartCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-5 pb-3 sm:px-6 lg:px-8">
+            <div className="rounded-2xl border p-4" style={{ borderColor: hexToRgba('#ffffff', 0.1), backgroundColor: hexToRgba('#ffffff', 0.06) }}>
+              <p className="text-[0.82rem] leading-6 text-white/72">
+                    {recommendationLead ? (
+                      <>
+                        <strong className="font-semibold text-white">{recommendationLead}</strong>
+                        {' '}
+                    {activeHeroMessage || currentCopy.smartSearchDescription}
+                      </>
+                ) : (activeHeroMessage || currentCopy.smartSearchDescription)}
+              </p>
+            </div>
+          </div>
+
+          <section className="pb-5">
+            <div className="px-5 text-[0.64rem] font-bold uppercase tracking-[0.2em] text-white/45 sm:px-6 lg:px-8">
+              {heroTitle}
+            </div>
+            <div className="mt-3 flex gap-2 overflow-x-auto px-5 pb-1 scrollbar-hide sm:gap-3 sm:px-6 lg:px-8">
+              {activeHeroItems.map((item, index) => {
+                const translation = translationCache[language]?.[item.id]
+                const badgeLabel =
+                  index === 0
+                    ? currentCopy.chefRecommendationLabel
+                    : item._hints?.isLimitedToday
+                      ? currentCopy.limitedTodayLabel
+                      : currentEngineCopy.chefSelectionBadge
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedItemForDetail(item)}
+                    className="relative h-[152px] w-[31vw] min-w-[112px] max-w-[140px] flex-shrink-0 overflow-hidden rounded-[18px] text-left shadow-[0_18px_46px_rgba(26,10,6,0.24)] sm:h-[188px] sm:w-[33vw] sm:min-w-0 sm:max-w-none lg:h-[220px] lg:w-[calc((100%-1.5rem)/3)]"
+                  >
+                    <img
+                      src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                      alt={item.name}
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/20 to-black/75" />
+                    <div className="absolute left-3 right-3 top-3 flex items-start justify-between gap-2">
+                      <span className="rounded-full px-2 py-0.5 text-[0.46rem] font-bold uppercase tracking-[0.06em] text-white" style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}>
+                        {badgeLabel}
+                      </span>
+                      <span className="flex items-center gap-1 rounded-full bg-black/35 px-1.5 py-0.5 text-[0.52rem] text-white/85">
+                        <Flame className="h-2.5 w-2.5" />
+                        {item.popularityScore || 0}
+                      </span>
+                    </div>
+                    <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-2.5">
+                      <div className="min-w-0">
+                        <div className="font-item text-[0.74rem] font-bold leading-tight text-white sm:text-[1rem]">
+                          {translation?.name || item.name}
+                        </div>
+                        <div className="mt-0.5 text-[0.62rem] text-white/70">
+                          {formatMenuPriceWithVariant(item.price, priceVariant)}
+                        </div>
+                      </div>
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full text-base text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] sm:h-9 sm:w-9 sm:text-lg" style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}>
+                        +
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        </header>
+
+        <main className="relative pb-36" style={{ backgroundColor: pageBg }}>
+          <div className="absolute inset-x-0 top-0 h-6 rounded-t-[26px]" style={{ backgroundColor: pageBg }} />
+
+          {availableMoods.length > 0 && (
+            <section className="px-5 pt-7 sm:px-6 lg:px-8">
+              <div className="mb-3 text-[0.62rem] font-bold uppercase tracking-[0.16em]" style={{ color: textMuted }}>
+                What are you in the mood for?
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMoodId(null)}
+                  className="flex min-w-[76px] flex-shrink-0 flex-col items-center gap-1 rounded-2xl border px-4 py-3 text-center shadow-sm"
+                  style={{
+                    borderColor: selectedMoodId == null ? accentBorder : dividerColor,
+                    backgroundColor: selectedMoodId == null ? accentSoft : surfaceBg,
+                  }}
+                >
+                  <Sparkles className="h-5 w-5" style={{ color: selectedMoodId == null ? themeAccent : textMain }} />
+                  <span className="text-[0.68rem] font-semibold" style={{ color: selectedMoodId == null ? themeAccent : textMain }}>
+                    Everything
+                  </span>
+                </button>
+                {availableMoods.map((mood) => {
+                  const active = selectedMoodId === mood.id
+                  const MoodIcon =
+                    mood.id === 'light' ? Leaf :
+                    mood.id === 'filling' ? ChefHat :
+                    mood.id === 'sharing' || mood.id === 'share' ? Handshake :
+                    mood.id === 'drinks' ? GlassWater :
+                    mood.id === 'sweet' ? IceCreamCone :
+                    Sparkles
+                  return (
+                    <button
+                      key={mood.id}
+                      type="button"
+                      onClick={() => setSelectedMoodId(active ? null : mood.id)}
+                      className="flex min-w-[76px] flex-shrink-0 flex-col items-center gap-1 rounded-2xl border px-4 py-3 text-center shadow-sm"
+                      style={{
+                        borderColor: active ? accentBorder : dividerColor,
+                        backgroundColor: active ? accentSoft : surfaceBg,
+                      }}
+                    >
+                      <MoodIcon className="h-5 w-5" style={{ color: active ? themeAccent : textMain }} />
+                      <span className="text-[0.68rem] font-semibold" style={{ color: active ? themeAccent : textMain }}>
+                        {getMoodLabel(mood)}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          <section className="space-y-2 px-5 pt-4 sm:px-6 lg:px-8">
+            {realStandingOutItems.length > 0 && (
+              <div className="flex items-start gap-3 rounded-2xl border p-4" style={{ borderColor: accentBorder, backgroundColor: accentSoft }}>
+                <Flame className="mt-0.5 h-4 w-4" style={{ color: themeAccent }} />
+                <p className="text-[0.8rem] leading-6" style={{ color: textMain }}>
+                  <strong className="font-bold" style={{ color: themeChef }}>
+                    {realStandingOutItems.map((item) => getDisplayNameForItem(item)).join(' and ')}
+                  </strong>{' '}
+                  are standing out on the menu right now.
+                </p>
+              </div>
+            )}
+            {scarcityItem && (
+              <div className="flex items-center gap-3 rounded-2xl border p-4" style={{ borderColor: accentBorder, backgroundColor: accentSoft }}>
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: themeAccent }} />
+                <p className="text-[0.8rem] leading-6" style={{ color: textMain }}>
+                  <strong className="font-bold" style={{ color: themeChef }}>
+                    {getDisplayNameForItem(scarcityItem)}
+                  </strong>{' '}
+                  {currentCopy.limitedTodayLabel.toLowerCase()}.
+                </p>
+              </div>
+            )}
+          </section>
+
+          {(contextSuggestedItems.main || contextSuggestedItems.drink) && (
+            <section className="px-5 pt-6 sm:px-6 lg:px-8">
+              <div className="mb-3 flex items-end justify-between">
+                <h2 className="font-category text-[1.4rem] font-bold" style={{ color: textMain }}>
+                  {contextPicksTitleMap[selectedContext]}
+                </h2>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {contextSuggestedItems.main && (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedItemForDetail(contextSuggestedItems.main)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSelectedItemForDetail(contextSuggestedItems.main)
+                      }
+                    }}
+                    className="flex items-center gap-3 rounded-[22px] border p-3 text-left shadow-[0_4px_18px_rgba(26,10,6,0.06)]"
+                    style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}
+                  >
+                    <img
+                      src={contextSuggestedItems.main.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                      alt={contextSuggestedItems.main.name}
+                      className="h-20 w-20 rounded-2xl object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 text-[0.56rem] font-bold uppercase tracking-[0.1em]" style={{ color: themeAccent }}>
+                        Main Recommendation
+                      </div>
+                      <div className="font-item text-[0.95rem] font-bold" style={{ color: textMain }}>
+                        {getDisplayNameForItem(contextSuggestedItems.main)}
+                      </div>
+                      <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
+                        High-margin fit for {currentContext.label.toLowerCase()} service.
+                      </div>
+                      <div className="mt-2 text-[0.9rem] font-bold" style={{ color: textMain }}>
+                        {formatMenuPriceWithVariant(contextSuggestedItems.main.price, priceVariant)}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        addToCart(contextSuggestedItems.main!.id)
+                      }}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-white"
+                      style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+                {contextSuggestedItems.drink && (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedItemForDetail(contextSuggestedItems.drink)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSelectedItemForDetail(contextSuggestedItems.drink)
+                      }
+                    }}
+                    className="flex items-center gap-3 rounded-[22px] border p-3 text-left shadow-[0_4px_18px_rgba(26,10,6,0.06)]"
+                    style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}
+                  >
+                    <img
+                      src={contextSuggestedItems.drink.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                      alt={contextSuggestedItems.drink.name}
+                      className="h-20 w-20 rounded-2xl object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 text-[0.56rem] font-bold uppercase tracking-[0.1em]" style={{ color: themeAccent }}>
+                        Drink Recommendation
+                      </div>
+                      <div className="font-item text-[0.95rem] font-bold" style={{ color: textMain }}>
+                        {getDisplayNameForItem(contextSuggestedItems.drink)}
+                      </div>
+                      <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
+                        High-margin drink matched to {currentContext.label.toLowerCase()} conditions.
+                      </div>
+                      <div className="mt-2 text-[0.9rem] font-bold" style={{ color: textMain }}>
+                        {formatMenuPriceWithVariant(contextSuggestedItems.drink.price, priceVariant)}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        addToCart(contextSuggestedItems.drink!.id)
+                      }}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-white"
+                      style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Most Ordered section temporarily disabled. Keep featuredItems logic intact for later re-enable. */}
+
+          {categorizedSections.map((section) => {
+            const sectionId = section.category?.id || 'uncategorized'
+            const expanded = section.category ? expandedCategoryIds.has(section.category.id) : true
+            const visibleItems = expanded ? section.items : section.items.slice(0, maxInitialItemsPerCategory)
+            return (
+              <section key={sectionId} ref={section.category ? setSectionRef(section.category.id) : undefined} className="px-5 pt-6 sm:px-6 lg:px-8">
+                <div className="mb-3 flex items-end justify-between gap-3">
+                  <h2 className="font-category text-[1.45rem] font-bold" style={{ color: textMain }}>
+                    {section.category ? getLocalizedCategoryName(section.category.name) : 'Menu'}
+                  </h2>
+                  {section.items.length > maxInitialItemsPerCategory && section.category && !expanded && (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedCategoryIds((prev) => new Set(prev).add(section.category!.id))}
+                      className="text-[0.76rem] font-semibold"
+                      style={{ color: themeAccent }}
+                    >
+                      See all
+                    </button>
+                  )}
+                </div>
+                <div className="overflow-hidden rounded-[22px] border shadow-[0_4px_18px_rgba(26,10,6,0.06)]" style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}>
+                  {visibleItems.map((item, index) => {
+                    const translation = translationCache[language]?.[item.id]
+                    const displayName = translation?.name || item.name
+                    const displayDescription = translation?.description || item.description || ''
+                    const badge =
+                      item._hints?.isLimitedToday
+                        ? currentCopy.limitedTodayLabel
+                        : item._hints?.isAnchor
+                          ? currentEngineCopy.signatureBadge
+                          : item._hints?.displayTier === 'featured'
+                            ? currentEngineCopy.mostLovedBadge
+                            : ''
+                    return (
+                      <div
+                        key={item.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedItemForDetail(item)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            setSelectedItemForDetail(item)
+                          }
+                        }}
+                        className="grid w-full grid-cols-[98px_1fr] text-left sm:grid-cols-[120px_1fr]"
+                        style={index !== visibleItems.length - 1 ? { borderBottom: `1px solid ${dividerColor}` } : undefined}
+                      >
+                        <div className="relative overflow-hidden">
+                          <img
+                            src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                            alt={item.name}
+                            className="h-full w-full object-cover"
+                          />
+                          {badge && (
+                            <span
+                              className="absolute bottom-2 left-2 rounded-full px-2 py-1 text-[0.52rem] font-bold uppercase tracking-[0.06em] text-white"
+                              style={{ background: item._hints?.isLimitedToday ? themeChef : `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                            >
+                              {badge}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex min-h-[104px] flex-col justify-between p-3">
+                          <div>
+                            <div className="font-item text-[0.98rem] font-bold leading-5" style={{ color: textMain }}>
+                              {displayName}
+                            </div>
+                            <div className="mt-1 line-clamp-2 text-[0.72rem] leading-5" style={{ color: textMuted }}>
+                              {displayDescription}
+                            </div>
+                          </div>
+                          <div className="mt-3 flex items-end justify-between gap-3">
+                            <div>
+                              <div className="text-[0.95rem] font-bold" style={{ color: textMain }}>
+                                {formatMenuPriceWithVariant(item.price, priceVariant)}
+                              </div>
+                              <div className="flex items-center gap-1 text-[0.64rem]" style={{ color: textMuted }}>
+                                <Flame className="h-3 w-3" />
+                                <span>{item.popularityScore || 0} orders</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                addToCart(item.id)
+                              }}
+                              className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-white shadow-[0_4px_10px_rgba(0,0,0,0.18)]"
+                              style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                              aria-label={currentEngineCopy.addToOrder}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {section.items.length > maxInitialItemsPerCategory && section.category && !expanded && (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedCategoryIds((prev) => new Set(prev).add(section.category!.id))}
+                      className="w-full px-4 py-3 text-[0.78rem] font-semibold"
+                      style={{ borderTop: `1px solid ${dividerColor}`, backgroundColor: surfaceSoft, color: themeAccent }}
+                    >
+                      See {section.items.length - maxInitialItemsPerCategory} more dishes →
+                    </button>
+                  )}
+                </div>
+              </section>
+            )
+          })}
+
+          {pairingItems.length > 0 && (
+            <section className="px-5 pt-5 sm:px-6 lg:px-8">
+              <div className="rounded-2xl border p-4" style={{ borderColor: accentBorder, backgroundColor: accentSoft }}>
+                <div className="mb-3 text-[0.62rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
+                  Complete your meal
+                </div>
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                  {pairingItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => addToCart(item.id)}
+                      className="flex flex-shrink-0 items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3 shadow-sm"
+                      style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}
+                    >
+                      <img
+                        src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                        alt={item.name}
+                        className="h-8 w-8 rounded-full object-cover"
+                      />
+                      <span className="text-left">
+                        <span className="block text-[0.72rem] font-semibold" style={{ color: textMain }}>
+                          {getDisplayNameForItem(item)}
+                        </span>
+                        <span className="block text-[0.64rem]" style={{ color: textMuted }}>
+                          {formatMenuPriceWithVariant(item.price, priceVariant)}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {orderSuccessMessage && (
+            <div className="px-5 pt-5 sm:px-6 lg:px-8">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                {orderSuccessMessage}
+              </div>
+            </div>
+          )}
+        </main>
+
+        {cartCount > 0 && (
+          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 mx-auto max-w-6xl px-5 pb-5 sm:px-6 lg:px-8">
+            <div className="pointer-events-auto rounded-[18px] p-[1px] shadow-[0_16px_36px_rgba(0,0,0,0.24)]" style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}>
+              <button
+                type="button"
+                onClick={() => setBasketOpen(true)}
+                className="flex w-full items-center justify-between rounded-[17px] bg-transparent px-4 py-4 text-white"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-[0.75rem] font-bold">
+                    {cartCount}
+                  </span>
+                  <span className="text-[0.92rem] font-bold">{currentEngineCopy.viewOrder}</span>
+                </span>
+                <span className="text-[0.92rem] font-bold">
+                  {formatMenuPriceWithVariant(cartTotal, priceVariant)}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(basketOpen || selectedItemForDetail || tablePickerOpen) && (
+          <div className="fixed inset-0 z-50 bg-[rgba(26,10,6,0.55)] backdrop-blur-sm" onClick={() => { setBasketOpen(false); setSelectedItemForDetail(null); setTablePickerOpen(false) }} />
+        )}
+
+        {tablePickerOpen && (
+          <div className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[70vh] max-w-2xl flex-col overflow-hidden rounded-t-[28px]" style={{ backgroundColor: pageBg }}>
+            <div className="mx-auto mt-3 h-1 w-10 rounded-full" style={{ backgroundColor: dividerColor }} />
+            <div className="flex items-center justify-between px-5 py-4 sm:px-6" style={{ borderBottom: `1px solid ${dividerColor}` }}>
+              <div>
+                <h3 className="font-menu-title text-[1.2rem] font-bold" style={{ color: textMain }}>
+                  {currentEngineCopy.selectYourTableLabel}
+                </h3>
+                <p className="mt-1 text-sm" style={{ color: textMuted }}>
+                  {currentEngineCopy.tableHelperLabel}
+                </p>
+              </div>
+              <button type="button" onClick={() => setTablePickerOpen(false)} className="rounded-full p-2" style={{ backgroundColor: surfaceSoft, color: textMuted }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
+                {liveTables.map((table) => {
+                  const isAvailable = (table.status ?? 'AVAILABLE') === 'AVAILABLE'
+                  return (
+                  <button
+                    key={table.id}
+                    type="button"
+                    disabled={!isAvailable}
+                    onClick={() => {
+                      if (!isAvailable) return
+                      setSelectedTableNumber(table.number)
+                      setTablePickerOpen(false)
+                    }}
+                    className="aspect-square rounded-2xl text-sm font-semibold transition"
+                    style={{
+                      backgroundColor: !isAvailable ? surfaceSoft : selectedTableNumber === table.number ? themeAccent : surfaceBg,
+                      color: !isAvailable ? textMuted : selectedTableNumber === table.number ? '#ffffff' : textMain,
+                      border: `1px solid ${!isAvailable ? dividerColor : selectedTableNumber === table.number ? themeAccent : dividerColor}`,
+                      opacity: isAvailable ? 1 : 0.5,
+                      cursor: isAvailable ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    <span className="block">{table.number}</span>
+                    {!isAvailable && (
+                      <span className="mt-1 block text-[0.62rem] font-medium uppercase tracking-[0.08em]">
+                        {table.status === 'OCCUPIED' ? 'Occupied' : 'Reserved'}
+                      </span>
+                    )}
+                  </button>
+                )})}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTableNumber(null)
+                  setTablePickerOpen(false)
+                }}
+                className="mt-4 w-full rounded-2xl px-4 py-3 text-sm font-semibold"
+                style={{ backgroundColor: surfaceSoft, color: textMain }}
+              >
+                {currentEngineCopy.noTableLabel}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {basketOpen && (
+          <div className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[88vh] max-w-4xl flex-col overflow-hidden rounded-t-[28px]" style={{ backgroundColor: pageBg }}>
+            <div className="mx-auto mt-3 h-1 w-10 rounded-full" style={{ backgroundColor: dividerColor }} />
+            <div className="flex items-center justify-between px-5 py-4 sm:px-6 lg:px-8" style={{ borderBottom: `1px solid ${dividerColor}` }}>
+              <h3 className="font-menu-title text-[1.3rem] font-bold" style={{ color: textMain }}>{currentEngineCopy.cartTitle}</h3>
+              <button type="button" onClick={() => setBasketOpen(false)} className="rounded-full p-2" style={{ backgroundColor: surfaceSoft, color: textMuted }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3 sm:px-6 lg:px-8">
+              {cartItems.length === 0 ? (
+                <div className="py-14 text-center" style={{ color: textMuted }}>{currentCopy.noItemsMessage}</div>
+              ) : (
+                <div className="space-y-4">
+                  {cartItems.map((line) => (
+                    <div key={line.item.id} className="flex items-center gap-3 pb-4" style={{ borderBottom: `1px solid ${dividerColor}` }}>
+                      <img
+                        src={line.item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                        alt={line.item.name}
+                        className="h-12 w-12 rounded-xl object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[0.9rem] font-semibold" style={{ color: textMain }}>
+                          {line.translation?.name || line.item.name}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <button type="button" onClick={() => updateCartQuantity(line.item.id, -1)} className="flex h-6 w-6 items-center justify-center rounded-full border" style={{ borderColor: dividerColor, backgroundColor: surfaceBg, color: textMain }}>
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="min-w-[18px] text-center text-sm font-bold" style={{ color: textMain }}>{line.quantity}</span>
+                          <button type="button" onClick={() => updateCartQuantity(line.item.id, 1)} className="flex h-6 w-6 items-center justify-center rounded-full border" style={{ borderColor: dividerColor, backgroundColor: surfaceBg, color: textMain }}>
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[0.88rem] font-bold" style={{ color: textMain }}>
+                          {formatMenuPriceWithVariant(line.item.price * line.quantity, priceVariant)}
+                        </div>
+                        <button type="button" onClick={() => removeFromCart(line.item.id)} className="mt-1 text-[0.68rem]" style={{ color: textMuted }}>
+                          {currentEngineCopy.removeLabel}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4 sm:px-6 lg:px-8" style={{ borderTop: `1px solid ${dividerColor}` }}>
+              {liveTables.length > 0 && (
+                <div className="mb-4">
+                  <div className="mb-2 text-[0.65rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
+                    {currentEngineCopy.tableLabel}
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTableNumber(null)}
+                      className="rounded-full border px-3 py-2 text-[0.72rem] font-semibold"
+                      style={{
+                        borderColor: selectedTableNumber == null ? accentBorder : dividerColor,
+                        backgroundColor: selectedTableNumber == null ? accentSoft : surfaceBg,
+                        color: selectedTableNumber == null ? themeAccent : textMain,
+                      }}
+                    >
+                      {currentEngineCopy.noTableLabel}
+                    </button>
+                    {liveTables.map((table) => {
+                      const isAvailable = (table.status ?? 'AVAILABLE') === 'AVAILABLE'
+                      return (
+                      <button
+                        key={table.id}
+                        type="button"
+                        disabled={!isAvailable}
+                        onClick={() => setSelectedTableNumber(table.number)}
+                        className="rounded-full border px-3 py-2 text-[0.72rem] font-semibold"
+                        style={{
+                          borderColor: !isAvailable ? dividerColor : selectedTableNumber === table.number ? accentBorder : dividerColor,
+                          backgroundColor: !isAvailable ? surfaceSoft : selectedTableNumber === table.number ? accentSoft : surfaceBg,
+                          color: !isAvailable ? textMuted : selectedTableNumber === table.number ? themeAccent : textMain,
+                          opacity: isAvailable ? 1 : 0.55,
+                          cursor: isAvailable ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        {currentEngineCopy.tableLabel} {table.number}{!isAvailable ? ` · ${table.status === 'OCCUPIED' ? 'Occupied' : 'Reserved'}` : ''}
+                      </button>
+                    )})}
+                  </div>
+                  {selectableTables.length === 0 && (
+                    <p className="mt-2 text-[0.72rem]" style={{ color: textMuted }}>
+                      No tables are currently available. You can still place the order without selecting one.
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="mb-4 flex items-center justify-between">
+                <span className="text-[0.84rem]" style={{ color: textMuted }}>{currentEngineCopy.totalLabel}</span>
+                <span className="font-menu-title text-[1.25rem] font-bold" style={{ color: textMain }}>
+                  {formatMenuPriceWithVariant(cartTotal, priceVariant)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={placeOrder}
+                disabled={cartItems.length === 0 || isPlacingOrder}
+                className="w-full rounded-2xl px-4 py-4 text-[0.92rem] font-bold text-white disabled:opacity-60"
+                style={{ backgroundColor: headerBg }}
+              >
+                {isPlacingOrder ? currentEngineCopy.placingLabel : currentEngineCopy.placeOrder}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {selectedItemForDetail && (
+          <div className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[90vh] max-w-4xl flex-col overflow-hidden rounded-t-[28px]" style={{ backgroundColor: pageBg }}>
+            <div className="mx-auto mt-3 h-1 w-10 rounded-full" style={{ backgroundColor: dividerColor }} />
+            <img
+              src={selectedItemForDetail.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+              alt={selectedItemForDetail.name}
+              className="h-[270px] w-full object-cover sm:h-[320px]"
+            />
+            <div className="overflow-y-auto px-5 py-5 sm:px-6 lg:px-8">
+              <div className="mb-3 flex flex-wrap gap-2">
+                {selectedItemForDetail._hints?.isAnchor && (
+                  <span className="rounded-full px-3 py-1 text-[0.6rem] font-bold uppercase tracking-[0.08em] text-white" style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}>
+                    {currentEngineCopy.signatureBadge}
+                  </span>
+                )}
+                {selectedItemForDetail._hints?.displayTier === 'featured' && (
+                  <span className="rounded-full px-3 py-1 text-[0.6rem] font-bold uppercase tracking-[0.08em] text-white" style={{ backgroundColor: headerBg }}>
+                    {currentEngineCopy.mostLovedBadge}
+                  </span>
+                )}
+                {selectedItemForDetail._hints?.isLimitedToday && (
+                  <span className="rounded-full px-3 py-1 text-[0.6rem] font-bold uppercase tracking-[0.08em] text-white" style={{ backgroundColor: themeChef }}>
+                    {currentCopy.limitedTodayLabel}
+                  </span>
+                )}
+              </div>
+              <h3 className="font-menu-title text-[1.6rem] font-bold leading-tight" style={{ color: textMain }}>
+                {getDisplayNameForItem(selectedItemForDetail)}
+              </h3>
+              <p className="mt-3 text-[0.88rem] leading-7" style={{ color: textMuted }}>
+                {getDisplayDescriptionForItem(selectedItemForDetail)}
+              </p>
+              <div className="mt-5 flex items-center justify-between">
+                <div className="font-menu-title text-[1.55rem] font-bold" style={{ color: textMain }}>
+                  {formatMenuPriceWithVariant(selectedItemForDetail.price, priceVariant)}
+                </div>
+                <div className="flex items-center gap-1 text-[0.74rem]" style={{ color: textMuted }}>
+                  <Flame className="h-3.5 w-3.5" />
+                  <span>{selectedItemForDetail.popularityScore || 0} orders</span>
+                </div>
+              </div>
+              {selectedItemForDetail.addOns && selectedItemForDetail.addOns.length > 0 && (
+                <div className="mt-6">
+                  <div className="mb-3 text-[0.64rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
+                    {currentCopy.addOnsLabel}
+                  </div>
+                  <div className="space-y-2">
+                    {selectedItemForDetail.addOns.map((addOn) => (
+                      <div key={addOn.id} className="flex items-center justify-between rounded-2xl border px-4 py-3" style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}>
+                        <div>
+                          <div className="text-sm font-semibold" style={{ color: textMain }}>{getLocalizedAddOnName(addOn.name)}</div>
+                          {addOn.description && <div className="text-xs" style={{ color: textMuted }}>{addOn.description}</div>}
+                        </div>
+                        <div className="text-sm font-bold" style={{ color: textMain }}>+{formatMenuPriceWithVariant(addOn.price, priceVariant)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  addToCart(selectedItemForDetail.id)
+                  setSelectedItemForDetail(null)
+                }}
+                className="mt-6 w-full rounded-2xl px-4 py-4 text-[0.94rem] font-bold text-white shadow-[0_10px_24px_rgba(0,0,0,0.24)]"
+                style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+              >
+                {currentEngineCopy.addToOrder}
+              </button>
+            </div>
+          </div>
+        )}
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div
@@ -1873,7 +3246,7 @@ export default function SmartMenu({
             />
           ))}
           {/* "What do you feel like eating today?" section (mood options) */}
-          {engineMode !== 'classic' && moods.length > 0 && (
+          {engineMode !== 'classic' && availableMoods.length > 0 && (
             <section className="w-full space-y-3" aria-label="What do you feel like eating today?">
               <h2 className={`font-category text-base sm:text-lg font-semibold ${isDarkBg ? 'text-white' : 'text-slate-900'}`}>
                 {language === 'ar' || language === 'ar_fusha'
@@ -1883,7 +3256,7 @@ export default function SmartMenu({
                     : 'What do you feel like eating?'}
               </h2>
               <MoodSelector
-                moods={moods}
+                moods={availableMoods}
                 language={language}
                 selectedMoodId={selectedMoodId}
                 onSelectMood={setSelectedMoodId}
@@ -2105,7 +3478,7 @@ export default function SmartMenu({
             </div>
           )}
 
-          {tableSize != null && tableSize > 3 && moods.some((m) => m.id === 'sharing') && (
+          {tableSize != null && tableSize > 3 && availableMoods.some((m) => m.id === 'sharing') && (
             <div className="px-4 py-1">
               <button
                 type="button"

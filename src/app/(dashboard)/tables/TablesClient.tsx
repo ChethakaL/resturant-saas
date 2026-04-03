@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, MapPin, Building2, UserPlus, Users, QrCode } from 'lucide-react'
+import { Plus, MapPin, Building2, Users, QrCode, Trash2, Loader2 } from 'lucide-react'
 import { TableQRModal } from '@/components/tables/TableQRModal'
 import { formatCurrency } from '@/lib/utils'
 import AddBranchModal, { AddBranchFormData } from '@/components/branches/AddBranchModal'
 import ManageWaitersModal from '@/components/waiters/ManageWaitersModal'
 import { useI18n } from '@/lib/i18n'
+import { useToast } from '@/components/ui/use-toast'
 
 interface Branch {
     id: string
@@ -60,6 +61,8 @@ interface TablesClientProps {
     menuBaseUrl?: string
 }
 
+const tableNumberCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
 export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
     const [branches, setBranches] = useState<Branch[]>([])
     const [selectedBranch, setSelectedBranch] = useState<string>('all')
@@ -72,6 +75,8 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
     const [showManageWaiters, setShowManageWaiters] = useState(false)
     const [qrModalOpen, setQrModalOpen] = useState(false)
     const [qrTableNumber, setQrTableNumber] = useState<string | null>(null)
+    const [deletingTableId, setDeletingTableId] = useState<string | null>(null)
+    const { toast } = useToast()
 
     const fetchBranches = useCallback(async () => {
         try {
@@ -91,7 +96,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
             const res = await fetch(url)
             if (res.ok) {
                 const data = await res.json()
-                setTables(data)
+                setTables([...data].sort((a, b) => tableNumberCollator.compare(a.number, b.number)))
             }
         } catch { }
         finally { setLoading(false) }
@@ -157,6 +162,38 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
     }
 
     const { t } = useI18n()
+
+    const handleDeleteTable = async (table: TableData) => {
+        if (!confirm(`Delete table "${table.number}"? This cannot be undone.`)) return
+
+        setDeletingTableId(table.id)
+        try {
+            const res = await fetch(`/api/tables/${table.id}`, { method: 'DELETE' })
+            const data = await res.json().catch(() => null)
+            if (!res.ok) {
+                toast({
+                    title: 'Delete failed',
+                    description: data?.error || 'Failed to delete table',
+                    variant: 'destructive',
+                })
+                return
+            }
+
+            setTables((prev) => prev.filter((t) => t.id !== table.id))
+            toast({
+                title: 'Table deleted',
+                description: `Table ${table.number} has been removed.`,
+            })
+        } catch {
+            toast({
+                title: 'Delete failed',
+                description: 'Failed to delete table',
+                variant: 'destructive',
+            })
+        } finally {
+            setDeletingTableId(null)
+        }
+    }
 
     return (
         <div className="space-y-6">
@@ -291,6 +328,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                         {tables.map((table) => {
                             const activeOrder = table.sales[0]
                             const orderTotal = activeOrder?.total || 0
+                            const hasActiveOrder = Boolean(activeOrder)
 
                             return (
                                 <div key={table.id} className="relative">
@@ -318,6 +356,19 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                                                                 <QrCode className="h-4 w-4" />
                                                             </button>
                                                         )}
+                                                        <button
+                                                            type="button"
+                                                            title={hasActiveOrder ? 'Cannot delete a table with active orders' : 'Delete table'}
+                                                            disabled={deletingTableId === table.id || hasActiveOrder}
+                                                            className="p-1.5 rounded-md hover:bg-slate-100 text-red-600 disabled:text-slate-300 disabled:hover:bg-transparent"
+                                                            onClick={(e) => {
+                                                                e.preventDefault()
+                                                                e.stopPropagation()
+                                                                void handleDeleteTable(table)
+                                                            }}
+                                                        >
+                                                            {deletingTableId === table.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                                        </button>
                                                         <span className="text-xs font-semibold px-2 py-1 rounded">
                                                             {table.status}
                                                         </span>

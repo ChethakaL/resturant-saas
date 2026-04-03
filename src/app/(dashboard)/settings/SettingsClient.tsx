@@ -813,68 +813,223 @@ export default function SettingsClient({
             </div>
 
             {/* Live Visual Preview */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 shadow-inner relative flex flex-col items-center justify-center min-h-[400px]">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 shadow-inner relative flex flex-col items-center justify-center min-h-[560px]">
               <div className="absolute top-4 left-4">
                 <Badge variant="outline" className="bg-white text-[10px] uppercase font-bold tracking-wider text-slate-500">Live Preview</Badge>
               </div>
-              
-              <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl overflow-hidden mt-6" style={{ fontFamily: `"${fontFamily}", sans-serif` }}>
-                {/* Simulated Menu Header */}
-                <div className="bg-slate-900 px-6 py-6 text-center text-white">
-                  <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: `"${fontMenuTitle}", sans-serif` }}>
-                    Al-Rafidain Restaurant
-                  </h1>
-                </div>
 
-                {/* Simulated Category */}
-                <div className="px-6 py-4">
-                  <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2 mb-4" style={{ fontFamily: `"${fontCategoryHeader}", sans-serif` }}>
-                    Appetizers & Starters
-                  </h2>
-                  
-                  {/* Simulated Item Form */}
-                  <div className="flex gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <h3 className="text-sm font-semibold leading-tight text-slate-900" style={{ fontFamily: `"${fontItemName}", sans-serif` }}>
-                          Beef Tikka Skewers
-                        </h3>
-                        <span className="text-sm font-bold text-emerald-700 shrink-0" style={{ fontFamily: `"${fontPrice}", sans-serif` }}>
-                          24,500
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 line-clamp-2" style={{ fontFamily: `"${fontDescription}", sans-serif` }}>
-                        Marinated overnight in our chef's special blend of traditional Iraqi spices and carefully charcoal grilled to perfection. Served with freshly baked nan.
+              <div
+                className="w-full max-w-[28rem] rounded-[28px] shadow-2xl overflow-hidden mt-6 border"
+                style={{
+                  fontFamily: `"${fontFamily}", sans-serif`,
+                  background:
+                    backgroundStyle === 'gradient'
+                      ? 'linear-gradient(180deg, #f8efe9 0%, #fffaf6 100%)'
+                      : backgroundStyle === 'dark'
+                        ? '#1f1f22'
+                        : '#fff9f5',
+                  borderColor: `${borderColor}22`,
+                }}
+              >
+                {(() => {
+                  const previewPageBg =
+                    backgroundStyle === 'dark'
+                      ? '#151515'
+                      : backgroundStyle === 'gradient'
+                        ? '#fff7f2'
+                        : '#fff9f5'
+                  const previewSurfaceBg = backgroundStyle === 'dark' ? '#211d1b' : '#ffffff'
+                  const previewSurfaceSoft = backgroundStyle === 'dark' ? '#2d2826' : '#fff3ec'
+                  const previewTextMain = backgroundStyle === 'dark' ? '#fff8f3' : '#1a0a06'
+                  const previewTextMuted = backgroundStyle === 'dark' ? 'rgba(255,248,243,0.68)' : '#9a6a58'
+                  return (
+                    <>
+                <div
+                  className="px-5 py-5 text-white"
+                  style={{
+                    background:
+                      backgroundStyle === 'gradient'
+                        ? `linear-gradient(135deg, ${primaryColor}, #111827)`
+                        : primaryColor,
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h1
+                        className="text-[1.7rem] font-bold tracking-tight"
+                        style={{ fontFamily: `"${fontMenuTitle}", sans-serif` }}
+                      >
+                        {restaurantName || 'Your Restaurant'}
+                      </h1>
+                      <p className="mt-1 text-[0.66rem] uppercase tracking-[0.22em] text-white/70">
+                        GOOD AFTERNOON
                       </p>
-                      <button className="mt-3 bg-[#f59e0b] text-[10px] font-bold text-white px-3 py-1.5 rounded-lg uppercase tracking-wide">
-                        Add to order
-                      </button>
                     </div>
-                    <div className="w-20 h-20 shrink-0 bg-slate-100 rounded-xl overflow-hidden">
-                      <img src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=150&q=80" alt="Beef Tikka" className="w-full h-full object-cover" />
+                    <div className="flex items-center gap-2">
+                      <div className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[0.68rem] text-white/80">
+                        Table 07
+                      </div>
+                      <div
+                        className="h-11 w-11 rounded-full flex items-center justify-center text-white shadow-lg"
+                        style={{ background: `linear-gradient(135deg, ${accentColor}, ${chefPickColor})` }}
+                      >
+                        <span className="text-lg">+</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-[0.62rem] font-bold uppercase tracking-[0.18em]" style={{ color: accentColor }}>
+                      Chef&apos;s Recommendation
+                    </div>
+                    <p className="mt-2 text-sm text-white/85" style={{ fontFamily: `"${fontDescription}", sans-serif` }}>
+                      A quick look at how your selected colors and fonts will feel on the guest menu.
+                    </p>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="text-[0.62rem] font-bold uppercase tracking-[0.18em] text-white/55 mb-2">
+                      Featured Cards
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        {
+                          name: 'Beef Tikka Skewers',
+                          price: '24,500',
+                          image: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=500&q=80',
+                        },
+                        {
+                          name: 'Signature Hummus',
+                          price: '5,000',
+                          image: 'https://images.unsplash.com/photo-1571159456876-1eb03b6ac7f3?auto=format&fit=crop&w=500&q=80',
+                        },
+                      ].map((item, index) => (
+                        <div
+                          key={item.name}
+                          className="rounded-[22px] overflow-hidden border shadow-lg"
+                          style={{
+                            borderColor: index === 0 ? borderColor : `${borderColor}33`,
+                            boxShadow: index === 0 ? `0 12px 28px ${borderColor}22` : undefined,
+                          }}
+                        >
+                          <div
+                            className="relative h-32"
+                            style={{
+                              background: index === 0
+                                ? 'linear-gradient(135deg, rgba(255,255,255,0.14), rgba(0,0,0,0.22)), radial-gradient(circle at top right, rgba(255,255,255,0.18), transparent 42%), linear-gradient(160deg, rgba(120,56,24,0.92), rgba(33,24,20,0.95))'
+                                : 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(0,0,0,0.18)), radial-gradient(circle at top left, rgba(255,255,255,0.16), transparent 40%), linear-gradient(160deg, rgba(34,139,94,0.92), rgba(18,58,49,0.96))',
+                            }}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                            <div className="absolute right-4 top-4 h-10 w-10 rounded-full border border-white/20 bg-white/10" />
+                            <div className="absolute left-4 bottom-6 h-14 w-14 rounded-full border border-white/15 bg-white/10" />
+                            <span
+                              className="absolute left-3 top-3 rounded-full px-3 py-1 text-[0.54rem] font-bold uppercase tracking-[0.1em] text-white"
+                              style={{ backgroundColor: chefPickColor }}
+                            >
+                              Chef&apos;s Pick
+                            </span>
+                            <div className="absolute left-3 right-3 bottom-3 flex items-end justify-between gap-3">
+                              <div>
+                                <div
+                                  className="text-white text-base font-bold leading-tight"
+                                  style={{ fontFamily: `"${fontItemName}", sans-serif` }}
+                                >
+                                  {item.name}
+                                </div>
+                                <div
+                                  className="text-white/80 text-sm font-bold"
+                                  style={{ fontFamily: `"${fontPrice}", sans-serif` }}
+                                >
+                                  {item.price}
+                                </div>
+                              </div>
+                              <div
+                                className="h-9 w-9 rounded-full flex items-center justify-center text-white text-lg"
+                                style={{ backgroundColor: accentColor }}
+                              >
+                                +
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                <div className="px-6 pb-6 pt-2">
-                 {/* Simulated Item Form 2 */}
-                 <div className="flex gap-4 opacity-50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <h3 className="text-sm font-semibold leading-tight text-slate-900" style={{ fontFamily: `"${fontItemName}", sans-serif` }}>
-                          Classic Hummus
-                        </h3>
-                        <span className="text-sm font-bold text-emerald-700 shrink-0" style={{ fontFamily: `"${fontPrice}", sans-serif` }}>
-                          5,000
-                        </span>
+                <div className="px-5 py-5" style={{ backgroundColor: previewPageBg }}>
+                  <div
+                    className="text-[0.62rem] font-bold uppercase tracking-[0.18em] mb-3"
+                    style={{ color: previewTextMuted }}
+                  >
+                    What are you in the mood for?
+                  </div>
+                  <div className="flex gap-2 mb-5">
+                    <div className="rounded-2xl border px-4 py-3 text-center flex-1" style={{ borderColor: `${accentColor}44`, backgroundColor: `${accentColor}12` }}>
+                      <div className="text-xs font-semibold" style={{ color: accentColor }}>Show all</div>
+                    </div>
+                    <div className="rounded-2xl border px-4 py-3 text-center flex-1" style={{ borderColor: `${borderColor}33`, backgroundColor: previewSurfaceBg }}>
+                      <div className="text-xs font-semibold" style={{ color: previewTextMain }}>Sharing</div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="rounded-[22px] border p-4 shadow-sm"
+                    style={{ borderColor: `${borderColor}33`, backgroundColor: previewSurfaceBg }}
+                  >
+                    <div
+                      className="text-[1.35rem] font-bold mb-3"
+                      style={{ fontFamily: `"${fontCategoryHeader}", sans-serif`, color: previewTextMain }}
+                    >
+                      Appetizers & Starters
+                    </div>
+                    <div className="flex gap-3">
+                      <div
+                        className="h-20 w-20 shrink-0 rounded-2xl overflow-hidden"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(0,0,0,0.14)), radial-gradient(circle at 30% 30%, rgba(255,200,120,0.45), transparent 25%), linear-gradient(160deg, rgba(176,95,31,0.9), rgba(67,38,22,0.96))',
+                        }}
+                      >
+                        <div className="h-full w-full bg-[radial-gradient(circle_at_70%_70%,rgba(255,255,255,0.22),transparent_28%)]" />
                       </div>
-                      <p className="text-xs text-slate-500 line-clamp-1" style={{ fontFamily: `"${fontDescription}", sans-serif` }}>
-                        Creamy mixed chickpeas with premium tahini.
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3
+                            className="text-sm font-bold leading-tight"
+                            style={{ fontFamily: `"${fontItemName}", sans-serif`, color: previewTextMain }}
+                          >
+                            Dolma — Stuffed Grape Leaves
+                          </h3>
+                          <span
+                            className="text-sm font-bold shrink-0"
+                            style={{ fontFamily: `"${fontPrice}", sans-serif`, color: previewTextMain }}
+                          >
+                            11,000
+                          </span>
+                        </div>
+                        <p
+                          className="mt-2 text-xs leading-5 line-clamp-2"
+                          style={{ fontFamily: `"${fontDescription}", sans-serif`, color: previewTextMuted }}
+                        >
+                          House-style description preview so the owner can understand how their menu typography and accents actually appear.
+                        </p>
+                        <div className="mt-3 flex items-center justify-between">
+                          <div className="text-[11px]" style={{ color: previewTextMuted }}>12 orders</div>
+                          <button
+                            className="rounded-xl px-3 py-2 text-[11px] font-bold text-white uppercase tracking-wide"
+                            style={{ backgroundColor: accentColor }}
+                          >
+                            Add to order
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-
+                    </>
+                  )
+                })()}
               </div>
             </div>
           </div>
@@ -957,38 +1112,6 @@ export default function SettingsClient({
               }}
               placeholder={td('Search your street or choose a Google Maps address')}
             />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Carousel Style */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{td('Carousel Style')}</CardTitle>
-          <p className="text-sm text-slate-500">{td('How featured items appear on the guest menu.')}</p>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => setMenuCarouselStyle('sliding')}
-              className={`rounded-xl border-2 px-5 py-4 transition-all text-left hover:shadow-md ${menuCarouselStyle === 'sliding' ? 'border-slate-900 bg-slate-50 shadow-md' : 'border-slate-200 hover:border-slate-300'
-                }`}
-            >
-              <p className="text-sm font-semibold text-slate-800">🎠 {td('Sliding Carousel')}</p>
-              <p className="text-xs text-slate-500 mt-1">{td('One/few items at a time, arrows to scroll')}</p>
-              {menuCarouselStyle === 'sliding' && <Check className="h-4 w-4 text-slate-900 mt-1" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setMenuCarouselStyle('static')}
-              className={`rounded-xl border-2 px-5 py-4 transition-all text-left hover:shadow-md ${menuCarouselStyle === 'static' ? 'border-slate-900 bg-slate-50 shadow-md' : 'border-slate-200 hover:border-slate-300'
-                }`}
-            >
-              <p className="text-sm font-semibold text-slate-800">📐 {td('Static Row')}</p>
-              <p className="text-xs text-slate-500 mt-1">{td('Manual horizontal swipe/scroll row (no auto-slide)')}</p>
-              {menuCarouselStyle === 'static' && <Check className="h-4 w-4 text-slate-900 mt-1" />}
-            </button>
           </div>
         </CardContent>
       </Card>

@@ -43,6 +43,10 @@ interface SimpleMenuItem {
   name: string
   /** Translated name when management language is not English; otherwise same as name */
   displayName?: string
+  description?: string | null
+  tags?: string[]
+  popularityScore?: number | null
+  category?: { name?: string | null } | null
   imageUrl: string | null
   price: number
 }
@@ -643,25 +647,25 @@ export default function MenuOptimizationContent({
         usedSalesData?: boolean
         recommended?: string[]
         breakfast?: string[]
-        day?: string[]
-        evening?: string[]
-        night?: string[]
+        lunch?: string[]
+        dinner?: string[]
+        hotDay?: string[]
+        rainyDay?: string[]
+        coldDay?: string[]
       } = await res.json()
-      const primaryIds = (suggested.recommended ?? suggested.day ?? []).slice(0, maxCarouselItems)
+      const primaryIds = (suggested.recommended ?? suggested.lunch ?? []).slice(0, maxCarouselItems)
       const secondaryPool = [
         ...(suggested.breakfast ?? []),
-        ...(suggested.evening ?? []),
-        ...(suggested.night ?? []),
-        ...(suggested.day ?? []),
+        ...(suggested.dinner ?? []),
+        ...(suggested.lunch ?? []),
       ]
       const secondaryIds = secondaryPool
         .filter((id, index, arr) => arr.indexOf(id) === index)
         .filter((id) => !primaryIds.includes(id))
         .slice(0, maxCarouselItems)
       const recommendationIds = secondaryIds.length > 0 ? secondaryIds : primaryIds
-      const firstCategory = categories[0]
 
-      // Remove old carousels so we only have the 3 boss-approved ones: breakfast, lunch, dinner.
+      // Remove old auto-generated carousels before rebuilding context-based ones.
       const titlesToRemove = new Set([
         "Chef's Highlights",
         'Recommended for Guests',
@@ -672,6 +676,9 @@ export default function MenuOptimizationContent({
         'Breakfast',
         'Lunch',
         'Dinner',
+        "Chef's recommendation for a hot day",
+        "Chef's recommendation for a rainy day",
+        "Chef's recommendation for a cold day",
       ])
       const toDelete = list.filter((s) => titlesToRemove.has((s.title || '').trim()))
       for (const section of toDelete) {
@@ -680,10 +687,11 @@ export default function MenuOptimizationContent({
       list = list.filter((s) => !titlesToRemove.has((s.title || '').trim()))
 
       const breakfastIds = (suggested.breakfast ?? primaryIds).slice(0, maxCarouselItems)
-      const dayIds = (suggested.day ?? primaryIds).slice(0, maxCarouselItems)
-      const eveningIds = (suggested.evening ?? recommendationIds).slice(0, maxCarouselItems)
-      const nightIds = (suggested.night ?? recommendationIds).slice(0, maxCarouselItems)
-      const lunchIds = Array.from(new Set([...(suggested.day ?? []), ...(suggested.evening ?? [])])).slice(0, maxCarouselItems)
+      const lunchIds = (suggested.lunch ?? primaryIds).slice(0, maxCarouselItems)
+      const dinnerIds = (suggested.dinner ?? recommendationIds).slice(0, maxCarouselItems)
+      const hotDayIds = (suggested.hotDay ?? lunchIds).slice(0, maxCarouselItems)
+      const rainyDayIds = (suggested.rainyDay ?? dinnerIds).slice(0, maxCarouselItems)
+      const coldDayIds = (suggested.coldDay ?? dinnerIds).slice(0, maxCarouselItems)
 
       const upsertShowcase = async (
         def: {
@@ -774,7 +782,6 @@ export default function MenuOptimizationContent({
         )
       }
 
-      // Only 3 carousels: Chef's recommendation for breakfast, lunch, dinner (boss requirement).
       list = await upsertShowcase({
         title: "Chef's recommendation for breakfast",
         type: 'CHEFS_HIGHLIGHTS',
@@ -788,7 +795,7 @@ export default function MenuOptimizationContent({
         title: "Chef's recommendation for lunch",
         type: 'CHEFS_HIGHLIGHTS',
         displayVariant: 'hero',
-        itemIds: lunchIds.length > 0 ? lunchIds : dayIds,
+        itemIds: lunchIds,
         position: 'top',
         insertAfterCategoryId: null,
         schedule: { displayForSlots: ['day', 'evening'] },
@@ -797,10 +804,37 @@ export default function MenuOptimizationContent({
         title: "Chef's recommendation for dinner",
         type: 'CHEFS_HIGHLIGHTS',
         displayVariant: 'hero',
-        itemIds: nightIds,
+        itemIds: dinnerIds,
         position: 'top',
         insertAfterCategoryId: null,
         schedule: { displayForSlot: 'night' },
+      })
+      list = await upsertShowcase({
+        title: "Chef's recommendation for a hot day",
+        type: 'CHEFS_HIGHLIGHTS',
+        displayVariant: 'hero',
+        itemIds: hotDayIds,
+        position: 'top',
+        insertAfterCategoryId: null,
+        schedule: { label: 'Hot Day' },
+      })
+      list = await upsertShowcase({
+        title: "Chef's recommendation for a rainy day",
+        type: 'CHEFS_HIGHLIGHTS',
+        displayVariant: 'hero',
+        itemIds: rainyDayIds,
+        position: 'top',
+        insertAfterCategoryId: null,
+        schedule: { label: 'Rainy Day' },
+      })
+      list = await upsertShowcase({
+        title: "Chef's recommendation for a cold day",
+        type: 'CHEFS_HIGHLIGHTS',
+        displayVariant: 'hero',
+        itemIds: coldDayIds,
+        position: 'top',
+        insertAfterCategoryId: null,
+        schedule: { label: 'Cold Day' },
       })
 
       setShowcases(mergeShowcasesWithMenuItems(list, menuItems))
@@ -808,7 +842,7 @@ export default function MenuOptimizationContent({
       if (engineMode === 'adaptive' && !suggested.usedSalesData) {
         const [title, description] = await Promise.all([
           fetchTranslation('Smart Profit fallback used'),
-          fetchTranslation('No sales history yet; used high-margin fallback for all three featured sections.'),
+          fetchTranslation('No sales history yet; used high-margin fallback for breakfast, lunch, dinner, hot day, rainy day, and cold day sections.'),
         ])
         toast({
           title,
@@ -817,7 +851,7 @@ export default function MenuOptimizationContent({
       } else {
         const [title, description] = await Promise.all([
           fetchTranslation('Featured sections ready'),
-          fetchTranslation('Three featured sections are ready for breakfast, lunch, and dinner. Each shows only in its time period (menu timezone).'),
+          fetchTranslation('Featured sections are ready for breakfast, lunch, dinner, hot day, rainy day, and cold day. Time-based ones show by menu timezone, and weather ones are available for the client menu simulation.'),
         ])
         toast({
           title,
@@ -1061,7 +1095,7 @@ export default function MenuOptimizationContent({
               <CardTitle>{td('Featured sections on your menu')}</CardTitle>
               <p className="text-sm text-slate-500 mt-1">
                 {td('Swipeable rows of items on the menu.')} {engineMode === 'classic' && td('You choose items or use defaults.')}
-                {(engineMode === 'profit' || engineMode === 'adaptive') && td("Profit and Smart Profit modes auto-build three featured sections: Chef's recommendation for breakfast, lunch, and dinner. Each shows only in its time period. Up to 6 dishes per section.")}
+                {(engineMode === 'profit' || engineMode === 'adaptive') && td("Profit and Smart Profit modes auto-build featured sections for breakfast, lunch, dinner, hot day, rainy day, and cold day. Time-based sections show in their time period, and weather sections are used by the client menu simulation. Up to 6 dishes per section.")}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1200,7 +1234,7 @@ export default function MenuOptimizationContent({
             const typeColor = settingsDraft.type === 'CHEFS_HIGHLIGHTS' ? '#16a34a' : '#f59e0b'
             return (
               <div className="space-y-4 py-2">
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label className="text-xs text-slate-500">{td('Highlight style')}</Label>
                     <select
@@ -1210,17 +1244,6 @@ export default function MenuOptimizationContent({
                     >
                       <option value="CHEFS_HIGHLIGHTS">{td("Chef's picks")} ({td('green badge')})</option>
                       <option value="RECOMMENDATIONS">{td('Recommended')} ({td('amber badge')})</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-slate-500">{td('Display style')}</Label>
-                    <select
-                      value={settingsDraft.displayVariant}
-                      onChange={(e) => setSettingsDraft((d) => ({ ...d, displayVariant: e.target.value as ShowcaseSettingsDraft['displayVariant'] }))}
-                      className="w-full rounded border border-slate-200 px-2 py-2 text-sm"
-                    >
-                      <option value="cards">{td('Card slider')} ({td('shows 3-4 dishes at once')})</option>
-                      <option value="hero">{td('Full-width slider')} ({td('1 dish at a time')})</option>
                     </select>
                   </div>
                   <div className="space-y-1">

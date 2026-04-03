@@ -2,9 +2,22 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import {
+    Bell,
+    Check,
+    CheckCircle2,
+    ChefHat,
+    ClipboardList,
+    PencilLine,
+    Trash2,
+    User,
+    UtensilsCrossed,
+    X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useToast } from '@/components/ui/use-toast'
 
 // Types
 interface MenuItem {
@@ -64,15 +77,14 @@ interface CartItem {
 
 // ─── Status Badge (simplified: Pending or Delivered) ───
 function StatusBadge({ status }: { status: string }) {
-    const isPending = ['PENDING', 'PREPARING', 'READY'].includes(status)
     const config: Record<string, { bg: string; text: string; dot: string; label: string }> = {
         PENDING: { bg: 'bg-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Pending' },
-        PREPARING: { bg: 'bg-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Pending' },
-        READY: { bg: 'bg-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Pending' },
+        PREPARING: { bg: 'bg-sky-100', text: 'text-sky-800', dot: 'bg-sky-500', label: 'Preparing' },
+        READY: { bg: 'bg-emerald-100', text: 'text-emerald-800', dot: 'bg-emerald-500', label: 'Ready to Deliver' },
         COMPLETED: { bg: 'bg-slate-100', text: 'text-slate-800', dot: 'bg-slate-500', label: 'Delivered' },
         CANCELLED: { bg: 'bg-red-100', text: 'text-red-800', dot: 'bg-red-500', label: 'Cancelled' },
     }
-    const c = config[status] || (isPending ? config.PENDING : config.COMPLETED)
+    const c = config[status] || config.PENDING
     return (
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${c.bg} ${c.text}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${c.dot} animate-pulse`} />
@@ -99,8 +111,8 @@ function TableCard({
                 ? 'bg-amber-50 border-amber-200'
                 : 'bg-emerald-50 border-emerald-200'
 
-    const statusIcon =
-        table.status === 'OCCUPIED' ? '🍽️' : table.status === 'RESERVED' ? '📋' : '✅'
+    const StatusIcon =
+        table.status === 'OCCUPIED' ? UtensilsCrossed : table.status === 'RESERVED' ? ClipboardList : CheckCircle2
 
     return (
         <button
@@ -113,7 +125,7 @@ function TableCard({
         >
             <div className="flex items-center justify-between mb-2">
                 <span className="text-2xl font-bold text-slate-900">T{table.number}</span>
-                <span className="text-lg">{statusIcon}</span>
+                <StatusIcon className="h-5 w-5 text-slate-500" />
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-600">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -582,7 +594,10 @@ function OrderDetailPanel({
                         )}
                     </div>
                     {order.notes && (
-                        <p className="text-xs text-slate-500 mt-2 bg-white/5 rounded-lg p-2">📝 {order.notes}</p>
+                        <p className="mt-2 flex items-start gap-2 rounded-lg bg-white/5 p-2 text-xs text-slate-500">
+                            <PencilLine className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <span>{order.notes}</span>
+                        </p>
                     )}
                 </div>
 
@@ -619,10 +634,7 @@ function OrderDetailPanel({
                                         disabled={isUpdating}
                                         className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/10 rounded-lg transition-all"
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <polyline points="3 6 5 6 21 6" />
-                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                        </svg>
+                                        <Trash2 className="h-4 w-4 text-red-400" />
                                     </button>
                                 )}
                             </div>
@@ -719,7 +731,10 @@ function OrderDetailPanel({
                                     disabled={isUpdating}
                                     className="py-3 col-span-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-40 active:scale-[0.98]"
                                 >
-                                    ✓ Mark delivered
+                                    <span className="flex items-center justify-center gap-2">
+                                        <Check className="h-4 w-4" />
+                                        Mark delivered
+                                    </span>
                                 </button>
                             )}
                             {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
@@ -730,7 +745,10 @@ function OrderDetailPanel({
                                     disabled={isUpdating}
                                     className="py-3 col-span-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-sm font-semibold rounded-xl transition-all disabled:opacity-40 active:scale-[0.98]"
                                 >
-                                    ✕ Cancel
+                                    <span className="flex items-center justify-center gap-2">
+                                        <X className="h-4 w-4" />
+                                        Cancel
+                                    </span>
                                 </button>
                             )}
                         </div>
@@ -772,12 +790,44 @@ export default function WaiterDashboard() {
     const [orderSort, setOrderSort] = useState<'newest' | 'oldest' | 'expensive' | 'cheap'>('newest')
     const [kitchenSort, setKitchenSort] = useState<'oldest' | 'newest' | 'expensive' | 'cheap'>('oldest')
     const [isLoading, setIsLoading] = useState(true)
+    const previousUnconfirmedCountRef = useRef(0)
+    const previousOrderStatusesRef = useRef<Map<string, string>>(new Map())
+    const previousKitchenOrderIdsRef = useRef<Set<string>>(new Set())
+    const { toast } = useToast()
 
     const currency = 'IQD'
 
+    const playNotificationSound = useCallback(() => {
+        if (typeof window === 'undefined') return
+
+        const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+        if (!AudioContextClass) return
+
+        const audioContext = new AudioContextClass()
+        const oscillator = audioContext.createOscillator()
+        const gainNode = audioContext.createGain()
+
+        oscillator.type = 'sine'
+        oscillator.frequency.setValueAtTime(880, audioContext.currentTime)
+        oscillator.frequency.setValueAtTime(1174, audioContext.currentTime + 0.12)
+
+        gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime)
+        gainNode.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02)
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.28)
+
+        oscillator.connect(gainNode)
+        gainNode.connect(audioContext.destination)
+
+        oscillator.start()
+        oscillator.stop(audioContext.currentTime + 0.3)
+        oscillator.onended = () => {
+            void audioContext.close()
+        }
+    }, [])
+
     const fetchTables = useCallback(async () => {
         try {
-            const res = await fetch('/api/waiter/tables')
+            const res = await fetch('/api/waiter/tables', { cache: 'no-store' })
             if (res.ok) {
                 const data = await res.json()
                 setTables(data)
@@ -789,7 +839,7 @@ export default function WaiterDashboard() {
 
     const fetchOrders = useCallback(async () => {
         try {
-            const res = await fetch(`/api/waiter/orders?myOnly=true&status=${orderFilter}`)
+            const res = await fetch(`/api/waiter/orders?myOnly=true&status=${orderFilter}`, { cache: 'no-store' })
             if (res.ok) {
                 const data = await res.json()
                 setMyOrders(data)
@@ -801,10 +851,10 @@ export default function WaiterDashboard() {
 
     const fetchKitchenOrders = useCallback(async () => {
         try {
-            const res = await fetch(`/api/waiter/orders?myOnly=false&status=active`)
+            const res = await fetch(`/api/waiter/orders?myOnly=false&status=active`, { cache: 'no-store' })
             if (res.ok) {
                 const data = await res.json()
-                setKitchenOrders(data)
+                setKitchenOrders(data.filter((order: Order) => order.status !== 'READY'))
             }
         } catch (err) {
             console.error('Failed to fetch kitchen orders:', err)
@@ -813,7 +863,7 @@ export default function WaiterDashboard() {
 
     const fetchMenu = useCallback(async () => {
         try {
-            const res = await fetch('/api/waiter/menu')
+            const res = await fetch('/api/waiter/menu', { cache: 'no-store' })
             if (res.ok) {
                 const data = await res.json()
                 setCategories(data)
@@ -825,7 +875,7 @@ export default function WaiterDashboard() {
 
     const fetchUnconfirmedOrders = useCallback(async () => {
         try {
-            const res = await fetch('/api/waiter/orders?unassigned=true')
+            const res = await fetch('/api/waiter/orders?unassigned=true', { cache: 'no-store' })
             if (res.ok) {
                 const data = await res.json()
                 setUnconfirmedOrders(data)
@@ -835,6 +885,15 @@ export default function WaiterDashboard() {
         }
     }, [])
 
+    const refreshDashboardData = useCallback(async () => {
+        await Promise.all([
+            fetchTables(),
+            fetchOrders(),
+            fetchKitchenOrders(),
+            fetchUnconfirmedOrders(),
+        ])
+    }, [fetchKitchenOrders, fetchOrders, fetchTables, fetchUnconfirmedOrders])
+
     useEffect(() => {
         if (authStatus === 'unauthenticated') {
             router.push('/waiter/login')
@@ -842,23 +901,32 @@ export default function WaiterDashboard() {
         }
         if (authStatus === 'authenticated') {
             Promise.all([
-                fetchTables(),
-                fetchOrders(),
-                fetchKitchenOrders(),
+                refreshDashboardData(),
                 fetchMenu(),
-                fetchUnconfirmedOrders(),
             ]).finally(() => setIsLoading(false))
 
-            // Auto-refresh every 15 seconds (for new QR orders)
+            // Poll quickly enough that QR orders appear without a manual refresh.
             const interval = setInterval(() => {
-                fetchTables()
-                fetchOrders()
-                fetchKitchenOrders()
-                fetchUnconfirmedOrders()
-            }, 15000)
-            return () => clearInterval(interval)
+                refreshDashboardData()
+            }, 2000)
+
+            const handleVisibilityChange = () => {
+                if (document.visibilityState === 'visible') {
+                    refreshDashboardData()
+                }
+            }
+
+            window.addEventListener('focus', refreshDashboardData)
+            document.addEventListener('visibilitychange', handleVisibilityChange)
+
+            refreshDashboardData()
+            return () => {
+                clearInterval(interval)
+                window.removeEventListener('focus', refreshDashboardData)
+                document.removeEventListener('visibilitychange', handleVisibilityChange)
+            }
         }
-    }, [authStatus, router, fetchTables, fetchOrders, fetchKitchenOrders, fetchMenu, fetchUnconfirmedOrders])
+    }, [authStatus, router, fetchMenu, refreshDashboardData])
 
     useEffect(() => {
         if (authStatus === 'authenticated') {
@@ -876,16 +944,74 @@ export default function WaiterDashboard() {
         setActiveTab(tabParam === 'orders' ? 'orders' : tabParam === 'kitchen' ? 'kitchen' : 'tables')
     }, [tabParam])
 
+    useEffect(() => {
+        const previous = previousUnconfirmedCountRef.current
+        if (previous > 0 && unconfirmedOrders.length > previous) {
+            const latest = unconfirmedOrders[0]
+            toast({
+                title: 'New table order',
+                description: latest?.table?.number
+                    ? `Table ${latest.table.number} placed ${latest.orderNumber}.`
+                    : `${unconfirmedOrders.length - previous} new customer order${unconfirmedOrders.length - previous > 1 ? 's' : ''} received.`,
+            })
+        }
+        previousUnconfirmedCountRef.current = unconfirmedOrders.length
+    }, [toast, unconfirmedOrders])
+
+    useEffect(() => {
+        const previousStatuses = previousOrderStatusesRef.current
+
+        myOrders.forEach((order) => {
+            const previousStatus = previousStatuses.get(order.id)
+            if (previousStatus && previousStatus !== 'READY' && order.status === 'READY') {
+                toast({
+                    title: 'Order ready to deliver',
+                    description: order.table?.number
+                        ? `Table ${order.table.number} is ready for delivery.`
+                        : `${order.orderNumber} is ready for delivery.`,
+                })
+                playNotificationSound()
+            }
+            previousStatuses.set(order.id, order.status)
+        })
+
+        const currentIds = new Set(myOrders.map((order) => order.id))
+        for (const orderId of previousStatuses.keys()) {
+            if (!currentIds.has(orderId)) {
+                previousStatuses.delete(orderId)
+            }
+        }
+    }, [myOrders, playNotificationSound, toast])
+
+    useEffect(() => {
+        const previousIds = previousKitchenOrderIdsRef.current
+        const currentIds = new Set(kitchenOrders.map((order) => order.id))
+
+        const newlyArrived = kitchenOrders.find((order) => !previousIds.has(order.id))
+        if (previousIds.size > 0 && newlyArrived) {
+            toast({
+                title: 'New kitchen order',
+                description: newlyArrived.table?.number
+                    ? `Table ${newlyArrived.table.number} sent ${newlyArrived.orderNumber} to the kitchen.`
+                    : `${newlyArrived.orderNumber} has arrived in the kitchen queue.`,
+            })
+            playNotificationSound()
+        }
+
+        previousKitchenOrderIdsRef.current = currentIds
+    }, [kitchenOrders, playNotificationSound, toast])
+
     const handleRefresh = () => {
-        fetchTables()
-        fetchOrders()
-        fetchKitchenOrders()
-        fetchUnconfirmedOrders()
+        refreshDashboardData()
     }
 
     const handleOrderCreated = () => {
         setShowNewOrder(false)
         setSelectedTable(null)
+        toast({
+            title: 'Order created',
+            description: 'The new table order is now visible in the waiter dashboard.',
+        })
         handleRefresh()
     }
 
@@ -926,8 +1052,9 @@ export default function WaiterDashboard() {
             <main className="space-y-6">
                 {unconfirmedOrders.length > 0 && (
                     <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
-                        <p className="text-sm font-semibold text-amber-900 mb-3">
-                            🔔 New order{unconfirmedOrders.length > 1 ? 's' : ''} from customer (QR menu) — confirm to take
+                        <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-900">
+                            <Bell className="h-4 w-4" />
+                            New order{unconfirmedOrders.length > 1 ? 's' : ''} from customer (QR menu) — confirm to take
                         </p>
                         <div className="flex flex-wrap gap-2">
                             {unconfirmedOrders.map((order) => (
@@ -949,6 +1076,10 @@ export default function WaiterDashboard() {
                                                 body: JSON.stringify({ confirm: true }),
                                             })
                                             if (res.ok) {
+                                                toast({
+                                                    title: 'Order assigned',
+                                                    description: `Table ${order.table?.number ?? ''} is now in your queue.`.trim(),
+                                                })
                                                 handleRefresh()
                                                 setSelectedOrder(await res.json())
                                             }
@@ -1178,7 +1309,12 @@ export default function WaiterDashboard() {
                                             )}
                                             <span>{order.items.length} items</span>
                                             <span>{new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                            {order.customerName && <span>👤 {order.customerName}</span>}
+                                            {order.customerName && (
+                                                <span className="flex items-center gap-1">
+                                                    <User className="h-3 w-3" />
+                                                    {order.customerName}
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="mt-2 flex flex-wrap gap-1">
                                             {order.items.slice(0, 4).map((item) => (
@@ -1224,7 +1360,7 @@ export default function WaiterDashboard() {
                         {kitchenOrders.length === 0 ? (
                             <Card>
                                 <CardContent className="flex flex-col items-center justify-center py-20 text-slate-500">
-                                    <span className="text-5xl mb-4">👨‍🍳</span>
+                                    <ChefHat className="mb-4 h-14 w-14 opacity-20" />
                                     <p className="text-lg font-medium">No orders for the kitchen yet</p>
                                     <p className="text-sm mt-1">New orders will appear here automatically</p>
                                 </CardContent>
@@ -1265,29 +1401,58 @@ export default function WaiterDashboard() {
                                                                     <span className={isUrgent ? 'font-semibold text-red-600' : 'text-slate-500'}>
                                                                         {minutesAgo < 1 ? 'Just now' : `${minutesAgo}m ago`}
                                                                     </span>
-                                                                    {order.waiter && <span>👤 {order.waiter.name}</span>}
+                                                                    {order.waiter && (
+                                                                        <span className="flex items-center gap-1">
+                                                                            <User className="h-3 w-3" />
+                                                                            {order.waiter.name}
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </div>
                                                         {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
                                                             <button
                                                                 onClick={async () => {
-                                                                    await fetch(`/api/waiter/orders/${order.id}`, {
-                                                                        method: 'PATCH',
-                                                                        headers: { 'Content-Type': 'application/json' },
-                                                                        body: JSON.stringify({ status: 'COMPLETED' }),
-                                                                    })
-                                                                    fetchKitchenOrders()
+                                                                    try {
+                                                                        const res = await fetch(`/api/waiter/orders/${order.id}`, {
+                                                                            method: 'PATCH',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify({ status: 'READY' }),
+                                                                        })
+                                                                        if (!res.ok) {
+                                                                            const data = await res.json().catch(() => null)
+                                                                            throw new Error(data?.error || 'Failed to mark order ready')
+                                                                        }
+
+                                                                        toast({
+                                                                            title: 'Order marked ready',
+                                                                            description: order.table?.number
+                                                                                ? `Table ${order.table.number} can now be served.`
+                                                                                : `${order.orderNumber} can now be served.`,
+                                                                        })
+                                                                        playNotificationSound()
+                                                                        await refreshDashboardData()
+                                                                    } catch (error) {
+                                                                        toast({
+                                                                            title: 'Could not update order',
+                                                                            description: error instanceof Error ? error.message : 'Failed to mark order ready.',
+                                                                            variant: 'destructive',
+                                                                        })
+                                                                    }
                                                                 }}
                                                                 className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-lg transition-colors"
                                                             >
-                                                                ✓ Mark done
+                                                                <span className="flex items-center gap-2">
+                                                                    <Check className="h-4 w-4" />
+                                                                    Mark ready
+                                                                </span>
                                                             </button>
                                                         )}
                                                     </div>
                                                 {order.notes && (
-                                                    <div className="mb-3 p-2 rounded-lg bg-amber-100 border border-amber-200 text-sm text-amber-800">
-                                                        📝 {order.notes}
+                                                    <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-100 p-2 text-sm text-amber-800">
+                                                        <PencilLine className="mt-0.5 h-4 w-4 shrink-0" />
+                                                        <span>{order.notes}</span>
                                                     </div>
                                                 )}
                                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">

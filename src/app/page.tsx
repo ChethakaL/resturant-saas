@@ -1,3 +1,10 @@
+import { redirect } from 'next/navigation'
+
+export default function HomePage() {
+  redirect('/al-rafidain')
+}
+
+/*
 import { Suspense } from 'react'
 import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
@@ -618,3 +625,5 @@ export default async function Home() {
     </Suspense>
   )
 }
+
+*/

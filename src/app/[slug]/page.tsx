@@ -6,7 +6,7 @@ import { MenuPersonalizationWrapper } from '@/components/customer/MenuPersonaliz
 import { runMenuEngine } from '@/lib/menu-engine'
 import type { EngineMenuItem, EngineCategory, CoPurchasePair } from '@/lib/menu-engine'
 import { getSettingsForMode } from '@/lib/menu-engine-defaults'
-import { hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
+import { getCurrentMonthlySalesImport, hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
 import type { MenuEngineSettings } from '@/types/menu-engine'
 import type { EngineMode } from '@/types/menu-engine'
 import { suggestCarouselItems, getTimeSlotLabel } from '@/lib/carousel-ai'
@@ -15,11 +15,15 @@ import { generateMenuDescription } from '@/lib/menu-description-ai'
 import { getCachedBadgePicks } from '@/lib/menu-badge-ai'
 import { getCurrentTimeSlot as getSlot, getTimeSlotForDate as getSlotForDate, parseSlotTimes, buildSlotRangeLabels } from '@/lib/time-slots'
 import { getPublicMediaAssetUrl } from '@/lib/media-asset-urls'
+import { getMenuFeelingContext } from '@/lib/menu-feeling-message'
+import { buildContextShowcaseSuggestions } from '@/lib/context-showcase-ranking'
+import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
 
 // Revalidate on every request for DB data; AI carousel suggestions cached 5 min to avoid slow Gemini on every load
 export const revalidate = 0
 
 const CAROUSEL_CACHE_SECONDS = 300 // 5 min
+const MAX_CONTEXT_SHOWCASE_ITEMS = 6
 
 function getInitialMenuLanguage(managementLanguage: unknown): 'en' | 'ar_fusha' | 'ku' {
   if (managementLanguage === 'ku') return 'ku'
@@ -67,7 +71,7 @@ async function getMenuData(slug: string) {
   const restaurantSettings = (restaurant.settings as Record<string, unknown>) || {}
   const initialLanguage = getInitialMenuLanguage(restaurantSettings.managementLanguage)
 
-  const [menuItems, chefPicks, showcases, categories, salesLast30d, preppedStocksRows, salesToday, tables] =
+  const [menuItems, chefPicks, fetchedShowcases, categories, salesLast30d, preppedStocksRows, salesToday, tables] =
     await prisma.$transaction([
       prisma.menuItem.findMany({
         where: { available: true, status: 'ACTIVE', restaurantId: restaurant.id },
@@ -133,6 +137,7 @@ async function getMenuData(slug: string) {
         orderBy: { number: 'asc' },
       }),
     ])
+  let showcases: any[] = fetchedShowcases
 
   const visibleCategoryIds = new Set(
     categories.filter((c: { showOnMenu?: boolean }) => c.showOnMenu !== false).map((c: { id: string }) => c.id)
@@ -220,6 +225,10 @@ async function getMenuData(slug: string) {
   }
 
   const settings = (restaurant.settings as Record<string, unknown>) || {}
+  const stored = (settings.menuEngine as Record<string, unknown>) || {}
+  const storedMode = stored.mode as EngineMode | undefined
+  const requestedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'classic'
+  const mode = requestedMode === 'adaptive' && !hasCurrentMonthlySalesImport(settings) ? 'profit' : requestedMode
   const timezone = (settings.menuTimezone as string) || restaurant.timezone || 'Asia/Baghdad'
   const slotTimes = parseSlotTimes(settings.slotTimes)
   const currentSlot = getCurrentTimeSlot(timezone, slotTimes)
@@ -244,7 +253,7 @@ async function getMenuData(slug: string) {
     if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') return currentSlot === slot
     return true
   }
-  const filtered = showcasesDateFiltered.filter((s) => slotMatches(scheduleType(s)))
+  const filtered = showcasesDateFiltered
   const showcasesToShow = [...filtered].sort((a, b) => {
     const aMatch = slotMatches(scheduleType(a))
     const bMatch = slotMatches(scheduleType(b))
@@ -285,6 +294,160 @@ async function getMenuData(slug: string) {
   const SLOT_TIME_RANGES = buildSlotRangeLabels(slotTimes)
   const LUNCH_RANGE = `${SLOT_TIME_RANGES.day.split('–')[0]}–${SLOT_TIME_RANGES.evening.split('–')[1]}`
 
+  const hasShowcaseMatching = (list: typeof showcases, matcher: (title: string) => boolean) =>
+    list.some((showcase) => matcher(`${showcase.title} ${((showcase.schedule as any)?.label as string | undefined) ?? ''}`.toLowerCase()))
+
+  const importedSales = getCurrentMonthlySalesImport(settings)
+  const showcaseSalesByItem = new Map<string, { quantity: number; costSum: number }>()
+  const showcaseUnitsBySlot = new Map<string, Record<'breakfast' | 'day' | 'evening' | 'night', number>>()
+  if (importedSales) {
+    const importedByItem = buildImportedSalesByItem(importedSales, buildCostedMenuItems(menuItems))
+    for (const [menuItemId, value] of Array.from(importedByItem.entries())) {
+      showcaseSalesByItem.set(menuItemId, { quantity: value.quantity, costSum: value.costSum })
+      showcaseUnitsBySlot.set(menuItemId, {
+        breakfast: 0,
+        day: value.quantity,
+        evening: 0,
+        night: 0,
+      })
+    }
+  } else {
+    for (const sale of salesLast30d) {
+      const saleSlot = getTimeSlotForDate(sale.timestamp, timezone, slotTimes)
+      for (const saleItem of sale.items) {
+        const current = showcaseSalesByItem.get(saleItem.menuItemId) ?? { quantity: 0, costSum: 0 }
+        current.quantity += saleItem.quantity
+        current.costSum += (saleItem.cost ?? 0) * saleItem.quantity
+        showcaseSalesByItem.set(saleItem.menuItemId, current)
+        const slotMap = showcaseUnitsBySlot.get(saleItem.menuItemId) ?? { breakfast: 0, day: 0, evening: 0, night: 0 }
+        slotMap[saleSlot] += saleItem.quantity
+        showcaseUnitsBySlot.set(saleItem.menuItemId, slotMap)
+      }
+    }
+  }
+
+  const showcaseCandidates = menuItemsInVisibleCategories.map((item: any) => {
+    const ingredientTotal = item.ingredients?.reduce(
+      (sum: number, ing: any) => sum + ing.quantity * ing.ingredient.costPerUnit,
+      0
+    ) ?? 0
+    const marginPercent = item.price > 0 ? ((item.price - ingredientTotal) / item.price) * 100 : 0
+    const totals = showcaseSalesByItem.get(item.id)
+    return {
+      id: item.id,
+      name: item.name,
+      categoryName: item.category?.name ?? null,
+      description: item.description ?? null,
+      tags: item.tags ?? [],
+      price: item.price ?? 0,
+      marginPercent,
+      totalUnitsSold: totals?.quantity ?? 0,
+      slotUnits: showcaseUnitsBySlot.get(item.id) ?? { breakfast: 0, day: 0, evening: 0, night: 0 },
+    }
+  })
+  const showcaseSuggestions =
+    mode === 'classic' ? null : buildContextShowcaseSuggestions(showcaseCandidates, mode, { maxItems: MAX_CONTEXT_SHOWCASE_ITEMS })
+
+  const hasLunchShowcase = showcases.some((showcase) => {
+    const title = showcase.title.toLowerCase()
+    const schedule = (showcase.schedule as any) || {}
+    const displayForSlots = Array.isArray(schedule.displayForSlots) ? schedule.displayForSlots : []
+    return /lunch/.test(title) || (displayForSlots.includes('day') && displayForSlots.includes('evening'))
+  })
+
+  const missingContextDefinitions =
+    mode === 'classic' || !showcaseSuggestions
+      ? []
+      : ([
+          !hasShowcaseMatching(showcases, (title) => /breakfast|morning/.test(title)) && {
+            title: "Chef's recommendation for breakfast",
+            schedule: { displayForSlot: 'breakfast' },
+            itemIds: showcaseSuggestions.breakfast,
+          },
+          !hasLunchShowcase && {
+            title: "Chef's recommendation for lunch",
+            schedule: { displayForSlots: ['day', 'evening'] },
+            itemIds: showcaseSuggestions.lunch,
+          },
+          !hasShowcaseMatching(showcases, (title) => /evening|dinner|night/.test(title)) && {
+            title: "Chef's recommendation for dinner",
+            schedule: { displayForSlot: 'night' },
+            itemIds: showcaseSuggestions.dinner,
+          },
+          !hasShowcaseMatching(showcases, (title) => /hot|summer|cool|cold drink/.test(title)) && {
+            title: "Chef's recommendation for a hot day",
+            schedule: { label: 'Hot Day' },
+            itemIds: showcaseSuggestions.hotDay,
+          },
+          !hasShowcaseMatching(showcases, (title) => /rain|rainy|comfort|warm/.test(title)) && {
+            title: "Chef's recommendation for a rainy day",
+            schedule: { label: 'Rainy Day' },
+            itemIds: showcaseSuggestions.rainyDay,
+          },
+          !hasShowcaseMatching(showcases, (title) => /cold|winter|warm/.test(title)) && {
+            title: "Chef's recommendation for a cold day",
+            schedule: { label: 'Cold Day' },
+            itemIds: showcaseSuggestions.coldDay,
+          },
+        ].filter(Boolean) as Array<{
+          title: string
+          schedule: Record<string, unknown>
+          itemIds: string[]
+        }>)
+
+  if (missingContextDefinitions.length > 0) {
+    let nextDisplayOrder =
+      showcases.reduce((max, showcase) => Math.max(max, showcase.displayOrder ?? 0), 0) + 1
+
+    for (const definition of missingContextDefinitions) {
+      const existing = await prisma.menuShowcase.findFirst({
+        where: {
+          restaurantId: restaurant.id,
+          title: { equals: definition.title, mode: 'insensitive' },
+        },
+        include: {
+          items: {
+            orderBy: { displayOrder: 'asc' },
+            include: { menuItem: true },
+          },
+        },
+      })
+
+      if (existing) {
+        showcases = [...showcases, existing]
+        continue
+      }
+
+      const created = await prisma.menuShowcase.create({
+        data: {
+          restaurantId: restaurant.id,
+          title: definition.title,
+          type: 'CHEFS_HIGHLIGHTS',
+          displayVariant: 'hero',
+          position: 'top',
+          insertAfterCategoryId: null,
+          displayOrder: nextDisplayOrder,
+          schedule: definition.schedule as any,
+          items: {
+            create: definition.itemIds.slice(0, MAX_CONTEXT_SHOWCASE_ITEMS).map((menuItemId, index) => ({
+              menuItemId,
+              displayOrder: index,
+            })),
+          },
+        },
+        include: {
+          items: {
+            orderBy: { displayOrder: 'asc' },
+            include: { menuItem: true },
+          },
+        },
+      })
+
+      showcases = [...showcases, created as any]
+      nextDisplayOrder += 1
+    }
+  }
+
   const showcaseData = await Promise.all(
     showcasesToShow.map(async (showcase) => {
       let showcaseMenuItems: typeof enrichedMenuItems
@@ -308,7 +471,6 @@ async function getMenuData(slug: string) {
         showcaseMenuItems = enrichedMenuItems
           .filter((item: any) => idToOrder.has(item.id))
           .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
-        showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
       } else if (showcase.items.length > 0) {
         const pickedItemIds = new Set(showcase.items.map((si: any) => si.menuItemId))
         showcaseMenuItems = enrichedMenuItems
@@ -322,7 +484,6 @@ async function getMenuData(slug: string) {
                 ?.displayOrder ?? 0
             return orderA - orderB
           })
-        showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
       } else {
         // Nothing chosen anywhere: AI suggests by time of day and relevance (variety), cached 5 min
         const suggestedIds = await getCachedCarouselSuggestions(restaurant.id, timeSlotLabel, fullCarouselPool)
@@ -338,7 +499,6 @@ async function getMenuData(slug: string) {
         showcaseMenuItems = enrichedMenuItems
           .filter((item: any) => idToOrder.has(item.id))
           .sort((a: any, b: any) => (idToOrder.get(a.id) ?? 0) - (idToOrder.get(b.id) ?? 0))
-        showcaseMenuItems = [...showcaseMenuItems].sort(sortByMarginThenCost)
       }
 
       const displaySlots = schedule?.displayForSlots
@@ -388,6 +548,9 @@ async function getMenuData(slug: string) {
       displayVariant: 'cards',
       position: 'top',
       insertAfterCategoryId: null,
+      activeTimeRange: undefined,
+      label: undefined,
+      seasonalItemImages: undefined,
       items: recommendedItems.map(
         ({ _featuredScore: _fs, ...item }) => item
       ),
@@ -427,7 +590,7 @@ async function getMenuData(slug: string) {
   const pairCounts = new Map<string, number>()
   const ordersWithItem = new Map<string, number>()
   for (const sale of salesLast30d) {
-    const itemIds = [...new Set(sale.items.map((i: { menuItemId: string }) => i.menuItemId))]
+    const itemIds = Array.from(new Set(sale.items.map((i: { menuItemId: string }) => i.menuItemId)))
     for (const id of itemIds) {
       ordersWithItem.set(id, (ordersWithItem.get(id) ?? 0) + 1)
     }
@@ -439,7 +602,7 @@ async function getMenuData(slug: string) {
     }
   }
   const coPurchasePairs: CoPurchasePair[] = []
-  for (const [key, pairCount] of pairCounts) {
+  for (const [key, pairCount] of Array.from(pairCounts.entries())) {
     const [itemIdA, itemIdB] = key.split('-')
     const totalA = ordersWithItem.get(itemIdA) ?? 0
     const totalB = ordersWithItem.get(itemIdB) ?? 0
@@ -454,10 +617,6 @@ async function getMenuData(slug: string) {
     })
   }
 
-  const stored = (settings.menuEngine as Record<string, unknown>) || {}
-  const storedMode = stored.mode as EngineMode | undefined
-  const requestedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'classic'
-  const mode = requestedMode === 'adaptive' && !hasCurrentMonthlySalesImport(settings) ? 'profit' : requestedMode
   const base = getSettingsForMode(mode)
   const suggestionKeys = ['moodFlow', 'bundles', 'upsells', 'scarcityBadges', 'priceAnchoring'] as const
   const overrides =
@@ -480,6 +639,7 @@ async function getMenuData(slug: string) {
       price: item.price,
       categoryId: item.categoryId,
       categoryName: item.category?.name ?? undefined,
+      tags: item.tags ?? [],
       _cost: foodCost,
       _marginPercent: marginPercent,
       _unitsSold: unitsSold,
@@ -554,6 +714,14 @@ async function getMenuData(slug: string) {
     backgroundImageUrl: settings.backgroundImageUrl ?? null,
   }
 
+  const smartSearchFeelingContext = await getMenuFeelingContext({
+    lat: restaurant.lat,
+    lng: restaurant.lng,
+    timezone,
+    slot: currentSlot,
+    language: initialLanguage,
+  })
+
   return {
     restaurant,
     menuItems: clientMenuItems,
@@ -571,10 +739,12 @@ async function getMenuData(slug: string) {
     moods: engineOutput.moods,
     upsellMap: engineOutput.upsellMap,
     categoryOrder: engineOutput.categoryOrder,
+    menuTimezone: timezone,
     categoryAnchorBundle: engineOutput.categoryAnchorBundle,
     maxInitialItemsPerCategory: menuEngineSettings.maxInitialItemsPerCategory ?? 3,
     tables: (settings.tableOrderingEnabled !== false ? tables : []).map((t: { id: string; number: string }) => ({ id: t.id, number: t.number })),
     tableOrderingEnabled: settings.tableOrderingEnabled !== false,
+    smartSearchFeelingContext,
     snowfallSettings: {
       enabled: settings.snowfallEnabled === 'true',
       start: (settings.snowfallStart as string) || '12-15',
@@ -611,10 +781,12 @@ export default async function SlugMenuPage({
       moods={data.moods}
       upsellMap={data.upsellMap}
       categoryOrder={data.categoryOrder}
+      menuTimezone={data.menuTimezone}
       categoryAnchorBundle={data.categoryAnchorBundle}
       maxInitialItemsPerCategory={data.maxInitialItemsPerCategory}
       tables={data.tables}
       tableOrderingEnabled={data.tableOrderingEnabled}
+      smartSearchFeelingContext={data.smartSearchFeelingContext}
       snowfallSettings={data.snowfallSettings}
       forceShowImages
     />
