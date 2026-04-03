@@ -319,6 +319,8 @@ const uiCopyMap: Record<
     sortCarbsHigh: string
     sortCarbsLow: string
     sortCaloriesLow: string
+    ordersLabel: string
+    seeMoreDishesLabel: string
   }
 > = {
   en: {
@@ -381,6 +383,8 @@ const uiCopyMap: Record<
     sortCarbsHigh: 'Carbs: High → Low',
     sortCarbsLow: 'Carbs: Low → High',
     sortCaloriesLow: 'Calories: Low → High',
+    ordersLabel: 'orders',
+    seeMoreDishesLabel: 'See {count} more dishes →',
   },
   ar: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -442,6 +446,8 @@ const uiCopyMap: Record<
     sortCarbsHigh: 'الكربوهيدرات: من الأعلى إلى الأقل',
     sortCarbsLow: 'الكربوهيدرات: من الأقل إلى الأعلى',
     sortCaloriesLow: 'السعرات: من الأقل إلى الأعلى',
+    ordersLabel: 'طلبات',
+    seeMoreDishesLabel: 'عرض {count} طبقًا إضافيًا ←',
   },
   ar_fusha: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -503,6 +509,8 @@ const uiCopyMap: Record<
     sortCarbsHigh: 'الكربوهيدرات: من الأعلى إلى الأقل',
     sortCarbsLow: 'الكربوهيدرات: من الأقل إلى الأعلى',
     sortCaloriesLow: 'السعرات: من الأقل إلى الأعلى',
+    ordersLabel: 'طلبات',
+    seeMoreDishesLabel: 'عرض {count} طبقًا إضافيًا ←',
   },
   ku: {
     searchPlaceholder: 'ئێستا خواردنەکان بگەڕە…',
@@ -564,6 +572,8 @@ const uiCopyMap: Record<
     sortCarbsHigh: 'کاربوهایدرات: لە زۆرەوە بۆ کەم',
     sortCarbsLow: 'کاربوهایدرات: لە کەمەوە بۆ زۆر',
     sortCaloriesLow: 'کالۆری: لە کەمەوە بۆ زۆر',
+    ordersLabel: 'داواکراو',
+    seeMoreDishesLabel: '{count} خواردنی زیاتر ببینە ←',
   },
 }
 
@@ -2856,7 +2866,7 @@ export default function SmartMenu({
                       className="text-[0.76rem] font-semibold"
                       style={{ color: themeAccent }}
                     >
-                      See all
+                      {engineCopyMap[language].showAll}
                     </button>
                   )}
                 </div>
@@ -2919,7 +2929,7 @@ export default function SmartMenu({
                               </div>
                               <div className="flex items-center gap-1 text-[0.64rem]" style={{ color: textMuted }}>
                                 <Flame className="h-3 w-3" />
-                                <span>{item.popularityScore || 0} orders</span>
+                                <span>{item.popularityScore || 0} {currentCopy.ordersLabel}</span>
                               </div>
                             </div>
                             <button
@@ -2946,7 +2956,9 @@ export default function SmartMenu({
                       className="w-full px-4 py-3 text-[0.78rem] font-semibold"
                       style={{ borderTop: `1px solid ${dividerColor}`, backgroundColor: surfaceSoft, color: themeAccent }}
                     >
-                      See {section.items.length - maxInitialItemsPerCategory} more dishes →
+                      {formatTemplate(currentCopy.seeMoreDishesLabel, {
+                        count: String(section.items.length - maxInitialItemsPerCategory),
+                      })}
                     </button>
                   )}
                 </div>
@@ -3239,7 +3251,7 @@ export default function SmartMenu({
                 </div>
                 <div className="flex items-center gap-1 text-[0.74rem]" style={{ color: textMuted }}>
                   <Flame className="h-3.5 w-3.5" />
-                  <span>{selectedItemForDetail.popularityScore || 0} orders</span>
+                  <span>{selectedItemForDetail.popularityScore || 0} {currentCopy.ordersLabel}</span>
                 </div>
               </div>
               {selectedItemForDetail.addOns && selectedItemForDetail.addOns.length > 0 && (
