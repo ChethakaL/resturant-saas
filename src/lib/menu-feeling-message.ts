@@ -278,12 +278,14 @@ export async function getMenuFeelingContext({
   timezone,
   slot,
   language,
+  allowAi = true,
 }: {
   lat: number | null | undefined
   lng: number | null | undefined
   timezone: string
   slot: TimeSlot
   language: LanguageCode
+  allowAi?: boolean
 }): Promise<MenuFeelingContext> {
   if (typeof lat !== 'number' || typeof lng !== 'number') {
     return {
@@ -325,14 +327,16 @@ export async function getMenuFeelingContext({
         ? buildKurdishMessage(slot, weatherLabel, temperatureFeel)
         : buildEnglishMessage(slot, weatherLabel, temperatureFeel)
   const aiMessage =
-    await generateAiFeelingMessage({
-      language,
-      slot,
-      weatherLabel,
-      temperatureFeel,
-      temperature: weather.temperature,
-      apparentTemperature: weather.apparentTemperature,
-    })
+    allowAi
+      ? await generateAiFeelingMessage({
+          language,
+          slot,
+          weatherLabel,
+          temperatureFeel,
+          temperature: weather.temperature,
+          apparentTemperature: weather.apparentTemperature,
+        })
+      : null
   const message =
     language === 'en'
       ? `${opening} ${aiMessage || buildEnglishTail(slot, weatherLabel, temperatureFeel)}`.replace(/\s+/g, ' ').trim()
@@ -356,13 +360,15 @@ export async function generateMenuFeelingMessage({
   timezone,
   slot,
   language,
+  allowAi = true,
 }: {
   lat: number | null | undefined
   lng: number | null | undefined
   timezone: string
   slot: TimeSlot
   language: LanguageCode
+  allowAi?: boolean
 }): Promise<string> {
-  const context = await getMenuFeelingContext({ lat, lng, timezone, slot, language })
+  const context = await getMenuFeelingContext({ lat, lng, timezone, slot, language, allowAi })
   return context.message
 }

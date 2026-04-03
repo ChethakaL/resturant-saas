@@ -733,7 +733,7 @@ function OrderDetailPanel({
                                 >
                                     <span className="flex items-center justify-center gap-2">
                                         <Check className="h-4 w-4" />
-                                        Mark delivered
+                                        Mark served
                                     </span>
                                 </button>
                             )}
@@ -831,6 +831,10 @@ export default function WaiterDashboard() {
             if (res.ok) {
                 const data = await res.json()
                 setTables(data)
+                setSelectedTable((current) => {
+                    if (!current) return current
+                    return data.find((table: Table) => table.id === current.id) ?? null
+                })
             }
         } catch (err) {
             console.error('Failed to fetch tables:', err)
@@ -1019,7 +1023,7 @@ export default function WaiterDashboard() {
         handleRefresh()
         // Refresh the selected order
         if (selectedOrder) {
-            fetch(`/api/waiter/orders?myOnly=true&status=${orderFilter}`)
+            fetch('/api/waiter/orders?myOnly=true&status=all', { cache: 'no-store' })
                 .then((r) => r.json())
                 .then((orders) => {
                     const updated = orders.find((o: Order) => o.id === selectedOrder.id)

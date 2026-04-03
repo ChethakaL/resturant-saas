@@ -42,26 +42,7 @@ export async function PATCH(
         if (data.status) {
             updateData.status = data.status
 
-            // If marking as COMPLETED, set paidAt and free the table
-            if (data.status === 'COMPLETED') {
-                updateData.paidAt = new Date()
-                if (existing.tableId) {
-                    // Check if there are other active orders on this table
-                    const otherActive = await prisma.sale.count({
-                        where: {
-                            tableId: existing.tableId,
-                            id: { not: orderId },
-                            status: { in: ['PENDING', 'PREPARING', 'READY'] },
-                        },
-                    })
-                    if (otherActive === 0) {
-                        await prisma.table.update({
-                            where: { id: existing.tableId },
-                            data: { status: 'AVAILABLE' },
-                        })
-                    }
-                }
-            }
+            // Delivery does not imply checkout. Keep the table occupied until staff explicitly frees it.
         }
 
         if (data.notes !== undefined) {

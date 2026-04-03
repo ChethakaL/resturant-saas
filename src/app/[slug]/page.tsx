@@ -19,8 +19,8 @@ import { getMenuFeelingContext } from '@/lib/menu-feeling-message'
 import { buildContextShowcaseSuggestions } from '@/lib/context-showcase-ranking'
 import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
 
-// Revalidate on every request for DB data; AI carousel suggestions cached 5 min to avoid slow Gemini on every load
-export const revalidate = 0
+// Keep the slug page warm in production instead of recomputing every request.
+export const revalidate = 60
 
 const CAROUSEL_CACHE_SECONDS = 300 // 5 min
 const MAX_CONTEXT_SHOWCASE_ITEMS = 6
@@ -53,6 +53,44 @@ function getCurrentTimeSlot(tz: string, slotTimes?: ReturnType<typeof parseSlotT
 /** Get time slot for a given date in tz (for aggregating sales by slot). */
 function getTimeSlotForDate(date: Date, tz: string, slotTimes?: ReturnType<typeof parseSlotTimes> | null): 'breakfast' | 'day' | 'evening' | 'night' {
   return getSlotForDate(date, tz, slotTimes)
+}
+
+function queueMissingDescriptionsGeneration({
+  items,
+  descriptionTone,
+}: {
+  items: Array<{ id: string; name: string; category?: { name: string | null; id: string } | null; tags?: string[]; price: number; description?: string | null }>
+  descriptionTone?: string | null
+}) {
+  const missingItems = items.filter((item) => !(item.description && String(item.description).trim()))
+  if (missingItems.length === 0) return
+
+  void (async () => {
+    for (const item of missingItems) {
+      const description = await generateMenuDescription({
+        itemName: item.name,
+        categoryName: item.category?.name ?? null,
+        tags: item.tags ?? null,
+        price: item.price ?? null,
+        descriptionTone,
+      })
+
+      if (!description) continue
+
+      await prisma.menuItem.updateMany({
+        where: {
+          id: item.id,
+          OR: [
+            { description: null },
+            { description: '' },
+          ],
+        },
+        data: { description },
+      })
+    }
+  })().catch((error) => {
+    console.error('Background menu description generation failed:', error)
+  })
 }
 
 async function getMenuData(slug: string) {
@@ -199,32 +237,13 @@ async function getMenuData(slug: string) {
           ),
         }
 
-  // If any item has no description (e.g. legacy), generate once and persist so next time it's already there
-  const settingsForTone = (restaurant.settings as Record<string, unknown>) || {}
-  const themeForTone = (settingsForTone.theme as Record<string, unknown>) || {}
-  const descriptionTone = typeof themeForTone.descriptionTone === 'string' ? themeForTone.descriptionTone : null
-  const itemsNeedingDescription = enrichedMenuItems.filter(
-    (i: any) => !(i.description && String(i.description).trim())
-  )
-  if (itemsNeedingDescription.length > 0) {
-    for (const item of itemsNeedingDescription) {
-      const desc = await generateMenuDescription({
-        itemName: item.name,
-        categoryName: item.category?.name ?? null,
-        tags: item.tags ?? null,
-        price: item.price ?? null,
-        descriptionTone,
-      })
-      if (!desc) continue
-      await prisma.menuItem.update({
-        where: { id: item.id },
-        data: { description: desc },
-      })
-      item.description = desc
-    }
-  }
-
   const settings = (restaurant.settings as Record<string, unknown>) || {}
+  const themeForTone = (settings.theme as Record<string, unknown>) || {}
+  const descriptionTone = typeof themeForTone.descriptionTone === 'string' ? themeForTone.descriptionTone : null
+  queueMissingDescriptionsGeneration({
+    items: enrichedMenuItems,
+    descriptionTone,
+  })
   const stored = (settings.menuEngine as Record<string, unknown>) || {}
   const storedMode = stored.mode as EngineMode | undefined
   const requestedMode = storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'classic'
@@ -236,37 +255,6 @@ async function getMenuData(slug: string) {
   type ScheduleShape = { useTimeSlots?: boolean; displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'; displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]; breakfast?: { itemIds?: string[] }; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] }; label?: string; seasonalStart?: string; seasonalEnd?: string; seasonalBackgroundUrl?: string; seasonalItemImages?: Record<string, string>; } | null
   const scheduleType = (s: typeof showcases[0]) => s.schedule as ScheduleShape
 
-  // Filter out seasonal carousels outside their date range
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const showcasesDateFiltered = showcases.filter((s) => {
-    const sched = scheduleType(s)
-    if (!sched?.seasonalStart && !sched?.seasonalEnd) return true
-    if (sched.seasonalStart && todayStr < sched.seasonalStart) return false
-    if (sched.seasonalEnd && todayStr > sched.seasonalEnd) return false
-    return true
-  })
-
-  const slotMatches = (schedule: ScheduleShape) => {
-    const slots = schedule?.displayForSlots
-    if (Array.isArray(slots) && slots.length > 0) return slots.includes(currentSlot)
-    const slot = schedule?.displayForSlot
-    if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') return currentSlot === slot
-    return true
-  }
-  const filtered = showcasesDateFiltered
-  const showcasesToShow = [...filtered].sort((a, b) => {
-    const aMatch = slotMatches(scheduleType(a))
-    const bMatch = slotMatches(scheduleType(b))
-    const aSlots = scheduleType(a)?.displayForSlots
-    const aSingle = scheduleType(a)?.displayForSlot
-    const bSlots = scheduleType(b)?.displayForSlots
-    const bSingle = scheduleType(b)?.displayForSlot
-    const aIsCurrentSlot = (Array.isArray(aSlots) && aSlots.includes(currentSlot)) || (aSingle && aSingle === currentSlot)
-    const bIsCurrentSlot = (Array.isArray(bSlots) && bSlots.includes(currentSlot)) || (bSingle && bSingle === currentSlot)
-    if (aIsCurrentSlot && !bIsCurrentSlot) return -1
-    if (!aIsCurrentSlot && bIsCurrentSlot) return 1
-    return 0
-  })
   const fullCarouselPool = enrichedMenuItems.map((item: any) => ({
     id: item.id,
     name: item.name,
@@ -399,54 +387,55 @@ async function getMenuData(slug: string) {
     let nextDisplayOrder =
       showcases.reduce((max, showcase) => Math.max(max, showcase.displayOrder ?? 0), 0) + 1
 
-    for (const definition of missingContextDefinitions) {
-      const existing = await prisma.menuShowcase.findFirst({
-        where: {
-          restaurantId: restaurant.id,
-          title: { equals: definition.title, mode: 'insensitive' },
-        },
-        include: {
-          items: {
-            orderBy: { displayOrder: 'asc' },
-            include: { menuItem: true },
-          },
-        },
-      })
+    const syntheticShowcases = missingContextDefinitions.map((definition) => ({
+      id: `synthetic-${definition.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      restaurantId: restaurant.id,
+      title: definition.title,
+      type: 'CHEFS_HIGHLIGHTS',
+      displayVariant: 'hero',
+      position: 'top',
+      insertAfterCategoryId: null,
+      displayOrder: nextDisplayOrder++,
+      schedule: definition.schedule,
+      items: definition.itemIds.slice(0, MAX_CONTEXT_SHOWCASE_ITEMS).map((menuItemId, index) => ({
+        id: `synthetic-${menuItemId}-${index}`,
+        menuItemId,
+        displayOrder: index,
+        menuItem: menuItems.find((item: any) => item.id === menuItemId) ?? null,
+      })),
+    }))
 
-      if (existing) {
-        showcases = [...showcases, existing]
-        continue
-      }
-
-      const created = await prisma.menuShowcase.create({
-        data: {
-          restaurantId: restaurant.id,
-          title: definition.title,
-          type: 'CHEFS_HIGHLIGHTS',
-          displayVariant: 'hero',
-          position: 'top',
-          insertAfterCategoryId: null,
-          displayOrder: nextDisplayOrder,
-          schedule: definition.schedule as any,
-          items: {
-            create: definition.itemIds.slice(0, MAX_CONTEXT_SHOWCASE_ITEMS).map((menuItemId, index) => ({
-              menuItemId,
-              displayOrder: index,
-            })),
-          },
-        },
-        include: {
-          items: {
-            orderBy: { displayOrder: 'asc' },
-            include: { menuItem: true },
-          },
-        },
-      })
-
-      showcases = [...showcases, created as any]
-      nextDisplayOrder += 1
-    }
+    showcases = [...showcases, ...syntheticShowcases]
   }
+
+  // Filter out seasonal carousels outside their date range.
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const showcasesDateFiltered = showcases.filter((s) => {
+    const sched = scheduleType(s)
+    if (!sched?.seasonalStart && !sched?.seasonalEnd) return true
+    if (sched.seasonalStart && todayStr < sched.seasonalStart) return false
+    if (sched.seasonalEnd && todayStr > sched.seasonalEnd) return false
+    return true
+  })
+
+  const slotMatches = (schedule: ScheduleShape) => {
+    const slots = schedule?.displayForSlots
+    if (Array.isArray(slots) && slots.length > 0) return slots.includes(currentSlot)
+    const slot = schedule?.displayForSlot
+    if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') return currentSlot === slot
+    return true
+  }
+  const showcasesToShow = [...showcasesDateFiltered].sort((a, b) => {
+    const aSlots = scheduleType(a)?.displayForSlots
+    const aSingle = scheduleType(a)?.displayForSlot
+    const bSlots = scheduleType(b)?.displayForSlots
+    const bSingle = scheduleType(b)?.displayForSlot
+    const aIsCurrentSlot = (Array.isArray(aSlots) && aSlots.includes(currentSlot)) || (aSingle && aSingle === currentSlot)
+    const bIsCurrentSlot = (Array.isArray(bSlots) && bSlots.includes(currentSlot)) || (bSingle && bSingle === currentSlot)
+    if (aIsCurrentSlot && !bIsCurrentSlot) return -1
+    if (!aIsCurrentSlot && bIsCurrentSlot) return 1
+    return 0
+  })
 
   const showcaseData = await Promise.all(
     showcasesToShow.map(async (showcase) => {
@@ -720,6 +709,7 @@ async function getMenuData(slug: string) {
     timezone,
     slot: currentSlot,
     language: initialLanguage,
+    allowAi: false,
   })
 
   return {

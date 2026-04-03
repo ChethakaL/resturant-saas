@@ -2530,7 +2530,7 @@ export default function SmartMenu({
                         {getDisplayNameForItem(contextSuggestedItems.main)}
                       </div>
                       <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
-                        High-margin fit for {currentContext.label.toLowerCase()} service.
+                        {translationCache[language]?.[contextSuggestedItems.main.id]?.description || contextSuggestedItems.main.description || `A great match for ${currentContext.label.toLowerCase()}.`}
                       </div>
                       <div className="mt-2 text-[0.9rem] font-bold" style={{ color: textMain }}>
                         {formatMenuPriceWithVariant(contextSuggestedItems.main.price, priceVariant)}
@@ -2576,7 +2576,7 @@ export default function SmartMenu({
                         {getDisplayNameForItem(contextSuggestedItems.drink)}
                       </div>
                       <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
-                        High-margin drink matched to {currentContext.label.toLowerCase()} conditions.
+                        {translationCache[language]?.[contextSuggestedItems.drink.id]?.description || contextSuggestedItems.drink.description || `A refreshing choice for ${currentContext.label.toLowerCase()}.`}
                       </div>
                       <div className="mt-2 text-[0.9rem] font-bold" style={{ color: textMain }}>
                         {formatMenuPriceWithVariant(contextSuggestedItems.drink.price, priceVariant)}
