@@ -37,6 +37,18 @@ interface TranslatedItemPayload {
   carbs?: number | null
 }
 
+function toFingerprintPayload(item: TranslationRequestItem) {
+  return {
+    name: item.name,
+    description: item.description,
+    category: item.category,
+    price: item.price,
+    calories: item.calories,
+    protein: item.protein,
+    carbs: item.carbs,
+  }
+}
+
 function buildSnippetLine(item: TranslationRequestItem) {
   const lineParts = [
     `- ID: ${item.id}`,
@@ -68,13 +80,6 @@ async function translateChunk(
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.GOOGLE_AI_KEY) {
-      return NextResponse.json(
-        { error: 'Google AI API key not configured' },
-        { status: 500 }
-      )
-    }
-
     let body
     try {
       body = await request.json()
@@ -86,7 +91,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { language, items } = body
+    const { language, items, dbOnly } = body
     const languageValue = language as LanguageCode
     if (!languageValue || !LANGUAGE_LABELS[languageValue]) {
       return NextResponse.json(
@@ -162,7 +167,7 @@ export async function POST(request: NextRequest) {
       const parsedUpdatedAt = item.updatedAt
         ? new Date(item.updatedAt)
         : new Date()
-      const sourceHash = buildSourceFingerprint(item)
+      const sourceHash = buildSourceFingerprint(toFingerprintPayload(item))
       const cached = translationById.get(item.id)
       if (
         cached &&
@@ -178,7 +183,14 @@ export async function POST(request: NextRequest) {
       itemsToTranslate.push(item)
     })
 
-    if (itemsToTranslate.length > 0) {
+    if (itemsToTranslate.length > 0 && !dbOnly) {
+      if (!process.env.GOOGLE_AI_KEY) {
+        return NextResponse.json(
+          { error: 'Google AI API key not configured' },
+          { status: 500 }
+        )
+      }
+
       for (let i = 0; i < itemsToTranslate.length; i += CHUNK_SIZE) {
         const chunk = itemsToTranslate.slice(i, i + CHUNK_SIZE)
         let translatedChunk: TranslatedItemPayload[] = []
@@ -250,7 +262,7 @@ export async function POST(request: NextRequest) {
                   typeof payload.carbs === 'number'
                     ? payload.carbs
                     : null,
-                sourceHash: metadata?.sourceHash ?? buildSourceFingerprint(item),
+                sourceHash: metadata?.sourceHash ?? buildSourceFingerprint(toFingerprintPayload(item)),
                 sourceUpdatedAt: metadata?.updatedAt ?? new Date(),
               },
               create: {
@@ -267,7 +279,7 @@ export async function POST(request: NextRequest) {
                   typeof payload.carbs === 'number'
                     ? payload.carbs
                     : null,
-                sourceHash: metadata?.sourceHash ?? buildSourceFingerprint(item),
+                sourceHash: metadata?.sourceHash ?? buildSourceFingerprint(toFingerprintPayload(item)),
                 sourceUpdatedAt: metadata?.updatedAt ?? new Date(),
               },
             })
@@ -301,7 +313,9 @@ export async function POST(request: NextRequest) {
     })
 
     console.log(
-      `[translate-items] language=${languageValue} translated ${itemsToTranslate.length}/${sanitizedItems.length}`
+      dbOnly
+        ? `[translate-items] language=${languageValue} db-only hit ${sanitizedItems.length - itemsToTranslate.length}/${sanitizedItems.length}`
+        : `[translate-items] language=${languageValue} translated ${itemsToTranslate.length}/${sanitizedItems.length}`
     )
 
     return NextResponse.json({

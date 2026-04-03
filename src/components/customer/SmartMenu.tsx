@@ -1186,6 +1186,7 @@ export default function SmartMenu({
           body: JSON.stringify({
             language: lang,
             items: payloadItems,
+            dbOnly: true,
           }),
         })
 
@@ -2012,13 +2013,185 @@ export default function SmartMenu({
   const getMoodLabel = (mood: MoodOption) =>
     mood.label[language === 'ar_fusha' ? 'ar' : language] ?? mood.label.en
 
+  const contextCopyMap = {
+    en: {
+      morning: {
+        label: 'Morning',
+        tone: 'Good Morning',
+        heroOpening: 'It is a fresh morning.',
+        heroTail: 'A light breakfast and a smooth coffee would feel just right.',
+        heroTitle: "Chef's Recommendation for Breakfast",
+        picksTitle: 'Excellent Morning Picks',
+      },
+      lunch: {
+        label: 'Lunch',
+        tone: 'Good Afternoon',
+        heroOpening: 'It is a lively afternoon.',
+        heroTail: 'This is a good time for a satisfying meal with a refreshing cold drink.',
+        heroTitle: 'Lunch Chef Selection',
+        picksTitle: 'Smart Lunch Picks',
+      },
+      hot: {
+        label: 'Hot Day',
+        tone: 'Hot Day',
+        heroOpening: 'It is a warm day.',
+        heroTail: 'Crisp flavors and an icy drink would feel especially refreshing.',
+        heroTitle: 'Hot Day Selections',
+        picksTitle: 'Brilliant Hot-Day Picks',
+      },
+      evening: {
+        label: 'Evening',
+        tone: 'Good Evening',
+        heroOpening: 'It is a relaxed evening.',
+        heroTail: 'A rich meal and a satisfying drink would suit the mood well.',
+        heroTitle: "Chef's Selection Tonight",
+        picksTitle: 'Excellent Evening Picks',
+      },
+      rainy: {
+        label: 'Rainy',
+        tone: 'Rainy Evening',
+        heroOpening: 'It is a rainy moment.',
+        heroTail: 'A comforting meal and a soothing drink would feel especially welcome.',
+        heroTitle: 'Rainy Day Selection',
+        picksTitle: 'Smart Rainy-Day Picks',
+      },
+      cold: {
+        label: 'Cold',
+        tone: 'Cold Night',
+        heroOpening: 'It is a cool moment.',
+        heroTail: 'A warm meal and a cozy drink would feel especially comforting.',
+        heroTitle: 'Cold Weather Selection',
+        picksTitle: 'Brilliant Cold-Day Picks',
+      },
+      moodPrompt: 'What are you in the mood for?',
+      everything: 'Everything',
+      listJoiner: ' and ',
+      standingOutSuffix: 'are standing out on the menu right now.',
+      mainRecommendation: 'Main recommendation',
+      drinkRecommendation: 'Drink recommendation',
+    },
+    ar_fusha: {
+      morning: {
+        label: 'الصباح',
+        tone: 'صباح الخير',
+        heroOpening: 'إنه صباح منعش.',
+        heroTail: 'وجبة فطور خفيفة مع قهوة ناعمة ستكون مناسبة تماماً.',
+        heroTitle: 'توصية الشيف للفطور',
+        picksTitle: 'اختيارات صباحية ممتازة',
+      },
+      lunch: {
+        label: 'الغداء',
+        tone: 'مساء الخير',
+        heroOpening: 'إنها فترة بعد ظهر حيوية.',
+        heroTail: 'هذا وقت مناسب لوجبة مشبعة مع مشروب بارد ومنعش.',
+        heroTitle: 'اختيار الشيف للغداء',
+        picksTitle: 'اختيارات غداء ذكية',
+      },
+      hot: {
+        label: 'يوم حار',
+        tone: 'أجواء حارة',
+        heroOpening: 'إنه يوم دافئ.',
+        heroTail: 'النكهات الخفيفة مع مشروب مثلج ستكون منعشة جداً.',
+        heroTitle: 'اختيارات اليوم الحار',
+        picksTitle: 'اختيارات ذكية للأجواء الحارة',
+      },
+      evening: {
+        label: 'المساء',
+        tone: 'مساء الخير',
+        heroOpening: 'إنه مساء هادئ.',
+        heroTail: 'وجبة غنية مع مشروب مناسب ستلائم الأجواء جيداً.',
+        heroTitle: 'اختيار الشيف لهذه الليلة',
+        picksTitle: 'اختيارات مسائية ممتازة',
+      },
+      rainy: {
+        label: 'ممطر',
+        tone: 'أمسية ممطرة',
+        heroOpening: 'إنها لحظة ممطرة.',
+        heroTail: 'وجبة مريحة مع مشروب دافئ ستكون مرحباً بها جداً الآن.',
+        heroTitle: 'اختيارات اليوم الماطر',
+        picksTitle: 'اختيارات ذكية لليوم الماطر',
+      },
+      cold: {
+        label: 'بارد',
+        tone: 'ليلة باردة',
+        heroOpening: 'إنها لحظة باردة.',
+        heroTail: 'وجبة دافئة مع مشروب مريح ستكون مناسبة جداً.',
+        heroTitle: 'اختيارات الطقس البارد',
+        picksTitle: 'اختيارات رائعة للطقس البارد',
+      },
+      moodPrompt: 'ما الذي تشتهيه اليوم؟',
+      everything: 'الكل',
+      listJoiner: ' و',
+      standingOutSuffix: 'تتألق في القائمة الآن.',
+      mainRecommendation: 'الترشيح الرئيسي',
+      drinkRecommendation: 'ترشيح المشروب',
+    },
+    ku: {
+      morning: {
+        label: 'بەیانی',
+        tone: 'بەیانی باش',
+        heroOpening: 'بەیانییەکی تازەیە.',
+        heroTail: 'نانێکی بەیانی سووک لەگەڵ قاوەیەکی نەرم زۆر گونجاو دەبێت.',
+        heroTitle: 'پێشنیاری شێف بۆ نانی بەیانی',
+        picksTitle: 'هەڵبژاردەی باشی بەیانی',
+      },
+      lunch: {
+        label: 'نیوەڕۆ',
+        tone: 'نیوەڕۆ باش',
+        heroOpening: 'نیوەڕۆیەکی زیندووە.',
+        heroTail: 'ئەمە کاتێکی باشە بۆ خواردنێکی تێرکەر لەگەڵ خواردنەوەیەکی سارد و فریش.',
+        heroTitle: 'هەڵبژاردنی شێف بۆ نیوەڕۆ',
+        picksTitle: 'هەڵبژاردەی زیرەکی نیوەڕۆ',
+      },
+      hot: {
+        label: 'ڕۆژی گەرم',
+        tone: 'هەوای گەرم',
+        heroOpening: 'ڕۆژێکی گەرمە.',
+        heroTail: 'تامە سووکەکان لەگەڵ خواردنەوەیەکی سارد زۆر فریش دەبن.',
+        heroTitle: 'هەڵبژاردەی ڕۆژی گەرم',
+        picksTitle: 'هەڵبژاردەی زیرەک بۆ هەوای گەرم',
+      },
+      evening: {
+        label: 'ئێوارە',
+        tone: 'ئێوارە باش',
+        heroOpening: 'ئێوارەیەکی ئارامە.',
+        heroTail: 'خواردنێکی دەوڵەمەند لەگەڵ خواردنەوەیەکی گونجاو زۆر لە جێی خۆیدایە.',
+        heroTitle: 'هەڵبژاردنی شێف بۆ ئەم ئێوارەیە',
+        picksTitle: 'هەڵبژاردەی باشی ئێوارە',
+      },
+      rainy: {
+        label: 'باراناوی',
+        tone: 'ئێوارەی باراناوی',
+        heroOpening: 'ساتێکی باراناویە.',
+        heroTail: 'خواردنێکی ئارامبەخش لەگەڵ خواردنەوەیەکی گەرم زۆر پێویستە.',
+        heroTitle: 'هەڵبژاردەی ڕۆژی باراناوی',
+        picksTitle: 'هەڵبژاردەی زیرەک بۆ ڕۆژی باراناوی',
+      },
+      cold: {
+        label: 'سارد',
+        tone: 'شەوی سارد',
+        heroOpening: 'ساتێکی ساردە.',
+        heroTail: 'خواردنێکی گەرم لەگەڵ خواردنەوەیەکی خۆش زۆر ئارامبەخش دەبێت.',
+        heroTitle: 'هەڵبژاردەی هەوای سارد',
+        picksTitle: 'هەڵبژاردەی ناوازە بۆ هەوای سارد',
+      },
+      moodPrompt: 'ئەمڕۆ حەزت لە چییە؟',
+      everything: 'هەموو',
+      listJoiner: ' و ',
+      standingOutSuffix: 'ئێستا لە مێنیووەکەدا دیارن.',
+      mainRecommendation: 'پێشنیاری سەرەکی',
+      drinkRecommendation: 'پێشنیاری خواردنەوە',
+    },
+  } as const
+  const contextLanguage = language === 'ar' ? 'ar_fusha' : language
+  const localizedContextCopy = contextCopyMap[contextLanguage]
   const contextOptions = [
-    { key: 'morning', label: 'Morning', tone: 'Good Morning' },
-    { key: 'lunch', label: 'Lunch', tone: 'Good Afternoon' },
-    { key: 'hot', label: 'Hot Day', tone: 'Hot Day' },
-    { key: 'evening', label: 'Evening', tone: 'Good Evening' },
-    { key: 'rainy', label: 'Rainy', tone: 'Rainy Evening' },
-    { key: 'cold', label: 'Cold', tone: 'Cold Night' },
+    { key: 'morning', label: localizedContextCopy.morning.label, tone: localizedContextCopy.morning.tone },
+    { key: 'lunch', label: localizedContextCopy.lunch.label, tone: localizedContextCopy.lunch.tone },
+    { key: 'hot', label: localizedContextCopy.hot.label, tone: localizedContextCopy.hot.tone },
+    { key: 'evening', label: localizedContextCopy.evening.label, tone: localizedContextCopy.evening.tone },
+    { key: 'rainy', label: localizedContextCopy.rainy.label, tone: localizedContextCopy.rainy.tone },
+    { key: 'cold', label: localizedContextCopy.cold.label, tone: localizedContextCopy.cold.tone },
   ] as const
   type ContextKey = (typeof contextOptions)[number]['key']
 
@@ -2057,22 +2230,26 @@ export default function SmartMenu({
   const selectedContext = autoContext
   const currentContext = contextOptions.find((option) => option.key === autoContext) ?? contextOptions[0]
   const contextHeroMessageMap: Record<ContextKey, string> = {
-    morning: 'It is a fresh morning.',
-    lunch: 'It is a lively afternoon.',
-    hot: 'It is a warm day.',
-    evening: 'It is a relaxed evening.',
-    rainy: 'It is a rainy moment.',
-    cold: 'It is a cool moment.',
+    morning: localizedContextCopy.morning.heroOpening,
+    lunch: localizedContextCopy.lunch.heroOpening,
+    hot: localizedContextCopy.hot.heroOpening,
+    evening: localizedContextCopy.evening.heroOpening,
+    rainy: localizedContextCopy.rainy.heroOpening,
+    cold: localizedContextCopy.cold.heroOpening,
   }
   const contextHeroTailMap: Record<ContextKey, string> = {
-    morning: 'A light breakfast and a smooth coffee would feel just right.',
-    lunch: 'This is a good time for a satisfying meal with a refreshing cold drink.',
-    hot: 'Crisp flavors and an icy drink would feel especially refreshing.',
-    evening: 'A rich meal and a satisfying drink would suit the mood well.',
-    rainy: 'A comforting meal and a soothing drink would feel especially welcome.',
-    cold: 'A warm meal and a cozy drink would feel especially comforting.',
+    morning: localizedContextCopy.morning.heroTail,
+    lunch: localizedContextCopy.lunch.heroTail,
+    hot: localizedContextCopy.hot.heroTail,
+    evening: localizedContextCopy.evening.heroTail,
+    rainy: localizedContextCopy.rainy.heroTail,
+    cold: localizedContextCopy.cold.heroTail,
   }
-  const activeHeroMessage = `${contextHeroMessageMap[selectedContext]} ${smartSearchFeelingContext?.aiTail || contextHeroTailMap[selectedContext]}`
+  const localizedHeroTail =
+    contextLanguage === 'en'
+      ? smartSearchFeelingContext?.aiTail || contextHeroTailMap[selectedContext]
+      : contextHeroTailMap[selectedContext]
+  const activeHeroMessage = `${contextHeroMessageMap[selectedContext]} ${localizedHeroTail}`
   const summaryTemplate =
     filteredItems.length === 1
       ? currentCopy.resultsSummarySingular
@@ -2200,20 +2377,20 @@ export default function SmartMenu({
     return Array.from(unique.values()).slice(0, 8)
   }, [contextRankedItems, isDrinkItem, isMainItem, selectedContext])
   const heroTitleMap: Record<ContextKey, string> = {
-    morning: "Chef's Recommendation for Breakfast",
-    lunch: "Lunch Chef Selection",
-    hot: 'Hot Day Selections',
-    evening: "Chef's Selection Tonight",
-    rainy: 'Rainy Day Selection',
-    cold: 'Cold Weather Selection',
+    morning: localizedContextCopy.morning.heroTitle,
+    lunch: localizedContextCopy.lunch.heroTitle,
+    hot: localizedContextCopy.hot.heroTitle,
+    evening: localizedContextCopy.evening.heroTitle,
+    rainy: localizedContextCopy.rainy.heroTitle,
+    cold: localizedContextCopy.cold.heroTitle,
   }
   const contextPicksTitleMap: Record<ContextKey, string> = {
-    morning: 'Excellent Morning Picks',
-    lunch: 'Smart Lunch Picks',
-    hot: 'Brilliant Hot-Day Picks',
-    evening: 'Excellent Evening Picks',
-    rainy: 'Smart Rainy-Day Picks',
-    cold: 'Brilliant Cold-Day Picks',
+    morning: localizedContextCopy.morning.picksTitle,
+    lunch: localizedContextCopy.lunch.picksTitle,
+    hot: localizedContextCopy.hot.picksTitle,
+    evening: localizedContextCopy.evening.picksTitle,
+    rainy: localizedContextCopy.rainy.picksTitle,
+    cold: localizedContextCopy.cold.picksTitle,
   }
   const selectedContextShowcase = useMemo(() => {
     const matchesTitle = (showcase: ShowcaseSection) => {
@@ -2253,7 +2430,11 @@ export default function SmartMenu({
     return source.slice(0, 5)
   }, [activeHeroItems, baseFilteredItems])
 
-  const heroTitle = selectedContextShowcase?.title || heroTitleMap[selectedContext] || topShowcases[0]?.title || currentCopy.chefRecommendationLabel
+  const heroTitle =
+    contextLanguage === 'en'
+      ? selectedContextShowcase?.title || heroTitleMap[selectedContext] || topShowcases[0]?.title || currentCopy.chefRecommendationLabel
+      : heroTitleMap[selectedContext] || currentCopy.chefRecommendationLabel
+  const isLanguageLoading = language !== 'en' && (!languageContentReady || isTranslating)
   const realStandingOutItems = useMemo(() => {
     const candidates = activeHeroItems.filter((item) => {
       const hints = item._hints
@@ -2285,6 +2466,14 @@ export default function SmartMenu({
   const accentSoft = hexToRgba(themeAccent, theme?.backgroundStyle === 'dark' ? 0.16 : 0.1)
   const accentBorder = hexToRgba(themeAccent, theme?.backgroundStyle === 'dark' ? 0.35 : 0.24)
 
+  if (!isLanguageReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: pageBg }}>
+        <Loader2 className="h-7 w-7 animate-spin text-slate-500" />
+      </div>
+    )
+  }
+
   return (
     <div
       className="min-h-screen"
@@ -2300,7 +2489,16 @@ export default function SmartMenu({
         <link key={url} href={url} rel="stylesheet" />
       ))}
 
-      <div className="mx-auto min-h-screen max-w-6xl px-4 py-4 sm:px-6 lg:px-8">
+      {isLanguageLoading && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/92 px-6 py-5 shadow-lg">
+            <Loader2 className="h-7 w-7 animate-spin text-emerald-600" />
+            <p className="text-sm font-medium text-slate-700">{currentCopy.loadingLabel}</p>
+          </div>
+        </div>
+      )}
+
+      <div className={`mx-auto min-h-screen max-w-6xl px-4 py-4 transition-[filter,opacity] duration-200 sm:px-6 lg:px-8 ${isLanguageLoading ? 'pointer-events-none blur-[2px]' : ''}`}>
         <div
           className="overflow-hidden rounded-[28px] shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_24px_70px_rgba(0,0,0,0.14)]"
           style={{ backgroundColor: pageBg }}
@@ -2318,6 +2516,43 @@ export default function SmartMenu({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <Popover open={isLanguageMenuOpen} onOpenChange={setIsLanguageMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex h-10 w-10 items-center justify-center rounded-full border"
+                      style={{ borderColor: hexToRgba('#ffffff', 0.12), backgroundColor: hexToRgba('#ffffff', 0.05) }}
+                      aria-label={`Language: ${currentLanguageLabel}`}
+                    >
+                      <Globe className="h-4 w-4 text-white" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    sideOffset={8}
+                    className="w-40 rounded-xl border border-white/15 bg-slate-950/95 p-1 text-sm text-white shadow-xl"
+                  >
+                    {visibleLanguageOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          if (option.value === language) {
+                            setIsLanguageMenuOpen(false)
+                            return
+                          }
+                          setLanguage(option.value)
+                          setIsLanguageMenuOpen(false)
+                        }}
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${
+                          language === option.value ? 'bg-white/10 text-white' : 'text-white/80 hover:bg-white/5'
+                        }`}
+                      >
+                        <span>{option.label}</span>
+                        {language === option.value && <span>✓</span>}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
                 <button
                   type="button"
                   onClick={() => setTablePickerOpen(true)}
@@ -2405,7 +2640,10 @@ export default function SmartMenu({
                           {formatMenuPriceWithVariant(item.price, priceVariant)}
                         </div>
                       </div>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full text-base text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] sm:h-9 sm:w-9 sm:text-lg" style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}>
+                      <span
+                        className="inline-flex h-7 w-7 min-h-[1.75rem] min-w-[1.75rem] shrink-0 aspect-square items-center justify-center rounded-full text-base text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] sm:h-9 sm:w-9 sm:min-h-[2.25rem] sm:min-w-[2.25rem] sm:text-lg"
+                        style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                      >
                         +
                       </span>
                     </div>
@@ -2422,7 +2660,7 @@ export default function SmartMenu({
           {availableMoods.length > 0 && (
             <section className="px-5 pt-7 sm:px-6 lg:px-8">
               <div className="mb-3 text-[0.62rem] font-bold uppercase tracking-[0.16em]" style={{ color: textMuted }}>
-                What are you in the mood for?
+                {localizedContextCopy.moodPrompt}
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                 <button
@@ -2436,7 +2674,7 @@ export default function SmartMenu({
                 >
                   <Sparkles className="h-5 w-5" style={{ color: selectedMoodId == null ? themeAccent : textMain }} />
                   <span className="text-[0.68rem] font-semibold" style={{ color: selectedMoodId == null ? themeAccent : textMain }}>
-                    Everything
+                    {localizedContextCopy.everything}
                   </span>
                 </button>
                 {availableMoods.map((mood) => {
@@ -2476,9 +2714,9 @@ export default function SmartMenu({
                 <Flame className="mt-0.5 h-4 w-4" style={{ color: themeAccent }} />
                 <p className="text-[0.8rem] leading-6" style={{ color: textMain }}>
                   <strong className="font-bold" style={{ color: themeChef }}>
-                    {realStandingOutItems.map((item) => getDisplayNameForItem(item)).join(' and ')}
+                    {realStandingOutItems.map((item) => getDisplayNameForItem(item)).join(localizedContextCopy.listJoiner)}
                   </strong>{' '}
-                  are standing out on the menu right now.
+                  {localizedContextCopy.standingOutSuffix}
                 </p>
               </div>
             )}
@@ -2524,13 +2762,13 @@ export default function SmartMenu({
                     />
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 text-[0.56rem] font-bold uppercase tracking-[0.1em]" style={{ color: themeAccent }}>
-                        Main Recommendation
+                        {localizedContextCopy.mainRecommendation}
                       </div>
                       <div className="font-item text-[0.95rem] font-bold" style={{ color: textMain }}>
                         {getDisplayNameForItem(contextSuggestedItems.main)}
                       </div>
                       <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
-                        {translationCache[language]?.[contextSuggestedItems.main.id]?.description || contextSuggestedItems.main.description || `A great match for ${currentContext.label.toLowerCase()}.`}
+                        {translationCache[language]?.[contextSuggestedItems.main.id]?.description || contextSuggestedItems.main.description || `${localizedContextCopy.mainRecommendation}.`}
                       </div>
                       <div className="mt-2 text-[0.9rem] font-bold" style={{ color: textMain }}>
                         {formatMenuPriceWithVariant(contextSuggestedItems.main.price, priceVariant)}
@@ -2570,13 +2808,13 @@ export default function SmartMenu({
                     />
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 text-[0.56rem] font-bold uppercase tracking-[0.1em]" style={{ color: themeAccent }}>
-                        Drink Recommendation
+                        {localizedContextCopy.drinkRecommendation}
                       </div>
                       <div className="font-item text-[0.95rem] font-bold" style={{ color: textMain }}>
                         {getDisplayNameForItem(contextSuggestedItems.drink)}
                       </div>
                       <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
-                        {translationCache[language]?.[contextSuggestedItems.drink.id]?.description || contextSuggestedItems.drink.description || `A refreshing choice for ${currentContext.label.toLowerCase()}.`}
+                        {translationCache[language]?.[contextSuggestedItems.drink.id]?.description || contextSuggestedItems.drink.description || `${localizedContextCopy.drinkRecommendation}.`}
                       </div>
                       <div className="mt-2 text-[0.9rem] font-bold" style={{ color: textMain }}>
                         {formatMenuPriceWithVariant(contextSuggestedItems.drink.price, priceVariant)}
