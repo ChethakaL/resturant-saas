@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getServerTranslations } from '@/lib/i18n/server'
+import { translateInventoryTableRows } from '@/lib/i18n/inventory-display-translate'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
@@ -257,14 +258,15 @@ export default async function InventoryPage({
 
   const data = await getInventoryData(restaurantId, page, query, category, sort)
 
+  const { locale: managementLocale, t } = await getServerTranslations()
+  const displayIngredients = await translateInventoryTableRows(data.ingredients, managementLocale)
+
   // Count ingredients with non-standard units across the whole restaurant (not just this page)
   const allUnits = await prisma.ingredient.findMany({
     where: { restaurantId },
     select: { unit: true },
   })
   const badUnitCount = allUnits.filter((i) => !isAllowedUnit(canonicalise(i.unit))).length
-
-  const { t } = await getServerTranslations()
 
   return (
     <div className="space-y-6">
@@ -304,7 +306,7 @@ export default async function InventoryPage({
         <CardContent>
           <div className="overflow-x-auto">
             <InventoryTable
-              ingredients={data.ingredients}
+              ingredients={displayIngredients}
               totalCount={data.totalCount}
               totalPages={data.totalPages}
               currentPage={page}

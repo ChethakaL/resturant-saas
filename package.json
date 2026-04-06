@@ -11,7 +11,8 @@
     "db:seed-pnl": "tsx prisma/seed-pnl.ts",
     "db:demo-connect": "tsx scripts/demo-connect-supplier.ts",
     "db:seed-feb-2026": "tsx scripts/seed-february-2026.ts",
-    "db:seed-supplier": "tsx prisma/seed-supplier.ts"
+    "db:seed-supplier": "tsx prisma/seed-supplier.ts",
+    "test:receipt-lines": "tsx scripts/test-receipt-16-lines.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

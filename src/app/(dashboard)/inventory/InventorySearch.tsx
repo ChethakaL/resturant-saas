@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
 import { useDynamicTranslate, useI18n } from '@/lib/i18n'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useTransition, useEffect, useState } from 'react'
+import { useTransition, useEffect, useState, useRef } from 'react'
 import { INVENTORY_CATEGORY_OPTIONS } from '@/lib/inventory-categories'
 
 export function InventorySearch() {
@@ -23,26 +23,25 @@ export function InventorySearch() {
     setSort(searchParams.get('sort') || 'category_name')
   }, [searchParams])
 
+  /** Only reset URL when filters change — not when only `page` changes (e.g. Next/Previous). */
+  const skipFilterSyncRef = useRef(true)
+
   useEffect(() => {
-    const params = new URLSearchParams(searchParams)
+    if (skipFilterSyncRef.current) {
+      skipFilterSyncRef.current = false
+      return
+    }
+
+    const params = new URLSearchParams()
     if (value) {
       params.set('q', value)
-    } else {
-      params.delete('q')
     }
-
     if (category) {
       params.set('category', category)
-    } else {
-      params.delete('category')
     }
-
     if (sort && sort !== 'category_name') {
       params.set('sort', sort)
-    } else {
-      params.delete('sort')
     }
-
     params.set('page', '1')
 
     const timeout = setTimeout(() => {
@@ -52,7 +51,7 @@ export function InventorySearch() {
     }, 300)
 
     return () => clearTimeout(timeout)
-  }, [category, router, searchParams, sort, value])
+  }, [category, router, sort, value])
 
   return (
     <div className="flex w-full max-w-3xl flex-col gap-3 md:flex-row">

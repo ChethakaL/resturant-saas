@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { canonicalise, isAllowedUnit, computeConversion } from '@/lib/unit-converter'
 import { DEFAULT_INVENTORY_CATEGORY, isInventoryCategory } from '@/lib/inventory-categories'
+import type { ManagementLocale } from '@/lib/i18n/translations'
+import { translateInventoryApiIngredients } from '@/lib/i18n/inventory-display-translate'
 
 const getPrimaryVariantCost = (variants: any[] | undefined, fallback: number) => {
   if (Array.isArray(variants) && variants.length > 0) {
@@ -93,20 +95,34 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const ingredients = await prisma.ingredient.findMany({
-      where: { restaurantId: session.user.restaurantId },
-      include: {
-        variants: true,
-      },
-      orderBy: [{ category: 'asc' }, { name: 'asc' }],
-    })
+    const [ingredients, restaurant] = await Promise.all([
+      prisma.ingredient.findMany({
+        where: { restaurantId: session.user.restaurantId },
+        include: {
+          variants: true,
+        },
+        orderBy: [{ category: 'asc' }, { name: 'asc' }],
+      }),
+      prisma.restaurant.findUnique({
+        where: { id: session.user.restaurantId },
+        select: { settings: true },
+      }),
+    ])
 
-    return NextResponse.json(
-      ingredients.map((ingredient) => ({
-        ...ingredient,
-        costPerUnit: getPrimaryVariantCost(ingredient.variants, ingredient.costPerUnit),
-      }))
-    )
+    const settings = (restaurant?.settings as Record<string, unknown>) || {}
+    const lang = (settings.managementLanguage as string) || 'en'
+    let managementLocale: ManagementLocale = 'en'
+    if (lang === 'ku') managementLocale = 'ku'
+    else if (lang === 'ar-fusha' || lang === 'ar_fusha') managementLocale = 'ar-fusha'
+
+    const mapped = ingredients.map((ingredient) => ({
+      ...ingredient,
+      costPerUnit: getPrimaryVariantCost(ingredient.variants, ingredient.costPerUnit),
+    }))
+
+    const translated = await translateInventoryApiIngredients(mapped, managementLocale)
+
+    return NextResponse.json(translated)
   } catch (error) {
     console.error('Error fetching ingredients:', error)
     return NextResponse.json(

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/lib/i18n'
 import { useDynamicTranslate } from '@/lib/i18n'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -66,10 +66,20 @@ export function InventoryTable({
   currentPage: number
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const inventoryHrefForPage = (pageNum: number) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('page', String(pageNum))
+    return `/inventory?${params.toString()}`
+  }
   const [requestModalOpen, setRequestModalOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
   const [ingredientToDelete, setIngredientToDelete] = useState<IngredientRow | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [selectedIngredient, setSelectedIngredient] = useState<IngredientRow | null>(null)
   const [products, setProducts] = useState<SupplierProduct[]>([])
   const [quantity, setQuantity] = useState('')
@@ -79,6 +89,36 @@ export function InventoryTable({
   const { toast } = useToast()
   const { t } = useI18n()
   const { t: td } = useDynamicTranslate()
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [currentPage])
+
+  const idsOnPage = ingredients.map((i) => i.id)
+  const allOnPageSelected =
+    idsOnPage.length > 0 && idsOnPage.every((id) => selectedIds.has(id))
+  const someOnPageSelected = idsOnPage.some((id) => selectedIds.has(id))
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allOnPageSelected) {
+        idsOnPage.forEach((id) => next.delete(id))
+      } else {
+        idsOnPage.forEach((id) => next.add(id))
+      }
+      return next
+    })
+  }
+
+  const toggleRowSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const openRequestModal = async (ingredient: IngredientRow) => {
     setSelectedIngredient(ingredient)
@@ -187,6 +227,39 @@ export function InventoryTable({
     }
   }
 
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    setBulkDeleting(true)
+    try {
+      const response = await fetch('/api/inventory/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : td('Failed to delete ingredients'))
+      }
+      const deleted = typeof data.deleted === 'number' ? data.deleted : 0
+      toast({
+        title: td('Ingredients deleted'),
+        description: td('Removed {{count}} ingredient(s) from inventory.').replace('{{count}}', String(deleted)),
+      })
+      setBulkDeleteDialogOpen(false)
+      setSelectedIds(new Set())
+      router.refresh()
+    } catch (error) {
+      toast({
+        title: td('Error'),
+        description: error instanceof Error ? error.message : td('Failed to delete ingredients'),
+        variant: 'destructive',
+      })
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   const supplierName = (ing: IngredientRow) =>
     ing.preferredSupplier?.name ?? ing.supplier ?? '—'
 
@@ -226,9 +299,37 @@ export function InventoryTable({
 
   return (
     <>
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50">
+          <span className="text-sm text-slate-700">
+            {td('{{count}} selected').replace('{{count}}', String(selectedIds.size))}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" type="button" onClick={() => setSelectedIds(new Set())}>
+              {td('Clear selection')}
+            </Button>
+            <Button variant="destructive" size="sm" type="button" onClick={() => setBulkDeleteDialogOpen(true)}>
+              {td('Delete selected')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <table className="w-full">
         <thead>
           <tr className="border-b border-slate-200">
+            <th className="w-10 py-3 px-2 text-left align-middle">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={allOnPageSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someOnPageSelected && !allOnPageSelected
+                }}
+                onChange={toggleSelectAllOnPage}
+                aria-label={td('Select all on this page')}
+              />
+            </th>
             <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
               {t.inventory_col_ingredient}
             </th>
@@ -252,6 +353,15 @@ export function InventoryTable({
         <tbody>
           {ingredients.map((ingredient) => (
             <tr key={ingredient.id} className="border-b border-slate-100 hover:bg-slate-50">
+              <td className="py-3 px-2 align-middle">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={selectedIds.has(ingredient.id)}
+                  onChange={() => toggleRowSelected(ingredient.id)}
+                  aria-label={td('Select row')}
+                />
+              </td>
               <td className="py-3 px-4">
                 <div className="space-y-1">
                   <div className="font-medium text-slate-900">{td(ingredient.name)}</div>
@@ -320,12 +430,12 @@ export function InventoryTable({
               .replace('{{count}}', String(totalCount))}
           </p>
           <div className="flex items-center gap-2">
-            <Link href={`/inventory?page=${Math.max(currentPage - 1, 1)}`}>
+            <Link href={inventoryHrefForPage(Math.max(currentPage - 1, 1))}>
               <Button variant="outline" size="sm" disabled={currentPage <= 1}>
                 {t.inventory_previous}
               </Button>
             </Link>
-            <Link href={`/inventory?page=${Math.min(currentPage + 1, totalPages)}`}>
+            <Link href={inventoryHrefForPage(Math.min(currentPage + 1, totalPages))}>
               <Button variant="outline" size="sm" disabled={currentPage >= totalPages}>
                 {t.inventory_next}
               </Button>
@@ -427,6 +537,42 @@ export function InventoryTable({
                 {submitting ? t.inventory_sending : t.inventory_send_request}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              {td('Delete selected ingredients?')}
+            </DialogTitle>
+            <DialogDescription>
+              <div className="space-y-2 pt-2">
+                <p>
+                  {td('This will permanently remove {{count}} ingredient(s).').replace(
+                    '{{count}}',
+                    String(selectedIds.size)
+                  )}
+                </p>
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                  <p className="text-sm text-amber-900">⚠️ {t.inventory_delete_warning}</p>
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBulkDeleteDialogOpen(false)}
+              disabled={bulkDeleting}
+            >
+              {t.common_cancel}
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? t.inventory_deleting : td('Delete all selected')}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

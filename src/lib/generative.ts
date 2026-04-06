@@ -1,17 +1,62 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-export async function callGemini(prompt: string) {
+/** Default for cheap text calls */
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
+
+/** Vision: override with GEMINI_RECEIPT_MODEL (e.g. gemini-2.5-pro for harder Arabic tables). */
+export function getReceiptVisionModel(): string {
+  return process.env.GEMINI_RECEIPT_MODEL?.trim() || DEFAULT_GEMINI_MODEL
+}
+
+function getGenAI() {
   const apiKey = process.env.GOOGLE_AI_KEY
   if (!apiKey) {
     throw new Error('Google AI API key not configured')
   }
+  return new GoogleGenerativeAI(apiKey)
+}
 
-  const genAI = new GoogleGenerativeAI(apiKey)
+export async function callGemini(prompt: string) {
+  const genAI = getGenAI()
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: DEFAULT_GEMINI_MODEL,
   })
 
   return model.generateContent(prompt)
+}
+
+/**
+ * Multimodal: one image (base64) + text prompt. Uses Flash for cost efficiency.
+ * Keep images small (e.g. ≤5MB JPEG) to limit input tokens.
+ */
+export async function callGeminiWithImage(options: {
+  base64: string
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+  prompt: string
+  /** Cap output cost; receipt JSON rarely needs more than ~8k */
+  maxOutputTokens?: number
+  /** Defaults to GEMINI_RECEIPT_MODEL or Flash (cheap). Use Pro for better OCR on dense tables. */
+  model?: string
+}) {
+  const genAI = getGenAI()
+  const modelName = options.model ?? getReceiptVisionModel()
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    generationConfig: {
+      maxOutputTokens: options.maxOutputTokens ?? 8192,
+      temperature: 0,
+    },
+  })
+
+  return model.generateContent([
+    {
+      inlineData: {
+        mimeType: options.mimeType,
+        data: options.base64,
+      },
+    },
+    { text: options.prompt },
+  ])
 }
 
 export function extractJsonBlock(raw: string) {

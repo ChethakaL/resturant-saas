@@ -47,7 +47,7 @@ export default function ReceiptUploadModal({
   onOpenChange,
   ingredientId,
 }: ReceiptUploadModalProps) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { t: td } = useDynamicTranslate()
   const router = useRouter()
 
@@ -121,6 +121,7 @@ export default function ReceiptUploadModal({
     const formData = new FormData()
     formData.append('file', file)
     if (ingredientId) formData.append('ingredientId', ingredientId)
+    formData.append('managementLocale', locale)
 
     try {
       const res = await fetch('/api/receipts', {
@@ -562,9 +563,9 @@ export default function ReceiptUploadModal({
                   {processedItems.map((item) => (
                     <div
                       key={`${item.ingredientId}-${item.expenseId}`}
-                      className="flex items-center justify-between rounded-xl border border-emerald-200 bg-white/90 px-4 py-3"
+                      className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-white/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="font-medium text-slate-900">{item.ingredientName}</p>
                         <p className="text-sm text-slate-500">
                           {item.action === 'CREATED'
@@ -572,16 +573,32 @@ export default function ReceiptUploadModal({
                             : td('Updated existing inventory ingredient')}
                         </p>
                       </div>
-                      <span
-                        className={cn(
-                          'rounded-full px-3 py-1 text-xs font-semibold',
-                          item.action === 'CREATED'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-sky-100 text-sky-700'
-                        )}
-                      >
-                        {item.action === 'CREATED' ? td('New') : td('Updated')}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="text-emerald-800 border-emerald-300"
+                          onClick={() => {
+                            onOpenChange(false)
+                            router.push(
+                              `/inventory?page=1&q=${encodeURIComponent(item.ingredientName)}`
+                            )
+                          }}
+                        >
+                          {td('View in inventory')}
+                        </Button>
+                        <span
+                          className={cn(
+                            'rounded-full px-3 py-1 text-xs font-semibold',
+                            item.action === 'CREATED'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-sky-100 text-sky-700'
+                          )}
+                        >
+                          {item.action === 'CREATED' ? td('New') : td('Updated')}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
