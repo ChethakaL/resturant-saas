@@ -48,13 +48,17 @@ async function geminiBatchTranslate(
 
 /**
  * Translates receipt strings to the dashboard language.
- * Order: OpenAI (if OPENAI_API_KEY) → Google Translate → Gemini.
- * Caches in `UiTranslation` with keys prefixed by `__mgmt_v6__:`.
+ * For **Arabic (Fusha)** dashboard locale, returns inputs unchanged — receipts are already Arabic; do not translate to English.
+ * For **English / Kurdish**, order: OpenAI → Google Translate → Gemini. Caches under `__mgmt_v6__:`.
  */
 export async function translateReceiptStringsToLocale(
   texts: string[],
   targetLocale: ReceiptTargetLocale
 ): Promise<string[]> {
+  if (targetLocale === 'ar-fusha') {
+    return texts.slice()
+  }
+
   const hasOpenAI = !!process.env.OPENAI_API_KEY?.trim()
   const hasGoogle = !!process.env.GOOGLE_TRANSLATE_API_KEY?.trim()
   const hasGemini = !!process.env.GOOGLE_AI_KEY?.trim()
