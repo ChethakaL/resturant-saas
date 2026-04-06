@@ -29,6 +29,13 @@ interface ReceiptItem {
   brand?: string
 }
 
+interface ProcessedReceiptItem {
+  ingredientId: string
+  ingredientName: string
+  expenseId: string
+  action: 'CREATED' | 'UPDATED'
+}
+
 interface ReceiptUploadModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -55,8 +62,16 @@ export default function ReceiptUploadModal({
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [allIngredients, setAllIngredients] = useState<{ id: string; name: string; unit: string; brand?: string }[]>([])
+  const [processedItems, setProcessedItems] = useState<ProcessedReceiptItem[]>([])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const sanitizeDraftIngredientName = (value: string) =>
+    value
+      .replace(/\b\d+\s*[x×]\s*\d+(?:\s*[x×]\s*\d+)*\b/gi, '')
+      .replace(/[()\-_,]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
 
   useEffect(() => {
     if (open) {
@@ -148,7 +163,7 @@ export default function ReceiptUploadModal({
 
         return {
           id: `item-${idx}`,
-          name: raw.name || 'Unknown',
+          name: sanitizeDraftIngredientName(raw.name || 'Unknown') || raw.name || 'Unknown',
           quantity: raw.quantity || 1,
           unit: raw.unit || 'piece',
           unitPrice: raw.unitPrice || 0,
@@ -195,6 +210,8 @@ export default function ReceiptUploadModal({
         throw new Error(errData.error || td('Failed to confirm receipt'))
       }
 
+      const data = await res.json()
+      setProcessedItems(Array.isArray(data.processedItems) ? data.processedItems : [])
       setStep('success')
       router.refresh()
     } catch (err: any) {
@@ -208,6 +225,17 @@ export default function ReceiptUploadModal({
     setExtractedItems(prev =>
       prev.map(item => (item.id === id ? { ...item, ...updates } : item))
     )
+  }
+
+  const updateNumericItemField = (
+    id: string,
+    field: 'quantity' | 'unitPrice' | 'totalPrice',
+    value: string
+  ) => {
+    const parsed = Number(value)
+    updateItem(id, {
+      [field]: Number.isFinite(parsed) ? parsed : 0,
+    } as Partial<ReceiptItem>)
   }
 
   const removeItem = (id: string) => {
@@ -224,6 +252,7 @@ export default function ReceiptUploadModal({
     setDate('')
     setTotalAmount(0)
     setError(null)
+    setProcessedItems([])
   }
 
   const closeModal = () => {
@@ -346,6 +375,7 @@ export default function ReceiptUploadModal({
                     value={supplier}
                     onChange={(e) => setSupplier(e.target.value)}
                     placeholder={td('e.g. Al-Anbar Market')}
+                    dir="auto"
                   />
                 </div>
                 <div className="space-y-2">
@@ -380,11 +410,71 @@ export default function ReceiptUploadModal({
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{item.name}</span>
-                            {item.brand && <span className="text-sm text-muted-foreground">({item.brand})</span>}
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-1.5 md:col-span-2">
+                              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                {td('Ingredient Name')}
+                              </Label>
+                              <Input
+                                value={item.name}
+                                onChange={(e) => updateItem(item.id, { name: e.target.value })}
+                                className="text-sm"
+                                dir="auto"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                {td('Brand')}
+                              </Label>
+                              <Input
+                                value={item.brand || ''}
+                                onChange={(e) => updateItem(item.id, { brand: e.target.value || undefined })}
+                                className="text-sm"
+                                dir="auto"
+                                placeholder={td('Optional')}
+                              />
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 md:col-span-2">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                  {td('Quantity')}
+                                </Label>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={item.quantity}
+                                  onChange={(e) => updateNumericItemField(item.id, 'quantity', e.target.value)}
+                                  className="text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                  {td('Unit')}
+                                </Label>
+                                <Input
+                                  value={item.unit}
+                                  onChange={(e) => updateItem(item.id, { unit: e.target.value })}
+                                  className="text-sm"
+                                  dir="auto"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                  {td('Total Price')}
+                                </Label>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={item.totalPrice}
+                                  onChange={(e) => updateNumericItemField(item.id, 'totalPrice', e.target.value)}
+                                  className="text-sm"
+                                />
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-sm text-muted-foreground mt-0.5">
+                          <div className="text-sm text-muted-foreground mt-2">
                             {item.quantity} × {item.unit} @ {item.unitPrice.toLocaleString()} IQD
                           </div>
                         </div>
@@ -397,23 +487,43 @@ export default function ReceiptUploadModal({
                         <Label className="text-xs uppercase tracking-wide text-muted-foreground mb-1 block">
                           {td('Link to Inventory')}
                         </Label>
-                        <Select
-                          value={item.ingredientId || ''}
-                          onValueChange={(val) =>
-                            updateItem(item.id, { ingredientId: val || undefined })
-                          }
-                        >
-                          <SelectTrigger className="text-sm">
-                            <SelectValue placeholder={td('+ Add as New Ingredient')} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {allIngredients.map(ing => (
-                              <SelectItem key={ing.id} value={ing.id}>
-                                {ing.name} {ing.brand ? `(${ing.brand})` : ''} – {ing.unit}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1">
+                            <Select
+                              value={item.ingredientId || ''}
+                              onValueChange={(val) =>
+                                updateItem(item.id, { ingredientId: val || undefined })
+                              }
+                            >
+                              <SelectTrigger className="text-sm">
+                                <SelectValue placeholder={td('+ Add as New Ingredient')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {allIngredients.map(ing => (
+                                  <SelectItem key={ing.id} value={ing.id}>
+                                    {ing.name} {ing.brand ? `(${ing.brand})` : ''} – {ing.unit}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {item.ingredientId ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0"
+                              onClick={() => updateItem(item.id, { ingredientId: undefined })}
+                            >
+                              {td('Clear')}
+                            </Button>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {item.ingredientId
+                            ? td('This receipt item will update the selected inventory ingredient.')
+                            : td('Leave this unlinked to create a new inventory ingredient when you confirm.')}
+                        </p>
                       </div>
 
                       {/* <Button
@@ -433,7 +543,7 @@ export default function ReceiptUploadModal({
         )}
 
         {step === 'success' && (
-          <div className="py-16 flex flex-col items-center text-center space-y-6">
+          <div className="py-12 flex flex-col items-center text-center space-y-6">
             <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
               <CheckCircle2 className="h-10 w-10 text-green-600" />
             </div>
@@ -443,6 +553,40 @@ export default function ReceiptUploadModal({
                 {td('Receipt processed. Inventory costs and stock updated, expense recorded.')}
               </p>
             </div>
+            {processedItems.length > 0 ? (
+              <div className="w-full max-w-2xl rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-left shadow-[0_0_0_1px_rgba(16,185,129,0.08),0_0_28px_rgba(16,185,129,0.18)]">
+                <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-emerald-700">
+                  {td('Added to inventory')}
+                </p>
+                <div className="space-y-3">
+                  {processedItems.map((item) => (
+                    <div
+                      key={`${item.ingredientId}-${item.expenseId}`}
+                      className="flex items-center justify-between rounded-xl border border-emerald-200 bg-white/90 px-4 py-3"
+                    >
+                      <div>
+                        <p className="font-medium text-slate-900">{item.ingredientName}</p>
+                        <p className="text-sm text-slate-500">
+                          {item.action === 'CREATED'
+                            ? td('Created as a new inventory ingredient')
+                            : td('Updated existing inventory ingredient')}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          'rounded-full px-3 py-1 text-xs font-semibold',
+                          item.action === 'CREATED'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-sky-100 text-sky-700'
+                        )}
+                      >
+                        {item.action === 'CREATED' ? td('New') : td('Updated')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 

@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import sharp from 'sharp'
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024
+const MAX_CLAUDE_IMAGE_BYTES = 5 * 1024 * 1024
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 function getS3Client() {
   const region = process.env.AWS_S3_REGION
@@ -27,6 +29,50 @@ function getPublicUrl(key: string): string {
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`
 }
 
+async function buildVisionPayload(
+  buffer: Buffer,
+  contentType: string
+): Promise<{ data: string; mediaType: 'image/jpeg' | 'image/png' | 'image/webp' }> {
+  let workingBuffer = buffer
+  let mediaType: 'image/jpeg' | 'image/png' | 'image/webp' =
+    contentType === 'image/png' || contentType === 'image/webp' ? contentType : 'image/jpeg'
+
+  if (workingBuffer.byteLength <= MAX_CLAUDE_IMAGE_BYTES) {
+    return { data: workingBuffer.toString('base64'), mediaType }
+  }
+
+  const widths = [2200, 1800, 1440, 1200, 960]
+  const qualities = [82, 72, 62, 52, 42]
+
+  for (const width of widths) {
+    for (const quality of qualities) {
+      const candidate = await sharp(buffer)
+        .rotate()
+        .resize({ width, withoutEnlargement: true })
+        .jpeg({ quality, mozjpeg: true })
+        .toBuffer()
+
+      if (candidate.byteLength <= MAX_CLAUDE_IMAGE_BYTES) {
+        return {
+          data: candidate.toString('base64'),
+          mediaType: 'image/jpeg',
+        }
+      }
+    }
+  }
+
+  const fallback = await sharp(buffer)
+    .rotate()
+    .resize({ width: 800, withoutEnlargement: true })
+    .jpeg({ quality: 38, mozjpeg: true })
+    .toBuffer()
+
+  return {
+    data: fallback.toString('base64'),
+    mediaType: 'image/jpeg',
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -34,9 +80,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const apiKey = process.env.OPENAI_API_KEY
+    const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
-      return NextResponse.json({ error: 'OpenAI not configured' }, { status: 500 })
+      return NextResponse.json({ error: 'Anthropic not configured' }, { status: 500 })
     }
 
     const formData = await request.formData()
@@ -71,15 +117,14 @@ export async function POST(request: NextRequest) {
     )
     const imageUrl = getPublicUrl(key)
 
-    // 2. Base64 for OpenAI
-    const base64Image = buffer.toString('base64')
-    const imageDataUrl = `data:${file.type};base64,${base64Image}`
+    // 2. Prepare image for Claude vision, compressing when needed to fit its 5 MB limit.
+    const { data: base64Image, mediaType } = await buildVisionPayload(buffer, file.type)
 
-    // 3. Improved prompt + structured output
-    const openai = new OpenAI({ apiKey })
+    // 3. Improved multilingual prompt + structured output
+    const anthropic = new Anthropic({ apiKey })
 
     const prompt = `
-You are a precise receipt OCR and data extraction assistant. Analyze the receipt image carefully.
+You are a precise multilingual receipt and invoice OCR extraction assistant. Analyze the uploaded receipt image carefully.
 
 Extract ONLY real visible information — do NOT hallucinate or invent values.
 
@@ -92,10 +137,10 @@ Output strictly as JSON matching this exact schema:
   "currency": string | null,              // e.g. "IQD", "USD"
   "items": array of objects, each:
     {
-      "name": string,                     // ingredient/product name
-      "brand": string | null,
+      "name": string,                     // product line as printed (Arabic/Kurdish/Latin); see brand rules below
+      "brand": string | null,             // optional: standard Latin spelling when the line clearly shows a global food brand
       "quantity": number | null,
-      "unit": string | null,              // e.g. "kg", "g", "L", "piece", "pack"
+      "unit": string | null,              // e.g. "kg", "g", "L", "piece", "pack" — as printed
       "unitPrice": number | null,
       "totalPrice": number | null
     }
@@ -107,34 +152,52 @@ Rules:
 - If ingredientId is provided (${ingredientId || 'none'}), prioritize/must include the matching or most relevant item for that ingredient
 - If multiple items, include all, but the first should be the most likely main purchase
 - If field is missing/unreadable → use null
-- Handle Arabic/English mix — translate names to English if possible, but keep original if unclear
+- Handle Arabic, Kurdish, English, and mixed-language receipts or invoices
+- Read tabular invoices carefully: quantity, unit price, total price, and product description may be in separate columns
+- **Latin OCR:** When Latin letters are visible on the line, transcribe them character-by-character. Do not substitute a different word that "sounds similar" — wrong brand spellings are unacceptable. If Latin text is too blurry to read, use null for brand rather than guessing.
+- **Brand field:** If the line clearly shows a major international food brand (e.g. Nestlé, Kinder, Oreo, Milka, Doritos, Pepsi, Coca-Cola) in Latin or an unmistakable logo context, set "brand" to the standard international spelling. Put the full product description in "name" as printed (Arabic text, nicknames, sizes); you may repeat the brand in "name" if it appears there. If no clear global brand, use null for brand.
+- **No translation:** Do NOT translate supplier, names, or units into another language — transcribe only.
+- Preserve each line item distinctly. Do not reuse the same generic name for multiple different rows unless the printed text is actually the same
+- For each item name, copy the printed line text verbatim. If uncertain, prefer partial legible text over invention
+- Do not collapse multiple different products into generic labels like "oil", "biscuit", or "chocolate wafer" unless the printed line clearly says that exact thing
+- If the line contains pack-size notation like 24x24 or 52x15, do NOT put that notation in the item name. Keep the product name separate from pack/count notation
 - Return ONLY valid JSON — nothing else.
 `
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1800,
       messages: [
-        { role: 'system', content: 'You are a helpful, precise JSON-only receipt parser.' },
         {
           role: 'user',
           content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mediaType,
+                data: base64Image,
+              },
+            },
             { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: imageDataUrl } },
           ],
         },
       ],
-      temperature: 0.1,               // low for consistency
-      max_tokens: 1500,
-      response_format: { type: 'json_object' },
+      temperature: 0,
     })
 
-    const rawContent = completion.choices[0]?.message?.content || '{}'
+    const rawContent = response.content
+      .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim()
     let extractedData
 
     try {
-      extractedData = JSON.parse(rawContent)
+      const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
+      extractedData = JSON.parse(jsonMatch ? jsonMatch[0] : rawContent || '{}')
     } catch (e) {
-      console.error('Invalid JSON from OpenAI:', rawContent)
+      console.error('Invalid JSON from Claude:', rawContent)
       return NextResponse.json({ error: 'Failed to parse receipt data' }, { status: 500 })
     }
 

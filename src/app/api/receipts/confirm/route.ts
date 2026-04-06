@@ -39,6 +39,15 @@ function roundCurrency(value: number) {
   return Math.round(value * 100) / 100
 }
 
+function sanitizeReceiptIngredientName(value: string) {
+  return value
+    .replace(/\b\d+\s*[x×]\s*\d+(?:\s*[x×]\s*\d+)*\b/gi, '')
+    .replace(/\b\d+\s*(?:pcs?|pieces?|pack|packs|box|boxes|bag|bags)\b$/i, '')
+    .replace(/[()\-_,]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 function pickBestVariant(
   ingredient: IngredientWithVariants,
   brand?: string,
@@ -149,7 +158,12 @@ export async function POST(request: NextRequest) {
         throw new Error(`Receipt is already ${receipt.status.toLowerCase()}`)
       }
 
-      const processed: Array<{ ingredientId: string; expenseId: string }> = []
+      const processed: Array<{
+        ingredientId: string
+        ingredientName: string
+        expenseId: string
+        action: 'CREATED' | 'UPDATED'
+      }> = []
 
       for (const item of items as ConfirmItem[]) {
         const {
@@ -223,13 +237,21 @@ export async function POST(request: NextRequest) {
 
           expenseQuantity = stockIncrement
           expenseUnitCost = roundCurrency(unitCost)
+
+          processed.push({
+            ingredientId: targetIngredientId,
+            ingredientName: existingIngredient.name,
+            expenseId: '',
+            action: 'UPDATED',
+          })
         } else {
+          const normalizedName = sanitizeReceiptIngredientName(name.trim()) || name.trim()
           const baseUnit = canonicalise(unit || 'piece')
           const roundedUnitCost = roundCurrency(Number(unitPrice))
 
           const newIngredient = await tx.ingredient.create({
             data: {
-              name: name.trim(),
+              name: normalizedName,
               unit: baseUnit,
               restaurant: {
                 connect: { id: restaurantId },
@@ -243,8 +265,8 @@ export async function POST(request: NextRequest) {
                   brand: brand?.trim() || 'Generic',
                   supplier: supplier?.trim() || null,
                   purchaseFormat: null,
-                  packageQuantity: quantity,
-                  packageUnit: unit,
+                  packageQuantity: Number.isFinite(Number(quantity)) && Number(quantity) > 0 ? Number(quantity) : null,
+                  packageUnit: canonicalise(unit || 'piece'),
                   bulkPrice: totalPrice,
                   costPerUnit: roundedUnitCost,
                 }],
@@ -267,11 +289,18 @@ export async function POST(request: NextRequest) {
               },
             },
           })
+
+          processed.push({
+            ingredientId: targetIngredientId,
+            ingredientName: normalizedName,
+            expenseId: '',
+            action: 'CREATED',
+          })
         }
 
         const expense = await tx.expenseTransaction.create({
           data: {
-            name: `Purchase: ${name.trim()}${brand ? ` (${brand.trim()})` : ''}`,
+            name: `Purchase: ${sanitizeReceiptIngredientName(name.trim()) || name.trim()}${brand ? ` (${brand.trim()})` : ''}`,
             category: 'INVENTORY_PURCHASE',
             amount: totalPrice,
             date: date ? new Date(date) : new Date(),
@@ -283,10 +312,10 @@ export async function POST(request: NextRequest) {
           },
         })
 
-        processed.push({
-          ingredientId: targetIngredientId,
-          expenseId: expense.id,
-        })
+        const processedEntry = processed[processed.length - 1]
+        if (processedEntry && processedEntry.ingredientId === targetIngredientId) {
+          processedEntry.expenseId = expense.id
+        }
       }
 
       await tx.receipt.update({
