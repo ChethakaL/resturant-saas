@@ -1488,12 +1488,18 @@ export default function SmartMenu({
       return keywordMap.filling.some((keyword) => bucket.includes(keyword))
     }
 
+    const isSweetLike = (item: MenuItem) => {
+      const bucket = `${item.name} ${item.category?.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+      return keywordMap.sweet.some((keyword) => bucket.includes(keyword))
+    }
+
     const inferMoodIds = (moodId: keyof typeof keywordMap) =>
       menuItems
         .filter((item) => {
           if (moodId === 'sharing') return isSharingLike(item)
           if (moodId === 'light') return isLightLike(item)
           if (moodId === 'drinks') return isDrinkLike(item)
+          if (moodId === 'sweet') return isSweetLike(item)
           const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
           return keywordMap[moodId].some((keyword) => bucket.includes(keyword))
         })
@@ -1527,6 +1533,13 @@ export default function SmartMenu({
           })
         }
 
+        if (fallbackMood.id === 'sweet') {
+          itemIds = itemIds.filter((id) => {
+            const item = menuItems.find((entry) => entry.id === id)
+            return item ? isSweetLike(item) : false
+          })
+        }
+
         if (fallbackMood.id === 'sharing' && itemIds.length === 0) {
           itemIds = menuItems
             .filter((item) => isSharingLike(item) || (!isDrinkLike(item) && !isFillingLike(item)))
@@ -1557,10 +1570,7 @@ export default function SmartMenu({
 
         if (fallbackMood.id === 'sweet' && itemIds.length === 0) {
           itemIds = menuItems
-            .filter((item) => {
-              const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
-              return keywordMap.sweet.some((keyword) => bucket.includes(keyword))
-            })
+            .filter((item) => isSweetLike(item))
             .map((item) => item.id)
             .slice(0, 8)
         }
@@ -1893,9 +1903,46 @@ export default function SmartMenu({
   const tierOrder = (tier: ItemDisplayHints['displayTier']) =>
     tier === 'hero' ? 0 : tier === 'featured' ? 1 : tier === 'standard' ? 2 : 3
 
+  const isDrinkItem = useCallback((item: MenuItem) => {
+    const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+    return /drink|beverage|juice|coffee|tea|smoothie|soda|cocktail|mocktail|water|lemonade|espresso|latte|mocha|frappuccino|americano|cappuccino|macchiato|milkshake|hot chocolate|ice chocolate/.test(bucket)
+  }, [])
+
+  const isDessertItem = useCallback((item: MenuItem) => {
+    const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+    return /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding|brownie|waffle|crepe|donut|chocolate cream|white chocolate cream/.test(bucket)
+  }, [])
+
+  const isMainItem = useCallback((item: MenuItem) => {
+    if (isDrinkItem(item) || isDessertItem(item)) return false
+    const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+    return /main|grill|burger|steak|pasta|rice|dish|kebab|shawarma|platter|seafood|chicken|beef|lamb|fish|salad|breakfast|egg|falafel|sandwich/.test(bucket)
+  }, [isDessertItem, isDrinkItem])
+
+  const isSweetItem = useCallback((item: MenuItem) => {
+    const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+    return /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding|brownie|waffle|crepe|donut|chocolate|mocha|cream|frappuccino|caramel|vanilla|hazelnut|white chocolate|condensed milk|latte/.test(bucket)
+  }, [])
+
+  const getSweetPriorityScore = useCallback((item: MenuItem) => {
+    const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+    let score = 0
+
+    if (/white chocolate cream|chocolate cream|white hot chocolate|hot chocolate|ice chocolate/.test(bucket)) score += 160
+    if (/chocolate|white chocolate/.test(bucket)) score += 80
+    if (/mocha|frappuccino|cream/.test(bucket)) score += 60
+    if (/caramel|vanilla|hazelnut|condensed milk|sweet/.test(bucket)) score += 40
+    if (isDessertItem(item)) score += 35
+    if (isDrinkItem(item)) score += 20
+    if ((item._hints?.popularityScore ?? 0) > 0) score += Math.min(20, (item._hints?.popularityScore ?? 0) * 20)
+    score += Math.min(15, item.price / 2000)
+
+    return score
+  }, [isDessertItem, isDrinkItem])
+
   const getMoodPriorityScore = useCallback((item: MenuItem) => {
     if (!selectedMoodId) return 0
-    const bucket = `${item.name} ${item.category?.name ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+    const bucket = `${item.name} ${item.category?.name ?? ''} ${(item.tags ?? []).join(' ')} ${item.description ?? ''}`.toLowerCase()
 
     if (selectedMoodId === 'sharing') {
       if (/for four|for 4|four persons?|four people|family tray|family platter|family breakfast/.test(bucket)) return 120
@@ -1904,9 +1951,7 @@ export default function SmartMenu({
       return 0
     }
 
-    if (selectedMoodId === 'drinks') {
-      return /drink|beverage|juice|coffee|tea|smoothie|soda|cocktail|mocktail|water|lemonade|espresso|latte|mocha|ayran/.test(bucket) ? 100 : 0
-    }
+    if (selectedMoodId === 'drinks') return isDrinkItem(item) ? 100 : 0
 
     if (selectedMoodId === 'light') {
       return /salad|soup|appetizer|starter|toast|egg|falafel|croissant|yogurt|granola|fruit|fresh/.test(bucket) ? 100 : 0
@@ -1917,12 +1962,10 @@ export default function SmartMenu({
       return 0
     }
 
-    if (selectedMoodId === 'sweet') {
-      return /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding/.test(bucket) ? 100 : 0
-    }
+    if (selectedMoodId === 'sweet') return getSweetPriorityScore(item)
 
     return 0
-  }, [selectedMoodId])
+  }, [getSweetPriorityScore, isDrinkItem, selectedMoodId])
 
   // Category sections: when user picked a sort (price-low, etc.), preserve filteredItems order.
   // When sortBy === 'popular', use engine order: anchor first, then position, then tier.
@@ -2379,37 +2422,6 @@ export default function SmartMenu({
     })
     : activeHeroMessage || currentCopy.smartSearchDescription
 
-  const isDrinkItem = useCallback((item: MenuItem) => {
-    const category = (item.category?.name || '').toLowerCase()
-    const name = item.name.toLowerCase()
-    const tags = (item.tags || []).join(' ').toLowerCase()
-    // Only classify as drink if the CATEGORY name clearly signals it's a beverage section,
-    // OR the item name itself is purely a drink (not a food dish that contains a drink word).
-    const categoryIsDrink = /\b(drink|drinks|beverage|beverages|juice|coffee|tea|smoothie|soda|cocktails?|mocktails?|hot drinks?|cold drinks?|soft drinks?)\b/.test(category)
-    const nameIsDrink = /\b(juice|espresso|latte|cappuccino|americano|mocha|macchiato|frappe|smoothie|milkshake|lemonade|ayran|tea|coffee|soda|cola|water|cocktail|mocktail)\b/.test(`${name} ${tags}`)
-    // Exclude food items that merely mention a drink word in passing (e.g. "Chicken in lemon sauce")
-    const isObviouslyFood = /\b(chicken|beef|lamb|steak|fish|shrimp|prawn|pasta|rice|burger|kebab|shawarma|salad|soup|pizza|wrap|sandwich|platter|grill|falafel|hummus|dolma|biryani|tenderloin|fillet|chop|roast)\b/.test(`${name} ${tags}`)
-    if (isObviouslyFood) return false
-    return categoryIsDrink || nameIsDrink
-  }, [])
-
-  const isDessertItem = useCallback((item: MenuItem) => {
-    const category = (item.category?.name || '').toLowerCase()
-    const name = item.name.toLowerCase()
-    return /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding/.test(`${category} ${name}`)
-  }, [])
-
-  const isMainItem = useCallback((item: MenuItem) => {
-    if (isDrinkItem(item) || isDessertItem(item)) return false
-    const category = (item.category?.name || '').toLowerCase()
-    const name = item.name.toLowerCase()
-    const tags = (item.tags || []).join(' ').toLowerCase()
-    if (/main|grill|burger|steak|pasta|rice|dish|kebab|shawarma|platter|seafood|chicken|beef|lamb|fish/.test(`${category} ${name} ${tags}`)) {
-      return true
-    }
-    return !/appetizer|starter|share|side|dip|salad|soup/.test(`${category} ${name} ${tags}`)
-  }, [isDessertItem, isDrinkItem])
-
   const contextRankedItems = useMemo(() => {
     const scoreItem = (item: MenuItem) => {
       let score = 0
@@ -2510,13 +2522,21 @@ export default function SmartMenu({
       if (selectedMoodId === 'light') {
         return !isDrinkItem(item) && !/steak|beef|lamb|mixed grill|grill|kebab|shawarma|burger|pasta|platter|tenderloin/.test(bucket)
       }
-      if (selectedMoodId === 'sweet') return isDessertItem(item)
-      if (selectedMoodId === 'sharing') return /platter|share|sharing|starter|appetizer|combo/.test(bucket)
+      if (selectedMoodId === 'sweet') return isSweetItem(item)
+      if (selectedMoodId === 'sharing') return /platter|share|sharing|starter|appetizer|combo|for two|for 2|two persons?|two people|for four|for 4|four persons?|four people|family|group|tray|breakfast for/.test(bucket)
       if (selectedMoodId === 'filling') return isMainItem(item)
       return isMainItem(item)
     })
     const drinks = rankedFromMood.filter(({ item }) => isDrinkItem(item))
     const mains = moodSpecificMains
+
+    if (selectedMoodId === 'sweet') {
+      return rankedFromMood
+        .filter(({ item }) => isSweetItem(item))
+        .sort((a, b) => getSweetPriorityScore(b.item) - getSweetPriorityScore(a.item))
+        .slice(0, 2)
+        .map(({ item }) => ({ item, kind: (isDrinkItem(item) ? 'drink' : 'main') as 'drink' | 'main' }))
+    }
 
     if (selectedMoodId === 'drinks') {
       return drinks.slice(0, 2).map(({ item }) => ({ item, kind: 'drink' as const }))
@@ -2524,14 +2544,14 @@ export default function SmartMenu({
 
     if (selectedMoodId === 'sweet') {
       return rankedFromMood
-        .filter(({ item }) => isDessertItem(item))
+        .filter(({ item }) => /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding|brownie|chocolate|cream/.test(`${item.name} ${item.category?.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase()))
         .slice(0, 2)
         .map(({ item }) => ({ item, kind: 'main' as const }))
     }
 
     if (selectedMoodId === 'sharing') {
       return rankedFromMood
-        .filter(({ item }) => /platter|share|sharing|starter|appetizer|combo/.test(`${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()))
+        .filter(({ item }) => /platter|share|sharing|starter|appetizer|combo|for two|for 2|two persons?|two people|for four|for 4|four persons?|four people|family|group|tray|breakfast for/.test(`${item.name} ${item.category?.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase()))
         .slice(0, 2)
         .map(({ item }) => ({ item, kind: 'main' as const }))
     }
@@ -2542,7 +2562,7 @@ export default function SmartMenu({
     if (topMain) picks.push({ item: topMain, kind: 'main' })
     if (topDrink) picks.push({ item: topDrink, kind: 'drink' })
     return picks
-  }, [filteredItems, isDessertItem, isDrinkItem, isMainItem, selectedContext, selectedMoodId])
+  }, [filteredItems, getSweetPriorityScore, isDrinkItem, isMainItem, isSweetItem, selectedContext, selectedMoodId])
 
   const contextHeroItems = useMemo(() => {
     if (selectedContext === 'rainy' || selectedContext === 'cold') {
