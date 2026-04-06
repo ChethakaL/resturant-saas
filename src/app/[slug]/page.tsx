@@ -19,6 +19,7 @@ import { getMenuFeelingContext } from '@/lib/menu-feeling-message'
 import type { MenuTemperatureFeel, MenuWeatherLabel } from '@/lib/menu-feeling-message'
 import { buildContextShowcaseSuggestions } from '@/lib/context-showcase-ranking'
 import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
+import { upsertContextShowcases } from '@/lib/context-showcase-persistence'
 
 // ISR: revalidate the rendered page every 5 minutes in production.
 export const revalidate = 300
@@ -411,28 +412,29 @@ async function getMenuData(slug: string) {
         }>)
 
   if (missingContextDefinitions.length > 0) {
-    let nextDisplayOrder =
-      showcases.reduce((max, showcase) => Math.max(max, showcase.displayOrder ?? 0), 0) + 1
-
-    const syntheticShowcases = missingContextDefinitions.map((definition) => ({
-      id: `synthetic-${definition.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    await upsertContextShowcases({
       restaurantId: restaurant.id,
-      title: definition.title,
-      type: 'CHEFS_HIGHLIGHTS',
-      displayVariant: 'hero',
-      position: 'top',
-      insertAfterCategoryId: null,
-      displayOrder: nextDisplayOrder++,
-      schedule: definition.schedule,
-      items: definition.itemIds.slice(0, MAX_CONTEXT_SHOWCASE_ITEMS).map((menuItemId, index) => ({
-        id: `synthetic-${menuItemId}-${index}`,
-        menuItemId,
-        displayOrder: index,
-        menuItem: menuItems.find((item: any) => item.id === menuItemId) ?? null,
+      existingShowcases: showcases.map((showcase) => ({
+        id: showcase.id,
+        title: showcase.title,
+        displayOrder: showcase.displayOrder ?? null,
       })),
-    }))
+      definitions: missingContextDefinitions.map((definition) => ({
+        ...definition,
+        itemIds: definition.itemIds.slice(0, MAX_CONTEXT_SHOWCASE_ITEMS),
+      })),
+    })
 
-    showcases = [...showcases, ...syntheticShowcases]
+    showcases = await prisma.menuShowcase.findMany({
+      where: { restaurantId: restaurant.id, isActive: true },
+      orderBy: { displayOrder: 'asc' },
+      include: {
+        items: {
+          orderBy: { displayOrder: 'asc' },
+          include: { menuItem: true },
+        },
+      },
+    })
   }
 
   // Filter out seasonal carousels outside their date range.
