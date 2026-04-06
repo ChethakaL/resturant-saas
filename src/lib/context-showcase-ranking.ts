@@ -49,6 +49,8 @@ type ContextGroup =
   | 'comfort_food'
   | 'fallback'
 
+// ContextGroup and buildSortedGroups are retained for evaluateContext relevance scoring
+
 interface EvaluatedCandidate extends ContextShowcaseCandidate {
   itemType: ReturnType<typeof classifyItemType>
   haystack: string
@@ -57,7 +59,8 @@ interface EvaluatedCandidate extends ContextShowcaseCandidate {
   modeScore: number
 }
 
-const MAX_DEFAULT_ITEMS = 6
+/** Always exactly 3 slots: Signature → Chef's Recommendation → Guest Favorite */
+const MAX_DEFAULT_ITEMS = 3
 
 function buildHaystack(item: ContextShowcaseCandidate) {
   return `${item.name} ${item.description ?? ''} ${item.categoryName ?? ''} ${(item.tags ?? []).join(' ')}`
@@ -122,18 +125,27 @@ function evaluateContext(item: ContextShowcaseCandidate, context: ShowcaseContex
   switch (context) {
     case 'breakfast':
       if (isBreakfastFood) {
+        // Specifically breakfast items (eggs, toast, falafel, manakish, etc.)
         group = 'breakfast_core'
         relevance = 100
       } else if (isBreakfastDrink) {
+        // Coffee, tea, juice, smoothie — perfect at breakfast
         group = 'breakfast_drink'
         relevance = 88
+      } else if (isHeavyMain || (isMain && !isLightSupport)) {
+        // Any main dish that isn't specifically light/breakfast-appropriate is wrong here.
+        // isHeavyMain catches English keywords; isMain catches any "Main Dishes" classification
+        // so non-English item names (e.g. Mashawi, Kabsa) are still excluded.
+        relevance = -35
       } else if (isLightSupport) {
+        // Salads, soups, yogurt, fruit — light and perfectly fine at breakfast
         group = 'light_support'
         relevance = 72
+      } else if (isShareable) {
+        // Shareables like hummus, dolma — acceptable but not ideal at breakfast
+        relevance = 30
       } else if (isDrink) {
         relevance = 18
-      } else if (isHeavyMain) {
-        relevance = -35
       } else {
         relevance = 8
       }
@@ -181,17 +193,28 @@ function evaluateContext(item: ContextShowcaseCandidate, context: ShowcaseContex
       break
     case 'hot_day':
       if (isRefreshingDrink) {
+        // Juices, iced drinks, lemonades — perfect on a hot day
         group = 'cooling_drink'
         relevance = 110
       } else if (isCoolingFood) {
+        // Salads, yogurt, fresh/cold items — refreshing choices
         group = 'cooling_food'
         relevance = 80
-      } else if (/fish|chicken|wrap|sandwich/.test(haystack)) {
+      } else if (/fish|chicken|wrap|sandwich/.test(haystack) && !isHeavyMain && !isComfortFood) {
+        // Light mains that aren't heavy/hot
         group = 'light_main'
         relevance = 52
+      } else if (isDessert) {
+        // Ice cream and cold desserts are great on a hot day
+        relevance = 40
+      } else if (isDrink && !isWarmDrink) {
+        // Other cold/neutral drinks are still fine
+        relevance = 30
       } else if (isWarmDrink) {
         relevance = -40
-      } else if (isHeavyMain) {
+      } else if (isHeavyMain || isComfortFood) {
+        // Heavy grills, stews, comfort food — not for a hot day.
+        // isComfortFood catches items like "Lamb Stew" that don't match isHeavyMain keywords.
         relevance = -22
       } else {
         relevance = 6
@@ -200,12 +223,15 @@ function evaluateContext(item: ContextShowcaseCandidate, context: ShowcaseContex
     case 'rainy_day':
     case 'cold_day':
       if (isWarmDrink) {
+        // Hot coffee, tea, sahlab — perfect comfort on a rainy/cold day
         group = 'warm_drink'
         relevance = 110
       } else if (isComfortFood || isDinnerMain) {
+        // Hearty grills, soups, stews, kebabs — exactly what you want
         group = 'comfort_food'
         relevance = 92
       } else if (isRefreshingDrink || /salad|cold/.test(haystack)) {
+        // Cold drinks and salads are not appropriate on a rainy/cold day
         relevance = -24
       } else {
         relevance = 8
@@ -239,70 +265,84 @@ function buildSortedGroups(items: EvaluatedCandidate[]) {
   return groups
 }
 
+/**
+ * Picks exactly 3 items per the behavioral-economics 3-slot framework:
+ *
+ *   Slot 0 — "Signature"         : highest-priced item relevant to this context (price anchor).
+ *   Slot 1 — "Chef's Recommendation" : highest-margin item that costs LESS than the Signature (the target).
+ *   Slot 2 — "Guest Favorite"    : second-highest-margin item not yet picked (social proof).
+ *
+ * Items with negative relevance for the context are excluded from all slots.
+ * Falls back gracefully when the menu has fewer than 3 eligible items.
+ */
 function pickForContext(items: ContextShowcaseCandidate[], context: ShowcaseContext, mode: RankingMode, usedSalesData: boolean, maxItems = MAX_DEFAULT_ITEMS) {
-  const evaluated = items.map((item) => evaluateContext(item, context, mode, usedSalesData))
-  const groups = buildSortedGroups(evaluated)
+  const evaluated = items
+    .map((item) => evaluateContext(item, context, mode, usedSalesData))
+    .filter((item) => item.relevance >= 0)
+    .filter((item) => {
+      if (context !== 'breakfast') return true
+      return !/(mixed grill|grill|kebab|biryani|kabsa|tikka|masgouf|shawarma|lamb|beef|platter)/.test(item.haystack)
+    })
 
-  const quotas: Record<ShowcaseContext, Array<{ group: ContextGroup; limit: number }>> = {
-    breakfast: [
-      { group: 'breakfast_core', limit: 3 },
-      { group: 'breakfast_drink', limit: 2 },
-      { group: 'light_support', limit: 1 },
-    ],
-    lunch: [
-      { group: 'lunch_main', limit: 4 },
-      { group: 'refreshing_support', limit: 1 },
-      { group: 'general_main', limit: 1 },
-    ],
-    dinner: [
-      { group: 'dinner_main', limit: 4 },
-      { group: 'sharing', limit: 1 },
-      { group: 'evening_support', limit: 1 },
-    ],
-    hot_day: [
-      { group: 'cooling_drink', limit: 3 },
-      { group: 'cooling_food', limit: 2 },
-      { group: 'light_main', limit: 1 },
-    ],
-    rainy_day: [
-      { group: 'warm_drink', limit: 2 },
-      { group: 'comfort_food', limit: 4 },
-    ],
-    cold_day: [
-      { group: 'warm_drink', limit: 2 },
-      { group: 'comfort_food', limit: 4 },
-    ],
-  }
+  if (evaluated.length === 0) return []
 
-  const selected: string[] = []
-  const seen = new Set<string>()
-  const addItem = (item?: EvaluatedCandidate) => {
-    if (!item || seen.has(item.id) || selected.length >= maxItems) return
-    selected.push(item.id)
-    seen.add(item.id)
-  }
+  const maxRelevance = Math.max(...evaluated.map((item) => item.relevance))
+  const preferredRelevanceFloor = Math.max(0, maxRelevance - 30)
+  const preferred = evaluated.filter((item) => item.relevance >= preferredRelevanceFloor)
+  const byPrice = [...preferred].sort((a, b) => b.price - a.price || b.modeScore - a.modeScore)
 
-  for (const { group, limit } of quotas[context]) {
-    const list = groups.get(group) ?? []
-    let taken = 0
-    for (const item of list) {
-      if (taken >= limit || selected.length >= maxItems) break
-      if (seen.has(item.id)) continue
-      addItem(item)
-      taken += 1
-    }
-  }
+  // Slot 0 — Signature: highest-priced item.
+  // For meal-time contexts (breakfast/lunch/dinner/rainy/cold), prefer food items as the
+  // price anchor — a warm coffee should never be the "Signature" in a dinner recommendation.
+  // Hot-day context is the exception: a premium refreshing drink can lead.
+  const isMealContext = context === 'breakfast' || context === 'lunch' || context === 'dinner' || context === 'rainy_day' || context === 'cold_day'
+  const foodItems = byPrice.filter((item) => item.itemType !== 'Drinks')
+  const signature = isMealContext
+    ? (foodItems[0] ?? byPrice[0]) // prefer food, fall back to anything if no food items
+    : byPrice[0]                   // hot_day: most expensive item wins (could be a premium drink)
 
-  const fallback = evaluated
-    .slice()
-    .sort((a, b) => b.relevance - a.relevance || b.modeScore - a.modeScore || b.price - a.price)
+  // Slot 1 — Chef's Recommendation: highest-margin food item cheaper than Signature
+  // Also prefer food items here; drinks in this slot confuse the value narrative.
+  const byMargin = [...preferred]
+    .filter((item) => item.id !== signature.id && item.price < signature.price)
+    .sort((a, b) => b.modeScore - a.modeScore || b.marginPercent - a.marginPercent)
+  const fallbackByMargin = [...evaluated]
+    .filter((item) => item.id !== signature.id && item.price < signature.price)
+    .sort((a, b) => b.modeScore - a.modeScore || b.marginPercent - a.marginPercent)
+  const foodByMargin = byMargin.filter((item) => item.itemType !== 'Drinks')
+  const fallbackFoodByMargin = fallbackByMargin.filter((item) => item.itemType !== 'Drinks')
+  const chefsRec = foodByMargin[0] ?? byMargin[0] ?? fallbackFoodByMargin[0] ?? fallbackByMargin[0]
 
-  for (const item of fallback) {
-    if (selected.length >= maxItems) break
-    addItem(item)
-  }
+  const shouldReserveWeatherDrink = context === 'hot_day' || context === 'rainy_day' || context === 'cold_day'
+  const picked = new Set([signature.id, chefsRec?.id].filter(Boolean) as string[])
 
-  return selected
+  const preferredWeatherDrinks = [...preferred]
+    .filter((item) => !picked.has(item.id) && item.itemType === 'Drinks')
+    .sort((a, b) => b.relevance - a.relevance || b.modeScore - a.modeScore || b.marginPercent - a.marginPercent || b.price - a.price)
+  const fallbackWeatherDrinks = [...evaluated]
+    .filter((item) => !picked.has(item.id) && item.itemType === 'Drinks')
+    .sort((a, b) => b.relevance - a.relevance || b.modeScore - a.modeScore || b.marginPercent - a.marginPercent || b.price - a.price)
+  const weatherDrink = shouldReserveWeatherDrink
+    ? preferredWeatherDrinks[0] ?? fallbackWeatherDrinks[0]
+    : undefined
+
+  if (weatherDrink) picked.add(weatherDrink.id)
+
+  // Slot 2 — Guest Favorite: second-highest-margin item not yet picked
+  const byMarginAll = [...preferred]
+    .filter((item) => !picked.has(item.id))
+    .sort((a, b) => b.modeScore - a.modeScore || b.marginPercent - a.marginPercent)
+  const fallbackByMarginAll = [...evaluated]
+    .filter((item) => !picked.has(item.id))
+    .sort((a, b) => b.modeScore - a.modeScore || b.marginPercent - a.marginPercent)
+  const guestFavorite = weatherDrink ?? byMarginAll[0] ?? fallbackByMarginAll[0]
+
+  const result = [signature, chefsRec, guestFavorite]
+    .filter(Boolean)
+    .slice(0, maxItems)
+    .map((item) => item!.id)
+
+  return result
 }
 
 export function buildContextShowcaseSuggestions(

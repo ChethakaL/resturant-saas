@@ -226,7 +226,22 @@ async function getMenuData() {
   const slotTimes = parseSlotTimes(settings.slotTimes)
   const currentSlot = getCurrentTimeSlot(timezone, slotTimes)
 
-  type ScheduleShape = { useTimeSlots?: boolean; displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'; displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]; breakfast?: { itemIds?: string[] }; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] }; label?: string; seasonalStart?: string; seasonalEnd?: string; seasonalBackgroundUrl?: string; seasonalItemImages?: Record<string, string>; } | null
+  type ScheduleShape = {
+    useTimeSlots?: boolean
+    displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'
+    displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]
+    breakfast?: { itemIds?: string[] }
+    day?: { itemIds?: string[] }
+    evening?: { itemIds?: string[] }
+    night?: { itemIds?: string[] }
+    weatherLabels?: ('clear' | 'partly-cloudy' | 'cloudy' | 'fog' | 'rain' | 'snow' | 'storm')[]
+    temperatureFeels?: ('cold' | 'cool' | 'mild' | 'warm' | 'hot')[]
+    label?: string
+    seasonalStart?: string
+    seasonalEnd?: string
+    seasonalBackgroundUrl?: string
+    seasonalItemImages?: Record<string, string>
+  } | null
   const scheduleType = (s: typeof showcases[0]) => s.schedule as ScheduleShape
 
   // Filter out seasonal carousels whose date range doesn't include today
@@ -239,14 +254,17 @@ async function getMenuData() {
     return true
   })
 
-  const slotMatches = (schedule: ScheduleShape) => {
+  const scheduleMatches = (schedule: ScheduleShape) => {
+    if (!schedule) return true
     const slots = schedule?.displayForSlots
-    if (Array.isArray(slots) && slots.length > 0) return slots.includes(currentSlot)
+    if (Array.isArray(slots) && slots.length > 0 && !slots.includes(currentSlot)) return false
     const slot = schedule?.displayForSlot
-    if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') return currentSlot === slot
+    if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') {
+      if (currentSlot !== slot) return false
+    }
     return true
   }
-  const filtered = showcasesToFilter.filter((s) => slotMatches(scheduleType(s)))
+  const filtered = showcasesToFilter.filter((s) => scheduleMatches(scheduleType(s)))
   const showcasesToShow = [...filtered].sort((a, b) => {
     const aSlots = scheduleType(a)?.displayForSlots
     const aSingle = scheduleType(a)?.displayForSlot

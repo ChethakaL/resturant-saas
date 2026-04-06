@@ -83,6 +83,10 @@ interface TimeSlotSchedule {
   displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'
   /** When set, this carousel is shown during any of these slots (e.g. lunch = day + evening). */
   displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]
+  /** Optional weather labels that must match the live menu weather context. */
+  weatherLabels?: ('clear' | 'partly-cloudy' | 'cloudy' | 'fog' | 'rain' | 'snow' | 'storm')[]
+  /** Optional temperature feels that must match the live menu weather context. */
+  temperatureFeels?: ('cold' | 'cool' | 'mild' | 'warm' | 'hot')[]
   /** Optional decorative badge label shown on the carousel (e.g. "🎄 Christmas Special") */
   label?: string
   /** ISO date string — carousel is only shown on or after this date */
@@ -272,7 +276,7 @@ export default function MenuOptimizationContent({
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
   const prevEngineModeRef = useRef<EngineMode>(resolvedMode)
-  const maxCarouselItems = (engineMode === 'profit' || engineMode === 'adaptive') ? 6 : 999
+  const maxCarouselItems = (engineMode === 'profit' || engineMode === 'adaptive') ? 3 : 999
 
   useEffect(() => {
     setShowcases(mergeShowcasesWithMenuItems(initialShowcases, menuItems))
@@ -816,7 +820,7 @@ export default function MenuOptimizationContent({
         itemIds: hotDayIds,
         position: 'top',
         insertAfterCategoryId: null,
-        schedule: { label: 'Hot Day' },
+        schedule: { label: 'Hot Day', temperatureFeels: ['hot', 'warm'], weatherLabels: ['clear', 'partly-cloudy', 'cloudy'] },
       })
       list = await upsertShowcase({
         title: "Chef's recommendation for a rainy day",
@@ -825,7 +829,7 @@ export default function MenuOptimizationContent({
         itemIds: rainyDayIds,
         position: 'top',
         insertAfterCategoryId: null,
-        schedule: { label: 'Rainy Day' },
+        schedule: { label: 'Rainy Day', weatherLabels: ['rain', 'storm'] },
       })
       list = await upsertShowcase({
         title: "Chef's recommendation for a cold day",
@@ -834,7 +838,7 @@ export default function MenuOptimizationContent({
         itemIds: coldDayIds,
         position: 'top',
         insertAfterCategoryId: null,
-        schedule: { label: 'Cold Day' },
+        schedule: { label: 'Cold Day', temperatureFeels: ['cold', 'cool'] },
       })
 
       setShowcases(mergeShowcasesWithMenuItems(list, menuItems))
@@ -1095,7 +1099,7 @@ export default function MenuOptimizationContent({
               <CardTitle>{td('Featured sections on your menu')}</CardTitle>
               <p className="text-sm text-slate-500 mt-1">
                 {td('Swipeable rows of items on the menu.')} {engineMode === 'classic' && td('You choose items or use defaults.')}
-                {(engineMode === 'profit' || engineMode === 'adaptive') && td("Profit and Smart Profit modes auto-build featured sections for breakfast, lunch, dinner, hot day, rainy day, and cold day. Time-based sections show in their time period, and weather sections are used by the client menu simulation. Up to 6 dishes per section.")}
+                {(engineMode === 'profit' || engineMode === 'adaptive') && td("Profit and Smart Profit modes auto-build featured sections for breakfast, lunch, dinner, hot day, rainy day, and cold day. Time-based sections show in their time period, and weather sections are used by the client menu simulation. Exactly 3 dishes per section: Signature (price anchor), Chef's Recommendation (highest margin), and Guest Favorite (social proof).")}
               </p>
             </div>
             <div className="flex items-center gap-2">

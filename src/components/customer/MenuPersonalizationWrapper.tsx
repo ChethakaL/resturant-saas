@@ -29,6 +29,11 @@ export interface MenuPersonalizationWrapperProps {
   upsellMap?: Record<string, UpsellSuggestion[]>
   categoryOrder?: string[]
   menuTimezone?: string
+  slotTimes?: {
+    breakfast: { start: number; end: number }
+    day: { start: number; end: number }
+    evening: { start: number; end: number }
+  } | null
   categoryAnchorBundle?: Record<string, BundleHint>
   maxInitialItemsPerCategory?: number
   tables?: { id: string; number: string }[]
@@ -54,6 +59,7 @@ export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProp
       initialLanguage={props.initialLanguage}
       initialTranslationCache={props.initialTranslationCache}
       menuTimezone={props.menuTimezone}
+      slotTimes={props.slotTimes}
       tableSize={validTableSize}
       tableNumber={tableNumber}
       tables={props.tables}

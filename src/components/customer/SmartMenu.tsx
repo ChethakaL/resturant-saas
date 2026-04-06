@@ -30,6 +30,7 @@ import { logMenuEvent } from '@/lib/menu-events'
 import { googleFontUrl, resolveGoogleFont } from '@/lib/google-fonts'
 import type { ItemDisplayHints, BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
 import type { MenuFeelingContext } from '@/lib/menu-feeling-message'
+import { getCurrentTimeSlot, type SlotTimes } from '@/lib/time-slots'
 
 interface MenuItem {
   id: string
@@ -75,6 +76,8 @@ interface CategorySection {
   id: string
   name: string
   displayOrder: number
+  /** If set, this category only appears during specific time contexts (morning/lunch/evening). */
+  availableContexts?: string[]
 }
 
 interface MenuTheme {
@@ -110,6 +113,7 @@ interface SmartMenuProps {
   upsellMap?: Record<string, UpsellSuggestion[]>
   categoryOrder?: string[]
   menuTimezone?: string
+  slotTimes?: SlotTimes | null
   tableSize?: number
   /** When menu is opened from a table (e.g. QR code), pass table number so the order is assigned to that table. */
   tableNumber?: string
@@ -168,6 +172,12 @@ function getAutoContextForTimeZone(timeZone?: string | null, preferBrowserTimeZo
 function getTimeContextForHour(hour: number): 'morning' | 'lunch' | 'evening' {
   if (hour >= 6 && hour < 11) return 'morning'
   if (hour >= 11 && hour < 16) return 'lunch'
+  return 'evening'
+}
+
+function mapSlotToDisplayContext(slot: 'breakfast' | 'day' | 'evening' | 'night'): 'morning' | 'lunch' | 'evening' {
+  if (slot === 'breakfast') return 'morning'
+  if (slot === 'day') return 'lunch'
   return 'evening'
 }
 
@@ -294,6 +304,9 @@ const uiCopyMap: Record<
     tryItemLabel: string
     suggestingLabel: string
     chefRecommendationLabel: string
+    signatureBadge: string
+    chefsRecBadge: string
+    guestFavoriteBadge: string
     pairingsButtonLabel: string
     moreInfoButtonLabel: string
     limitedTodayLabel: string
@@ -321,6 +334,7 @@ const uiCopyMap: Record<
     sortCaloriesLow: string
     ordersLabel: string
     seeMoreDishesLabel: string
+    seeMoreDrinksLabel: string
   }
 > = {
   en: {
@@ -358,6 +372,9 @@ const uiCopyMap: Record<
     tryItemLabel: 'Try',
     suggestingLabel: 'Suggesting…',
     chefRecommendationLabel: "Chef's recommendation",
+    signatureBadge: 'Signature',
+    chefsRecBadge: "Chef's Recommendation",
+    guestFavoriteBadge: 'Guest Favorite',
     pairingsButtonLabel: 'Pairings',
     moreInfoButtonLabel: 'More info',
     limitedTodayLabel: 'Limited Today',
@@ -385,6 +402,7 @@ const uiCopyMap: Record<
     sortCaloriesLow: 'Calories: Low → High',
     ordersLabel: 'orders',
     seeMoreDishesLabel: 'See {count} more dishes →',
+    seeMoreDrinksLabel: 'See {count} more drinks →',
   },
   ar: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -421,6 +439,9 @@ const uiCopyMap: Record<
     tryItemLabel: 'جرّب',
     suggestingLabel: 'جاري الاقتراح…',
     chefRecommendationLabel: 'توصية الشيف',
+    signatureBadge: 'الطبق المميز',
+    chefsRecBadge: 'توصية الشيف',
+    guestFavoriteBadge: 'الأكثر طلبًا',
     pairingsButtonLabel: 'مقترحات',
     moreInfoButtonLabel: 'مزيد من المعلومات',
     limitedTodayLabel: 'محدود اليوم',
@@ -448,6 +469,7 @@ const uiCopyMap: Record<
     sortCaloriesLow: 'السعرات: من الأقل إلى الأعلى',
     ordersLabel: 'طلبات',
     seeMoreDishesLabel: 'عرض {count} طبقًا إضافيًا ←',
+    seeMoreDrinksLabel: 'عرض {count} مشروبًا إضافيًا ←',
   },
   ar_fusha: {
     searchPlaceholder: 'ابحث عن الأطباق…',
@@ -484,6 +506,9 @@ const uiCopyMap: Record<
     tryItemLabel: 'جرّب',
     suggestingLabel: 'جاري الاقتراح…',
     chefRecommendationLabel: 'توصية الشيف',
+    signatureBadge: 'الطبق المميز',
+    chefsRecBadge: 'توصية الشيف',
+    guestFavoriteBadge: 'الأكثر طلبًا',
     pairingsButtonLabel: 'مقترحات',
     moreInfoButtonLabel: 'مزيد من المعلومات',
     limitedTodayLabel: 'محدود اليوم',
@@ -511,6 +536,7 @@ const uiCopyMap: Record<
     sortCaloriesLow: 'السعرات: من الأقل إلى الأعلى',
     ordersLabel: 'طلبات',
     seeMoreDishesLabel: 'عرض {count} طبقًا إضافيًا ←',
+    seeMoreDrinksLabel: 'عرض {count} مشروبًا إضافيًا ←',
   },
   ku: {
     searchPlaceholder: 'ئێستا خواردنەکان بگەڕە…',
@@ -547,6 +573,9 @@ const uiCopyMap: Record<
     tryItemLabel: 'تاقی بکەرەوە',
     suggestingLabel: 'پێشنیار دەکرێت…',
     chefRecommendationLabel: 'پێشنیاری چێشتلێنەر',
+    signatureBadge: 'تایبەت',
+    chefsRecBadge: 'پێشنیاری چێشتلێنەر',
+    guestFavoriteBadge: 'دڵخوازی میوانەکان',
     pairingsButtonLabel: 'پێشنیارە هاوپەیوەندەکان',
     moreInfoButtonLabel: 'زانیاری زیاتر',
     limitedTodayLabel: 'تەنها بۆ ئەمڕۆ',
@@ -574,6 +603,7 @@ const uiCopyMap: Record<
     sortCaloriesLow: 'کالۆری: لە کەمەوە بۆ زۆر',
     ordersLabel: 'داواکراو',
     seeMoreDishesLabel: '{count} خواردنی زیاتر ببینە ←',
+    seeMoreDrinksLabel: '{count} خواردنەوەی زیاتر ببینە ←',
   },
 }
 
@@ -830,6 +860,7 @@ export default function SmartMenu({
   moods = [],
   categoryOrder,
   menuTimezone,
+  slotTimes,
   tableSize,
   tableNumber,
   tables,
@@ -849,6 +880,16 @@ export default function SmartMenu({
 
   const pathname = usePathname()
   const languageStorageKey = `smart-menu-language:${restaurantId}:${pathname || '/'}`
+
+  // Compute the current time context early so category time-bounding can use it
+  // before the full resolveAutoContext + autoContext memos are available.
+  const earlyTimeContext = useMemo(() => {
+    try {
+      return mapSlotToDisplayContext(getCurrentTimeSlot(menuTimezone || 'Asia/Baghdad', slotTimes))
+    } catch {
+      return getAutoContextForTimeZone(menuTimezone)
+    }
+  }, [menuTimezone, slotTimes])
 
   const [search, setSearch] = useState('')
   const [isSearchFocused, setIsSearchFocused] = useState(false)
@@ -1428,12 +1469,18 @@ export default function SmartMenu({
 
     const isLightLike = (item: MenuItem) => {
       const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
-      return keywordMap.light.some((keyword) => bucket.includes(keyword))
+      const isHeavy = /steak|beef|lamb|mixed grill|grill|kebab|shawarma|burger|pasta|rice platter|platter|tenderloin/.test(bucket)
+      const isActuallyLight =
+        /salad|soup|appetizer|starter|toast|egg|falafel|croissant|yogurt|granola|fruit|fresh|mix salad/.test(bucket)
+      return !isHeavy && (isActuallyLight || isDrinkLike(item) || keywordMap.light.some((keyword) => bucket.includes(keyword)))
     }
 
     const isSharingLike = (item: MenuItem) => {
       const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
-      return keywordMap.sharing.some((keyword) => bucket.includes(keyword))
+      return (
+        keywordMap.sharing.some((keyword) => bucket.includes(keyword)) ||
+        /for two|for 2|two persons?|two people|for four|for 4|four persons?|four people|family|group|tray|breakfast for/.test(bucket)
+      )
     }
 
     const isFillingLike = (item: MenuItem) => {
@@ -1444,6 +1491,9 @@ export default function SmartMenu({
     const inferMoodIds = (moodId: keyof typeof keywordMap) =>
       menuItems
         .filter((item) => {
+          if (moodId === 'sharing') return isSharingLike(item)
+          if (moodId === 'light') return isLightLike(item)
+          if (moodId === 'drinks') return isDrinkLike(item)
           const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
           return keywordMap[moodId].some((keyword) => bucket.includes(keyword))
         })
@@ -1462,6 +1512,20 @@ export default function SmartMenu({
       .map((fallbackMood) => {
         const serverMood = serverMoodMap.get(fallbackMood.id)
         let itemIds = serverMood?.itemIds?.length ? serverMood.itemIds : fallbackMood.itemIds
+
+        if (fallbackMood.id === 'light') {
+          itemIds = itemIds.filter((id) => {
+            const item = menuItems.find((entry) => entry.id === id)
+            return item ? isLightLike(item) : false
+          })
+        }
+
+        if (fallbackMood.id === 'drinks') {
+          itemIds = itemIds.filter((id) => {
+            const item = menuItems.find((entry) => entry.id === id)
+            return item ? isDrinkLike(item) : false
+          })
+        }
 
         if (fallbackMood.id === 'sharing' && itemIds.length === 0) {
           itemIds = menuItems
@@ -1622,6 +1686,9 @@ export default function SmartMenu({
 
     return items.filter((item) => {
       const bucket = `${item.name} ${item.category?.name ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+      if (mood.id === 'sharing') {
+        return keywords.some((keyword) => bucket.includes(keyword)) || /for two|for 2|two persons?|two people|for four|for 4|four persons?|four people|family|group|tray|breakfast for/.test(bucket)
+      }
       return keywords.some((keyword) => bucket.includes(keyword))
     })
   }, [availableMoods, baseFilteredItems, selectedMoodId])
@@ -1826,6 +1893,37 @@ export default function SmartMenu({
   const tierOrder = (tier: ItemDisplayHints['displayTier']) =>
     tier === 'hero' ? 0 : tier === 'featured' ? 1 : tier === 'standard' ? 2 : 3
 
+  const getMoodPriorityScore = useCallback((item: MenuItem) => {
+    if (!selectedMoodId) return 0
+    const bucket = `${item.name} ${item.category?.name ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+
+    if (selectedMoodId === 'sharing') {
+      if (/for four|for 4|four persons?|four people|family tray|family platter|family breakfast/.test(bucket)) return 120
+      if (/for two|for 2|two persons?|two people/.test(bucket)) return 110
+      if (/platter|share|sharing|combo|tray|family|group/.test(bucket)) return 100
+      return 0
+    }
+
+    if (selectedMoodId === 'drinks') {
+      return /drink|beverage|juice|coffee|tea|smoothie|soda|cocktail|mocktail|water|lemonade|espresso|latte|mocha|ayran/.test(bucket) ? 100 : 0
+    }
+
+    if (selectedMoodId === 'light') {
+      return /salad|soup|appetizer|starter|toast|egg|falafel|croissant|yogurt|granola|fruit|fresh/.test(bucket) ? 100 : 0
+    }
+
+    if (selectedMoodId === 'filling') {
+      if (/main|grill|burger|steak|pasta|rice|dish|kebab|shawarma|platter|seafood|chicken|beef|lamb|fish/.test(bucket)) return 100
+      return 0
+    }
+
+    if (selectedMoodId === 'sweet') {
+      return /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding/.test(bucket) ? 100 : 0
+    }
+
+    return 0
+  }, [selectedMoodId])
+
   // Category sections: when user picked a sort (price-low, etc.), preserve filteredItems order.
   // When sortBy === 'popular', use engine order: anchor first, then position, then tier.
   const categorizedSections = useMemo(() => {
@@ -1833,15 +1931,21 @@ export default function SmartMenu({
       return [{ category: null as CategorySection | null, items: filteredItems }]
     }
 
+    // Hide categories that are only available at a specific time of day
+    const timeVisibleCategories = categoriesProp.filter((cat) => {
+      if (!cat.availableContexts || cat.availableContexts.length === 0) return true
+      return cat.availableContexts.includes(earlyTimeContext)
+    })
+
     const sections: Array<{ category: CategorySection | null; items: MenuItem[] }> = []
     const sortedCategories =
       categoryOrder && categoryOrder.length > 0
-        ? [...categoriesProp].sort(
+        ? [...timeVisibleCategories].sort(
           (a, b) =>
             (categoryOrder.indexOf(a.id) === -1 ? 999 : categoryOrder.indexOf(a.id)) -
             (categoryOrder.indexOf(b.id) === -1 ? 999 : categoryOrder.indexOf(b.id))
         )
-        : [...categoriesProp].sort((a, b) => a.displayOrder - b.displayOrder)
+        : [...timeVisibleCategories].sort((a, b) => a.displayOrder - b.displayOrder)
 
     const useEngineOrder = sortBy === 'popular'
 
@@ -1849,7 +1953,7 @@ export default function SmartMenu({
       const categoryItems = filteredItems.filter(
         (item) => item.category?.id === cat.id
       )
-      const ordered = useEngineOrder
+      const orderedBase = useEngineOrder
         ? [...categoryItems].sort((a, b) => {
             const hintsA = a._hints
             const hintsB = b._hints
@@ -1861,21 +1965,32 @@ export default function SmartMenu({
             return tierOrder(hintsA?.displayTier ?? 'standard') - tierOrder(hintsB?.displayTier ?? 'standard')
           })
         : categoryItems
+      const ordered = selectedMoodId
+        ? [...orderedBase].sort((a, b) => {
+            const moodDelta = getMoodPriorityScore(b) - getMoodPriorityScore(a)
+            if (moodDelta !== 0) return moodDelta
+            return orderedBase.indexOf(a) - orderedBase.indexOf(b)
+          })
+        : orderedBase
       if (ordered.length > 0) {
         sections.push({ category: cat, items: ordered })
       }
     }
 
-    const uncategorized = filteredItems.filter(
-      (item) =>
-        !categoriesProp.some((c) => c.id === item.category?.id)
-    )
+    const visibleCategoryIds = new Set(timeVisibleCategories.map((category) => category.id))
+    const allCategoryIds = new Set(categoriesProp.map((category) => category.id))
+    const uncategorized = filteredItems.filter((item) => {
+      const categoryId = item.category?.id
+      if (!categoryId) return true
+      if (visibleCategoryIds.has(categoryId)) return false
+      return !allCategoryIds.has(categoryId)
+    })
     if (uncategorized.length > 0) {
       sections.push({ category: null, items: uncategorized })
     }
 
     return sections
-  }, [filteredItems, categoriesProp, categoryOrder, sortBy])
+  }, [filteredItems, categoriesProp, categoryOrder, sortBy, earlyTimeContext, getMoodPriorityScore, selectedMoodId])
 
   // Highlight which section is in view (for the sticky nav)
   useEffect(() => {
@@ -2220,20 +2335,13 @@ export default function SmartMenu({
             ? Intl.DateTimeFormat().resolvedOptions().timeZone
             : null
         const effectiveTimeZone = browserTimeZone || menuTimezone || 'Asia/Baghdad'
-        const hour = parseInt(
-          new Intl.DateTimeFormat('en-GB', {
-            hour: 'numeric',
-            hour12: false,
-            timeZone: effectiveTimeZone,
-          }).format(new Date()),
-          10
-        )
-        return getTimeContextForHour(hour)
+        const slot = getCurrentTimeSlot(effectiveTimeZone, slotTimes)
+        return mapSlotToDisplayContext(slot)
       } catch {
         return getAutoContextForTimeZone(menuTimezone)
       }
     },
-    [menuTimezone, smartSearchFeelingContext]
+    [menuTimezone, slotTimes, smartSearchFeelingContext]
   )
 
   const autoContext = useMemo<ContextKey>(() => resolveAutoContext(false), [resolveAutoContext])
@@ -2275,7 +2383,14 @@ export default function SmartMenu({
     const category = (item.category?.name || '').toLowerCase()
     const name = item.name.toLowerCase()
     const tags = (item.tags || []).join(' ').toLowerCase()
-    return /drink|beverage|juice|coffee|tea|smoothie|soda|cocktail|mocktail|water|lemonade|espresso|latte|mocha|ayran/.test(`${category} ${name} ${tags}`)
+    // Only classify as drink if the CATEGORY name clearly signals it's a beverage section,
+    // OR the item name itself is purely a drink (not a food dish that contains a drink word).
+    const categoryIsDrink = /\b(drink|drinks|beverage|beverages|juice|coffee|tea|smoothie|soda|cocktails?|mocktails?|hot drinks?|cold drinks?|soft drinks?)\b/.test(category)
+    const nameIsDrink = /\b(juice|espresso|latte|cappuccino|americano|mocha|macchiato|frappe|smoothie|milkshake|lemonade|ayran|tea|coffee|soda|cola|water|cocktail|mocktail)\b/.test(`${name} ${tags}`)
+    // Exclude food items that merely mention a drink word in passing (e.g. "Chicken in lemon sauce")
+    const isObviouslyFood = /\b(chicken|beef|lamb|steak|fish|shrimp|prawn|pasta|rice|burger|kebab|shawarma|salad|soup|pizza|wrap|sandwich|platter|grill|falafel|hummus|dolma|biryani|tenderloin|fillet|chop|roast)\b/.test(`${name} ${tags}`)
+    if (isObviouslyFood) return false
+    return categoryIsDrink || nameIsDrink
   }, [])
 
   const isDessertItem = useCallback((item: MenuItem) => {
@@ -2350,14 +2465,84 @@ export default function SmartMenu({
       .sort((a, b) => b.score - a.score)
   }, [baseFilteredItems, isDrinkItem, isMainItem, selectedContext])
 
-  const contextSuggestedItems = useMemo(() => {
-    const drinks = contextRankedItems.filter(({ item }) => isDrinkItem(item))
-    const mains = contextRankedItems.filter(({ item }) => isMainItem(item))
-    return {
-      drink: drinks[0]?.item ?? null,
-      main: mains[0]?.item ?? null,
+  const contextSuggestedCards = useMemo(() => {
+    // Score items from the mood-filtered pool so Excellent Picks change when a mood is selected.
+    // Hero cards (contextHeroItems) still use baseFilteredItems via contextRankedItems.
+    const scoreItem = (item: MenuItem) => {
+      const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+      let score = 0
+      if (item._hints?.isAnchor) score += 30
+      if (item._hints?.displayTier === 'hero') score += 24
+      if (item._hints?.displayTier === 'featured') score += 18
+      score += Math.min(item.popularityScore || 0, 40)
+      score += Math.min(item.price / 1000, 18)
+      if (selectedContext === 'morning') {
+        if (/coffee|tea|espresso|latte|juice/.test(bucket)) score += 30
+        if (/breakfast|egg|toast|falafel|pastry/.test(bucket)) score += 18
+        if (/steak|beef|lamb|platter|mixed grill/.test(bucket)) score -= 50
+      }
+      if (selectedContext === 'lunch') {
+        if (/juice|lemonade|ayran/.test(bucket)) score += 18
+        if (/grill|rice|burger|kebab|shawarma|platter|chicken|beef|lamb|fish/.test(bucket)) score += 34
+      }
+      if (selectedContext === 'hot') {
+        if (/juice|lemonade|iced|cold|ayran|smoothie/.test(bucket)) score += 32
+        if (/salad|light|chicken|fish/.test(bucket)) score += 20
+      }
+      if (selectedContext === 'evening') {
+        if (/tea|coffee|juice|mocktail|ayran/.test(bucket)) score += 18
+        if (/grill|steak|kebab|fish|lamb|beef|main/.test(bucket)) score += 30
+      }
+      if (selectedContext === 'rainy' || selectedContext === 'cold') {
+        if (/coffee|tea|espresso|cappuccino|hot chocolate|mocha|latte/.test(bucket)) score += 42
+        if (/soup|stew|grill|kebab|lamb|beef|pasta|rice/.test(bucket)) score += 28
+      }
+      return score
     }
-  }, [contextRankedItems, isDrinkItem, isMainItem])
+
+    const rankedFromMood = filteredItems
+      .map((item) => ({ item, score: scoreItem(item) }))
+      .sort((a, b) => b.score - a.score)
+
+    const moodSpecificMains = rankedFromMood.filter(({ item }) => {
+      const bucket = `${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+      if (selectedMoodId === 'drinks') return false
+      if (selectedMoodId === 'light') {
+        return !isDrinkItem(item) && !/steak|beef|lamb|mixed grill|grill|kebab|shawarma|burger|pasta|platter|tenderloin/.test(bucket)
+      }
+      if (selectedMoodId === 'sweet') return isDessertItem(item)
+      if (selectedMoodId === 'sharing') return /platter|share|sharing|starter|appetizer|combo/.test(bucket)
+      if (selectedMoodId === 'filling') return isMainItem(item)
+      return isMainItem(item)
+    })
+    const drinks = rankedFromMood.filter(({ item }) => isDrinkItem(item))
+    const mains = moodSpecificMains
+
+    if (selectedMoodId === 'drinks') {
+      return drinks.slice(0, 2).map(({ item }) => ({ item, kind: 'drink' as const }))
+    }
+
+    if (selectedMoodId === 'sweet') {
+      return rankedFromMood
+        .filter(({ item }) => isDessertItem(item))
+        .slice(0, 2)
+        .map(({ item }) => ({ item, kind: 'main' as const }))
+    }
+
+    if (selectedMoodId === 'sharing') {
+      return rankedFromMood
+        .filter(({ item }) => /platter|share|sharing|starter|appetizer|combo/.test(`${item.name} ${item.category?.name || ''} ${(item.tags || []).join(' ')}`.toLowerCase()))
+        .slice(0, 2)
+        .map(({ item }) => ({ item, kind: 'main' as const }))
+    }
+
+    const picks: Array<{ item: MenuItem; kind: 'main' | 'drink' }> = []
+    const topMain = mains[0]?.item ?? null
+    const topDrink = drinks.find(({ item }) => item.id !== topMain?.id)?.item ?? null
+    if (topMain) picks.push({ item: topMain, kind: 'main' })
+    if (topDrink) picks.push({ item: topDrink, kind: 'drink' })
+    return picks
+  }, [filteredItems, isDessertItem, isDrinkItem, isMainItem, selectedContext, selectedMoodId])
 
   const contextHeroItems = useMemo(() => {
     if (selectedContext === 'rainy' || selectedContext === 'cold') {
@@ -2384,7 +2569,7 @@ export default function SmartMenu({
     contextRankedItems.forEach(({ item }) => {
       if (!unique.has(item.id)) unique.set(item.id, item)
     })
-    return Array.from(unique.values()).slice(0, 8)
+    return Array.from(unique.values()).slice(0, 3)
   }, [contextRankedItems, isDrinkItem, isMainItem, selectedContext])
   const heroTitleMap: Record<ContextKey, string> = {
     morning: localizedContextCopy.morning.heroTitle,
@@ -2611,14 +2796,16 @@ export default function SmartMenu({
               {heroTitle}
             </div>
             <div className="mt-3 flex gap-2 overflow-x-auto px-5 pb-1 scrollbar-hide sm:gap-3 sm:px-6 lg:px-8">
-              {activeHeroItems.map((item, index) => {
+              {activeHeroItems.slice(0, 3).map((item, index) => {
                 const translation = translationCache[language]?.[item.id]
-                const badgeLabel =
-                  index === 0
-                    ? currentCopy.chefRecommendationLabel
-                    : item._hints?.isLimitedToday
-                      ? currentCopy.limitedTodayLabel
-                      : currentEngineCopy.chefSelectionBadge
+                // 3-slot behavioral economics framework:
+                // 0 = Signature (price anchor, gold), 1 = Chef's Recommendation (target, brand), 2 = Guest Favorite (social proof, warm)
+                const BADGE_CONFIG = [
+                  { label: currentCopy.signatureBadge, bg: 'linear-gradient(135deg, #7A5A0A, #D6A93A)', color: '#FFF8E1', border: '1px solid rgba(255, 243, 204, 0.5)' },
+                  { label: currentCopy.chefsRecBadge, bg: `linear-gradient(135deg, ${themeAccent}, ${themeChef})`, color: '#ffffff', border: '1px solid rgba(255, 255, 255, 0.18)' },
+                  { label: currentCopy.guestFavoriteBadge, bg: 'linear-gradient(135deg, #8B5E3C, #C28A5A)', color: '#ffffff', border: '1px solid rgba(255, 255, 255, 0.18)' },
+                ] as const
+                const badge = BADGE_CONFIG[index] ?? BADGE_CONFIG[1]
                 return (
                   <button
                     key={item.id}
@@ -2633,8 +2820,11 @@ export default function SmartMenu({
                     />
                     <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/20 to-black/75" />
                     <div className="absolute left-3 right-3 top-3 flex items-start justify-between gap-2">
-                      <span className="rounded-full px-2 py-0.5 text-[0.46rem] font-bold uppercase tracking-[0.06em] text-white" style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}>
-                        {badgeLabel}
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[0.46rem] font-bold uppercase tracking-[0.06em] shadow-[0_4px_10px_rgba(0,0,0,0.22)]"
+                        style={{ background: badge.bg, color: badge.color, border: badge.border }}
+                      >
+                        {badge.label}
                       </span>
                       <span className="flex items-center gap-1 rounded-full bg-black/35 px-1.5 py-0.5 text-[0.52rem] text-white/85">
                         <Flame className="h-2.5 w-2.5" />
@@ -2652,7 +2842,7 @@ export default function SmartMenu({
                       </div>
                       <span
                         className="inline-flex h-7 w-7 min-h-[1.75rem] min-w-[1.75rem] shrink-0 aspect-square items-center justify-center rounded-full text-base text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] sm:h-9 sm:w-9 sm:min-h-[2.25rem] sm:min-w-[2.25rem] sm:text-lg"
-                        style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                        style={{ background: badge.bg }}
                       >
                         +
                       </span>
@@ -2743,7 +2933,7 @@ export default function SmartMenu({
             )}
           </section>
 
-          {(contextSuggestedItems.main || contextSuggestedItems.drink) && (
+          {contextSuggestedCards.length > 0 && (
             <section className="px-5 pt-6 sm:px-6 lg:px-8">
               <div className="mb-3 flex items-end justify-between">
                 <h2 className="font-category text-[1.4rem] font-bold" style={{ color: textMain }}>
@@ -2751,44 +2941,45 @@ export default function SmartMenu({
                 </h2>
               </div>
               <div className="grid gap-3 lg:grid-cols-2">
-                {contextSuggestedItems.main && (
+                {contextSuggestedCards.map(({ item, kind }) => (
                   <div
+                    key={item.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelectedItemForDetail(contextSuggestedItems.main)}
+                    onClick={() => setSelectedItemForDetail(item)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
-                        setSelectedItemForDetail(contextSuggestedItems.main)
+                        setSelectedItemForDetail(item)
                       }
                     }}
                     className="flex items-center gap-3 rounded-[22px] border p-3 text-left shadow-[0_4px_18px_rgba(26,10,6,0.06)]"
                     style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}
                   >
                     <img
-                      src={contextSuggestedItems.main.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
-                      alt={contextSuggestedItems.main.name}
+                      src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                      alt={item.name}
                       className="h-20 w-20 rounded-2xl object-cover"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 text-[0.56rem] font-bold uppercase tracking-[0.1em]" style={{ color: themeAccent }}>
-                        {localizedContextCopy.mainRecommendation}
+                        {kind === 'drink' ? localizedContextCopy.drinkRecommendation : localizedContextCopy.mainRecommendation}
                       </div>
                       <div className="font-item text-[0.95rem] font-bold" style={{ color: textMain }}>
-                        {getDisplayNameForItem(contextSuggestedItems.main)}
+                        {getDisplayNameForItem(item)}
                       </div>
                       <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
-                        {translationCache[language]?.[contextSuggestedItems.main.id]?.description || contextSuggestedItems.main.description || `${localizedContextCopy.mainRecommendation}.`}
+                        {translationCache[language]?.[item.id]?.description || item.description || `${kind === 'drink' ? localizedContextCopy.drinkRecommendation : localizedContextCopy.mainRecommendation}.`}
                       </div>
                       <div className="mt-2 text-[0.9rem] font-bold" style={{ color: textMain }}>
-                        {formatMenuPriceWithVariant(contextSuggestedItems.main.price, priceVariant)}
+                        {formatMenuPriceWithVariant(item.price, priceVariant)}
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation()
-                        addToCart(contextSuggestedItems.main!.id)
+                        addToCart(item.id)
                       }}
                       className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-white"
                       style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
@@ -2796,53 +2987,7 @@ export default function SmartMenu({
                       +
                     </button>
                   </div>
-                )}
-                {contextSuggestedItems.drink && (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelectedItemForDetail(contextSuggestedItems.drink)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        setSelectedItemForDetail(contextSuggestedItems.drink)
-                      }
-                    }}
-                    className="flex items-center gap-3 rounded-[22px] border p-3 text-left shadow-[0_4px_18px_rgba(26,10,6,0.06)]"
-                    style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}
-                  >
-                    <img
-                      src={contextSuggestedItems.drink.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
-                      alt={contextSuggestedItems.drink.name}
-                      className="h-20 w-20 rounded-2xl object-cover"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1 text-[0.56rem] font-bold uppercase tracking-[0.1em]" style={{ color: themeAccent }}>
-                        {localizedContextCopy.drinkRecommendation}
-                      </div>
-                      <div className="font-item text-[0.95rem] font-bold" style={{ color: textMain }}>
-                        {getDisplayNameForItem(contextSuggestedItems.drink)}
-                      </div>
-                      <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
-                        {translationCache[language]?.[contextSuggestedItems.drink.id]?.description || contextSuggestedItems.drink.description || `${localizedContextCopy.drinkRecommendation}.`}
-                      </div>
-                      <div className="mt-2 text-[0.9rem] font-bold" style={{ color: textMain }}>
-                        {formatMenuPriceWithVariant(contextSuggestedItems.drink.price, priceVariant)}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        addToCart(contextSuggestedItems.drink!.id)
-                      }}
-                      className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-white"
-                      style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
-                    >
-                      +
-                    </button>
-                  </div>
-                )}
+                ))}
               </div>
             </section>
           )}
@@ -2853,6 +2998,75 @@ export default function SmartMenu({
             const sectionId = section.category?.id || 'uncategorized'
             const expanded = section.category ? expandedCategoryIds.has(section.category.id) : true
             const visibleItems = expanded ? section.items : section.items.slice(0, maxInitialItemsPerCategory)
+            const categoryBadgeByItemId = (() => {
+              const badgeMap = new Map<string, { label: string; bg: string; color: string; border: string }>()
+              const categoryItems = section.items
+              if (categoryItems.length === 0) return badgeMap
+
+              const remaining = [...categoryItems]
+              const takeItem = (predicate: (item: MenuItem) => boolean, fallback?: (items: MenuItem[]) => MenuItem | null) => {
+                const found = remaining.find(predicate) ?? fallback?.(remaining) ?? null
+                if (!found) return null
+                const next = remaining.filter((item) => item.id !== found.id)
+                remaining.splice(0, remaining.length, ...next)
+                return found
+              }
+
+              const signatureItem = takeItem(
+                (item) => item._hints?.isAnchor === true,
+                (items) => items.slice().sort((a, b) => b.price - a.price)[0] ?? null
+              )
+              if (signatureItem) {
+                badgeMap.set(signatureItem.id, {
+                  label: currentCopy.signatureBadge,
+                  bg: 'linear-gradient(135deg, #7A5A0A, #D6A93A)',
+                  color: '#FFF8E1',
+                  border: '1px solid rgba(255, 243, 204, 0.5)',
+                })
+              }
+
+              const chefRecItem = takeItem(
+                (item) => item._hints?.displayTier === 'featured',
+                (items) =>
+                  items
+                    .slice()
+                    .sort((a, b) => {
+                      const popularityDelta = (b.popularityScore || 0) - (a.popularityScore || 0)
+                      if (popularityDelta !== 0) return popularityDelta
+                      return b.price - a.price
+                    })[0] ?? null
+              )
+              if (chefRecItem) {
+                badgeMap.set(chefRecItem.id, {
+                  label: currentCopy.chefsRecBadge,
+                  bg: `linear-gradient(135deg, ${themeAccent}, ${themeChef})`,
+                  color: '#ffffff',
+                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                })
+              }
+
+              const guestFavoriteItem = takeItem(
+                (item) => (item.popularityScore || 0) > 0,
+                (items) =>
+                  items
+                    .slice()
+                    .sort((a, b) => {
+                      const priceDelta = a.price - b.price
+                      if (priceDelta !== 0) return priceDelta
+                      return (b.popularityScore || 0) - (a.popularityScore || 0)
+                    })[0] ?? null
+              )
+              if (guestFavoriteItem) {
+                badgeMap.set(guestFavoriteItem.id, {
+                  label: currentCopy.guestFavoriteBadge,
+                  bg: 'linear-gradient(135deg, #8B5E3C, #C28A5A)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                })
+              }
+
+              return badgeMap
+            })()
             return (
               <section key={sectionId} ref={section.category ? setSectionRef(section.category.id) : undefined} className="px-5 pt-6 sm:px-6 lg:px-8">
                 <div className="mb-3 flex items-end justify-between gap-3">
@@ -2875,14 +3089,12 @@ export default function SmartMenu({
                     const translation = translationCache[language]?.[item.id]
                     const displayName = translation?.name || item.name
                     const displayDescription = translation?.description || item.description || ''
-                    const badge =
+                    const ruleBasedBadge = categoryBadgeByItemId.get(item.id) ?? null
+                    const fallbackBadge =
                       item._hints?.isLimitedToday
-                        ? currentCopy.limitedTodayLabel
-                        : item._hints?.isAnchor
-                          ? currentEngineCopy.signatureBadge
-                          : item._hints?.displayTier === 'featured'
-                            ? currentEngineCopy.mostLovedBadge
-                            : ''
+                        ? { label: currentCopy.limitedTodayLabel, bg: `linear-gradient(135deg, ${themeAccent}, ${themeChef})`, color: '#ffffff', border: '1px solid rgba(255, 255, 255, 0.18)' }
+                        : null
+                    const badge = ruleBasedBadge ?? fallbackBadge
                     return (
                       <div
                         key={item.id}
@@ -2906,10 +3118,10 @@ export default function SmartMenu({
                           />
                           {badge && (
                             <span
-                              className="absolute bottom-2 left-2 rounded-full px-2 py-1 text-[0.52rem] font-bold uppercase tracking-[0.06em] text-white"
-                              style={{ background: item._hints?.isLimitedToday ? themeChef : `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                              className="absolute bottom-2 left-2 rounded-full px-2 py-1 text-[0.52rem] font-bold uppercase tracking-[0.06em] shadow-[0_4px_10px_rgba(0,0,0,0.18)]"
+                              style={{ background: badge.bg, color: badge.color, border: badge.border }}
                             >
-                              {badge}
+                              {badge.label}
                             </span>
                           )}
                         </div>
@@ -2956,9 +3168,12 @@ export default function SmartMenu({
                       className="w-full px-4 py-3 text-[0.78rem] font-semibold"
                       style={{ borderTop: `1px solid ${dividerColor}`, backgroundColor: surfaceSoft, color: themeAccent }}
                     >
-                      {formatTemplate(currentCopy.seeMoreDishesLabel, {
-                        count: String(section.items.length - maxInitialItemsPerCategory),
-                      })}
+                      {formatTemplate(
+                        /\b(drink|drinks|beverage|beverages|juice|coffee|tea|smoothie|soda|cocktail|mocktail|hot drinks?|cold drinks?|soft drinks?|ice tea|iced tea|خواردنەوە|مشروب|مشروبات)\b/i.test(section.category.name)
+                          ? currentCopy.seeMoreDrinksLabel
+                          : currentCopy.seeMoreDishesLabel,
+                        { count: String(section.items.length - maxInitialItemsPerCategory) }
+                      )}
                     </button>
                   )}
                 </div>

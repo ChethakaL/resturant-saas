@@ -16,14 +16,15 @@ import { getCachedBadgePicks } from '@/lib/menu-badge-ai'
 import { getCurrentTimeSlot as getSlot, getTimeSlotForDate as getSlotForDate, parseSlotTimes, buildSlotRangeLabels } from '@/lib/time-slots'
 import { getPublicMediaAssetUrl } from '@/lib/media-asset-urls'
 import { getMenuFeelingContext } from '@/lib/menu-feeling-message'
+import type { MenuTemperatureFeel, MenuWeatherLabel } from '@/lib/menu-feeling-message'
 import { buildContextShowcaseSuggestions } from '@/lib/context-showcase-ranking'
 import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
 
-// Keep the slug page warm in production instead of recomputing every request.
-export const revalidate = 60
+// ISR: revalidate the rendered page every 5 minutes in production.
+export const revalidate = 300
 
 const CAROUSEL_CACHE_SECONDS = 300 // 5 min
-const MAX_CONTEXT_SHOWCASE_ITEMS = 6
+const MAX_CONTEXT_SHOWCASE_ITEMS = 3
 
 function getInitialMenuLanguage(managementLanguage: unknown): 'en' | 'ar_fusha' | 'ku' {
   if (managementLanguage === 'ku') return 'ku'
@@ -39,7 +40,7 @@ async function getCachedCarouselSuggestions(
 ): Promise<string[]> {
   const poolKey = pool.map((i) => i.id).sort().join(',')
   return unstable_cache(
-    () => suggestCarouselItems(pool, timeSlotLabel as 'Morning' | 'Lunch' | 'Evening' | 'Night', { maxItems: 16 }),
+    () => suggestCarouselItems(pool, timeSlotLabel as 'Morning' | 'Lunch' | 'Evening' | 'Night', { maxItems: MAX_CONTEXT_SHOWCASE_ITEMS }),
     [`carousel-ai`, restaurantId, timeSlotLabel, poolKey],
     { revalidate: CAROUSEL_CACHE_SECONDS }
   )()
@@ -156,7 +157,13 @@ async function getMenuData(slug: string) {
 
       prisma.sale.findMany({
         where: { restaurantId: restaurant.id, timestamp: { gte: thirtyDaysAgo } },
-        include: { items: true },
+        select: {
+          id: true,
+          timestamp: true,
+          items: { select: { menuItemId: true, quantity: true, cost: true } },
+        },
+        orderBy: { timestamp: 'desc' },
+        take: 2000, // cap at 2000 recent sales — enough for margin/popularity stats
       }),
 
       prisma.preppedDishStock.findMany({
@@ -166,7 +173,12 @@ async function getMenuData(slug: string) {
 
       prisma.sale.findMany({
         where: { restaurantId: restaurant.id, timestamp: { gte: todayStart } },
-        include: { items: true },
+        select: {
+          id: true,
+          timestamp: true,
+          items: { select: { menuItemId: true, quantity: true, cost: true } },
+        },
+        take: 500, // today's sales — unlikely to exceed 500 orders in a day
       }),
 
       prisma.table.findMany({
@@ -252,7 +264,22 @@ async function getMenuData(slug: string) {
   const slotTimes = parseSlotTimes(settings.slotTimes)
   const currentSlot = getCurrentTimeSlot(timezone, slotTimes)
 
-  type ScheduleShape = { useTimeSlots?: boolean; displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'; displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]; breakfast?: { itemIds?: string[] }; day?: { itemIds?: string[] }; evening?: { itemIds?: string[] }; night?: { itemIds?: string[] }; label?: string; seasonalStart?: string; seasonalEnd?: string; seasonalBackgroundUrl?: string; seasonalItemImages?: Record<string, string>; } | null
+  type ScheduleShape = {
+    useTimeSlots?: boolean
+    displayForSlot?: 'breakfast' | 'day' | 'evening' | 'night'
+    displayForSlots?: ('breakfast' | 'day' | 'evening' | 'night')[]
+    breakfast?: { itemIds?: string[] }
+    day?: { itemIds?: string[] }
+    evening?: { itemIds?: string[] }
+    night?: { itemIds?: string[] }
+    weatherLabels?: MenuWeatherLabel[]
+    temperatureFeels?: MenuTemperatureFeel[]
+    label?: string
+    seasonalStart?: string
+    seasonalEnd?: string
+    seasonalBackgroundUrl?: string
+    seasonalItemImages?: Record<string, string>
+  } | null
   const scheduleType = (s: typeof showcases[0]) => s.schedule as ScheduleShape
 
   const fullCarouselPool = enrichedMenuItems.map((item: any) => ({
@@ -364,17 +391,17 @@ async function getMenuData(slug: string) {
           },
           !hasShowcaseMatching(showcases, (title) => /hot|summer|cool|cold drink/.test(title)) && {
             title: "Chef's recommendation for a hot day",
-            schedule: { label: 'Hot Day' },
+            schedule: { label: 'Hot Day', temperatureFeels: ['hot', 'warm'], weatherLabels: ['clear', 'partly-cloudy', 'cloudy'] },
             itemIds: showcaseSuggestions.hotDay,
           },
           !hasShowcaseMatching(showcases, (title) => /rain|rainy|comfort|warm/.test(title)) && {
             title: "Chef's recommendation for a rainy day",
-            schedule: { label: 'Rainy Day' },
+            schedule: { label: 'Rainy Day', weatherLabels: ['rain', 'storm'] },
             itemIds: showcaseSuggestions.rainyDay,
           },
           !hasShowcaseMatching(showcases, (title) => /cold|winter|warm/.test(title)) && {
             title: "Chef's recommendation for a cold day",
-            schedule: { label: 'Cold Day' },
+            schedule: { label: 'Cold Day', temperatureFeels: ['cold', 'cool'] },
             itemIds: showcaseSuggestions.coldDay,
           },
         ].filter(Boolean) as Array<{
@@ -418,14 +445,30 @@ async function getMenuData(slug: string) {
     return true
   })
 
-  const slotMatches = (schedule: ScheduleShape) => {
+  const smartSearchFeelingContext = await getMenuFeelingContext({
+    lat: restaurant.lat,
+    lng: restaurant.lng,
+    timezone,
+    slot: currentSlot,
+    language: initialLanguage,
+    allowAi: false,
+  })
+
+  const scheduleMatches = (schedule: ScheduleShape) => {
+    if (!schedule) return true
     const slots = schedule?.displayForSlots
-    if (Array.isArray(slots) && slots.length > 0) return slots.includes(currentSlot)
+    if (Array.isArray(slots) && slots.length > 0 && !slots.includes(currentSlot)) return false
     const slot = schedule?.displayForSlot
-    if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') return currentSlot === slot
+    if (slot === 'breakfast' || slot === 'day' || slot === 'evening' || slot === 'night') {
+      if (currentSlot !== slot) return false
+    }
+    const weatherLabels = Array.isArray(schedule.weatherLabels) ? schedule.weatherLabels : []
+    if (weatherLabels.length > 0 && !weatherLabels.includes(smartSearchFeelingContext.weatherLabel)) return false
+    const temperatureFeels = Array.isArray(schedule.temperatureFeels) ? schedule.temperatureFeels : []
+    if (temperatureFeels.length > 0 && !temperatureFeels.includes(smartSearchFeelingContext.temperatureFeel)) return false
     return true
   }
-  const showcasesToShow = [...showcasesDateFiltered].sort((a, b) => {
+  const showcasesToShow = showcasesDateFiltered.filter((showcase) => scheduleMatches(scheduleType(showcase))).sort((a, b) => {
     const aSlots = scheduleType(a)?.displayForSlots
     const aSingle = scheduleType(a)?.displayForSlot
     const bSlots = scheduleType(b)?.displayForSlots
@@ -434,6 +477,10 @@ async function getMenuData(slug: string) {
     const bIsCurrentSlot = (Array.isArray(bSlots) && bSlots.includes(currentSlot)) || (bSingle && bSingle === currentSlot)
     if (aIsCurrentSlot && !bIsCurrentSlot) return -1
     if (!aIsCurrentSlot && bIsCurrentSlot) return 1
+    const aHasWeatherMatch = Boolean(scheduleType(a)?.weatherLabels?.length || scheduleType(a)?.temperatureFeels?.length)
+    const bHasWeatherMatch = Boolean(scheduleType(b)?.weatherLabels?.length || scheduleType(b)?.temperatureFeels?.length)
+    if (aHasWeatherMatch && !bHasWeatherMatch) return -1
+    if (!aHasWeatherMatch && bHasWeatherMatch) return 1
     return 0
   })
 
@@ -465,12 +512,8 @@ async function getMenuData(slug: string) {
         showcaseMenuItems = enrichedMenuItems
           .filter((item: any) => pickedItemIds.has(item.id))
           .sort((a: any, b: any) => {
-            const orderA =
-              showcase.items.find((si: any) => si.menuItemId === a.id)
-                ?.displayOrder ?? 0
-            const orderB =
-              showcase.items.find((si: any) => si.menuItemId === b.id)
-                ?.displayOrder ?? 0
+            const orderA = showcase.items.find((si: any) => si.menuItemId === a.id)?.displayOrder ?? 0
+            const orderB = showcase.items.find((si: any) => si.menuItemId === b.id)?.displayOrder ?? 0
             return orderA - orderB
           })
       } else {
@@ -659,17 +702,21 @@ async function getMenuData(slug: string) {
 
   const totalSales = Array.from(salesByItem.values()).reduce((s, v) => s + v.quantity, 0)
   const hasMeaningfulSales = totalSales >= 10
-  const badgePicks =
+  // Run badge AI + menu feeling context in parallel — neither depends on the other.
+  const badgeItemsPayload = enrichedMenuItems.map((i: any) => ({
+    id: i.id,
+    name: i.name,
+    description: i.description,
+    categoryName: i.category?.name,
+    price: i.price,
+    tags: i.tags,
+  }))
+
+  const [badgePicks] = await Promise.all([
     !hasMeaningfulSales && mode !== 'classic'
-      ? await getCachedBadgePicks(restaurant.id, enrichedMenuItems.map((i: any) => ({
-          id: i.id,
-          name: i.name,
-          description: i.description,
-          categoryName: i.category?.name,
-          price: i.price,
-          tags: i.tags,
-        })))
-      : undefined
+      ? getCachedBadgePicks(restaurant.id, badgeItemsPayload)
+      : Promise.resolve(undefined),
+  ])
 
   const engineOutput = runMenuEngine({
     settings: menuEngineSettings,
@@ -703,26 +750,31 @@ async function getMenuData(slug: string) {
     backgroundImageUrl: settings.backgroundImageUrl ?? null,
   }
 
-  const smartSearchFeelingContext = await getMenuFeelingContext({
-    lat: restaurant.lat,
-    lng: restaurant.lng,
-    timezone,
-    slot: currentSlot,
-    language: initialLanguage,
-    allowAi: false,
-  })
-
   return {
     restaurant,
     menuItems: clientMenuItems,
     initialLanguage,
     initialTranslationCache,
     showcases: showcaseData,
-    categories: categoriesForMenu.map((c: { id: string; name: string; displayOrder: number }) => ({
-      id: c.id,
-      name: c.name,
-      displayOrder: c.displayOrder,
-    })),
+    categories: categoriesForMenu.map((c: { id: string; name: string; displayOrder: number }) => {
+      const nameLower = c.name.toLowerCase()
+      // Detect time-bound categories by name and restrict them to the appropriate context.
+      // This hides e.g. a "Breakfast" category during lunch/evening shifts.
+      let availableContexts: string[] | undefined
+      if (/\b(breakfast|morning|سحور|إفطار|بريكفاست|بەیانی)\b/.test(nameLower)) {
+        availableContexts = ['morning']
+      } else if (/\b(lunch|midday|noon|غداء|نهار|نیوەڕۆ)\b/.test(nameLower)) {
+        availableContexts = ['lunch', 'hot']
+      } else if (/\b(dinner|evening|night|عشاء|مساء|ئێوارە)\b/.test(nameLower)) {
+        availableContexts = ['evening', 'rainy', 'cold']
+      }
+      return {
+        id: c.id,
+        name: c.name,
+        displayOrder: c.displayOrder,
+        ...(availableContexts ? { availableContexts } : {}),
+      }
+    }),
     theme,
     engineMode: engineOutput.engineMode,
     bundles: engineOutput.bundles,
@@ -730,6 +782,7 @@ async function getMenuData(slug: string) {
     upsellMap: engineOutput.upsellMap,
     categoryOrder: engineOutput.categoryOrder,
     menuTimezone: timezone,
+    slotTimes,
     categoryAnchorBundle: engineOutput.categoryAnchorBundle,
     maxInitialItemsPerCategory: menuEngineSettings.maxInitialItemsPerCategory ?? 3,
     tables: (settings.tableOrderingEnabled !== false ? tables : []).map((t: { id: string; number: string }) => ({ id: t.id, number: t.number })),
@@ -772,6 +825,7 @@ export default async function SlugMenuPage({
       upsellMap={data.upsellMap}
       categoryOrder={data.categoryOrder}
       menuTimezone={data.menuTimezone}
+      slotTimes={data.slotTimes}
       categoryAnchorBundle={data.categoryAnchorBundle}
       maxInitialItemsPerCategory={data.maxInitialItemsPerCategory}
       tables={data.tables}
