@@ -67,18 +67,13 @@ async function getMenuData(
   }
 
   // Run count and paginated fetch in parallel
-  const [totalCount, menuItems, categories, ingredients, avgMarginResult, chefPicks] =
+  const [totalCount, menuItems, categories, ingredients, chefPicks] =
     await Promise.all([
       prisma.menuItem.count({ where }),
       prisma.menuItem.findMany({
         where,
         include: {
           category: true,
-          ingredients: {
-            include: {
-              ingredient: true,
-            },
-          },
           translations: translationLang
             ? { where: { language: translationLang } }
             : false,
@@ -95,23 +90,6 @@ async function getMenuData(
         where: { restaurantId },
         orderBy: { name: 'asc' },
       }),
-      // Average margin: sample up to 500 items to avoid loading thousands (perf)
-      prisma.menuItem.findMany({
-        where,
-        select: {
-          price: true,
-          ingredients: {
-            select: {
-              quantity: true,
-              ingredient: {
-                select: { costPerUnit: true },
-              },
-            },
-          },
-        },
-        orderBy: { id: 'asc' },
-        take: 500,
-      }),
       prisma.chefPick.findMany({
         where: { restaurantId },
         orderBy: { displayOrder: 'asc' },
@@ -120,13 +98,40 @@ async function getMenuData(
 
   // Calculate cost and margin for paginated items
   const chefPickOrderById = new Map(chefPicks.map((pick) => [pick.menuItemId, pick.displayOrder]))
+  const menuItemIds = menuItems.map((item) => item.id)
+  const metricRows =
+    menuItemIds.length === 0
+      ? []
+      : await prisma.$queryRaw<Array<{
+          menu_item_id: string
+          direct_cost: number
+          gross_profit: number
+          margin_percent: number
+        }>>(Prisma.sql`
+          SELECT menu_item_id, direct_cost, gross_profit, margin_percent
+          FROM public.menu_item_profit_metrics_v
+          WHERE menu_item_id IN (${Prisma.join(menuItemIds)})
+        `)
+  const metricsByItemId = new Map(metricRows.map((row) => [row.menu_item_id, row]))
+  const avgMarginRow = await prisma.$queryRaw<Array<{ avg_margin: number }>>(Prisma.sql`
+    SELECT COALESCE(AVG(v.margin_percent), 0)::double precision AS avg_margin
+    FROM public.menu_item_profit_metrics_v v
+    JOIN public.menu_items mi ON mi.id = v.menu_item_id
+    WHERE mi."restaurantId" = ${restaurantId}
+      ${statusFilter === 'DRAFT'
+        ? Prisma.sql`AND mi.status = 'DRAFT'`
+        : statusFilter === 'ACTIVE'
+          ? Prisma.sql`AND mi.status = 'ACTIVE'`
+          : statusFilter === 'COSTING_INCOMPLETE'
+            ? Prisma.sql`AND mi."costingStatus" = 'INCOMPLETE'`
+            : Prisma.empty}
+  `)
 
   const itemsWithMetrics = menuItems.map((item) => {
-    const cost = item.ingredients.reduce(
-      (sum, ing) => sum + ing.quantity * ing.ingredient.costPerUnit,
-      0
-    )
-    const margin = item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0
+    const row = metricsByItemId.get(item.id)
+    const cost = row?.direct_cost ?? 0
+    const margin = row?.margin_percent ?? 0
+    const profit = row?.gross_profit ?? item.price - cost
 
     // Overlay translated name/description when management language isn't English
     const tx = translationLang && (item as any).translations?.[0]
@@ -139,24 +144,14 @@ async function getMenuData(
       description: displayDescription,
       cost,
       margin,
-      profit: item.price - cost,
+      profit,
       chefPickOrder: chefPickOrderById.get(item.id) ?? null,
       status: (item as any).status ?? 'DRAFT',
       costingStatus: (item as any).costingStatus ?? 'INCOMPLETE',
     }
   })
 
-  // Calculate average margin from all items
-  const allMargins = avgMarginResult.map((item) => {
-    const cost = item.ingredients.reduce(
-      (sum, ing) => sum + ing.quantity * ing.ingredient.costPerUnit,
-      0
-    )
-    return item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0
-  })
-  const avgMargin = allMargins.length > 0
-    ? allMargins.reduce((sum, m) => sum + m, 0) / allMargins.length
-    : 0
+  const avgMargin = avgMarginRow[0]?.avg_margin ?? 0
 
   return {
     menuItems: itemsWithMetrics,

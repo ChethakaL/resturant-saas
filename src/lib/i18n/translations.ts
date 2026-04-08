@@ -455,6 +455,7 @@ export interface TranslationStrings {
     settings_restaurant_name: string
     settings_carousel_style: string
     settings_timezone: string
+    settings_timezone_description: string
     settings_dish_photo_bg: string
     settings_ai_description_tone: string
     settings_restaurant_photo: string
@@ -934,6 +935,8 @@ const en: TranslationStrings = {
     settings_restaurant_name: 'Restaurant Name',
     settings_carousel_style: 'Carousel Style',
     settings_timezone: 'Timezone',
+    settings_timezone_description:
+      'Sets the clock for guest greetings, time-based carousels, and weather lines. Weather uses your map pin (restaurant coordinates) with this timezone. Sri Lanka and Sydney are useful to preview another local time.',
     settings_dish_photo_bg: 'Dish Photo Background',
     settings_ai_description_tone: 'AI Menu Description Tone',
     settings_restaurant_photo: 'Restaurant Photo (Optional)',
@@ -1413,6 +1416,8 @@ const ku: TranslationStrings = {
     settings_restaurant_name: 'ناوی چێشتخانە',
     settings_carousel_style: 'شێوازی کارۆسێل',
     settings_timezone: 'ناوچەی کات',
+    settings_timezone_description:
+      'کاتژمێری مینیو بۆ میوان، کارۆسێلە کاتییەکان، و دەقی کەشوهەوا دیاری دەکات. کەشوهەوا لەگەڵ خاڵی نەخشە و ئەم ناوچەی کاتە. سریلانکا و سیدنی بۆ تێڕوانین لە کاتێکی تر بەسوودن.',
     settings_dish_photo_bg: 'پاشبنەمای وێنەی خواردن',
     settings_ai_description_tone: 'شێوازی وەسفی AI',
     settings_restaurant_photo: 'وێنەی چێشتخانە (ئارەزوومەندانە)',
@@ -1892,6 +1897,8 @@ const arFusha: TranslationStrings = {
     settings_restaurant_name: 'اسم المطعم',
     settings_carousel_style: 'نمط العرض الدوّار',
     settings_timezone: 'المنطقة الزمنية',
+    settings_timezone_description:
+      'تحدد ساعة القائمة للضيوف والأقسام المرتبطة بالوقت ونص الطقس. يُستند الطقس إلى موقعك على الخريطة مع هذه المنطقة الزمنية. سريلانكا وسيدني مفيدة لمعاينة توقيت محلي مختلف.',
     settings_dish_photo_bg: 'خلفية صور الأطباق',
     settings_ai_description_tone: 'أسلوب الوصف بالذكاء الاصطناعي',
     settings_restaurant_photo: 'صورة المطعم (اختياري)',

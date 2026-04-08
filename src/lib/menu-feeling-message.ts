@@ -98,6 +98,10 @@ function buildEnglishOpening(slot: TimeSlot, weather: MenuWeatherLabel, tempFeel
   if (weather === 'clear' && tempFeel === 'warm') {
     return `It is a bright ${slotLabel}.`
   }
+  /** Most common case (Open-Meteo): clear sky + ~18–25°C — must mention conditions, not only "pleasant". */
+  if (weather === 'clear' && tempFeel === 'mild') {
+    return `Skies are clear and the air feels mild this ${slotLabel}.`
+  }
   if (weather === 'partly-cloudy' || weather === 'cloudy') {
     return `It is a calm ${slotLabel}.`
   }
@@ -119,6 +123,9 @@ function buildEnglishTail(slot: TimeSlot, weather: MenuWeatherLabel, tempFeel: M
   }
   if (weather === 'clear' && tempFeel === 'warm') {
     return 'Fresh flavors and a chilled drink would feel especially good.'
+  }
+  if (weather === 'clear' && tempFeel === 'mild') {
+    return 'A flavorful plate and a well-chosen drink would suit this easy weather perfectly.'
   }
   if (weather === 'partly-cloudy' || weather === 'cloudy') {
     return 'This is a good moment for a balanced meal and something smooth to sip alongside it.'
@@ -148,6 +155,9 @@ function buildArabicMessage(slot: TimeSlot, weather: MenuWeatherLabel, tempFeel:
   if (weather === 'clear' && tempFeel === 'warm') {
     return `إنه ${slotLabel} مشرق. النكهات الطازجة مع مشروب بارد ستكون اختياراً رائعاً.`
   }
+  if (weather === 'clear' && tempFeel === 'mild') {
+    return `سماء صافية وهواء معتدل في ${slotLabel}. وجبة لذيذة ومشروباً يلائم الجو يكملان التجربة.`
+  }
   if (weather === 'partly-cloudy' || weather === 'cloudy') {
     return `إنه ${slotLabel} هادئ. وجبة متوازنة مع مشروب ناعم ستكون مناسبة جداً للأجواء.`
   }
@@ -169,6 +179,9 @@ function buildKurdishMessage(slot: TimeSlot, weather: MenuWeatherLabel, tempFeel
   if (weather === 'clear' && tempFeel === 'warm') {
     return `ئەم ${slotLabel}ە ڕووناکە. تامی تازە لەگەڵ خواردنەوەیەکی سارد هەستێکی خۆش دروست دەکات.`
   }
+  if (weather === 'clear' && tempFeel === 'mild') {
+    return `ئاسمان ڕوونە و هەوا نەرمە لە ${slotLabel}. خواردنێکی تێرکەر و خواردنەوەیەکی گونجاو زۆر دەگونجێت.`
+  }
   if (weather === 'partly-cloudy' || weather === 'cloudy') {
     return `ئەم ${slotLabel}ە ئارامە. خواردنێکی هاوسەنگ لەگەڵ خواردنەوەیەکی نەرم زۆر گونجاو دەبێت.`
   }
@@ -184,6 +197,7 @@ async function fetchCurrentWeather(lat: number, lng: number, timezone: string): 
 
     const response = await fetch(url, {
       next: { revalidate: 900 },
+      signal: AbortSignal.timeout(2500),
     })
     if (!response.ok) return null
 
@@ -234,34 +248,31 @@ async function generateAiFeelingMessage({
   const languageLabel =
     language === 'ar_fusha' ? 'Arabic' : language === 'ku' ? 'Kurdish Sorani' : 'English'
 
-  const prompt = `You write short restaurant menu hero copy that nudges guests to order.
+  const prompt = `You write one line of hero text for a restaurant's digital menu (guest-facing).
 
-Generate exactly one short restaurant upsell sentence in ${languageLabel}.
+Language: ${languageLabel} only.
 
-Context:
-- Time slot: ${slot}
-- Weather: ${weatherLabel}
-- Temperature feel: ${temperatureFeel}
-- Temperature C: ${temperature ?? 'unknown'}
-- Apparent temperature C: ${apparentTemperature ?? 'unknown'}
+Facts (use naturally; do not list them):
+- Part of day (meal rhythm): ${slot}
+- Sky / conditions label: ${weatherLabel}
+- How it feels outside: ${temperatureFeel}
+- Optional context (no numbers in output): air is ${temperatureFeel === 'hot' || temperatureFeel === 'warm' ? 'warm' : temperatureFeel === 'cold' || temperatureFeel === 'cool' ? 'cooler' : 'pleasant'}
 
 Requirements:
-- Use feeling words and sensory language.
-- Make the guest feel like ordering food and a drink.
-- Keep it to exactly 1 short sentence.
-- Maximum 14 words total.
-- Do not mention AI.
-- Do not use hashtags, emojis, markdown, or quotation marks.
-- Do not mention exact numeric temperatures.
-- Do not mention morning, afternoon, evening, night, sunny, rainy, stormy, cool, hot, warm, bright, calm, weather, temperature, or time.
-- Keep it classy and sales-oriented, not cheesy.
+- Exactly ONE sentence.
+- It MUST reflect both the time-of-day vibe AND the outdoor conditions (e.g. clear air, light rain, breezy, muggy heat, crisp cold — choose what fits the facts).
+- Nudge the guest toward ordering something to eat and something to drink; stay appetizing, not salesy.
+- Max 22 words.
+- No hashtags, emojis, markdown, or quotation marks.
+- Do not output exact temperatures or numbers.
+- Do not say you are an AI.
 
 Return JSON only:
 {"message":"..."}
 `
 
   try {
-    const result = await callGemini(prompt)
+    const result = await callGemini(prompt, { maxOutputTokens: 140, temperature: 0.35 })
     const raw = result.response?.text?.() ?? ''
     const parsed = parseGeminiJson(raw) as { message?: string }
     const message = parsed.message?.trim()
@@ -337,10 +348,13 @@ export async function getMenuFeelingContext({
           apparentTemperature: weather.apparentTemperature,
         })
       : null
+  const trimmedAi = aiMessage?.trim()
   const message =
-    language === 'en'
-      ? `${opening} ${aiMessage || buildEnglishTail(slot, weatherLabel, temperatureFeel)}`.replace(/\s+/g, ' ').trim()
-      : aiMessage || fallbackMessage
+    trimmedAi
+      ? trimmedAi.replace(/\s+/g, ' ').trim()
+      : language === 'en'
+        ? `${opening} ${buildEnglishTail(slot, weatherLabel, temperatureFeel)}`.replace(/\s+/g, ' ').trim()
+        : fallbackMessage
 
   return {
     slot,
@@ -349,7 +363,9 @@ export async function getMenuFeelingContext({
     temperature: weather.temperature,
     apparentTemperature: weather.apparentTemperature,
     opening,
-    aiTail: aiMessage || (language === 'en' ? buildEnglishTail(slot, weatherLabel, temperatureFeel) : fallbackMessage),
+    aiTail:
+      trimmedAi ||
+      (language === 'en' ? buildEnglishTail(slot, weatherLabel, temperatureFeel) : fallbackMessage),
     message,
   }
 }

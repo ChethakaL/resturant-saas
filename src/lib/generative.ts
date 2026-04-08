@@ -16,10 +16,21 @@ function getGenAI() {
   return new GoogleGenerativeAI(apiKey)
 }
 
-export async function callGemini(prompt: string) {
+export async function callGemini(
+  prompt: string,
+  generationConfig?: { maxOutputTokens?: number; temperature?: number }
+) {
   const genAI = getGenAI()
   const model = genAI.getGenerativeModel({
     model: DEFAULT_GEMINI_MODEL,
+    ...(generationConfig
+      ? {
+          generationConfig: {
+            maxOutputTokens: generationConfig.maxOutputTokens ?? 512,
+            temperature: generationConfig.temperature ?? 0.4,
+          },
+        }
+      : {}),
   })
 
   return model.generateContent(prompt)

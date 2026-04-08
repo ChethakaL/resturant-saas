@@ -1258,7 +1258,7 @@ export default function SettingsClient({
       <Card>
         <CardHeader>
           <CardTitle>{td('Timezone')}</CardTitle>
-          <p className="text-sm text-slate-500">{td('Used for time-based featured sections.')}</p>
+          <p className="text-sm text-slate-500">{td('settings_timezone_description')}</p>
         </CardHeader>
         <CardContent>
           <select
@@ -1268,6 +1268,8 @@ export default function SettingsClient({
           >
             <option value="Asia/Baghdad">Erbil (Asia/Baghdad)</option>
             <option value="Asia/Dubai">Dubai</option>
+            <option value="Asia/Colombo">Sri Lanka (Asia/Colombo)</option>
+            <option value="Australia/Sydney">Sydney (Australia/Sydney)</option>
             <option value="Europe/London">London</option>
             <option value="America/New_York">New York</option>
             <option value="UTC">UTC</option>

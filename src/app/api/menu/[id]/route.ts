@@ -2,7 +2,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
+import { publicMenuDataCacheTag } from '@/lib/public-menu-cache-tags'
 import { buildTranslationSeed } from '@/lib/menu-translation-seed'
 import { buildSourceFingerprint } from '@/lib/menu-translations'
 import { normalizeTranslationInputs } from '@/lib/menu-translation-input'
@@ -302,6 +303,14 @@ export async function PATCH(
     // Revalidate the public menu page so changes appear immediately
     try {
       revalidatePath('/')
+      const rest = await prisma.restaurant.findUnique({
+        where: { id: session.user.restaurantId },
+        select: { slug: true },
+      })
+      if (rest?.slug) {
+        revalidatePath(`/${rest.slug}`)
+        revalidateTag(publicMenuDataCacheTag(rest.slug))
+      }
     } catch (revalidateErr) {
       console.warn('revalidatePath failed:', revalidateErr)
     }
@@ -352,6 +361,14 @@ export async function DELETE(
 
     // Revalidate the public menu page so deleted items disappear immediately
     revalidatePath('/')
+    const rest = await prisma.restaurant.findUnique({
+      where: { id: session.user.restaurantId },
+      select: { slug: true },
+    })
+    if (rest?.slug) {
+      revalidatePath(`/${rest.slug}`)
+      revalidateTag(publicMenuDataCacheTag(rest.slug))
+    }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

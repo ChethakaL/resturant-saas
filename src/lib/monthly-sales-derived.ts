@@ -20,10 +20,13 @@ export function buildCostedMenuItems(menuItems: any[]): CostedMenuItem[] {
     price: item.price ?? 0,
     categoryId: item.categoryId,
     categoryName: item.category?.name ?? null,
-    cost: (item.ingredients || []).reduce(
-      (sum: number, ing: any) => sum + (ing.quantity || 0) * (ing.ingredient?.costPerUnit || 0),
-      0
-    ),
+    cost:
+      typeof item.cost === 'number'
+        ? item.cost
+        : (item.ingredients || []).reduce(
+            (sum: number, ing: any) => sum + (ing.quantity || 0) * (ing.ingredient?.costPerUnit || 0),
+            0
+          ),
   }))
 }
 

@@ -148,7 +148,13 @@ export function MenuCarousel({
                   onClick={() => onItemClick?.(item as CarouselItem)}
                 >
                   <div className={`aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
-                    <img src={photo} alt={item.name} className="h-full w-full object-cover" />
+                    <img
+                      src={photo}
+                      alt={item.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
                   </div>
                   <div className="rounded-b-2xl px-3 py-3 bg-slate-900/90 text-left">
                     <p className={`text-sm font-semibold text-white line-clamp-2 ${displayFontClassName ?? ''}`}>
@@ -196,6 +202,8 @@ export function MenuCarousel({
                 <img
                   src={item.imageUrl || defaultImage}
                   alt={item.name}
+                  loading="lazy"
+                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
@@ -303,6 +311,8 @@ export function MenuCarousel({
                   <img
                     src={photo}
                     alt={item.name}
+                    loading="lazy"
+                    decoding="async"
                     className="h-full w-full object-cover transition duration-300 hover:scale-105"
                   />
                   <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />

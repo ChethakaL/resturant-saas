@@ -30,7 +30,7 @@ import { logMenuEvent } from '@/lib/menu-events'
 import { googleFontUrl, resolveGoogleFont } from '@/lib/google-fonts'
 import type { ItemDisplayHints, BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
 import type { MenuFeelingContext } from '@/lib/menu-feeling-message'
-import { getCurrentTimeSlot, type SlotTimes } from '@/lib/time-slots'
+import { getCurrentTimeSlot, getHourInTimeZone, mapSlotToGreetingContext, type SlotTimes } from '@/lib/time-slots'
 
 interface MenuItem {
   id: string
@@ -172,12 +172,6 @@ function getAutoContextForTimeZone(timeZone?: string | null, preferBrowserTimeZo
 function getTimeContextForHour(hour: number): 'morning' | 'lunch' | 'evening' {
   if (hour >= 6 && hour < 11) return 'morning'
   if (hour >= 11 && hour < 16) return 'lunch'
-  return 'evening'
-}
-
-function mapSlotToDisplayContext(slot: 'breakfast' | 'day' | 'evening' | 'night'): 'morning' | 'lunch' | 'evening' {
-  if (slot === 'breakfast') return 'morning'
-  if (slot === 'day') return 'lunch'
   return 'evening'
 }
 
@@ -885,7 +879,10 @@ export default function SmartMenu({
   // before the full resolveAutoContext + autoContext memos are available.
   const earlyTimeContext = useMemo(() => {
     try {
-      return mapSlotToDisplayContext(getCurrentTimeSlot(menuTimezone || 'Asia/Baghdad', slotTimes))
+      const tz = menuTimezone || 'Asia/Baghdad'
+      const slot = getCurrentTimeSlot(tz, slotTimes)
+      const hour = getHourInTimeZone(tz)
+      return mapSlotToGreetingContext(slot, hour)
     } catch {
       return getAutoContextForTimeZone(menuTimezone)
     }
@@ -946,6 +943,8 @@ export default function SmartMenu({
   const navScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasLoadedStoredLanguageRef = useRef(false)
   const [isLanguageReady, setIsLanguageReady] = useState(false)
+  /** AI weather line from `/api/public/menu-feeling-ai` (after first paint; does not block SSR). */
+  const [heroAiLine, setHeroAiLine] = useState<string | null>(null)
 
   const visibleLanguageOptions = useMemo(() => {
     return LANGUAGE_OPTIONS_ALL.filter((o) => {
@@ -999,6 +998,27 @@ export default function SmartMenu({
     setLiveTables(tables ?? [])
   }, [tables])
 
+  useEffect(() => {
+    if (!restaurantId) return
+    setHeroAiLine(null)
+    const langParam =
+      language === 'ku' ? 'ku' : language === 'ar_fusha' || language === 'ar' ? 'ar_fusha' : 'en'
+    const tz = encodeURIComponent(menuTimezone || 'Asia/Baghdad')
+    const ac = new AbortController()
+    fetch(
+      `/api/public/menu-feeling-ai?restaurantId=${encodeURIComponent(restaurantId)}&lang=${encodeURIComponent(langParam)}&tz=${tz}`,
+      { signal: ac.signal }
+    )
+      .then((r) => r.json())
+      .then((data: { message?: string | null }) => {
+        if (typeof data?.message === 'string' && data.message.trim()) {
+          setHeroAiLine(data.message.trim())
+        }
+      })
+      .catch(() => {})
+    return () => ac.abort()
+  }, [restaurantId, language, menuTimezone])
+
   const refreshTables = useCallback(async () => {
     if (!restaurantId) return
 
@@ -1022,7 +1042,7 @@ export default function SmartMenu({
 
     const interval = window.setInterval(() => {
       void refreshTables()
-    }, 2000)
+    }, 15000)
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -1454,6 +1474,11 @@ export default function SmartMenu({
   )
 
   const availableMoods = useMemo<MoodOption[]>(() => {
+    const isBreakfastMenuItem = (item: MenuItem) => {
+      const bucket = `${item.name} ${item.category?.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+      return /breakfast|egg|toast|croissant|jam|cream cheese|kaymak|qaymak|honey|olives|breakfast for|family breakfast/.test(bucket)
+    }
+
     const keywordMap: Record<string, string[]> = {
       light: ['salad', 'soup', 'appetizer', 'starter', 'light', 'juice', 'drink', 'beverage', 'tea', 'coffee'],
       filling: ['main', 'grill', 'burger', 'pasta', 'rice', 'dish', 'sandwich', 'wrap', 'kebab', 'steak', 'meal'],
@@ -1496,7 +1521,10 @@ export default function SmartMenu({
     const inferMoodIds = (moodId: keyof typeof keywordMap) =>
       menuItems
         .filter((item) => {
-          if (moodId === 'sharing') return isSharingLike(item)
+          if (moodId === 'sharing') {
+            if (earlyTimeContext !== 'morning' && isBreakfastMenuItem(item)) return false
+            return isSharingLike(item)
+          }
           if (moodId === 'light') return isLightLike(item)
           if (moodId === 'drinks') return isDrinkLike(item)
           if (moodId === 'sweet') return isSweetLike(item)
@@ -1542,9 +1570,22 @@ export default function SmartMenu({
 
         if (fallbackMood.id === 'sharing' && itemIds.length === 0) {
           itemIds = menuItems
-            .filter((item) => isSharingLike(item) || (!isDrinkLike(item) && !isFillingLike(item)))
+            .filter((item) => {
+              if (earlyTimeContext !== 'morning' && isBreakfastMenuItem(item)) return false
+              const bucket = `${item.name} ${item.category?.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase()
+              const isBreakfastLike = /breakfast|egg|toast|croissant|jam|cream cheese|kaymak|qaymak|honey|olives|breakfast for|family breakfast/.test(bucket)
+              const pairingLike = /combo|platter|meal|mixed grill|grill|kebab|shawarma|burger|pasta|rice|chicken|beef|lamb|fish|seafood|starter|appetizer|mezze|sampler/.test(bucket)
+              return isSharingLike(item) || (!isDrinkLike(item) && !isBreakfastLike && pairingLike)
+            })
             .map((item) => item.id)
             .slice(0, 8)
+        }
+
+        if (fallbackMood.id === 'sharing' && itemIds.length > 0 && earlyTimeContext !== 'morning') {
+          itemIds = itemIds.filter((id) => {
+            const item = menuItems.find((entry) => entry.id === id)
+            return item ? !isBreakfastMenuItem(item) : false
+          })
         }
 
         if (fallbackMood.id === 'light' && itemIds.length === 0) {
@@ -1581,7 +1622,7 @@ export default function SmartMenu({
         }
       })
     return resolved
-  }, [menuItems, moods])
+  }, [menuItems, moods, earlyTimeContext])
 
   // Filter and sort menu items before mood selection.
   const baseFilteredItems = useMemo(() => {
@@ -1672,6 +1713,11 @@ export default function SmartMenu({
   ])
 
   const filteredItems = useMemo(() => {
+    const breakfastLike = (item: MenuItem) => {
+      const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+      return /breakfast|egg|toast|croissant|jam|cream cheese|kaymak|qaymak|honey|olives|breakfast for|family breakfast/.test(bucket)
+    }
+
     let items = baseFilteredItems
     if (!selectedMoodId) return items
 
@@ -1681,6 +1727,9 @@ export default function SmartMenu({
     if (mood.itemIds.length > 0) {
       const moodIds = new Set(mood.itemIds)
       items = items.filter((item) => moodIds.has(item.id))
+      if (selectedMoodId === 'sharing' && earlyTimeContext !== 'morning') {
+        items = items.filter((item) => !breakfastLike(item))
+      }
       return items
     }
 
@@ -1697,11 +1746,15 @@ export default function SmartMenu({
     return items.filter((item) => {
       const bucket = `${item.name} ${item.category?.name ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
       if (mood.id === 'sharing') {
-        return keywords.some((keyword) => bucket.includes(keyword)) || /for two|for 2|two persons?|two people|for four|for 4|four persons?|four people|family|group|tray|breakfast for/.test(bucket)
+        if (earlyTimeContext !== 'morning' && breakfastLike(item)) return false
+        return (
+          keywords.some((keyword) => bucket.includes(keyword)) ||
+          /for two|for 2|two persons?|two people|for four|for 4|four persons?|four people|family|group|tray|breakfast for/.test(bucket)
+        )
       }
       return keywords.some((keyword) => bucket.includes(keyword))
     })
-  }, [availableMoods, baseFilteredItems, selectedMoodId])
+  }, [availableMoods, baseFilteredItems, earlyTimeContext, selectedMoodId])
 
   const selectedMood = useMemo(
     () => (selectedMoodId ? availableMoods.find((m) => m.id === selectedMoodId) ?? null : null),
@@ -1923,6 +1976,29 @@ export default function SmartMenu({
     const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
     return /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding|brownie|waffle|crepe|donut|chocolate|mocha|cream|frappuccino|caramel|vanilla|hazelnut|white chocolate|condensed milk|latte/.test(bucket)
   }, [])
+
+  const getRecommendationKind = useCallback((item: MenuItem): 'main' | 'drink' | 'sweet' => {
+    if (isDrinkItem(item)) return 'drink'
+    if (isSweetItem(item)) return 'sweet'
+    return 'main'
+  }, [isDrinkItem, isSweetItem])
+
+  const isBreakfastItem = useCallback((item: MenuItem) => {
+    const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+    return /breakfast|egg|toast|croissant|jam|cream cheese|kaymak|qaymak|honey|olives|breakfast for|family breakfast/.test(bucket)
+  }, [])
+
+  const isSharingCandidate = useCallback((item: MenuItem, context?: ContextKey) => {
+    const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
+    const explicitSharing =
+      /platter|share|sharing|starter|appetizer|combo|for two|for 2|two persons?|two people|for four|for 4|four persons?|four people|family|group|tray|mezze|sampler/.test(bucket)
+    const pairingLike =
+      /grill|mixed grill|kebab|shawarma|burger|pasta|rice|chicken|beef|lamb|fish|seafood|meal/.test(bucket)
+
+    if (!explicitSharing && !pairingLike) return false
+    if (context && context !== 'morning' && isBreakfastItem(item)) return false
+    return true
+  }, [isBreakfastItem])
 
   const getSweetPriorityScore = useCallback((item: MenuItem) => {
     const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
@@ -2237,6 +2313,7 @@ export default function SmartMenu({
       standingOutSuffix: 'are standing out on the menu right now.',
       mainRecommendation: 'Main recommendation',
       drinkRecommendation: 'Drink recommendation',
+      sweetRecommendation: 'Sweet recommendation',
     },
     ar_fusha: {
       morning: {
@@ -2293,6 +2370,7 @@ export default function SmartMenu({
       standingOutSuffix: 'تتألق في القائمة الآن.',
       mainRecommendation: 'الترشيح الرئيسي',
       drinkRecommendation: 'ترشيح المشروب',
+      sweetRecommendation: 'ترشيح الحلوى',
     },
     ku: {
       morning: {
@@ -2349,6 +2427,7 @@ export default function SmartMenu({
       standingOutSuffix: 'ئێستا لە مێنیووەکەدا دیارن.',
       mainRecommendation: 'پێشنیاری سەرەکی',
       drinkRecommendation: 'پێشنیاری خواردنەوە',
+      sweetRecommendation: 'پێشنیاری شیرینی',
     },
   } as const
   const contextLanguage = language === 'ar' ? 'ar_fusha' : language
@@ -2379,7 +2458,8 @@ export default function SmartMenu({
             : null
         const effectiveTimeZone = browserTimeZone || menuTimezone || 'Asia/Baghdad'
         const slot = getCurrentTimeSlot(effectiveTimeZone, slotTimes)
-        return mapSlotToDisplayContext(slot)
+        const hour = getHourInTimeZone(effectiveTimeZone)
+        return mapSlotToGreetingContext(slot, hour)
       } catch {
         return getAutoContextForTimeZone(menuTimezone)
       }
@@ -2410,7 +2490,12 @@ export default function SmartMenu({
     contextLanguage === 'en'
       ? smartSearchFeelingContext?.aiTail || contextHeroTailMap[selectedContext]
       : contextHeroTailMap[selectedContext]
-  const activeHeroMessage = `${contextHeroMessageMap[selectedContext]} ${localizedHeroTail}`
+  /** Server composes weather + slot copy in menu-feeling-message (Open-Meteo + restaurant lat/lng + menu timezone). */
+  const fallbackHeroMessage = `${contextHeroMessageMap[selectedContext]} ${localizedHeroTail}`.replace(/\s+/g, ' ').trim()
+  const activeHeroMessage = smartSearchFeelingContext?.message?.trim()
+    ? smartSearchFeelingContext.message.trim()
+    : fallbackHeroMessage
+  const displayHeroMessage = heroAiLine ?? activeHeroMessage
   const summaryTemplate =
     filteredItems.length === 1
       ? currentCopy.resultsSummarySingular
@@ -2420,7 +2505,7 @@ export default function SmartMenu({
       count: filteredItems.length.toString(),
       query: trimmedSearch,
     })
-    : activeHeroMessage || currentCopy.smartSearchDescription
+    : displayHeroMessage || currentCopy.smartSearchDescription
 
   const contextRankedItems = useMemo(() => {
     const scoreItem = (item: MenuItem) => {
@@ -2496,18 +2581,22 @@ export default function SmartMenu({
       if (selectedContext === 'lunch') {
         if (/juice|lemonade|ayran/.test(bucket)) score += 18
         if (/grill|rice|burger|kebab|shawarma|platter|chicken|beef|lamb|fish/.test(bucket)) score += 34
+        if (isBreakfastItem(item)) score -= 80
       }
       if (selectedContext === 'hot') {
         if (/juice|lemonade|iced|cold|ayran|smoothie/.test(bucket)) score += 32
         if (/salad|light|chicken|fish/.test(bucket)) score += 20
+        if (isBreakfastItem(item)) score -= 60
       }
       if (selectedContext === 'evening') {
         if (/tea|coffee|juice|mocktail|ayran/.test(bucket)) score += 18
         if (/grill|steak|kebab|fish|lamb|beef|main/.test(bucket)) score += 30
+        if (isBreakfastItem(item)) score -= 100
       }
       if (selectedContext === 'rainy' || selectedContext === 'cold') {
         if (/coffee|tea|espresso|cappuccino|hot chocolate|mocha|latte/.test(bucket)) score += 42
         if (/soup|stew|grill|kebab|lamb|beef|pasta|rice/.test(bucket)) score += 28
+        if (isBreakfastItem(item)) score -= 80
       }
       return score
     }
@@ -2523,7 +2612,7 @@ export default function SmartMenu({
         return !isDrinkItem(item) && !/steak|beef|lamb|mixed grill|grill|kebab|shawarma|burger|pasta|platter|tenderloin/.test(bucket)
       }
       if (selectedMoodId === 'sweet') return isSweetItem(item)
-      if (selectedMoodId === 'sharing') return /platter|share|sharing|starter|appetizer|combo|for two|for 2|two persons?|two people|for four|for 4|four persons?|four people|family|group|tray|breakfast for/.test(bucket)
+      if (selectedMoodId === 'sharing') return isSharingCandidate(item, selectedContext)
       if (selectedMoodId === 'filling') return isMainItem(item)
       return isMainItem(item)
     })
@@ -2535,7 +2624,7 @@ export default function SmartMenu({
         .filter(({ item }) => isSweetItem(item))
         .sort((a, b) => getSweetPriorityScore(b.item) - getSweetPriorityScore(a.item))
         .slice(0, 2)
-        .map(({ item }) => ({ item, kind: (isDrinkItem(item) ? 'drink' : 'main') as 'drink' | 'main' }))
+        .map(({ item }) => ({ item, kind: getRecommendationKind(item) }))
     }
 
     if (selectedMoodId === 'drinks') {
@@ -2551,18 +2640,26 @@ export default function SmartMenu({
 
     if (selectedMoodId === 'sharing') {
       return rankedFromMood
-        .filter(({ item }) => /platter|share|sharing|starter|appetizer|combo|for two|for 2|two persons?|two people|for four|for 4|four persons?|four people|family|group|tray|breakfast for/.test(`${item.name} ${item.category?.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase()))
+        .filter(({ item }) => isSharingCandidate(item, selectedContext))
         .slice(0, 2)
         .map(({ item }) => ({ item, kind: 'main' as const }))
     }
 
-    const picks: Array<{ item: MenuItem; kind: 'main' | 'drink' }> = []
+    const picks: Array<{ item: MenuItem; kind: 'main' | 'drink' | 'sweet' }> = []
     const topMain = mains[0]?.item ?? null
     const topDrink = drinks.find(({ item }) => item.id !== topMain?.id)?.item ?? null
-    if (topMain) picks.push({ item: topMain, kind: 'main' })
-    if (topDrink) picks.push({ item: topDrink, kind: 'drink' })
+    const topSweet = rankedFromMood
+      .filter(({ item }) => item.id !== topMain?.id && item.id !== topDrink?.id)
+      .filter(({ item }) => isSweetItem(item))
+      .sort((a, b) => getSweetPriorityScore(b.item) - getSweetPriorityScore(a.item))[0]?.item ?? null
+    if (topMain) picks.push({ item: topMain, kind: getRecommendationKind(topMain) })
+    if (topDrink) {
+      picks.push({ item: topDrink, kind: getRecommendationKind(topDrink) })
+    } else if (topSweet) {
+      picks.push({ item: topSweet, kind: getRecommendationKind(topSweet) })
+    }
     return picks
-  }, [filteredItems, getSweetPriorityScore, isDrinkItem, isMainItem, isSweetItem, selectedContext, selectedMoodId])
+  }, [filteredItems, getRecommendationKind, getSweetPriorityScore, isBreakfastItem, isDrinkItem, isMainItem, isSharingCandidate, isSweetItem, selectedContext, selectedMoodId])
 
   const contextHeroItems = useMemo(() => {
     if (selectedContext === 'rainy' || selectedContext === 'cold') {
@@ -2665,7 +2762,6 @@ export default function SmartMenu({
       .slice(0, 2)
   }, [activeHeroItems])
 
-  const recommendationLead = realStandingOutItems[0] ? getDisplayNameForItem(realStandingOutItems[0]) : ''
   const scarcityItem = baseFilteredItems.find((item) => item._hints?.badgeText === 'Limited Today') || null
   const themePrimary = theme?.primaryColor || '#1c1c1e'
   const themeAccent = theme?.accentColor || '#E8440A'
@@ -2680,6 +2776,22 @@ export default function SmartMenu({
   const dividerColor = hexToRgba(themeBorder, theme?.backgroundStyle === 'dark' ? 0.28 : 0.45)
   const accentSoft = hexToRgba(themeAccent, theme?.backgroundStyle === 'dark' ? 0.16 : 0.1)
   const accentBorder = hexToRgba(themeAccent, theme?.backgroundStyle === 'dark' ? 0.35 : 0.24)
+
+  const getRecommendationLabel = useCallback((kind: 'main' | 'drink' | 'sweet') => {
+    if (kind === 'drink') return localizedContextCopy.drinkRecommendation
+    if (kind === 'sweet') return localizedContextCopy.sweetRecommendation
+    return localizedContextCopy.mainRecommendation
+  }, [localizedContextCopy])
+
+  const getSectionSeeMoreLabel = useCallback((section: { category: CategorySection | null; items: MenuItem[] }) => {
+    const categoryName = section.category?.name ?? ''
+    const hasDrinkCategoryName = /\b(drink|drinks|beverage|beverages|juice|coffee|tea|smoothie|soda|cocktail|mocktail|hot drinks?|cold drinks?|soft drinks?|ice tea|iced tea|mojito|خواردنەوە|مشروب|مشروبات)\b/i.test(categoryName)
+    const visibleKinds = section.items.slice(0, Math.min(section.items.length, 6)).map(getRecommendationKind)
+    const drinkCount = visibleKinds.filter((kind) => kind === 'drink').length
+    return hasDrinkCategoryName || (visibleKinds.length > 0 && drinkCount >= Math.ceil(visibleKinds.length / 2))
+      ? currentCopy.seeMoreDrinksLabel
+      : currentCopy.seeMoreDishesLabel
+  }, [currentCopy.seeMoreDishesLabel, currentCopy.seeMoreDrinksLabel, getRecommendationKind])
 
   if (!isLanguageReady) {
     return (
@@ -2800,13 +2912,7 @@ export default function SmartMenu({
           <div className="px-5 pb-3 sm:px-6 lg:px-8">
             <div className="rounded-2xl border p-4" style={{ borderColor: hexToRgba('#ffffff', 0.1), backgroundColor: hexToRgba('#ffffff', 0.06) }}>
               <p className="text-[0.82rem] leading-6 text-white/72">
-                    {recommendationLead ? (
-                      <>
-                        <strong className="font-semibold text-white">{recommendationLead}</strong>
-                        {' '}
-                    {activeHeroMessage || currentCopy.smartSearchDescription}
-                      </>
-                ) : (activeHeroMessage || currentCopy.smartSearchDescription)}
+                {displayHeroMessage || currentCopy.smartSearchDescription}
               </p>
             </div>
           </div>
@@ -2836,6 +2942,8 @@ export default function SmartMenu({
                     <img
                       src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
                       alt={item.name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/20 to-black/75" />
@@ -2979,17 +3087,19 @@ export default function SmartMenu({
                     <img
                       src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
                       alt={item.name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-20 w-20 rounded-2xl object-cover"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 text-[0.56rem] font-bold uppercase tracking-[0.1em]" style={{ color: themeAccent }}>
-                        {kind === 'drink' ? localizedContextCopy.drinkRecommendation : localizedContextCopy.mainRecommendation}
+                        {getRecommendationLabel(kind)}
                       </div>
                       <div className="font-item text-[0.95rem] font-bold" style={{ color: textMain }}>
                         {getDisplayNameForItem(item)}
                       </div>
                       <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
-                        {translationCache[language]?.[item.id]?.description || item.description || `${kind === 'drink' ? localizedContextCopy.drinkRecommendation : localizedContextCopy.mainRecommendation}.`}
+                        {translationCache[language]?.[item.id]?.description || item.description || `${getRecommendationLabel(kind)}.`}
                       </div>
                       <div className="mt-2 text-[0.9rem] font-bold" style={{ color: textMain }}>
                         {formatMenuPriceWithVariant(item.price, priceVariant)}
@@ -3134,6 +3244,8 @@ export default function SmartMenu({
                           <img
                             src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
                             alt={item.name}
+                            loading="lazy"
+                            decoding="async"
                             className="h-full w-full object-cover"
                           />
                           {badge && (
@@ -3189,9 +3301,7 @@ export default function SmartMenu({
                       style={{ borderTop: `1px solid ${dividerColor}`, backgroundColor: surfaceSoft, color: themeAccent }}
                     >
                       {formatTemplate(
-                        /\b(drink|drinks|beverage|beverages|juice|coffee|tea|smoothie|soda|cocktail|mocktail|hot drinks?|cold drinks?|soft drinks?|ice tea|iced tea|خواردنەوە|مشروب|مشروبات)\b/i.test(section.category.name)
-                          ? currentCopy.seeMoreDrinksLabel
-                          : currentCopy.seeMoreDishesLabel,
+                        getSectionSeeMoreLabel(section),
                         { count: String(section.items.length - maxInitialItemsPerCategory) }
                       )}
                     </button>
@@ -3219,6 +3329,8 @@ export default function SmartMenu({
                       <img
                         src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
                         alt={item.name}
+                        loading="lazy"
+                        decoding="async"
                         className="h-8 w-8 rounded-full object-cover"
                       />
                       <span className="text-left">
@@ -3353,6 +3465,8 @@ export default function SmartMenu({
                       <img
                         src={line.item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
                         alt={line.item.name}
+                        loading="lazy"
+                        decoding="async"
                         className="h-12 w-12 rounded-xl object-cover"
                       />
                       <div className="min-w-0 flex-1">
@@ -3454,6 +3568,8 @@ export default function SmartMenu({
             <img
               src={selectedItemForDetail.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
               alt={selectedItemForDetail.name}
+              loading="lazy"
+              decoding="async"
               className="h-[270px] w-full object-cover sm:h-[320px]"
             />
             <div className="overflow-y-auto px-5 py-5 sm:px-6 lg:px-8">
@@ -4240,6 +4356,8 @@ export default function SmartMenu({
                                 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
                               }
                               alt={item.name}
+                              loading="lazy"
+                              decoding="async"
                               className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
                             />
                           </div>
@@ -4325,6 +4443,8 @@ export default function SmartMenu({
                       <img
                         src={item.imageUrl}
                         alt={suggestionName}
+                        loading="lazy"
+                        decoding="async"
                         className="h-32 w-full object-cover"
                       />
                     )}
@@ -4401,6 +4521,8 @@ export default function SmartMenu({
                   <img
                     src={selectedItemForDetail.imageUrl}
                     alt={selectedItemForDetail.name}
+                    loading="lazy"
+                    decoding="async"
                     className="max-w-full max-h-64 object-contain"
                   />
                 </div>

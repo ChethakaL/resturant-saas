@@ -117,6 +117,19 @@ function fallbackByMargin(items: CarouselMenuItem[]): CarouselMenuItem[] {
   return [...items].sort((a, b) => b.marginPercent - a.marginPercent)
 }
 
+/**
+ * Same food/drink filtering and margin ordering as suggestCarouselItems, without calling Gemini.
+ * Used on the guest menu request path for instant carousel ordering when DB cache is cold.
+ */
+export function getFallbackCarouselItemIdsFromPool(items: CarouselMenuItem[], maxItems: number): string[] {
+  const foodOnly = items.filter((i) => !isDrinkLike(i))
+  const pool = foodOnly.length > 0 ? foodOnly : items
+  if (pool.length === 0) return []
+  return fallbackByMargin(pool)
+    .slice(0, maxItems)
+    .map((i) => i.id)
+}
+
 function formatPrice(price: number): string {
   if (price >= 1000) return `${(price / 1000).toFixed(1)}k`
   return String(Math.round(price))

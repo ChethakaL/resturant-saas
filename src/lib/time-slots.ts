@@ -78,6 +78,47 @@ function inSlot(hour: number, boundary: SlotBoundary): boolean {
   return hour >= start || hour < end
 }
 
+/** Current hour (0–23) in the given IANA timezone. */
+export function getHourInTimeZone(tz: string): number {
+  return parseInt(
+    new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date()),
+    10
+  )
+}
+
+/** YYYY-MM-DD-HH in `tz` — stable cache keys for time-bucketed guest copy. */
+export function formatHourBucketInTimeZone(tz: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date())
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')}-${get('hour')}`
+}
+
+export type GreetingBucket = 'morning' | 'lunch' | 'evening'
+
+/**
+ * Maps internal slot + wall-clock hour to hero greeting (Good morning / afternoon / evening).
+ * Important: `getCurrentTimeSlot` returns `night` for any hour not in breakfast/day/evening windows.
+ * Custom slotTimes often leave gaps (e.g. 7am before an 8am breakfast start) — those hours were
+ * incorrectly lumped into the same UI bucket as dinner. We split `night` by actual hour.
+ */
+export function mapSlotToGreetingContext(slot: SlotName, hour: number): GreetingBucket {
+  if (slot === 'breakfast') return 'morning'
+  if (slot === 'day') return 'lunch'
+  if (slot === 'evening') return 'evening'
+  // night — refine by clock so 7am is not "Good evening"
+  if (hour >= 5 && hour < 11) return 'morning'
+  if (hour >= 11 && hour < 14) return 'lunch'
+  if (hour >= 14 && hour < 18) return 'evening'
+  return 'evening'
+}
+
 /** Format slot time boundary as a human-readable string, e.g. "6am–10am" or "22pm–6am". */
 export function formatSlotRange(boundary: SlotBoundary): string {
   return `${formatHour(boundary.start)}–${formatHour(boundary.end)}`

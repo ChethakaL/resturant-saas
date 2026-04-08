@@ -59,6 +59,8 @@ model Restaurant {
   promoRedemptions       PromoRedemption[]
   receipts               Receipt[]
   mediaAssets            MediaAsset[]
+  carouselAiCaches       CarouselAiCache[]
+  menuBadgeAiCaches      MenuBadgeAiCache[]
 
   @@map("restaurants")
 }
@@ -321,6 +323,8 @@ model MenuItem {
   @@index([mediaAssetId])
   @@index([available])
   @@index([popularityScore])
+  // Guest menu: WHERE restaurantId AND status AND available (hot path)
+  @@index([restaurantId, status, available])
   @@map("menu_items")
 }
 
@@ -489,6 +493,7 @@ model Sale {
   @@index([restaurantId])
   @@index([customerId])
   @@index([timestamp])
+  @@index([restaurantId, timestamp])
   @@index([orderNumber])
   @@index([status])
   @@index([branchId])
@@ -821,6 +826,38 @@ model MenuShowcaseItem {
   @@unique([showcaseId, menuItemId])
   @@index([showcaseId])
   @@map("menu_showcase_items")
+}
+
+// Precomputed Gemini carousel picks; guest menu reads without blocking on AI.
+model CarouselAiCache {
+  id             String   @id @default(cuid())
+  restaurantId   String
+  timeSlotLabel  String
+  poolKeyHash    String
+  itemIds        String[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, timeSlotLabel, poolKeyHash])
+  @@index([restaurantId, updatedAt])
+  @@map("carousel_ai_caches")
+}
+
+// Precomputed badge picks when sales data is thin; read without blocking on AI.
+model MenuBadgeAiCache {
+  id             String   @id @default(cuid())
+  restaurantId   String
+  itemSetHash    String
+  signatureIds   String[]
+  mostLovedIds   String[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, itemSetHash])
+  @@index([restaurantId, updatedAt])
+  @@map("menu_badge_ai_caches")
 }
 
 // ----- Supplier portal & global ingredients -----
