@@ -109,13 +109,16 @@ export type GreetingBucket = 'morning' | 'lunch' | 'evening'
  * incorrectly lumped into the same UI bucket as dinner. We split `night` by actual hour.
  */
 export function mapSlotToGreetingContext(slot: SlotName, hour: number): GreetingBucket {
+  // Clock-based guardrails win for greeting labels to avoid mislabeling when
+  // custom slot windows overlap (e.g. breakfast 8-14 and day 13-24).
+  if (hour >= 5 && hour < 11) return 'morning'
+  if (hour >= 11 && hour < 16) return 'lunch'
+  if (hour >= 16 && hour < 24) return 'evening'
+
   if (slot === 'breakfast') return 'morning'
   if (slot === 'day') return 'lunch'
   if (slot === 'evening') return 'evening'
   // night — refine by clock so 7am is not "Good evening"
-  if (hour >= 5 && hour < 11) return 'morning'
-  if (hour >= 11 && hour < 14) return 'lunch'
-  if (hour >= 14 && hour < 18) return 'evening'
   return 'evening'
 }
 

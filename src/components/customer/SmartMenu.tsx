@@ -3092,11 +3092,6 @@ export default function SmartMenu({
                       className="h-20 w-20 rounded-2xl object-cover"
                     />
                     <div className="min-w-0 flex-1">
-                      {selectedContext !== 'morning' && (
-                        <div className="mb-1 text-[0.56rem] font-bold uppercase tracking-[0.1em]" style={{ color: themeAccent }}>
-                          {getRecommendationLabel(kind)}
-                        </div>
-                      )}
                       <div className="font-item text-[0.95rem] font-bold" style={{ color: textMain }}>
                         {getDisplayNameForItem(item)}
                       </div>
