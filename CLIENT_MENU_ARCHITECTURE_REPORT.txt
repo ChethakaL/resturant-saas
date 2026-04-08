@@ -1,0 +1,282 @@
+IServe+ Client Menu Architecture and AI Behavior Report
+Prepared for: Stakeholders and business review
+Prepared by: Technical team summary
+
+============================================================
+1) TECHNOLOGY OVERVIEW
+============================================================
+
+Core stack:
+- Next.js (App Router) for frontend + backend routes
+- TypeScript for both client and server logic
+- Tailwind CSS for UI styling
+- PostgreSQL database via Prisma ORM
+- Gemini is the primary AI provider used in the menu experience
+
+General architecture:
+- The guest menu route (restaurant slug page) is server-rendered.
+- Backend assembles a single menu bundle with menu items, categories, showcases, and engine outputs.
+- Frontend then renders an interactive Smart Menu experience from this bundle.
+
+
+============================================================
+2) HIGH-LEVEL FLOW WHEN A GUEST OPENS THE MENU
+============================================================
+
+When a user opens a URL like /cavern:
+
+Step A: Restaurant context is resolved
+- Restaurant is found by slug.
+- Restaurant settings are loaded (theme, timezone, language preferences, engine settings, etc.).
+
+Step B: Time and context are resolved
+- Current time slot is computed from restaurant timezone + slot config.
+- Context can become morning/lunch/evening and can also adapt to weather contexts like hot/rainy/cold.
+
+Step C: Menu bundle is assembled
+- Active menu items, categories, showcases, and sales signals are loaded.
+- Profit and popularity signals are attached to items.
+- Recommendation engine shapes item hints, category ordering, bundles, upsells, and mood flow.
+
+Step D: Frontend renders sections
+- Hero area
+- 3-card Chef recommendation strip
+- Mood selector
+- Smart/Excellent picks section
+- Category sections
+- Pairing/bundle/cart interactions
+
+Step E: Non-blocking AI enhancements
+- AI hero message endpoint is requested after initial paint.
+- Cached AI outputs are used where possible.
+
+
+============================================================
+3) HERO SECTION (TIMEZONE + LOCATION + WEATHER + AI)
+============================================================
+
+How it works:
+- Restaurant timezone is read from settings (or restaurant timezone fallback).
+- Restaurant location (lat/lng) is used for weather context.
+- Weather + time slot produces a contextual opening message.
+- An AI-enhanced hero line is fetched from a dedicated endpoint after first paint.
+
+Important behavior:
+- The hero section does not wait on heavy AI generation during first render.
+- AI hero text is cached by restaurant/language/time bucket to keep repeat loads fast.
+
+What this means for business:
+- Guests get contextual messaging tied to local time and local weather.
+- Language-specific copy appears naturally for EN/AR/KU.
+
+
+============================================================
+4) SHOWCASE/CAROUSEL ARCHITECTURE
+============================================================
+
+Primary source of truth:
+- Menu showcases are stored in the database and editable in the admin optimization experience.
+
+How items are chosen inside showcases:
+- If a showcase has manual item IDs, those are respected.
+- If showcase is context/time-slot based and no manual set is available for the active slot, AI/cached ranking is used.
+- If no showcases exist, a fallback "Chef selection" is built from available signals.
+
+Context-aware behavior:
+- Time-aware showcases: breakfast, lunch/day-evening window, dinner/night
+- Weather-aware showcases: hot day, rainy day, cold day
+- Seasonal showcase constraints are respected when configured.
+
+
+============================================================
+5) 3-ITEM DECISION ARCHITECTURE (CLIENT REQUIREMENT)
+============================================================
+
+Business framework implemented:
+- Exactly 3 hero recommendation cards are displayed in fixed order:
+  1) Signature
+  2) Chef's Recommendation
+  3) Guest Favorite
+
+Behavioral intent:
+- Signature: highest anchor role (premium/ceiling framing)
+- Chef's Recommendation: target choice (expert framing)
+- Guest Favorite: social proof/comfort fallback
+
+Visual behavior:
+- Each of the three cards uses a distinct badge and color scheme.
+- The order is explicitly fixed by index, not random.
+
+
+============================================================
+6) "WHAT ARE YOU IN THE MOOD FOR?" SECTION
+============================================================
+
+Purpose:
+- Quickly filters menu discovery by guest intent.
+
+Behavior:
+- Mood chips are generated from engine outputs and available menu state.
+- Examples include everything/light/filling/sharing/drinks/sweet.
+- The section is language-aware and context-aware.
+- Certain breakfast-like suggestions are intentionally suppressed outside morning context in specific flows.
+
+Business value:
+- Reduces browsing friction.
+- Moves users from generic browsing to guided intent-based selection.
+
+
+============================================================
+7) SMART/EXCELLENT PICKS SECTION (TIME-AWARE)
+============================================================
+
+Title behavior:
+- This title changes by active context:
+  - Excellent Morning Picks
+  - Smart Lunch Picks
+  - Excellent Evening Picks
+  - Smart Rainy-Day Picks
+  - Brilliant Cold-Day Picks
+  - etc.
+
+How pick cards are composed:
+- Section chooses high-priority candidates using item hints + margin + popularity.
+- It typically surfaces a focused set (commonly two visible cards in layout variants).
+- Each card is tagged with semantic label:
+  - Main recommendation
+  - Drink recommendation
+  - Sweet recommendation
+
+How recommendation type is chosen:
+- A kind classifier determines whether an item is main/drink/sweet.
+- Labels are rendered based on this kind in the selected language.
+
+Business value:
+- Converts contextual demand into focused choices.
+- Keeps recommendation semantics understandable to guests.
+
+
+============================================================
+8) CATEGORY SECTIONS: BADGES + SEE MORE BEHAVIOR
+============================================================
+
+Category card badge logic (inside each category):
+- For each category, up to three highlighted badge roles are mapped to items:
+  1) Signature:
+     - Prefer engine anchor item
+     - Fallback: highest-priced item
+  2) Chef's Recommendation:
+     - Prefer featured engine item
+     - Fallback: strongest popularity/price candidate
+  3) Guest Favorite:
+     - Prefer items with popularity
+     - Fallback: lower-price social-proof style choice
+
+This means the badge system works even if explicit engine hints are incomplete.
+
+"See more dishes" vs "See more drinks" logic:
+- For collapsed categories, the system inspects:
+  - category name keywords (drink/beverage/juice/coffee/tea/etc., multilingual),
+  - and visible item kind mix.
+- If category appears beverage-heavy, label becomes "See more drinks".
+- Otherwise, label becomes "See more dishes".
+
+Business value:
+- Dynamic CTA wording matches the category nature.
+- Better clarity for guests while scrolling categories.
+
+
+============================================================
+9) AI ARCHITECTURE: BACKEND AND FRONTEND CONNECTIONS
+============================================================
+
+Main AI touchpoints in this menu journey:
+
+A) Hero feeling AI
+- Input: restaurant ID, language, timezone, location/weather context
+- Output: contextual hero message string
+- Delivery: API endpoint called from frontend after first paint
+- Caching: yes (hour-bucket/time-aware)
+
+B) Carousel suggestion AI (cached strategy)
+- Input: candidate item pool + time slot
+- Output: ranked IDs for showcase ordering
+- Behavior: cache-first, fallback ranking when needed
+
+C) Badge suggestion AI (cold-start helper)
+- Used when sales signal is weak
+- Produces lightweight signature/most-loved style picks
+- Cached in DB for reuse
+
+D) Optional AI descriptions
+- Background generation for missing descriptions when feature flag is enabled
+- Not required for baseline menu render
+
+Design principle:
+- AI is assistive and layered.
+- Core menu remains functional with deterministic fallbacks.
+
+
+============================================================
+10) PERFORMANCE INCIDENT SUMMARY (RECENT)
+============================================================
+
+Observed delay:
+- Client menu sometimes took 20-35s.
+
+Confirmed root causes identified during debugging:
+1) Extremely large base64 images were previously loaded with menu payloads.
+2) Even after payload slimming, DB query still fetched large image blob fields.
+
+Fix strategy applied:
+- Initial page now avoids transferring image blobs in the main query path.
+- Image delivery moved to dedicated image endpoint path for legacy base64 entries.
+- Main menu query now fetches only required lightweight fields.
+
+Result:
+- Major reduction in initial document size and request duration in measured test runs.
+
+
+============================================================
+11) WHAT CAN BE CHANGED SAFELY NEXT (BUSINESS ROADMAP)
+============================================================
+
+If stakeholders want changes, these are low-risk strategic levers:
+
+1) Recommendation policy tuning
+- Adjust how strongly margin vs popularity influences picks.
+- Keep fixed 3-role architecture while changing scoring weights.
+
+2) Context strategy
+- Tune morning/lunch/evening thresholds and weather mappings.
+- Localize context messaging per brand tone.
+
+3) Showcase governance
+- Keep manual admin control as priority.
+- Use AI only as fallback or assist mode.
+
+4) Image pipeline hardening
+- Migrate all legacy base64 images to object storage URLs.
+- Keep proxy route only as transitional compatibility path.
+
+
+============================================================
+12) EXECUTIVE CONCLUSION
+============================================================
+
+The client menu system is a hybrid decision architecture:
+- deterministic business logic (profit, popularity, categories, rules),
+- controlled editorial input (admin-managed showcases),
+- AI augmentation (Gemini-based contextual messaging and suggestion support).
+
+It is aligned with the requested behavioral model:
+- Signature -> Chef's Recommendation -> Guest Favorite
+- context-aware "Smart/Excellent Picks"
+- mood-driven discovery
+- dynamic category continuation ("See more drinks/dishes")
+
+The system is now understandable as a layered platform:
+- Data + rules first
+- AI second
+- UX orchestration on top
+
