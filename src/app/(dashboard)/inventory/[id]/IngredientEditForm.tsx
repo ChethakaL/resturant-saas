@@ -19,6 +19,7 @@ import Link from 'next/link'
 import UploadReceiptModal from '../UploadReceiptModal'
 import { SupplierDirectoryModal, type SupplierDirectoryEntry } from '../SupplierDirectoryModal'
 import { DEFAULT_INVENTORY_CATEGORY } from '@/lib/inventory-categories'
+import { convertQuantityValue } from '@/lib/unit-converter'
 
 function PurchaseDateField({
   value,
@@ -242,18 +243,8 @@ export default function IngredientEditForm({
   }, [fetchTranslation, ingredient.name])
 
   const convertQuantity = (qty: number, fromUnit: string, toUnit: string): number => {
-    if (fromUnit === toUnit) return qty
-
-    if (['g', 'kg'].includes(fromUnit) && ['g', 'kg'].includes(toUnit)) {
-      const inGrams = fromUnit === 'kg' ? qty * 1000 : qty
-      return toUnit === 'kg' ? inGrams / 1000 : inGrams
-    }
-    if (['ml', 'L'].includes(fromUnit) && ['ml', 'L'].includes(toUnit)) {
-      const inMl = fromUnit === 'L' ? qty * 1000 : qty
-      return toUnit === 'L' ? inMl / 1000 : inMl
-    }
-    if (fromUnit === 'piece' && toUnit === 'piece') return qty
-
+    const converted = convertQuantityValue(qty, fromUnit, toUnit)
+    if (converted !== null) return converted
     console.warn(`Unit mismatch: ${fromUnit} → ${toUnit}`)
     return qty
   }
@@ -297,6 +288,27 @@ export default function IngredientEditForm({
       variants: prev.variants.map((v, i) =>
         i === index ? { ...v, [field]: value } : v
       ),
+    }))
+  }
+
+  const updateUnitOfUse = (unit: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      unit,
+      variants: prev.variants.map((variant) => {
+        const quantity = parseFloat(variant.packageQuantity || '0')
+        const convertedQuantity =
+          quantity > 0 ? convertQuantityValue(quantity, variant.packageUnit, unit) : null
+
+        return {
+          ...variant,
+          packageUnit: unit,
+          packageQuantity:
+            convertedQuantity !== null
+              ? String(Number(convertedQuantity.toFixed(6)))
+              : variant.packageQuantity,
+        }
+      }),
     }))
   }
 
@@ -610,7 +622,7 @@ export default function IngredientEditForm({
                                   <button
                                     key={opt.value}
                                     type="button"
-                                    onClick={() => setFormData({ ...formData, unit: opt.value })}
+                                    onClick={() => updateUnitOfUse(opt.value)}
                                     className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
                                       active
                                         ? 'border-emerald-600 bg-emerald-600 text-white'

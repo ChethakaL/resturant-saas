@@ -27,6 +27,8 @@ interface ReceiptItem {
   unitPrice: number
   totalPrice: number
   brand?: string
+  packageQuantity?: number
+  packageUnit?: string
 }
 
 interface ProcessedReceiptItem {
@@ -72,6 +74,68 @@ export default function ReceiptUploadModal({
       .replace(/[()\-_,]+/g, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim()
+
+  const normalizeForIngredientMatch = (value: string) => {
+    const normalized = value
+      .toLowerCase()
+      .replace(/\b\d+(?:\.\d+)?\s*(?:kg|g|grams?|kilograms?|l|lt|liter|litre|liters|litres|ml|pcs?|pieces?)\b/g, ' ')
+      .replace(/\b(?:bag|bags|box|boxes|pack|packs|bottle|bottles|can|cans|carton|cartons|jar|jars|block|blocks)\b/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+
+    return normalized
+      .split(' ')
+      .filter((token) => token.length > 1)
+      .join(' ')
+  }
+
+  const getMatchTokens = (value: string) => normalizeForIngredientMatch(value).split(' ').filter(Boolean)
+
+  const ingredientMatchScore = (receiptName: string, ingredientName: string, brand?: string) => {
+    const receiptNormalized = normalizeForIngredientMatch(receiptName)
+    const ingredientNormalized = normalizeForIngredientMatch(ingredientName)
+    const brandNormalized = brand ? normalizeForIngredientMatch(brand) : ''
+
+    if (!receiptNormalized || !ingredientNormalized) return 0
+    if (receiptNormalized === ingredientNormalized) return 100
+    if (receiptNormalized.includes(ingredientNormalized) || ingredientNormalized.includes(receiptNormalized)) return 90
+
+    const receiptTokens = new Set(getMatchTokens(`${receiptName} ${brand ?? ''}`))
+    const ingredientTokens = getMatchTokens(ingredientName)
+    if (ingredientTokens.length === 0) return 0
+
+    const matchedTokens = ingredientTokens.filter((token) => receiptTokens.has(token))
+    const tokenScore = matchedTokens.length / ingredientTokens.length
+    const brandScore = brandNormalized && ingredientNormalized.includes(brandNormalized) ? 0.25 : 0
+
+    return tokenScore + brandScore
+  }
+
+  const findMatchingIngredient = (raw: any) => {
+    const candidates = allIngredients
+      .map((ingredient) => ({
+        ingredient,
+        score: ingredientMatchScore(String(raw.name || ''), ingredient.name, raw.brand),
+      }))
+      .filter((candidate) => candidate.score >= 0.6)
+      .sort((left, right) => right.score - left.score)
+
+    return candidates[0]?.ingredient ?? null
+  }
+
+  const extractPackageSize = (value: string) => {
+    const match = value.match(/\b(\d+(?:\.\d+)?)\s*(?:pcs?|pieces?)\b/i)
+    if (!match) return null
+
+    const quantity = Number(match[1])
+    if (!Number.isFinite(quantity) || quantity <= 1) return null
+
+    return {
+      packageQuantity: quantity,
+      packageUnit: 'piece',
+    }
+  }
 
   useEffect(() => {
     if (open) {
@@ -142,18 +206,16 @@ export default function ReceiptUploadModal({
         : null
 
       const items = (data.extractedData?.items || []).map((raw: any, idx: number) => {
-        const matched = allIngredients.find(ing =>
-          ing.name.toLowerCase().includes(raw.name.toLowerCase()) ||
-          (raw.brand && ing.brand?.toLowerCase().includes(raw.brand.toLowerCase()))
-        )
+        const matched = findMatchingIngredient(raw)
 
         const normalizedRawName = String(raw.name || '').trim().toLowerCase()
         const contextMatchesCurrentIngredient =
           Boolean(contextIngredient) &&
           normalizedRawName.length > 0 &&
           (
-            contextIngredient!.name.toLowerCase().includes(normalizedRawName) ||
-            normalizedRawName.includes(contextIngredient!.name.toLowerCase())
+            normalizeForIngredientMatch(contextIngredient!.name).includes(normalizeForIngredientMatch(normalizedRawName)) ||
+            normalizeForIngredientMatch(normalizedRawName).includes(normalizeForIngredientMatch(contextIngredient!.name)) ||
+            ingredientMatchScore(normalizedRawName, contextIngredient!.name, raw.brand) >= 0.6
           )
 
         const linkedIngredientId = matched?.id
@@ -161,6 +223,8 @@ export default function ReceiptUploadModal({
           : (data.extractedData?.items || []).length === 1 || contextMatchesCurrentIngredient
             ? ingredientId || ''
             : ''
+
+        const packageSize = extractPackageSize(raw.name || '')
 
         return {
           id: `item-${idx}`,
@@ -170,6 +234,7 @@ export default function ReceiptUploadModal({
           unitPrice: raw.unitPrice || 0,
           totalPrice: raw.totalPrice || 0,
           brand: raw.brand,
+          ...(packageSize ?? {}),
           ingredientId: linkedIngredientId,
         }
       })
@@ -230,7 +295,7 @@ export default function ReceiptUploadModal({
 
   const updateNumericItemField = (
     id: string,
-    field: 'quantity' | 'unitPrice' | 'totalPrice',
+    field: 'quantity' | 'unitPrice' | 'totalPrice' | 'packageQuantity',
     value: string
   ) => {
     const parsed = Number(value)
@@ -241,6 +306,27 @@ export default function ReceiptUploadModal({
 
   const removeItem = (id: string) => {
     setExtractedItems(prev => prev.filter(item => item.id !== id))
+  }
+
+  const getReceiptItemTotals = (item: ReceiptItem) => {
+    const packageQuantity =
+      typeof item.packageQuantity === 'number' && item.packageQuantity > 0
+        ? item.packageQuantity
+        : null
+    const packageUnit = item.packageUnit || 'piece'
+    const totalUnits = packageQuantity ? item.quantity * packageQuantity : item.quantity
+    const unitLabel = packageQuantity ? packageUnit : item.unit
+    const costPerUnit = totalUnits > 0 ? item.totalPrice / totalUnits : 0
+    const packagePrice = item.quantity > 0 ? item.totalPrice / item.quantity : item.totalPrice
+
+    return {
+      packageQuantity,
+      packageUnit,
+      totalUnits,
+      unitLabel,
+      costPerUnit,
+      packagePrice,
+    }
   }
 
   const resetModal = () => {
@@ -399,16 +485,19 @@ export default function ReceiptUploadModal({
                 </div>
 
                 <div className="space-y-4 max-h-[420px] overflow-y-auto pr-2">
-                  {extractedItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className={cn(
-                        "p-4 border rounded-lg space-y-3 transition-all",
-                        item.ingredientId
-                          ? "border-green-200 bg-green-50/40"
-                          : "border-amber-200 bg-amber-50/40"
-                      )}
-                    >
+                  {extractedItems.map((item) => {
+                    const totals = getReceiptItemTotals(item)
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "p-4 border rounded-lg space-y-3 transition-all",
+                          item.ingredientId
+                            ? "border-green-200 bg-green-50/40"
+                            : "border-amber-200 bg-amber-50/40"
+                        )}
+                      >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="grid gap-3 md:grid-cols-2">
@@ -438,7 +527,7 @@ export default function ReceiptUploadModal({
                             <div className="grid grid-cols-3 gap-2 md:col-span-2">
                               <div className="space-y-1.5">
                                 <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                                  {td('Quantity')}
+                                  {totals.packageQuantity ? td('Packs bought') : td('Quantity')}
                                 </Label>
                                 <Input
                                   type="number"
@@ -451,7 +540,7 @@ export default function ReceiptUploadModal({
                               </div>
                               <div className="space-y-1.5">
                                 <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                                  {td('Unit')}
+                                  {totals.packageQuantity ? td('Purchase unit') : td('Unit')}
                                 </Label>
                                 <Input
                                   value={item.unit}
@@ -462,7 +551,7 @@ export default function ReceiptUploadModal({
                               </div>
                               <div className="space-y-1.5">
                                 <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                                  {td('Total Price')}
+                                  {td('Total line price')}
                                 </Label>
                                 <Input
                                   type="number"
@@ -474,9 +563,56 @@ export default function ReceiptUploadModal({
                                 />
                               </div>
                             </div>
+                            {totals.packageQuantity ? (
+                              <div className="grid grid-cols-2 gap-2 md:col-span-2">
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                    {td('Pieces per pack')}
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={item.packageQuantity ?? ''}
+                                    onChange={(e) => updateNumericItemField(item.id, 'packageQuantity', e.target.value)}
+                                    className="text-sm"
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                    {td('Package unit')}
+                                  </Label>
+                                  <Input
+                                    value={item.packageUnit || 'piece'}
+                                    onChange={(e) => updateItem(item.id, { packageUnit: e.target.value })}
+                                    className="text-sm"
+                                    dir="auto"
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
-                          <div className="text-sm text-muted-foreground mt-2">
-                            {item.quantity} × {item.unit} @ {item.unitPrice.toLocaleString()} IQD
+                          <div className="mt-3 rounded-md border border-slate-200 bg-white/80 px-3 py-2 text-sm text-slate-700">
+                            {totals.packageQuantity ? (
+                              <>
+                                <div>
+                                  {item.quantity} {td('packs')} × {totals.packageQuantity} {totals.packageUnit}
+                                  {' = '}
+                                  <span className="font-medium">
+                                    {totals.totalUnits.toLocaleString()} {totals.unitLabel}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {td('Package price')}: {Math.round(totals.packagePrice).toLocaleString()} IQD
+                                  {' · '}
+                                  {td('Cost per')} {totals.unitLabel}: {Math.round(totals.costPerUnit).toLocaleString()} IQD
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {item.quantity} × {item.unit} @ {item.unitPrice.toLocaleString()} IQD
+                              </>
+                            )}
                           </div>
                         </div>
                         <div className="text-right font-medium">
@@ -535,8 +671,9 @@ export default function ReceiptUploadModal({
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button> */}
-                    </div>
-                  ))}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             </div>
