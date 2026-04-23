@@ -105,6 +105,24 @@ Schema:
 Do not use the document title "فاتورة مبيعات" as supplier unless a real vendor name is not visible.`
 }
 
+function parseReceiptJsonWithRecovery(rawText: string) {
+  const attempts = [
+    rawText,
+    rawText.replace(/```json/g, '').replace(/```/g, '').trim(),
+  ]
+
+  let lastError: unknown = null
+  for (const attempt of attempts) {
+    try {
+      return parseGeminiJson(attempt)
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Unable to parse receipt JSON')
+}
+
 async function buildVisionPayload(
   buffer: Buffer,
   contentType: string
@@ -217,7 +235,7 @@ export async function POST(request: NextRequest) {
           model: getReceiptVisionModel(),
         })
         const rawText = geminiResult.response.text()
-        extractedData = parseGeminiJson(rawText)
+        extractedData = parseReceiptJsonWithRecovery(rawText)
       } catch (e) {
         console.warn('[receipts] Gemini vision extraction failed', e)
       }
@@ -289,8 +307,7 @@ Rules:
           .map((block) => block.text)
           .join('\n')
           .trim()
-        const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
-        extractedData = JSON.parse(jsonMatch ? jsonMatch[0] : rawContent || '{}')
+        extractedData = parseReceiptJsonWithRecovery(rawContent)
       } catch (e) {
         console.error('Invalid JSON from Claude:', e)
         return NextResponse.json({ error: 'Failed to parse receipt data' }, { status: 500 })

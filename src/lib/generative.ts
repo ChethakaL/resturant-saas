@@ -79,6 +79,35 @@ export function extractJsonBlock(raw: string) {
   return cleaned
 }
 
+function balanceJsonDelimiters(candidate: string) {
+  let balanced = candidate
+  const openCurly = (balanced.match(/\{/g) || []).length
+  const closeCurly = (balanced.match(/\}/g) || []).length
+  const openSquare = (balanced.match(/\[/g) || []).length
+  const closeSquare = (balanced.match(/\]/g) || []).length
+
+  if (closeSquare < openSquare) {
+    balanced += ']'.repeat(openSquare - closeSquare)
+  }
+  if (closeCurly < openCurly) {
+    balanced += '}'.repeat(openCurly - closeCurly)
+  }
+
+  return balanced
+}
+
+function repairJsonCandidate(candidate: string) {
+  return balanceJsonDelimiters(
+    candidate
+      .trim()
+      .replace(/^\uFEFF/, '')
+      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/([{,]\s*)([A-Za-z0-9_]+)\s*:/g, '$1"$2":')
+      .replace(/:\s*'([^']*)'/g, ': "$1"')
+      .replace(/\u00A0/g, ' ')
+  )
+}
+
 function tryParseCandidates(candidate: string) {
   const normalized = candidate.trim()
   if (!normalized) {
@@ -93,6 +122,8 @@ export function parseGeminiJson(rawText: string) {
     baseCandidate,
     baseCandidate.replace(/(\r?\n)+/g, ' '),
     baseCandidate.replace(/,\s+/g, ', '),
+    repairJsonCandidate(baseCandidate),
+    repairJsonCandidate(baseCandidate.replace(/(\r?\n)+/g, ' ')),
   ]
 
   for (const candidate of normalizedCandidates) {
