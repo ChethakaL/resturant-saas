@@ -225,14 +225,22 @@ export default function ReceiptUploadModal({
             : ''
 
         const packageSize = extractPackageSize(raw.name || '')
+        const quantity =
+          typeof raw.quantity === 'number' && raw.quantity > 0 ? raw.quantity : 1
+        const unitPrice =
+          typeof raw.unitPrice === 'number' && Number.isFinite(raw.unitPrice) ? raw.unitPrice : 0
+        const totalPrice =
+          typeof raw.totalPrice === 'number' && Number.isFinite(raw.totalPrice)
+            ? raw.totalPrice
+            : quantity * unitPrice
 
         return {
           id: `item-${idx}`,
           name: sanitizeDraftIngredientName(raw.name || 'Unknown') || raw.name || 'Unknown',
-          quantity: raw.quantity || 1,
+          quantity,
           unit: raw.unit || 'piece',
-          unitPrice: raw.unitPrice || 0,
-          totalPrice: raw.totalPrice || 0,
+          unitPrice,
+          totalPrice,
           brand: raw.brand,
           ...(packageSize ?? {}),
           ingredientId: linkedIngredientId,
@@ -349,7 +357,7 @@ export default function ReceiptUploadModal({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && closeModal()}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-6">
+      <DialogContent className="max-w-6xl max-h-[92vh] overflow-hidden p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3 text-xl">
             <Upload className="h-5 w-5 text-primary" />
@@ -436,11 +444,11 @@ export default function ReceiptUploadModal({
         )}
 
         {step === 'review' && (
-          <div className="grid md:grid-cols-2 gap-7 py-4">
+          <div className="grid max-h-[calc(92vh-11rem)] gap-7 overflow-hidden py-4 md:grid-cols-[1.15fr_1fr]">
             {/* Left: Image Preview */}
             <div className="space-y-4">
               <h4 className="font-medium text-muted-foreground">{td('Receipt Image')}</h4>
-              <div className="relative aspect-[3/4] rounded-lg overflow-hidden border bg-muted/30 shadow-inner">
+              <div className="relative h-[min(70vh,48rem)] rounded-lg overflow-hidden border bg-muted/30 shadow-inner">
                 {previewUrl && (
                   <Image
                     src={previewUrl}
@@ -453,7 +461,7 @@ export default function ReceiptUploadModal({
             </div>
 
             {/* Right: Edit Form */}
-            <div className="space-y-6">
+            <div className="flex min-h-0 flex-col space-y-6 overflow-hidden">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="supplier">{td('Supplier')}</Label>
@@ -476,7 +484,7 @@ export default function ReceiptUploadModal({
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-hidden">
                 <div className="flex items-center justify-between">
                   <h4 className="font-medium">{td('Purchased Items')}</h4>
                   <p className="text-sm text-muted-foreground">
@@ -484,7 +492,7 @@ export default function ReceiptUploadModal({
                   </p>
                 </div>
 
-                <div className="space-y-4 max-h-[420px] overflow-y-auto pr-2">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-2">
                   {extractedItems.map((item) => {
                     const totals = getReceiptItemTotals(item)
 
@@ -524,9 +532,9 @@ export default function ReceiptUploadModal({
                                 placeholder={td('Optional')}
                               />
                             </div>
-                            <div className="grid grid-cols-3 gap-2 md:col-span-2">
+                            <div className="grid gap-2 md:col-span-2 md:grid-cols-[0.9fr_0.9fr_1.15fr]">
                               <div className="space-y-1.5">
-                                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                <Label className="flex min-h-[2rem] items-end text-xs uppercase tracking-wide text-muted-foreground">
                                   {totals.packageQuantity ? td('Packs bought') : td('Quantity')}
                                 </Label>
                                 <Input
@@ -539,7 +547,7 @@ export default function ReceiptUploadModal({
                                 />
                               </div>
                               <div className="space-y-1.5">
-                                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                <Label className="flex min-h-[2rem] items-end text-xs uppercase tracking-wide text-muted-foreground">
                                   {totals.packageQuantity ? td('Purchase unit') : td('Unit')}
                                 </Label>
                                 <Input
@@ -550,7 +558,7 @@ export default function ReceiptUploadModal({
                                 />
                               </div>
                               <div className="space-y-1.5">
-                                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                                <Label className="flex min-h-[2rem] items-end text-xs uppercase tracking-wide text-muted-foreground">
                                   {td('Total line price')}
                                 </Label>
                                 <Input
@@ -744,7 +752,7 @@ export default function ReceiptUploadModal({
           </div>
         )}
 
-        <DialogFooter className="gap-3 sm:gap-4 pt-4 border-t">
+        <DialogFooter className="sticky bottom-0 z-10 -mx-6 mt-4 gap-3 border-t bg-white px-6 py-4 sm:gap-4">
           {step === 'upload' && (
             <>
               <Button variant="outline" onClick={closeModal}>

@@ -336,7 +336,17 @@ Rules:
       quantity: cleanNum(item.quantity),
       unitPrice: cleanNum(item.unitPrice),
       totalPrice: cleanNum(item.totalPrice),
-    }))
+    })).map((item: any) => {
+      const quantity = Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : 1
+      const unitPrice = Number.isFinite(item.unitPrice) ? item.unitPrice : null
+      const totalPrice = Number.isFinite(item.totalPrice) ? item.totalPrice : null
+
+      return {
+        ...item,
+        quantity,
+        totalPrice: totalPrice ?? (unitPrice != null ? quantity * unitPrice : null),
+      }
+    })
 
     // 5. Translate verbatim OCR to dashboard language (Gemini text + cache; same for Claude and Gemini vision paths)
     const toTranslate: string[] = []
