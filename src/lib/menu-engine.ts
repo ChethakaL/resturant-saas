@@ -348,16 +348,34 @@ function orderItemsForAdaptiveMode(
 /** Top N "often bought together" pairs by purchase count. Filter by co-purchase correlation (e.g. 35%). */
 const TOP_BUNDLES_BY_COUNT = 5
 
-/** True if item is classified as Main Dishes (so we never bundle two mains). */
-function isMainDish(item: EngineMenuItem): boolean {
-  const type = classifyItemType({
+function getBundleItemType(item: EngineMenuItem) {
+  return classifyItemType({
     id: item.id,
     name: item.name,
     categoryName: item.categoryName ?? null,
     marginPercent: item._marginPercent,
     unitsSold: item._unitsSold,
   })
-  return type === 'Main Dishes'
+}
+
+function getBundlePairScore(a: EngineMenuItem, b: EngineMenuItem): number {
+  const typeA = getBundleItemType(a)
+  const typeB = getBundleItemType(b)
+  const types = new Set([typeA, typeB])
+
+  if (a.categoryId === b.categoryId) return 0
+  if (typeA === typeB) return 0
+  if (types.has('Kids')) return 0
+  if (types.has('Add-ons') && !types.has('Main Dishes')) return 0
+
+  if (types.has('Drinks') && (types.has('Main Dishes') || types.has('Shareables') || types.has('Sides'))) return 5
+  if (types.has('Main Dishes') && types.has('Sides')) return 4
+  if (types.has('Main Dishes') && types.has('Shareables')) return 4
+  if (types.has('Main Dishes') && types.has('Desserts')) return 3
+  if (types.has('Desserts') && types.has('Drinks')) return 3
+  if (types.has('Shareables') && types.has('Drinks')) return 3
+
+  return 1
 }
 
 function generateBundles(
@@ -375,7 +393,15 @@ function generateBundles(
       return { p, correlation }
     })
     .filter(({ correlation }) => correlation >= correlationThreshold)
-  const sorted = [...withCorrelation].sort((a, b) => b.pairCount - a.pairCount)
+  const sorted = [...withCorrelation].sort((a, b) => {
+    const aItem = itemMap.get(a.p.itemIdA)
+    const aOther = itemMap.get(a.p.itemIdB)
+    const bItem = itemMap.get(b.p.itemIdA)
+    const bOther = itemMap.get(b.p.itemIdB)
+    const aPairScore = aItem && aOther ? getBundlePairScore(aItem, aOther) : 0
+    const bPairScore = bItem && bOther ? getBundlePairScore(bItem, bOther) : 0
+    return bPairScore - aPairScore || b.p.pairCount - a.p.pairCount || b.correlation - a.correlation
+  })
   const bundles: BundleHint[] = []
   const used = new Set<string>()
   for (let i = 0; i < sorted.length && bundles.length < TOP_BUNDLES_BY_COUNT; i++) {
@@ -384,15 +410,17 @@ function generateBundles(
     const a = itemMap.get(p.itemIdA)
     const b = itemMap.get(p.itemIdB)
     if (!a || !b) continue
-    if (isMainDish(a) && isMainDish(b)) continue
+    const pairScore = getBundlePairScore(a, b)
+    if (pairScore <= 0) continue
     const originalPrice = a.price + b.price
     const discount = Math.round(originalPrice * 0.07)
     const bundlePrice = originalPrice - discount
     const savingsText = `Save ${formatMenuPrice(discount)}`
+    const orderedItems = getBundleItemType(a) === 'Drinks' ? [b, a] : [a, b]
     bundles.push({
       id: `bundle-${p.itemIdA}-${p.itemIdB}`,
-      name: `${a.name} + ${b.name}`,
-      itemIds: [a.id, b.id],
+      name: `${orderedItems[0].name} + ${orderedItems[1].name}`,
+      itemIds: [orderedItems[0].id, orderedItems[1].id],
       bundlePrice,
       originalPrice,
       savingsText,
@@ -450,19 +478,38 @@ function buildUpsellSequence(
   const item = allItems.find((i) => i.id === itemId)
   if (!item) return []
   const seq: UpsellSuggestion[] = []
-  const stars = allItems.filter((i) => quadrants[i.id] === 'STAR')
-  const protein = stars.find((i) => (i.categoryName ?? '').toLowerCase().includes('grill') || (i.categoryName ?? '').toLowerCase().includes('main'))
-  const side = stars.find((i) => (i.categoryName ?? '').toLowerCase().includes('side'))
-  const beverage = stars.find((i) => (i.categoryName ?? '').toLowerCase().includes('drink') || (i.categoryName ?? '').toLowerCase().includes('beverage') || (i.categoryName ?? '').toLowerCase().includes('coffee'))
-  const dessert = stars.find((i) => (i.categoryName ?? '').toLowerCase().includes('dessert'))
-  if (protein && protein.id !== itemId)
-    seq.push({ stage: 'protein_upgrade', itemId: protein.id, nudgeText: 'Upgrade with a premium protein?' })
-  if (side && side.id !== itemId)
-    seq.push({ stage: 'premium_side', itemId: side.id, nudgeText: 'Most guests add a side.' })
-  if (beverage && beverage.id !== itemId)
-    seq.push({ stage: 'beverage', itemId: beverage.id, nudgeText: 'Most guests complete with a refreshing drink.' })
-  if (dessert && dessert.id !== itemId)
-    seq.push({ stage: 'dessert', itemId: dessert.id, nudgeText: 'End your meal on a sweet note?' })
+  const selectedType = getBundleItemType(item)
+  const candidates = allItems
+    .filter((candidate) => candidate.id !== itemId)
+    .sort((a, b) => {
+      const starDelta = Number(quadrants[b.id] === 'STAR') - Number(quadrants[a.id] === 'STAR')
+      if (starDelta !== 0) return starDelta
+      return b._marginPercent - a._marginPercent || b.price - a.price
+    })
+  const pick = (types: ReturnType<typeof getBundleItemType>[]) =>
+    candidates.find((candidate) => {
+      const candidateType = getBundleItemType(candidate)
+      return candidateType !== selectedType && types.includes(candidateType)
+    })
+
+  const side = pick(['Sides', 'Shareables'])
+  const beverage = pick(['Drinks'])
+  const dessert = pick(['Desserts'])
+  const main = pick(['Main Dishes'])
+
+  if (selectedType === 'Main Dishes') {
+    if (side) seq.push({ stage: 'premium_side', itemId: side.id, nudgeText: 'This would pair well with it.' })
+    if (beverage) seq.push({ stage: 'beverage', itemId: beverage.id, nudgeText: 'A drink would pair well with it.' })
+    if (dessert) seq.push({ stage: 'dessert', itemId: dessert.id, nudgeText: 'Finish with something sweet?' })
+  } else if (selectedType === 'Drinks') {
+    if (main) seq.push({ stage: 'protein_upgrade', itemId: main.id, nudgeText: 'Something to eat would pair well with it.' })
+    if (dessert) seq.push({ stage: 'dessert', itemId: dessert.id, nudgeText: 'This also works well with something sweet.' })
+  } else if (selectedType === 'Desserts') {
+    if (beverage) seq.push({ stage: 'beverage', itemId: beverage.id, nudgeText: 'A drink would pair well with it.' })
+  } else {
+    if (main) seq.push({ stage: 'protein_upgrade', itemId: main.id, nudgeText: 'A main dish would pair well with it.' })
+    if (beverage) seq.push({ stage: 'beverage', itemId: beverage.id, nudgeText: 'A drink would pair well with it.' })
+  }
   return seq
 }
 

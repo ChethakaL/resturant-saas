@@ -24,7 +24,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
 import { MenuItemCard } from './MenuItemCard'
 import { MoodSelector } from './MoodSelector'
-import { getOrCreateGuestId, setStoredLastOrder } from './MenuPersonalizationWrapper'
+import { getOrCreateGuestId, getStoredLastOrder, setStoredLastOrder } from './MenuPersonalizationWrapper'
 import { getAllVariants, getVariant } from '@/lib/experiments'
 import { logMenuEvent } from '@/lib/menu-events'
 import { googleFontUrl, resolveGoogleFont } from '@/lib/google-fonts'
@@ -851,13 +851,16 @@ export default function SmartMenu({
   restaurantName,
   restaurantLogo,
   engineMode = 'classic',
+  bundles = [],
   moods = [],
+  upsellMap = {},
   categoryOrder,
   menuTimezone,
   slotTimes,
   tableSize,
   tableNumber,
   tables,
+  categoryAnchorBundle = {},
   maxInitialItemsPerCategory = 3,
   smartSearchFeelingContext,
   forceShowImages = false,
@@ -926,6 +929,11 @@ export default function SmartMenu({
   const [liveTables, setLiveTables] = useState(() => tables ?? [])
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
   const [orderSuccessMessage, setOrderSuccessMessage] = useState<string | null>(null)
+  const [lastOrder, setLastOrder] = useState<{ itemIds: string[]; names: string[] } | null>(null)
+  const [nextOrderSuggestion, setNextOrderSuggestion] = useState<{ itemId: string; name: string; message: string } | null>(null)
+  const [nextOrderSuggestionLoading, setNextOrderSuggestionLoading] = useState(false)
+  const [upsellAfterAdd, setUpsellAfterAdd] = useState<{ itemId: string } | null>(null)
+  const [checkoutNudgeDismissed, setCheckoutNudgeDismissed] = useState(false)
   const [selectedItemForDetail, setSelectedItemForDetail] =
     useState<MenuItem | null>(null)
   const { toast } = useToast()
@@ -1085,12 +1093,28 @@ export default function SmartMenu({
     else sectionRefs.current.delete(id)
   }, [])
 
-  const addToCart = useCallback((itemId: string) => {
+  const addToCart = useCallback((itemId: string, options?: { skipUpsell?: boolean }) => {
     setCart((prev) => ({
       ...prev,
       [itemId]: (prev[itemId] ?? 0) + 1,
     }))
     setOrderSuccessMessage(null)
+    setCheckoutNudgeDismissed(false)
+    if (!options?.skipUpsell && engineMode !== 'classic' && (upsellMap[itemId]?.length ?? 0) > 0) {
+      setUpsellAfterAdd({ itemId })
+    }
+  }, [engineMode, upsellMap])
+
+  const addBundleToCart = useCallback((bundle: BundleHint) => {
+    setCart((prev) => {
+      const next = { ...prev }
+      for (const itemId of bundle.itemIds) {
+        next[itemId] = (next[itemId] ?? 0) + 1
+      }
+      return next
+    })
+    setOrderSuccessMessage(null)
+    setCheckoutNudgeDismissed(false)
   }, [])
 
   const updateCartQuantity = useCallback((itemId: string, delta: number) => {
@@ -1114,6 +1138,37 @@ export default function SmartMenu({
   useEffect(() => {
     logMenuEvent(restaurantId, 'menu_view', {}, getOrCreateGuestId(restaurantId), JSON.stringify(getAllVariants()))
   }, [restaurantId])
+
+  useEffect(() => {
+    setLastOrder(getStoredLastOrder(restaurantId))
+  }, [restaurantId])
+
+  useEffect(() => {
+    if (!lastOrder?.itemIds?.length) {
+      setNextOrderSuggestion(null)
+      return
+    }
+    const uniqueIds = Array.from(new Set(lastOrder.itemIds))
+    setNextOrderSuggestionLoading(true)
+    setNextOrderSuggestion(null)
+    fetch('/api/public/menu/suggest-next-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId, lastOrderItemIds: uniqueIds }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.suggestedItemId && data.suggestedItemName && data.message) {
+          setNextOrderSuggestion({
+            itemId: data.suggestedItemId,
+            name: data.suggestedItemName,
+            message: data.message,
+          })
+        }
+      })
+      .catch(() => setNextOrderSuggestion(null))
+      .finally(() => setNextOrderSuggestionLoading(false))
+  }, [restaurantId, lastOrder?.itemIds?.join(',')])
 
   useEffect(() => {
     const onScroll = () => {
@@ -1472,6 +1527,35 @@ export default function SmartMenu({
     () => cartItems.reduce((sum, line) => sum + line.item.price * line.quantity, 0),
     [cartItems]
   )
+
+  const bundleItemNameMap = useMemo(
+    () => Object.fromEntries(menuItems.map((item) => [item.id, getDisplayNameForItem(item)])),
+    [getDisplayNameForItem, menuItems]
+  )
+
+  const bundleItemImageMap = useMemo(
+    () => Object.fromEntries(menuItems.map((item) => [item.id, item.imageUrl])),
+    [menuItems]
+  )
+
+  const formatBundleName = useCallback((bundle: BundleHint) => {
+    const separator = language === 'en' ? ' + ' : ' و '
+    return bundle.itemIds.map((id) => bundleItemNameMap[id]).filter(Boolean).join(separator) || bundle.name
+  }, [bundleItemNameMap, language])
+
+  const lastOrderDisplayNames = useMemo(() => {
+    if (!lastOrder?.itemIds?.length) return []
+    const seen = new Set<string>()
+    const names: string[] = []
+    for (let i = 0; i < lastOrder.itemIds.length && names.length < 3; i++) {
+      const id = lastOrder.itemIds[i]
+      if (seen.has(id)) continue
+      seen.add(id)
+      const item = menuItems.find((entry) => entry.id === id)
+      names.push(item ? getDisplayNameForItem(item) : lastOrder.names[i] ?? '')
+    }
+    return names.filter(Boolean)
+  }, [getDisplayNameForItem, lastOrder, menuItems])
 
   const availableMoods = useMemo<MoodOption[]>(() => {
     const isBreakfastMenuItem = (item: MenuItem) => {
@@ -1972,6 +2056,48 @@ export default function SmartMenu({
     return /main|grill|burger|steak|pasta|rice|dish|kebab|shawarma|platter|seafood|chicken|beef|lamb|fish|salad|breakfast|egg|falafel|sandwich/.test(bucket)
   }, [isDessertItem, isDrinkItem])
 
+  const checkoutNudge = useMemo(() => {
+    if (engineMode === 'classic' || checkoutNudgeDismissed || cartItems.length === 0) return null
+    const cartIds = new Set(cartItems.map((line) => line.item.id))
+    const hasDrink = cartItems.some((line) => isDrinkItem(line.item))
+    const hasDessert = cartItems.some((line) => isDessertItem(line.item))
+    const topDrink = menuItems.find((item) => !cartIds.has(item.id) && isDrinkItem(item))
+    const topDessert = menuItems.find((item) => !cartIds.has(item.id) && isDessertItem(item))
+    if (!hasDrink && topDrink) {
+      return { item: topDrink, message: currentEngineCopy.checkoutNudgeBeverage }
+    }
+    if (!hasDessert && topDessert) {
+      return { item: topDessert, message: currentEngineCopy.checkoutNudgeDessert }
+    }
+    return null
+  }, [
+    cartItems,
+    checkoutNudgeDismissed,
+    currentEngineCopy.checkoutNudgeBeverage,
+    currentEngineCopy.checkoutNudgeDessert,
+    engineMode,
+    isDessertItem,
+    isDrinkItem,
+    menuItems,
+  ])
+
+  const currentUpsellSuggestions = useMemo(() => {
+    if (!upsellAfterAdd) return []
+    const cartIds = new Set(cartItems.map((line) => line.item.id))
+    return (upsellMap[upsellAfterAdd.itemId] ?? [])
+      .map((suggestion) => ({
+        suggestion,
+        item: menuItems.find((entry) => entry.id === suggestion.itemId) ?? null,
+      }))
+      .filter((entry): entry is { suggestion: UpsellSuggestion; item: MenuItem } => Boolean(entry.item) && !cartIds.has(entry.suggestion.itemId))
+      .slice(0, 3)
+  }, [cartItems, menuItems, upsellAfterAdd, upsellMap])
+
+  const upsellSourceItem = useMemo(
+    () => upsellAfterAdd ? menuItems.find((item) => item.id === upsellAfterAdd.itemId) ?? null : null,
+    [menuItems, upsellAfterAdd]
+  )
+
   const isSweetItem = useCallback((item: MenuItem) => {
     const bucket = `${item.name} ${item.category?.name ?? ''} ${item.description ?? ''} ${(item.tags ?? []).join(' ')}`.toLowerCase()
     return /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding|brownie|waffle|crepe|donut|chocolate|mocha|cream|frappuccino|caramel|vanilla|hazelnut|white chocolate|condensed milk|latte/.test(bucket)
@@ -2010,7 +2136,7 @@ export default function SmartMenu({
     if (/caramel|vanilla|hazelnut|condensed milk|sweet/.test(bucket)) score += 40
     if (isDessertItem(item)) score += 35
     if (isDrinkItem(item)) score += 20
-    if ((item._hints?.popularityScore ?? 0) > 0) score += Math.min(20, (item._hints?.popularityScore ?? 0) * 20)
+    if ((item.popularityScore ?? 0) > 0) score += Math.min(20, (item.popularityScore ?? 0) * 20)
     score += Math.min(15, item.price / 2000)
 
     return score
@@ -2234,6 +2360,7 @@ export default function SmartMenu({
           quantity: line.quantity,
         }))
       )
+      setLastOrder(getStoredLastOrder(restaurantId))
 
       setCart({})
       setBasketOpen(false)
@@ -3036,6 +3163,97 @@ export default function SmartMenu({
             </section>
           )}
 
+          {engineMode !== 'classic' && lastOrderDisplayNames.length > 0 && (
+            <section className="px-5 pt-5 sm:px-6 lg:px-8">
+              <div className="rounded-2xl border p-4" style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}>
+                <div className="text-[0.62rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
+                  {currentCopy.lastTimeYouOrdered}
+                </div>
+                <div className="mt-1 text-[0.86rem] font-semibold" style={{ color: textMain }}>
+                  {lastOrderDisplayNames.join(localizedContextCopy.listJoiner)}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!lastOrder) return
+                      for (const itemId of lastOrder.itemIds) {
+                        if (menuItems.some((item) => item.id === itemId)) addToCart(itemId, { skipUpsell: true })
+                      }
+                    }}
+                    className="rounded-full px-3 py-2 text-[0.72rem] font-bold text-white"
+                    style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                  >
+                    {currentCopy.orderAgain}
+                  </button>
+                  {nextOrderSuggestionLoading && (
+                    <span className="rounded-full px-3 py-2 text-[0.72rem] font-semibold" style={{ backgroundColor: surfaceSoft, color: textMuted }}>
+                      {currentCopy.suggestingLabel}
+                    </span>
+                  )}
+                  {!nextOrderSuggestionLoading && nextOrderSuggestion && (
+                    <button
+                      type="button"
+                      onClick={() => addToCart(nextOrderSuggestion.itemId)}
+                      className="rounded-full border px-3 py-2 text-[0.72rem] font-bold"
+                      style={{ borderColor: accentBorder, backgroundColor: accentSoft, color: themeAccent }}
+                    >
+                      {currentCopy.tryItemLabel} {translationCache[language]?.[nextOrderSuggestion.itemId]?.name ?? nextOrderSuggestion.name}
+                    </button>
+                  )}
+                </div>
+                {!nextOrderSuggestionLoading && nextOrderSuggestion && (
+                  <p className="mt-2 text-[0.72rem] leading-5" style={{ color: textMuted }}>
+                    {nextOrderSuggestion.message}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+
+          {engineMode !== 'classic' && bundles.length > 0 && (
+            <section className="px-5 pt-5 sm:px-6 lg:px-8">
+              <div className="mb-3 text-[0.62rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
+                {currentEngineCopy.bundlesTitle}
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+                {bundles.map((bundle) => (
+                  <button
+                    key={bundle.id}
+                    type="button"
+                    onClick={() => addBundleToCart(bundle)}
+                    className="min-w-[240px] flex-shrink-0 rounded-2xl border p-3 text-left shadow-sm"
+                    style={{ borderColor: accentBorder, backgroundColor: accentSoft }}
+                  >
+                    <div className="flex items-center gap-2">
+                      {bundle.itemIds.slice(0, 2).map((itemId) => (
+                        <img
+                          key={itemId}
+                          src={bundleItemImageMap[itemId] || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                          alt={bundleItemNameMap[itemId] || ''}
+                          loading="lazy"
+                          decoding="async"
+                          className="h-10 w-10 rounded-xl object-cover"
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-3 text-[0.86rem] font-bold leading-5" style={{ color: textMain }}>
+                      {formatBundleName(bundle)}
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <span className="text-[0.72rem] font-semibold" style={{ color: themeAccent }}>
+                        {getLocalizedSavingsText(bundle.savingsText)}
+                      </span>
+                      <span className="text-[0.82rem] font-bold" style={{ color: textMain }}>
+                        {formatMenuPriceWithVariant(bundle.bundlePrice, priceVariant)}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
           <section className="space-y-2 px-5 pt-4 sm:px-6 lg:px-8">
             {realStandingOutItems.length > 0 && (
               <div className="flex items-start gap-3 rounded-2xl border p-4" style={{ borderColor: accentBorder, backgroundColor: accentSoft }}>
@@ -3211,6 +3429,29 @@ export default function SmartMenu({
                     </button>
                   )}
                 </div>
+                {engineMode !== 'classic' && section.category && categoryAnchorBundle[section.category.id] && (
+                  <button
+                    type="button"
+                    onClick={() => addBundleToCart(categoryAnchorBundle[section.category!.id])}
+                    className="mb-3 flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left"
+                    style={{ borderColor: accentBorder, backgroundColor: accentSoft }}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[0.62rem] font-bold uppercase tracking-[0.12em]" style={{ color: textMuted }}>
+                        {currentEngineCopy.bundlesTitle}
+                      </div>
+                      <div className="mt-1 truncate text-[0.86rem] font-bold" style={{ color: textMain }}>
+                        {formatBundleName(categoryAnchorBundle[section.category.id])}
+                      </div>
+                      <div className="mt-0.5 text-[0.7rem] font-semibold" style={{ color: themeAccent }}>
+                        {getLocalizedSavingsText(categoryAnchorBundle[section.category.id].savingsText)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded-full px-3 py-2 text-[0.72rem] font-bold text-white" style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}>
+                      {currentEngineCopy.addBundleLabel}
+                    </span>
+                  </button>
+                )}
                 <div className="overflow-hidden rounded-[22px] border shadow-[0_4px_18px_rgba(26,10,6,0.06)]" style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}>
                   {visibleItems.map((item, index) => {
                     const translation = translationCache[language]?.[item.id]
@@ -3273,18 +3514,33 @@ export default function SmartMenu({
                                 <span>{item.popularityScore || 0} {currentCopy.ordersLabel}</span>
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                addToCart(item.id)
-                              }}
-                              className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-white shadow-[0_4px_10px_rgba(0,0,0,0.18)]"
-                              style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
-                              aria-label={currentEngineCopy.addToOrder}
-                            >
-                              +
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  fetchPairingSuggestions(item)
+                                }}
+                                className="flex h-8 max-w-[96px] items-center gap-1.5 rounded-full border px-2 text-[0.64rem] font-bold shadow-[0_4px_10px_rgba(0,0,0,0.12)]"
+                                style={{ borderColor: accentBorder, backgroundColor: accentSoft, color: themeAccent }}
+                                aria-label={currentCopy.pairingsButtonLabel}
+                              >
+                                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{currentCopy.pairingsButtonLabel}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  addToCart(item.id)
+                                }}
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-white shadow-[0_4px_10px_rgba(0,0,0,0.18)]"
+                                style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                                aria-label={currentEngineCopy.addToOrder}
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -3376,8 +3632,8 @@ export default function SmartMenu({
           </div>
         )}
 
-        {(basketOpen || selectedItemForDetail || tablePickerOpen) && (
-          <div className="fixed inset-0 z-50 bg-[rgba(26,10,6,0.55)] backdrop-blur-sm" onClick={() => { setBasketOpen(false); setSelectedItemForDetail(null); setTablePickerOpen(false) }} />
+        {(basketOpen || selectedItemForDetail || tablePickerOpen || currentUpsellSuggestions.length > 0 || showPairingSuggestions) && (
+          <div className="fixed inset-0 z-50 bg-[rgba(26,10,6,0.55)] backdrop-blur-sm" onClick={() => { setBasketOpen(false); setSelectedItemForDetail(null); setTablePickerOpen(false); setUpsellAfterAdd(null); setShowPairingSuggestions(false) }} />
         )}
 
         {tablePickerOpen && (
@@ -3490,6 +3746,46 @@ export default function SmartMenu({
                       </div>
                     </div>
                   ))}
+                  {checkoutNudge && (
+                    <div className="rounded-2xl border p-3" style={{ borderColor: accentBorder, backgroundColor: accentSoft }}>
+                      <div className="text-[0.78rem] font-semibold leading-5" style={{ color: textMain }}>
+                        {checkoutNudge.message}
+                      </div>
+                      <div className="mt-3 flex items-center gap-3">
+                        <img
+                          src={checkoutNudge.item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                          alt={checkoutNudge.item.name}
+                          loading="lazy"
+                          decoding="async"
+                          className="h-11 w-11 rounded-xl object-cover"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[0.84rem] font-bold" style={{ color: textMain }}>
+                            {getDisplayNameForItem(checkoutNudge.item)}
+                          </div>
+                          <div className="text-[0.72rem]" style={{ color: textMuted }}>
+                            {formatMenuPriceWithVariant(checkoutNudge.item.price, priceVariant)}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => addToCart(checkoutNudge.item.id, { skipUpsell: true })}
+                          className="rounded-full px-3 py-2 text-[0.72rem] font-bold text-white"
+                          style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                        >
+                          {currentEngineCopy.addLabel}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCheckoutNudgeDismissed(true)}
+                          className="text-[0.7rem] font-semibold"
+                          style={{ color: textMuted }}
+                        >
+                          {currentEngineCopy.dismissLabel}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -3554,6 +3850,67 @@ export default function SmartMenu({
                 style={{ backgroundColor: headerBg }}
               >
                 {isPlacingOrder ? currentEngineCopy.placingLabel : currentEngineCopy.placeOrder}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {upsellAfterAdd && currentUpsellSuggestions.length > 0 && (
+          <div className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[82vh] max-w-3xl flex-col overflow-hidden rounded-t-[28px]" style={{ backgroundColor: pageBg }}>
+            <div className="mx-auto mt-3 h-1 w-10 rounded-full" style={{ backgroundColor: dividerColor }} />
+            <div className="flex items-center justify-between px-5 py-4 sm:px-6" style={{ borderBottom: `1px solid ${dividerColor}` }}>
+              <div className="min-w-0">
+                <h3 className="font-menu-title text-[1.15rem] font-bold" style={{ color: textMain }}>
+                  {upsellSourceItem ? `Added ${getDisplayNameForItem(upsellSourceItem)}` : currentEngineCopy.addToOrder}
+                </h3>
+                <p className="mt-1 text-[0.78rem]" style={{ color: textMuted }}>
+                  Would you like to add this with it?
+                </p>
+              </div>
+              <button type="button" onClick={() => setUpsellAfterAdd(null)} className="rounded-full p-2" style={{ backgroundColor: surfaceSoft, color: textMuted }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-3 overflow-y-auto px-5 py-4 sm:px-6">
+              {currentUpsellSuggestions.map(({ suggestion, item }) => (
+                <div key={suggestion.itemId} className="flex items-center gap-3 rounded-2xl border p-3" style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}>
+                  <img
+                    src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                    alt={item.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-14 w-14 rounded-xl object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[0.76rem] leading-5" style={{ color: textMuted }}>
+                      {suggestion.nudgeText}
+                    </div>
+                    <div className="truncate text-[0.92rem] font-bold" style={{ color: textMain }}>
+                      {getDisplayNameForItem(item)}
+                    </div>
+                    <div className="text-[0.74rem]" style={{ color: textMuted }}>
+                      {formatMenuPriceWithVariant(item.price, priceVariant)}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => addToCart(item.id, { skipUpsell: true })}
+                    className="rounded-full px-3 py-2 text-[0.72rem] font-bold text-white"
+                    style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                  >
+                    {currentEngineCopy.addLabel}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 pb-5 sm:px-6">
+              <button
+                type="button"
+                onClick={() => setUpsellAfterAdd(null)}
+                className="w-full rounded-2xl border px-4 py-3 text-[0.84rem] font-bold"
+                style={{ borderColor: dividerColor, backgroundColor: surfaceSoft, color: textMain }}
+              >
+                {currentEngineCopy.skipLabel}
               </button>
             </div>
           </div>
@@ -3631,6 +3988,80 @@ export default function SmartMenu({
               >
                 {currentEngineCopy.addToOrder}
               </button>
+              <button
+                type="button"
+                onClick={() => fetchPairingSuggestions(selectedItemForDetail)}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-[0.86rem] font-bold"
+                style={{ borderColor: accentBorder, backgroundColor: accentSoft, color: themeAccent }}
+              >
+                <Sparkles className="h-4 w-4" />
+                {currentCopy.pairingsButtonLabel}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showPairingSuggestions && (
+          <div className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[86vh] max-w-4xl flex-col overflow-hidden rounded-t-[28px]" style={{ backgroundColor: pageBg }}>
+            <div className="mx-auto mt-3 h-1 w-10 rounded-full" style={{ backgroundColor: dividerColor }} />
+            <div className="flex items-start justify-between gap-3 px-5 py-4 sm:px-6 lg:px-8" style={{ borderBottom: `1px solid ${dividerColor}` }}>
+              <div>
+                <h3 className="font-menu-title text-[1.2rem] font-bold" style={{ color: textMain }}>
+                  {currentCopy.pairingTitle} {pairingItemDisplayName}
+                </h3>
+                <p className="mt-1 text-[0.78rem] leading-5" style={{ color: textMuted }}>
+                  {currentCopy.pairingDescription}
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowPairingSuggestions(false)} className="rounded-full p-2" style={{ backgroundColor: surfaceSoft, color: textMuted }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-5 py-4 sm:px-6 lg:px-8">
+              {loadingSuggestions ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-12" style={{ color: textMuted }}>
+                  <Sparkles className="h-7 w-7 animate-spin" style={{ color: themeAccent }} />
+                  <p className="text-sm font-medium">{currentCopy.pairingAnalyzing}</p>
+                </div>
+              ) : pairingSuggestions.length === 0 ? (
+                <div className="py-10 text-center text-sm" style={{ color: textMuted }}>
+                  {currentCopy.pairingNoSuggestions}
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {pairingSuggestions.map((item) => (
+                    <div key={item.id} className="flex items-center gap-3 rounded-2xl border p-3" style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}>
+                      <img
+                        src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                        alt={item.name}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-16 w-16 rounded-xl object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[0.92rem] font-bold" style={{ color: textMain }}>
+                          {translationCache[language]?.[item.id]?.name || item.name}
+                        </div>
+                        <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
+                          {getLocalizedCategoryName(item.category?.name)}
+                        </div>
+                        <div className="mt-1 text-[0.8rem] font-bold" style={{ color: textMain }}>
+                          {formatMenuPriceWithVariant(item.price, priceVariant)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => addToCart(item.id, { skipUpsell: true })}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-white"
+                        style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
+                        aria-label={currentEngineCopy.addToOrder}
+                      >
+                        +
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
