@@ -448,13 +448,13 @@ export default function ReceiptUploadModal({
             {/* Left: Image Preview */}
             <div className="space-y-4">
               <h4 className="font-medium text-muted-foreground">{td('Receipt Image')}</h4>
-              <div className="relative h-[min(70vh,48rem)] rounded-lg overflow-hidden border bg-muted/30 shadow-inner">
+              <div className="relative h-[calc(92vh-14rem)] min-h-[32rem] overflow-hidden rounded-lg border bg-muted/30 shadow-inner">
                 {previewUrl && (
                   <Image
                     src={previewUrl}
                     alt="Receipt"
                     fill
-                    className="object-contain p-2"
+                    className="object-contain p-1"
                   />
                 )}
               </div>
@@ -492,7 +492,7 @@ export default function ReceiptUploadModal({
                   </p>
                 </div>
 
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-2">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-2 pb-6">
                   {extractedItems.map((item) => {
                     const totals = getReceiptItemTotals(item)
 
