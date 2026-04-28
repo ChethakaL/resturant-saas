@@ -25,9 +25,6 @@ export async function GET(request: NextRequest) {
     if (!promo) {
       return NextResponse.json({ valid: false, error: 'Invalid promo code' }, { status: 200 })
     }
-    if (!promo.stripeCouponId) {
-      return NextResponse.json({ valid: false, error: 'This promo code is not properly configured.' }, { status: 200 })
-    }
     if (promo.maxRedemptions != null && promo.timesRedeemed >= promo.maxRedemptions) {
       return NextResponse.json({ valid: false, error: 'This promo code has reached its usage limit.' }, { status: 200 })
     }

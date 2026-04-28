@@ -50,7 +50,6 @@ export function SubscriptionGate({
         body: JSON.stringify({
           plan,
           returnPath: pathname || '/dashboard',
-          ...(promoCode.trim() && { promotionCode: promoCode.trim() }),
         }),
       })
       const data = await res.json()

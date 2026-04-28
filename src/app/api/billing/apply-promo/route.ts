@@ -24,9 +24,6 @@ export async function POST(request: NextRequest) {
     if (!promo) {
       return NextResponse.json({ error: 'Invalid promo code' }, { status: 400 })
     }
-    if (!promo.stripeCouponId) {
-      return NextResponse.json({ error: 'This promo code is not properly configured.' }, { status: 400 })
-    }
     if (promo.maxRedemptions != null && promo.timesRedeemed >= promo.maxRedemptions) {
       return NextResponse.json({ error: 'This promo code has reached its usage limit.' }, { status: 400 })
     }

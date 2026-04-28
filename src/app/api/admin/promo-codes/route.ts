@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,20 +80,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Promo code already exists' }, { status: 400 })
     }
 
-    const durationMonths = type === 'ONE_YEAR_FREE' ? 12 : 1
-    const coupon = await stripe.coupons.create({
-      percent_off: 100,
-      duration: 'repeating',
-      duration_in_months: durationMonths,
-      name: `${type === 'ONE_YEAR_FREE' ? '1 year' : '1 month'} free - ${code}`,
-    })
-
     const promo = await prisma.promoCode.create({
       data: {
         code,
         type,
-        stripeCouponId: coupon.id,
         maxRedemptions: maxRedemptions ?? undefined,
+      },
+      include: {
+        redemptions: {
+          include: {
+            restaurant: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                email: true,
+                subscriptionStatus: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
       },
     })
 
