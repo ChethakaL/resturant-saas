@@ -22,6 +22,23 @@ export async function GET() {
 
     const promos = await prisma.promoCode.findMany({
       orderBy: { createdAt: 'desc' },
+      include: {
+        redemptions: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            restaurant: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                email: true,
+                subscriptionStatus: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+      },
     })
     return NextResponse.json(promos)
   } catch (error) {

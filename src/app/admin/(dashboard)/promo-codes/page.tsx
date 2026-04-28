@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
-import { Tag, Plus, Loader2, Trash2 } from 'lucide-react'
+import { Tag, Plus, Loader2, Trash2, Building2 } from 'lucide-react'
 
 type PromoCode = {
   id: string
@@ -23,6 +24,18 @@ type PromoCode = {
   maxRedemptions: number | null
   timesRedeemed: number
   createdAt: string
+  redemptions: {
+    id: string
+    createdAt: string
+    restaurant: {
+      id: string
+      name: string
+      slug: string
+      email: string | null
+      subscriptionStatus: string | null
+      createdAt: string
+    }
+  }[]
 }
 
 export default function AdminPromoCodesPage() {
@@ -79,7 +92,7 @@ export default function AdminPromoCodesPage() {
         setCreateError(data.error || 'Failed to create')
         return
       }
-      setPromos((prev) => [data, ...prev])
+      setPromos((prev) => [{ ...data, redemptions: data.redemptions ?? [] }, ...prev])
       setCode('')
       setMaxRedemptions('')
     } catch (e) {
@@ -217,6 +230,7 @@ export default function AdminPromoCodesPage() {
                     <th className="py-2 pr-4 font-medium">Redeemed</th>
                     <th className="py-2 pr-4 font-medium">Max</th>
                     <th className="py-2 pr-4 font-medium">Created</th>
+                    <th className="py-2 pr-4 font-medium">Restaurants using code</th>
                     <th className="py-2 w-12"></th>
                   </tr>
                 </thead>
@@ -239,6 +253,35 @@ export default function AdminPromoCodesPage() {
                       <td className="py-3 pr-4">{p.maxRedemptions ?? '∞'}</td>
                       <td className="py-3 text-slate-500">
                         {new Date(p.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 pr-4 min-w-72">
+                        {p.redemptions.length === 0 ? (
+                          <span className="text-slate-400">No restaurants yet</span>
+                        ) : (
+                          <div className="space-y-2">
+                            {p.redemptions.map((redemption) => (
+                              <div key={redemption.id} className="flex items-start gap-2">
+                                <Building2 className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                                <div className="min-w-0">
+                                  <Link
+                                    href={`/admin/restaurants/${redemption.restaurant.id}`}
+                                    className="font-medium text-slate-900 hover:text-blue-600"
+                                  >
+                                    {redemption.restaurant.name}
+                                  </Link>
+                                  <div className="text-xs text-slate-500">
+                                    {redemption.restaurant.email || redemption.restaurant.slug}
+                                    {' · '}
+                                    Used {new Date(redemption.createdAt).toLocaleDateString()}
+                                    {redemption.restaurant.subscriptionStatus
+                                      ? ` · ${redemption.restaurant.subscriptionStatus}`
+                                      : ''}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3">
                         <Button
