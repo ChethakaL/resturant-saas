@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
-import { Tag, Plus, Loader2, Trash2, Building2 } from 'lucide-react'
+import { Tag, Plus, Loader2, Trash2, Building2, Search, ExternalLink } from 'lucide-react'
 
 type PromoCode = {
   id: string
@@ -49,7 +49,22 @@ export default function AdminPromoCodesPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; code: string } | null>(null)
+  const [redemptionTarget, setRedemptionTarget] = useState<PromoCode | null>(null)
+  const [redemptionSearch, setRedemptionSearch] = useState('')
   const { toast } = useToast()
+
+  const filteredRedemptions = useMemo(() => {
+    if (!redemptionTarget) return []
+    const query = redemptionSearch.trim().toLowerCase()
+    if (!query) return redemptionTarget.redemptions
+
+    return redemptionTarget.redemptions.filter((redemption) => {
+      const restaurant = redemption.restaurant
+      return [restaurant.name, restaurant.email, restaurant.slug, restaurant.subscriptionStatus]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(query))
+    })
+  }, [redemptionSearch, redemptionTarget])
 
   async function fetchPromos() {
     try {
@@ -109,6 +124,11 @@ export default function AdminPromoCodesPage() {
   function closeDeleteDialog() {
     if (deletingId) return
     setDeleteTarget(null)
+  }
+
+  function openRedemptionDialog(promo: PromoCode) {
+    setRedemptionTarget(promo)
+    setRedemptionSearch('')
   }
 
   async function confirmDelete() {
@@ -230,7 +250,7 @@ export default function AdminPromoCodesPage() {
                     <th className="py-2 pr-4 font-medium">Redeemed</th>
                     <th className="py-2 pr-4 font-medium">Max</th>
                     <th className="py-2 pr-4 font-medium">Created</th>
-                    <th className="py-2 pr-4 font-medium">Restaurants using code</th>
+                    <th className="py-2 pr-4 font-medium">Restaurants</th>
                     <th className="py-2 w-12"></th>
                   </tr>
                 </thead>
@@ -254,33 +274,14 @@ export default function AdminPromoCodesPage() {
                       <td className="py-3 text-slate-500">
                         {new Date(p.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="py-3 pr-4 min-w-72">
+                      <td className="py-3 pr-4">
                         {p.redemptions.length === 0 ? (
                           <span className="text-slate-400">No restaurants yet</span>
                         ) : (
-                          <div className="space-y-2">
-                            {p.redemptions.map((redemption) => (
-                              <div key={redemption.id} className="flex items-start gap-2">
-                                <Building2 className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                                <div className="min-w-0">
-                                  <Link
-                                    href={`/admin/restaurants/${redemption.restaurant.id}`}
-                                    className="font-medium text-slate-900 hover:text-blue-600"
-                                  >
-                                    {redemption.restaurant.name}
-                                  </Link>
-                                  <div className="text-xs text-slate-500">
-                                    {redemption.restaurant.email || redemption.restaurant.slug}
-                                    {' · '}
-                                    Used {new Date(redemption.createdAt).toLocaleDateString()}
-                                    {redemption.restaurant.subscriptionStatus
-                                      ? ` · ${redemption.restaurant.subscriptionStatus}`
-                                      : ''}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                          <Button variant="outline" size="sm" onClick={() => openRedemptionDialog(p)}>
+                            <Building2 className="h-4 w-4 mr-2" />
+                            View {p.redemptions.length} restaurant{p.redemptions.length !== 1 ? 's' : ''}
+                          </Button>
                         )}
                       </td>
                       <td className="py-3">
@@ -332,6 +333,87 @@ export default function AdminPromoCodesPage() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!redemptionTarget} onOpenChange={(open) => !open && setRedemptionTarget(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>
+              Restaurants using <span className="font-mono">{redemptionTarget?.code}</span>
+            </DialogTitle>
+            <DialogDescription>
+              {redemptionTarget?.redemptions.length ?? 0} redemption
+              {redemptionTarget?.redemptions.length === 1 ? '' : 's'}
+              {redemptionTarget ? ` · ${redemptionTarget.type === 'ONE_YEAR_FREE' ? '1 Year Free' : '1 Month Free'}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input
+                value={redemptionSearch}
+                onChange={(e) => setRedemptionSearch(e.target.value)}
+                placeholder="Search by restaurant, email, slug, or status"
+                className="pl-9"
+              />
+            </div>
+
+            <div className="max-h-96 overflow-auto rounded-md border border-slate-200">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="border-b border-slate-200 text-left text-slate-500">
+                    <th className="py-2 px-3 font-medium">Restaurant</th>
+                    <th className="py-2 px-3 font-medium">Email / Slug</th>
+                    <th className="py-2 px-3 font-medium">Status</th>
+                    <th className="py-2 px-3 font-medium">Used Date</th>
+                    <th className="py-2 px-3 w-12"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRedemptions.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 px-3 text-center text-slate-500">
+                        No matching restaurants.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRedemptions.map((redemption) => (
+                      <tr key={redemption.id} className="border-b border-slate-100 last:border-0">
+                        <td className="py-3 px-3 font-medium text-slate-900">
+                          {redemption.restaurant.name}
+                        </td>
+                        <td className="py-3 px-3 text-slate-600">
+                          <div>{redemption.restaurant.email || 'No email'}</div>
+                          <div className="text-xs text-slate-400">{redemption.restaurant.slug}</div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+                            {redemption.restaurant.subscriptionStatus || 'No status'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-600">
+                          {new Date(redemption.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-3">
+                          <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Link
+                              href={`/admin/restaurants/${redemption.restaurant.id}`}
+                              title="Open restaurant"
+                              onClick={() => setRedemptionTarget(null)}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
