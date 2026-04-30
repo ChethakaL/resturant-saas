@@ -34,6 +34,7 @@ export default async function SettingsPage() {
 
   const settings = (restaurant?.settings as Record<string, unknown>) || {}
   const themeFromSettings = (settings.theme as Record<string, string>) || {}
+  const whatsappSettings = (settings.whatsappOrderNotifications as Record<string, unknown>) || {}
   const currentTheme = {
     ...themeFromSettings,
     menuTimezone: (settings.menuTimezone as string) || 'Asia/Baghdad',
@@ -53,6 +54,9 @@ export default async function SettingsPage() {
     tableOrderingEnabled: settings.tableOrderingEnabled !== false,
     showKurdishOnMenu: (settings.theme as Record<string, unknown>)?.showKurdishOnMenu !== false,
     showArabicOnMenu: (settings.theme as Record<string, unknown>)?.showArabicOnMenu !== false,
+    restaurantWhatsappNumber: typeof whatsappSettings.number === 'string' ? whatsappSettings.number : '',
+    restaurantWhatsappVerifiedAt: typeof whatsappSettings.verifiedAt === 'string' ? whatsappSettings.verifiedAt : null,
+    restaurantWhatsappLastInboundAt: typeof whatsappSettings.lastInboundAt === 'string' ? whatsappSettings.lastInboundAt : null,
   }
 
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
@@ -62,6 +66,7 @@ export default async function SettingsPage() {
   return (
     <SettingsClient
       currentTheme={currentTheme}
+      twilioWhatsAppNumber={process.env.TWILIO_PHONE_NUMBER ?? ''}
       defaultBackgroundPrompt={defaultBackgroundPrompt}
       hasDefaultBackgroundImage={hasDefaultBackgroundImage}
       defaultBackgroundImageData={defaultBackgroundImageData}

@@ -12,7 +12,7 @@ export default async function AdminDashboardPage() {
     redirect('/admin/login')
   }
 
-  const [restaurantCount, restaurants, menuEventCount, userCount] = await Promise.all([
+  const [restaurantCount, restaurants, menuEventCount, userCount] = await prisma.$transaction([
     prisma.restaurant.count(),
     prisma.restaurant.findMany({
       select: { subscriptionStatus: true, createdAt: true },

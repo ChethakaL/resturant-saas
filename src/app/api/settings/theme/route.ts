@@ -5,6 +5,11 @@ import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { IRAQ_CITIES } from '@/lib/iraq-cities'
+import {
+  getRestaurantWhatsAppSettings,
+  mergeRestaurantWhatsAppSettings,
+  normalizeWhatsAppNumber,
+} from '@/lib/restaurant-whatsapp'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +36,10 @@ const themeSchema = z.object({
   restaurantName: z.string().min(1).max(100).optional(),
   restaurantEmail: z.string().email().nullable().optional(),
   restaurantPhone: z.string().max(50).nullable().optional(),
+  restaurantWhatsappNumber: z.string().max(50).nullable().optional(),
+  instagramUrl: z.string().url().nullable().optional(),
+  facebookUrl: z.string().url().nullable().optional(),
+  whatsappUrl: z.string().url().nullable().optional(),
   restaurantCity: z.enum(IRAQ_CITIES).nullable().optional(),
   restaurantAddress: z.string().max(255).nullable().optional(),
   restaurantLat: z.number().nullable().optional(),
@@ -80,6 +89,7 @@ export async function GET() {
     })
 
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
+    const whatsappSettings = getRestaurantWhatsAppSettings(settings)
     return NextResponse.json({
       ...(settings.theme as object),
       menuTimezone: settings.menuTimezone ?? 'Asia/Baghdad',
@@ -89,6 +99,9 @@ export async function GET() {
       tableOrderingEnabled: settings.tableOrderingEnabled !== false,
       restaurantEmail: restaurant?.email ?? null,
       restaurantPhone: restaurant?.phone ?? null,
+      restaurantWhatsappNumber: whatsappSettings.number ?? null,
+      restaurantWhatsappVerifiedAt: whatsappSettings.verifiedAt ?? null,
+      restaurantWhatsappLastInboundAt: whatsappSettings.lastInboundAt ?? null,
       restaurantCity: restaurant?.city ?? null,
       restaurantAddress: restaurant?.address ?? null,
       restaurantLat: restaurant?.lat ?? null,
@@ -133,6 +146,7 @@ export async function PUT(request: Request) {
       restaurantName,
       restaurantEmail,
       restaurantPhone,
+      restaurantWhatsappNumber,
       restaurantCity,
       restaurantAddress,
       restaurantLat,
@@ -164,6 +178,23 @@ export async function PUT(request: Request) {
       ...(tableOrderingEnabled !== undefined && { tableOrderingEnabled }),
     }
 
+    if (restaurantWhatsappNumber !== undefined) {
+      const normalizedWhatsappNumber = normalizeWhatsAppNumber(restaurantWhatsappNumber)
+      const currentWhatsappSettings = getRestaurantWhatsAppSettings(currentSettings)
+      const mergedSettings = mergeRestaurantWhatsAppSettings(currentSettings, {
+        number: normalizedWhatsappNumber,
+        ...(normalizedWhatsappNumber !== currentWhatsappSettings.number
+          ? {
+              verifiedAt: null,
+              verificationCode: null,
+              verificationRequestedAt: null,
+              lastInboundAt: null,
+            }
+          : {}),
+      })
+      Object.assign(newSettings, mergedSettings)
+    }
+
     const updateData: Record<string, unknown> = { settings: newSettings }
     if (restaurantName !== undefined && restaurantName.trim()) {
       updateData.name = restaurantName.trim()
@@ -190,6 +221,7 @@ export async function PUT(request: Request) {
       managementLanguage: managementLanguage ?? currentSettings.managementLanguage ?? 'en',
       restaurantEmail: restaurantEmail ?? null,
       restaurantPhone: restaurantPhone ?? null,
+      restaurantWhatsappNumber: restaurantWhatsappNumber ?? null,
       restaurantCity: restaurantCity ?? null,
       restaurantAddress: restaurantAddress ?? null,
       restaurantLat: restaurantLat ?? null,

@@ -78,6 +78,7 @@ export default function SubscriptionTab({
         body: JSON.stringify({
           plan,
           returnPath: pathname || '/billing',
+          ...(promoCode.trim() && { promotionCode: promoCode.trim() }),
         }),
       })
       const data = await res.json()

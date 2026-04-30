@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
+import { mergeRestaurantWhatsAppSettings, normalizeWhatsAppNumber } from '@/lib/restaurant-whatsapp'
 
 function slugify(text: string): string {
   return text
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
       slug: slugInput,
       userName,
       userEmail,
+      restaurantWhatsappNumber,
       password,
       referralCode: refCode,
     } = body as {
@@ -26,6 +28,7 @@ export async function POST(request: Request) {
       slug?: string
       userName?: string
       userEmail?: string
+      restaurantWhatsappNumber?: string
       password?: string
       referralCode?: string
     }
@@ -78,6 +81,7 @@ export async function POST(request: Request) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10)
+    const normalizedWhatsappNumber = normalizeWhatsAppNumber(restaurantWhatsappNumber)
 
     let referredByRestaurantId: string | null = null
     if (refCode?.trim()) {
@@ -93,6 +97,9 @@ export async function POST(request: Request) {
         name: restaurantName.trim(),
         slug,
         email: userEmail.trim().toLowerCase(),
+        settings: normalizedWhatsappNumber
+          ? mergeRestaurantWhatsAppSettings({}, { number: normalizedWhatsappNumber })
+          : undefined,
         ...(referredByRestaurantId && { referredByRestaurantId }),
       },
     })

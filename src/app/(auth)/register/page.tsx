@@ -17,6 +17,7 @@ function RegisterForm() {
   const [isManualSlug, setIsManualSlug] = useState(false)
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [restaurantWhatsappNumber, setRestaurantWhatsappNumber] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -63,6 +64,7 @@ function RegisterForm() {
           referralCode: referralCode || undefined,
           userName: userName.trim(),
           userEmail: userEmail.trim(),
+          restaurantWhatsappNumber: restaurantWhatsappNumber.trim() || undefined,
           password,
         }),
       })
@@ -161,7 +163,21 @@ function RegisterForm() {
                   disabled={isLoading}
                 />
                 <p className="text-[11px] text-slate-500">
-                  Restaurant contact phone, city, and street will be completed later in Restaurant DNA.
+                  Restaurant contact phone, WhatsApp, city, and street can be completed later in Restaurant DNA.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="restaurantWhatsappNumber">Restaurant WhatsApp</Label>
+                <Input
+                  id="restaurantWhatsappNumber"
+                  type="tel"
+                  placeholder="+964 770 000 0000"
+                  value={restaurantWhatsappNumber}
+                  onChange={(e) => setRestaurantWhatsappNumber(e.target.value)}
+                  disabled={isLoading}
+                />
+                <p className="text-[11px] text-slate-500">
+                  Optional. You can verify it later in Restaurant DNA.
                 </p>
               </div>
               <div className="space-y-2">

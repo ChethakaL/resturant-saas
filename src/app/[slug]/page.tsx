@@ -5,6 +5,13 @@ import { getPublicMenuBundleBySlug } from '@/lib/public-menu-bundle'
 /** ISR hint; full payload is not unstable_cached (can exceed Next.js ~2MB data cache limit). */
 export const revalidate = 300
 
+const RESERVED_SLUGS = new Set([
+  'favicon.ico',
+  'robots.txt',
+  'sitemap.xml',
+  'manifest.json',
+])
+
 export default async function SlugMenuPage({
   params,
 }: {
@@ -13,6 +20,7 @@ export default async function SlugMenuPage({
   const resolved = params instanceof Promise ? await params : params
   const slug = resolved.slug?.toLowerCase().trim()
   if (!slug) notFound()
+  if (RESERVED_SLUGS.has(slug) || slug.includes('.')) notFound()
 
   const data = await getPublicMenuBundleBySlug(slug)
   if (!data) notFound()

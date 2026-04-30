@@ -130,11 +130,18 @@ export async function getPublicMenuBundleBySlug(slug: string) {
   })
 
   const [
-    [menuItems, chefPicks, fetchedShowcases, categories],
-    [salesLast30d, preppedStocksRows, tables],
+    [
+      menuItems,
+      chefPicks,
+      fetchedShowcases,
+      categories,
+      salesLast30d,
+      preppedStocksRows,
+      tables,
+    ],
     smartSearchFeelingContext,
   ] = await Promise.all([
-    Promise.all([
+    prisma.$transaction([
       prisma.menuItem.findMany({
         where: { available: true, status: 'ACTIVE', restaurantId: restaurant.id },
         select: {
@@ -202,8 +209,7 @@ export async function getPublicMenuBundleBySlug(slug: string) {
         where: { restaurantId: restaurant.id },
         orderBy: { displayOrder: 'asc' },
       }),
-    ]),
-    Promise.all([
+
       prisma.sale.findMany({
         where: { restaurantId: restaurant.id, timestamp: { gte: thirtyDaysAgo } },
         select: {

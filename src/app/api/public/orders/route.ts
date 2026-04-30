@@ -2,6 +2,8 @@ import { getServerSession } from 'next-auth'
 import { prisma } from '@/lib/prisma'
 import { authOptions } from '@/lib/auth'
 import { NextResponse } from 'next/server'
+import { sendRestaurantOrderWhatsApp } from '@/lib/whatsapp-orders'
+import { buildRestaurantOrderWhatsAppNumber } from '@/lib/restaurant-whatsapp'
 
 export async function POST(request: Request) {
   try {
@@ -25,17 +27,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No items provided' }, { status: 400 })
     }
 
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { name: true, phone: true, settings: true },
+    })
+
+    if (!restaurant) {
+      return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
+    }
+
     let tableId: string | null = null
+    let resolvedTableNumber: string | null = null
     if (tableIdFromClient) {
       const table = await prisma.table.findFirst({
         where: { id: tableIdFromClient, restaurantId },
       })
-      if (table) tableId = table.id
+      if (table) {
+        tableId = table.id
+        resolvedTableNumber = table.number
+      }
     } else if (tableNumber) {
       const table = await prisma.table.findUnique({
         where: { restaurantId_number: { restaurantId, number: tableNumber } },
       })
-      if (table) tableId = table.id
+      if (table) {
+        tableId = table.id
+        resolvedTableNumber = table.number
+      }
     }
 
     const menuItemsData = await prisma.menuItem.findMany({
@@ -107,6 +125,27 @@ export async function POST(request: Request) {
         },
       },
     })
+
+    try {
+      await sendRestaurantOrderWhatsApp({
+        restaurantName: restaurant.name,
+        restaurantPhone: buildRestaurantOrderWhatsAppNumber(restaurant.settings, restaurant.phone),
+        orderNumber: sale.orderNumber,
+        tableNumber: resolvedTableNumber,
+        customerName: data.customerName || (session?.user?.name as string) || 'Guest',
+        total,
+        items: saleItems.map((item) => {
+          const menuItem = menuItemsData.find((m) => m.id === item.menuItemId)
+          return {
+            name: menuItem?.name || 'Menu item',
+            quantity: item.quantity,
+            price: item.price,
+          }
+        }),
+      })
+    } catch (error) {
+      console.error('[whatsapp-orders] Failed to send public order notification:', error)
+    }
 
     return NextResponse.json({ id: sale.id, orderNumber: sale.orderNumber })
   } catch (error: any) {

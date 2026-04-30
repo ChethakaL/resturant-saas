@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3, ShoppingBag, Minus, Plus, Clock3, ChefHat, GlassWater, Handshake, IceCreamCone } from 'lucide-react'
+import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3, ShoppingBag, Minus, Plus, Clock3, ChefHat, GlassWater, Handshake, IceCreamCone, Instagram, Facebook, MessageCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
@@ -91,6 +91,14 @@ interface MenuTheme {
   backgroundImageUrl?: string | null
   menuCarouselStyle?: string
   menuLayout?: 'list' | 'grid'
+  socialLinks?: {
+    instagram?: string | null
+    facebook?: string | null
+    whatsapp?: string | null
+  } | null
+  instagramUrl?: string | null
+  facebookUrl?: string | null
+  whatsappUrl?: string | null
   /** When false, Kurdish is hidden from the language selector (default true). */
   showKurdishOnMenu?: boolean
   /** When false, Arabic is hidden from the language selector (default true). */
@@ -942,11 +950,13 @@ export default function SmartMenu({
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set())
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const menuListRef = useRef<HTMLDivElement | null>(null)
+  const socialFooterTriggerRef = useRef<HTMLDivElement | null>(null)
   const stickyHeaderRef = useRef<HTMLDivElement | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   const [navActiveSectionId, setNavActiveSectionId] = useState<string | null>(null)
   const [scrollDepth, setScrollDepth] = useState(0)
   const [menuListFlash, setMenuListFlash] = useState(false)
+  const [socialFooterVisible, setSocialFooterVisible] = useState(false)
   const navScrollTargetRef = useRef<string | null>(null)
   const navScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasLoadedStoredLanguageRef = useRef(false)
@@ -1386,6 +1396,29 @@ export default function SmartMenu({
 
   const currentCopy = uiCopyMap[language]
   const currentEngineCopy = engineCopyMap[language]
+  const socialFooterLinks = useMemo(() => {
+    const links = theme?.socialLinks ?? null
+    return [
+      { key: 'instagram', label: 'Instagram', href: links?.instagram || theme?.instagramUrl || null, icon: Instagram },
+      { key: 'facebook', label: 'Facebook', href: links?.facebook || theme?.facebookUrl || null, icon: Facebook },
+      { key: 'whatsapp', label: 'WhatsApp', href: links?.whatsapp || theme?.whatsappUrl || null, icon: MessageCircle },
+    ]
+  }, [theme])
+
+  useEffect(() => {
+    const updateSocialFooter = () => {
+      const trigger = socialFooterTriggerRef.current
+      setSocialFooterVisible(Boolean(trigger && trigger.getBoundingClientRect().top <= 90))
+    }
+
+    updateSocialFooter()
+    window.addEventListener('scroll', updateSocialFooter, { passive: true })
+    window.addEventListener('resize', updateSocialFooter)
+    return () => {
+      window.removeEventListener('scroll', updateSocialFooter)
+      window.removeEventListener('resize', updateSocialFooter)
+    }
+  }, [])
   const localizedSortOptions = sortOptions.map((option) => ({
     ...option,
     label: currentCopy[option.label as keyof typeof currentCopy] as string,
@@ -2864,11 +2897,6 @@ export default function SmartMenu({
     return source.slice(0, 3)
   }, [activeHeroItems, baseFilteredItems])
 
-  const pairingItems = useMemo(() => {
-    const source = baseFilteredItems.filter((item) => !activeHeroItems.some((hero) => hero.id === item.id))
-    return source.slice(0, 5)
-  }, [activeHeroItems, baseFilteredItems])
-
   const heroTitle =
     contextLanguage === 'en'
       ? selectedContextShowcase?.title || heroTitleMap[selectedContext] || topShowcases[0]?.title || currentCopy.chefRecommendationLabel
@@ -3162,6 +3190,8 @@ export default function SmartMenu({
               </div>
             </section>
           )}
+
+          <div ref={socialFooterTriggerRef} aria-hidden className="h-px" />
 
           {engineMode !== 'classic' && lastOrderDisplayNames.length > 0 && (
             <section className="px-5 pt-5 sm:px-6 lg:px-8">
@@ -3564,43 +3594,6 @@ export default function SmartMenu({
             )
           })}
 
-          {pairingItems.length > 0 && (
-            <section className="px-5 pt-5 sm:px-6 lg:px-8">
-              <div className="rounded-2xl border p-4" style={{ borderColor: accentBorder, backgroundColor: accentSoft }}>
-                <div className="mb-3 text-[0.62rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
-                  Complete your meal
-                </div>
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-                  {pairingItems.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => addToCart(item.id)}
-                      className="flex flex-shrink-0 items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3 shadow-sm"
-                      style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}
-                    >
-                      <img
-                        src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
-                        alt={item.name}
-                        loading="lazy"
-                        decoding="async"
-                        className="h-8 w-8 rounded-full object-cover"
-                      />
-                      <span className="text-left">
-                        <span className="block text-[0.72rem] font-semibold" style={{ color: textMain }}>
-                          {getDisplayNameForItem(item)}
-                        </span>
-                        <span className="block text-[0.64rem]" style={{ color: textMuted }}>
-                          {formatMenuPriceWithVariant(item.price, priceVariant)}
-                        </span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-          )}
-
           {orderSuccessMessage && (
             <div className="px-5 pt-5 sm:px-6 lg:px-8">
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
@@ -3609,6 +3602,49 @@ export default function SmartMenu({
             </div>
           )}
         </main>
+
+        <div
+          className={`pointer-events-none fixed inset-x-0 z-30 mx-auto flex max-w-6xl justify-center px-5 transition-all duration-300 sm:px-6 lg:px-8 ${
+            socialFooterVisible ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
+          } ${cartCount > 0 ? 'bottom-24' : 'bottom-5'}`}
+          aria-hidden={!socialFooterVisible}
+        >
+          <div
+            className="pointer-events-auto flex items-center gap-2 rounded-full border px-2 py-2 shadow-[0_14px_32px_rgba(0,0,0,0.16)] backdrop-blur-xl"
+            style={{ borderColor: dividerColor, backgroundColor: hexToRgba(surfaceBg, 0.9) }}
+          >
+            {socialFooterLinks.map(({ key, label, href, icon: Icon }) => {
+              const content = (
+                <span
+                  className="flex h-10 w-10 items-center justify-center rounded-full border transition"
+                  style={{
+                    borderColor: href ? accentBorder : dividerColor,
+                    backgroundColor: href ? accentSoft : surfaceSoft,
+                    color: href ? themeAccent : textMuted,
+                  }}
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
+              )
+
+              return href ? (
+                <a
+                  key={key}
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={label}
+                >
+                  {content}
+                </a>
+              ) : (
+                <span key={key} aria-label={label}>
+                  {content}
+                </span>
+              )
+            })}
+          </div>
+        </div>
 
         {cartCount > 0 && (
           <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 mx-auto max-w-6xl px-5 pb-5 sm:px-6 lg:px-8">

@@ -26,6 +26,9 @@ import {
   ChevronDown,
   Eye,
   MessageCircle,
+  Copy,
+  ExternalLink,
+  ShieldCheck,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useI18n, useDynamicTranslate, type ManagementLocale } from '@/lib/i18n'
@@ -75,6 +78,12 @@ interface SettingsThemePayload {
   restaurantName?: string
   restaurantEmail?: string
   restaurantPhone?: string
+  restaurantWhatsappNumber?: string
+  restaurantWhatsappVerifiedAt?: string | null
+  restaurantWhatsappLastInboundAt?: string | null
+  instagramUrl?: string
+  facebookUrl?: string
+  whatsappUrl?: string
   restaurantCity?: string
   restaurantAddress?: string
   restaurantLat?: string | number
@@ -110,6 +119,7 @@ interface SettingsThemePayload {
 
 interface SettingsClientProps {
   currentTheme: SettingsThemePayload
+  twilioWhatsAppNumber?: string
   defaultBackgroundPrompt?: string
   hasDefaultBackgroundImage?: boolean
   defaultBackgroundImageData?: string | null
@@ -125,6 +135,7 @@ interface ChatMessage {
 
 export default function SettingsClient({
   currentTheme,
+  twilioWhatsAppNumber = '',
   defaultBackgroundPrompt: initialDefaultBackgroundPrompt = '',
   hasDefaultBackgroundImage: initialHasDefaultBackgroundImage = false,
   defaultBackgroundImageData: initialDefaultBackgroundImageData = null,
@@ -179,6 +190,10 @@ export default function SettingsClient({
   const [restaurantName, setRestaurantName] = useState(currentTheme.restaurantName || '')
   const [restaurantEmail, setRestaurantEmail] = useState(currentTheme.restaurantEmail || '')
   const [restaurantPhone, setRestaurantPhone] = useState(currentTheme.restaurantPhone || '')
+  const [restaurantWhatsappNumber, setRestaurantWhatsappNumber] = useState(currentTheme.restaurantWhatsappNumber || '')
+  const [instagramUrl, setInstagramUrl] = useState(currentTheme.instagramUrl || '')
+  const [facebookUrl, setFacebookUrl] = useState(currentTheme.facebookUrl || '')
+  const [whatsappUrl, setWhatsappUrl] = useState(currentTheme.whatsappUrl || '')
   const [restaurantCity, setRestaurantCity] = useState(currentTheme.restaurantCity || '')
   const [restaurantAddress, setRestaurantAddress] = useState(currentTheme.restaurantAddress || '')
   const [restaurantLat, setRestaurantLat] = useState<number | null>(() => {
@@ -224,6 +239,11 @@ export default function SettingsClient({
   const [snowfallStart, setSnowfallStart] = useState<string>(currentTheme.snowfallStart || '12-15')
   const [snowfallEnd, setSnowfallEnd] = useState<string>(currentTheme.snowfallEnd || '01-07')
   const [savingTheme, setSavingTheme] = useState(false)
+  const [whatsappVerificationCode, setWhatsappVerificationCode] = useState<string | null>(null)
+  const [whatsappVerificationRequestedAt, setWhatsappVerificationRequestedAt] = useState<string | null>(null)
+  const [whatsappVerifiedAt, setWhatsappVerifiedAt] = useState<string | null>(currentTheme.restaurantWhatsappVerifiedAt || null)
+  const [whatsappLastInboundAt, setWhatsappLastInboundAt] = useState<string | null>(currentTheme.restaurantWhatsappLastInboundAt || null)
+  const [startingWhatsappVerification, setStartingWhatsappVerification] = useState(false)
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [resettingDemoAccount, setResettingDemoAccount] = useState(false)
   const [fontDropdownOpen, setFontDropdownOpen] = useState(false)
@@ -288,6 +308,43 @@ export default function SettingsClient({
     designerEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [designerMessages])
 
+  useEffect(() => {
+    setWhatsappVerifiedAt(currentTheme.restaurantWhatsappVerifiedAt || null)
+    setWhatsappLastInboundAt(currentTheme.restaurantWhatsappLastInboundAt || null)
+  }, [currentTheme.restaurantWhatsappVerifiedAt, currentTheme.restaurantWhatsappLastInboundAt])
+
+  useEffect(() => {
+    if (!whatsappVerificationRequestedAt || whatsappVerifiedAt) return
+
+    const interval = window.setInterval(async () => {
+      try {
+        const response = await fetch('/api/whatsapp/verification/status', { cache: 'no-store' })
+        if (!response.ok) return
+        const data = await response.json()
+        setWhatsappVerifiedAt(data.verifiedAt || null)
+        setWhatsappLastInboundAt(data.lastInboundAt || null)
+        if (data.verified) {
+          setRestaurantWhatsappNumber(data.whatsappNumber || '')
+          setWhatsappVerificationCode(null)
+          setWhatsappVerificationRequestedAt(null)
+        }
+      } catch {
+        // Keep polling quietly while waiting for verification.
+      }
+    }, 3000)
+
+    return () => window.clearInterval(interval)
+  }, [whatsappVerificationRequestedAt, whatsappVerifiedAt])
+
+  const verificationChatHref = (() => {
+    if (!twilioWhatsAppNumber) return null
+    const digits = twilioWhatsAppNumber.replace(/[^\d]/g, '')
+    if (!digits) return null
+    const base = `https://wa.me/${digits}`
+    if (!whatsappVerificationCode) return base
+    return `${base}?text=${encodeURIComponent(whatsappVerificationCode)}`
+  })()
+
   const getEtaLabel = (done: number, total: number, startedAt: number | null): string => {
     if (!startedAt || total <= 0) return ''
     if (done >= total) return ''
@@ -330,6 +387,10 @@ export default function SettingsClient({
           ...(restaurantName.trim() && { restaurantName: restaurantName.trim() }),
           restaurantEmail: restaurantEmail.trim() || null,
           restaurantPhone: restaurantPhone.trim() || null,
+          restaurantWhatsappNumber: restaurantWhatsappNumber.trim() || null,
+          instagramUrl: instagramUrl.trim() || null,
+          facebookUrl: facebookUrl.trim() || null,
+          whatsappUrl: whatsappUrl.trim() || null,
           restaurantCity: restaurantCity || null,
           restaurantAddress: restaurantAddress.trim() || null,
           restaurantLat,
@@ -346,6 +407,12 @@ export default function SettingsClient({
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.error || 'Failed to save theme')
+      }
+      if (!restaurantWhatsappNumber.trim()) {
+        setWhatsappVerificationCode(null)
+        setWhatsappVerificationRequestedAt(null)
+        setWhatsappVerifiedAt(null)
+        setWhatsappLastInboundAt(null)
       }
       toast({ title: 'Theme saved ✨', description: 'Your Restaurant DNA has been updated.' })
       if (languageChanged) {
@@ -392,6 +459,57 @@ export default function SettingsClient({
       })
     } finally {
       setResettingDemoAccount(false)
+    }
+  }
+
+  const startWhatsAppVerification = async () => {
+    if (!restaurantWhatsappNumber.trim()) {
+      toast({ title: td('WhatsApp number required'), description: td('Enter the restaurant WhatsApp number first.'), variant: 'destructive' })
+      return
+    }
+
+    setStartingWhatsappVerification(true)
+    try {
+      const response = await fetch('/api/whatsapp/verification/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ whatsappNumber: restaurantWhatsappNumber }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start WhatsApp verification')
+      }
+
+      setRestaurantWhatsappNumber(data.whatsappNumber || restaurantWhatsappNumber)
+      setWhatsappVerifiedAt(data.verifiedAt || null)
+      setWhatsappLastInboundAt(data.lastInboundAt || null)
+      setWhatsappVerificationRequestedAt(data.verificationRequestedAt || null)
+      setWhatsappVerificationCode(data.verificationCode || null)
+
+      toast({
+        title: data.verified ? td('WhatsApp already verified') : td('OTP ready'),
+        description: data.verified
+          ? td('This WhatsApp number is already verified.')
+          : td('Send the OTP from this WhatsApp number to finish verification.'),
+      })
+    } catch (error) {
+      toast({
+        title: td('Could not start verification'),
+        description: error instanceof Error ? error.message : td('Unknown error'),
+        variant: 'destructive',
+      })
+    } finally {
+      setStartingWhatsappVerification(false)
+    }
+  }
+
+  const copyVerificationCode = async () => {
+    if (!whatsappVerificationCode) return
+    try {
+      await navigator.clipboard.writeText(whatsappVerificationCode)
+      toast({ title: td('OTP copied'), description: td('Paste it into WhatsApp and send it to verify.') })
+    } catch {
+      toast({ title: td('Copy failed'), description: td('Please copy the OTP manually.'), variant: 'destructive' })
     }
   }
 
@@ -1055,6 +1173,47 @@ export default function SettingsClient({
 
       <Card>
         <CardHeader>
+          <CardTitle>{td('Guest Menu Social Links')}</CardTitle>
+          <p className="text-sm text-slate-500">
+            {td('These three icons appear in the small guest menu footer after the hero section.')}
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="instagramUrl">{td('Instagram URL')}</Label>
+            <Input
+              id="instagramUrl"
+              type="url"
+              value={instagramUrl}
+              onChange={(event) => setInstagramUrl(event.target.value)}
+              placeholder="https://instagram.com/restaurant"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="facebookUrl">{td('Facebook URL')}</Label>
+            <Input
+              id="facebookUrl"
+              type="url"
+              value={facebookUrl}
+              onChange={(event) => setFacebookUrl(event.target.value)}
+              placeholder="https://facebook.com/restaurant"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="whatsappUrl">{td('WhatsApp URL')}</Label>
+            <Input
+              id="whatsappUrl"
+              type="url"
+              value={whatsappUrl}
+              onChange={(event) => setWhatsappUrl(event.target.value)}
+              placeholder="https://wa.me/9647700000000"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>{td('Restaurant Contact & Location')}</CardTitle>
           <p className="text-sm text-slate-500">
             {td('Set the single restaurant email and phone here. Choose the city, then pick the street from Google Maps.')}
@@ -1080,6 +1239,101 @@ export default function SettingsClient({
               onChange={(event) => setRestaurantPhone(event.target.value)}
               placeholder="+964 770 000 0000"
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="restaurantWhatsappNumber">{td('Restaurant WhatsApp')}</Label>
+            <Input
+              id="restaurantWhatsappNumber"
+              type="tel"
+              value={restaurantWhatsappNumber}
+              onChange={(event) => {
+                setRestaurantWhatsappNumber(event.target.value)
+                setWhatsappVerificationCode(null)
+                setWhatsappVerificationRequestedAt(null)
+                setWhatsappVerifiedAt(null)
+              }}
+              placeholder="+964 770 000 0000"
+            />
+            <p className="text-xs text-slate-500">
+              {td('Optional. When a customer does a order, it will be sent to this Whatsapp Number.')}
+            </p>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 md:col-span-2">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-start">
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-emerald-700" />
+                  <p className="text-sm font-semibold text-slate-900">{td('WhatsApp order notification verification')}</p>
+                  {whatsappVerifiedAt ? (
+                    <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
+                      <ShieldCheck className="mr-1 h-3.5 w-3.5" />
+                      {td('Verified')}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-amber-300 text-amber-700">
+                      {td('Not verified')}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-slate-600">
+                  {td('Generate an OTP, then send it from the restaurant WhatsApp number to the below WhatsApp number. Verification updates here automatically.')}
+                </p>
+                {twilioWhatsAppNumber && (
+                  <p className="text-xs text-slate-500">
+                    {td('The WhatsApp number you need to send the OTP to')}: <span className="font-mono">{twilioWhatsAppNumber}</span>
+                  </p>
+                )}
+                {whatsappVerifiedAt && (
+                  <p className="text-xs text-emerald-700">
+                    {td('Verified')}: {new Date(whatsappVerifiedAt).toLocaleString()}
+                    {whatsappLastInboundAt ? ` · ${td('Last inbound')}: ${new Date(whatsappLastInboundAt).toLocaleString()}` : ''}
+                  </p>
+                )}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={startWhatsAppVerification}
+                  disabled={startingWhatsappVerification}
+                  className="h-10 w-full justify-center"
+                >
+                  {startingWhatsappVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-2 h-4 w-4" />}
+                  {whatsappVerifiedAt ? td('Regenerate OTP') : td('Generate OTP')}
+                </Button>
+                {verificationChatHref && (
+                  <Button asChild type="button" className="h-10 w-full justify-center">
+                    <a href={verificationChatHref} target="_blank" rel="noreferrer">
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      {td('Open chat')}
+                    </a>
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {!whatsappVerifiedAt && whatsappVerificationCode && (
+              <div className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[1fr_auto_auto] md:items-end">
+                <div className="space-y-1">
+                  <Label>{td('OTP')}</Label>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-lg font-semibold tracking-[0.2em] text-slate-900">
+                    {whatsappVerificationCode}
+                  </div>
+                </div>
+                <Button type="button" variant="outline" onClick={copyVerificationCode}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  {td('Copy OTP')}
+                </Button>
+                {verificationChatHref ? (
+                  <Button asChild type="button" variant="outline">
+                    <a href={verificationChatHref} target="_blank" rel="noreferrer">
+                      <Send className="mr-2 h-4 w-4" />
+                      {td('Send in WhatsApp')}
+                    </a>
+                  </Button>
+                ) : null}
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="restaurantCity">{td('City')}</Label>

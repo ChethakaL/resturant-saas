@@ -13,6 +13,11 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: 'iServe+ - Restaurant Management System',
   description: 'AI-powered restaurant management system',
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
 }
 
 export default function RootLayout({
