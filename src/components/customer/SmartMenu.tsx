@@ -2391,6 +2391,7 @@ export default function SmartMenu({
       }
 
       pendingSelfOrderTableRef.current = selectedTableNumber ?? null
+      setSelectedTableNumber(null)
 
       setStoredLastOrder(
         restaurantId,
