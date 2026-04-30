@@ -7,6 +7,11 @@ type OrderLine = {
   price: number
 }
 
+type SendFreeformWhatsAppInput = {
+  to?: string | null
+  body: string
+}
+
 type SendRestaurantOrderWhatsAppInput = {
   restaurantName: string
   restaurantPhone?: string | null
@@ -19,6 +24,28 @@ type SendRestaurantOrderWhatsAppInput = {
 
 function formatMoney(value: number) {
   return `${Math.round(value).toLocaleString('en-US')} IQD`
+}
+
+async function sendFreeformWhatsApp(input: SendFreeformWhatsAppInput) {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  const from = normalizeTwilioWhatsAppAddress(process.env.TWILIO_PHONE_NUMBER)
+  const to = normalizeTwilioWhatsAppAddress(input.to)
+
+  if (!accountSid || !authToken || !from || !to) {
+    console.warn('[whatsapp-orders] Skipping WhatsApp send: missing Twilio config or destination')
+    return { sent: false, skipped: true }
+  }
+
+  const client = twilio(accountSid, authToken)
+
+  await client.messages.create({
+    from,
+    to,
+    body: input.body,
+  })
+
+  return { sent: true, skipped: false }
 }
 
 function buildOrderMessage(input: SendRestaurantOrderWhatsAppInput) {
@@ -44,23 +71,15 @@ function buildOrderMessage(input: SendRestaurantOrderWhatsAppInput) {
 }
 
 export async function sendRestaurantOrderWhatsApp(input: SendRestaurantOrderWhatsAppInput) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  const from = normalizeTwilioWhatsAppAddress(process.env.TWILIO_PHONE_NUMBER)
-  const to = normalizeTwilioWhatsAppAddress(input.restaurantPhone)
-
-  if (!accountSid || !authToken || !from || !to) {
-    console.warn('[whatsapp-orders] Skipping WhatsApp notification: missing Twilio config or restaurant phone')
-    return { sent: false, skipped: true }
-  }
-
-  const client = twilio(accountSid, authToken)
-
-  await client.messages.create({
-    from,
-    to,
+  return sendFreeformWhatsApp({
+    to: input.restaurantPhone,
     body: buildOrderMessage(input),
   })
+}
 
-  return { sent: true, skipped: false }
+export async function sendWhatsAppVerificationConfirmed(to?: string | null) {
+  return sendFreeformWhatsApp({
+    to,
+    body: 'Your WhatsApp number is verified. Order notifications are now active.',
+  })
 }

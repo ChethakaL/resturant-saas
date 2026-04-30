@@ -5,6 +5,7 @@ import {
   mergeRestaurantWhatsAppSettings,
   normalizeWhatsAppNumber,
 } from '@/lib/restaurant-whatsapp'
+import { sendWhatsAppVerificationConfirmed } from '@/lib/whatsapp-orders'
 
 function xmlResponse(body: string, status = 200) {
   return new NextResponse(body, {
@@ -72,6 +73,12 @@ export async function POST(request: NextRequest) {
         })
 
         if (isVerificationMatch) {
+          try {
+            await sendWhatsAppVerificationConfirmed(normalizedFrom)
+          } catch (error) {
+            console.error('[whatsapp-incoming] Failed to send verification confirmation:', error)
+          }
+
           console.log('[whatsapp-incoming] WhatsApp number verified', {
             restaurantId: match.id,
             restaurantName: match.name,
