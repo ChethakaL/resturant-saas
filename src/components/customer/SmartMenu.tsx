@@ -935,6 +935,7 @@ export default function SmartMenu({
   const [tablePickerOpen, setTablePickerOpen] = useState(false)
   const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(tableNumber ?? null)
   const [liveTables, setLiveTables] = useState(() => tables ?? [])
+  const pendingSelfOrderTableRef = useRef<string | null>(null)
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
   const [orderSuccessMessage, setOrderSuccessMessage] = useState<string | null>(null)
   const [lastOrder, setLastOrder] = useState<{ itemIds: string[]; names: string[] } | null>(null)
@@ -1083,6 +1084,10 @@ export default function SmartMenu({
 
     const selectedTable = liveTables.find((table) => table.number === selectedTableNumber)
     if (selectedTable && selectedTable.status && selectedTable.status !== 'AVAILABLE') {
+      if (pendingSelfOrderTableRef.current === selectedTable.number) {
+        pendingSelfOrderTableRef.current = null
+        return
+      }
       setSelectedTableNumber(null)
       toast({
         title: 'Table no longer available',
@@ -2384,6 +2389,8 @@ export default function SmartMenu({
       if (!response.ok) {
         throw new Error(data?.error || 'Failed to place order')
       }
+
+      pendingSelfOrderTableRef.current = selectedTableNumber ?? null
 
       setStoredLastOrder(
         restaurantId,
