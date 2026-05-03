@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
 export interface ImportedMonthlySalesSummary {
   currency: string
@@ -335,6 +339,77 @@ const EXTRACTION_SCHEMA = {
   required: ['restaurantName', 'branchName', 'reportType', 'summary', 'weeklySales', 'topSellingItems', 'dailySales'],
 } as const
 
+function extractTableItemsWithPdfPlumber(fileBase64: string): ImportedMonthlySalesItem[] {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'monthly-sales-pdf-'))
+  const pdfPath = join(tmpDir, 'report.pdf')
+  try {
+    writeFileSync(pdfPath, Buffer.from(fileBase64, 'base64'))
+    const script = [
+      'import json, re, sys',
+      'import pdfplumber',
+      'path = sys.argv[1]',
+      "unit_re = r'(PCS|PC|KG|G|L|ML|BOTTLE|CUP|PLATE|PORTION|SET|ITEM|BOX)'",
+      "pat = re.compile(r'^\\s*(\\d+)\\s+(.+?)\\s+' + unit_re + r'\\s+([\\d,]+(?:\\.\\d+)?)\\s+([\\d,]+(?:\\.\\d+)?)\\s+([\\d,]+(?:\\.\\d+)?)\\s*$')",
+      'rows = []',
+      'seen = set()',
+      'with pdfplumber.open(path) as pdf:',
+      '  for page in pdf.pages:',
+      "    text = page.extract_text() or ''",
+      '    for line in text.splitlines():',
+      "      line = ' '.join(line.split())",
+      '      m = pat.match(line)',
+      '      if not m:',
+      '        continue',
+      '      idx = int(m.group(1))',
+      '      item = m.group(2).strip()',
+      "      unit_price = float(m.group(4).replace(',', ''))",
+      "      qty = float(m.group(5).replace(',', ''))",
+      "      gross = float(m.group(6).replace(',', ''))",
+      '      key = (idx, item, unit_price, qty, gross)',
+      '      if key in seen:',
+      '        continue',
+      '      seen.add(key)',
+      '      rows.append({',
+      "        'itemName': item,",
+      "        'category': None,",
+      "        'quantitySold': int(round(qty)),",
+      "        'unitPrice': unit_price,",
+      "        'grossRevenue': gross",
+      '      })',
+      "print(json.dumps(rows, ensure_ascii=True))",
+    ].join('\n')
+
+    const result = spawnSync('python3', ['-c', script, pdfPath], {
+      encoding: 'utf8',
+      timeout: 20_000,
+      maxBuffer: 5 * 1024 * 1024,
+    })
+    if (result.status !== 0 || !result.stdout.trim()) return []
+
+    const parsed = JSON.parse(result.stdout) as Array<{
+      itemName?: unknown
+      category?: unknown
+      quantitySold?: unknown
+      unitPrice?: unknown
+      grossRevenue?: unknown
+    }>
+
+    return parsed
+      .map((row) => ({
+        itemName: typeof row.itemName === 'string' ? row.itemName : 'Unknown Item',
+        category: typeof row.category === 'string' ? row.category : null,
+        quantitySold: Math.max(0, Math.round(toFiniteNumber(row.quantitySold))),
+        unitPrice: Math.max(0, toFiniteNumber(row.unitPrice)),
+        grossRevenue: Math.max(0, toFiniteNumber(row.grossRevenue)),
+      }))
+      .filter((row) => row.itemName && row.grossRevenue > 0)
+  } catch {
+    return []
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true })
+  }
+}
+
 export async function extractMonthlySalesFromPdf(params: {
   fileName: string
   fileBase64: string
@@ -459,8 +534,17 @@ export async function extractMonthlySalesFromPdf(params: {
     ].join(' ')
     const secondPass = await callClaudePdfExtraction(retryPrompt, 8_000)
     if (secondPass.topSellingItems.length > firstPass.topSellingItems.length) {
+      const deterministicItems = extractTableItemsWithPdfPlumber(params.fileBase64)
+      if (deterministicItems.length > secondPass.topSellingItems.length) {
+        return { ...secondPass, topSellingItems: deterministicItems }
+      }
       return secondPass
     }
+  }
+
+  const deterministicItems = extractTableItemsWithPdfPlumber(params.fileBase64)
+  if (deterministicItems.length > firstPass.topSellingItems.length) {
+    return { ...firstPass, topSellingItems: deterministicItems }
   }
 
   return firstPass
