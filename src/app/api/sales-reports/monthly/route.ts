@@ -11,6 +11,7 @@ import {
   upsertMonthlySalesPdfRecord,
 } from '@/lib/monthly-sales-pdf'
 import {
+  detectPeriodFromFileName,
   extractMonthlySalesFromPdf,
   type ImportedMonthlySalesData,
   getCurrentMonthlySalesImport,
@@ -114,6 +115,19 @@ export async function POST(request: NextRequest) {
 
     const importMode = formData.get('importMode') === 'append' ? 'append' : 'replace'
     const buffer = file ? Buffer.from(await file.arrayBuffer()) : null
+
+    if (file) {
+      const detectedPeriod = detectPeriodFromFileName(file.name)
+      if (detectedPeriod && (detectedPeriod.year !== year || detectedPeriod.month !== month)) {
+        return NextResponse.json(
+          {
+            error: `Selected period (${year}-${String(month).padStart(2, '0')}) does not match file period (${detectedPeriod.year}-${String(detectedPeriod.month).padStart(2, '0')}) inferred from file name "${file.name}".`,
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     let parsedImport: ImportedMonthlySalesData
     if (typeof editedDataRaw === 'string' && editedDataRaw.trim()) {
       parsedImport = JSON.parse(editedDataRaw) as ImportedMonthlySalesData

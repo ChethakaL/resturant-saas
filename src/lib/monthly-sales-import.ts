@@ -1,8 +1,3 @@
-import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
-
 export interface ImportedMonthlySalesSummary {
   currency: string
   totalSales: number
@@ -54,6 +49,57 @@ export interface ImportedMonthlySalesData {
   dailySales: ImportedMonthlySalesDay[]
 }
 
+const MONTH_NAME_TO_NUMBER: Record<string, number> = {
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
+}
+
+export function detectPeriodFromFileName(fileName: string): { year: number; month: number } | null {
+  const normalized = fileName.toLowerCase().replace(/[^a-z0-9]+/g, ' ')
+  const compact = fileName.toLowerCase()
+
+  const yearMonthPattern = compact.match(/\b(20\d{2})[-_./ ](0?[1-9]|1[0-2])\b/)
+  if (yearMonthPattern) {
+    const year = Number(yearMonthPattern[1])
+    const month = Number(yearMonthPattern[2])
+    if (Number.isInteger(year) && Number.isInteger(month) && year >= 2020 && year <= 2100 && month >= 1 && month <= 12) {
+      return { year, month }
+    }
+  }
+
+  const monthYearPattern = compact.match(/\b(0?[1-9]|1[0-2])[-_./ ](20\d{2})\b/)
+  if (monthYearPattern) {
+    const month = Number(monthYearPattern[1])
+    const year = Number(monthYearPattern[2])
+    if (Number.isInteger(year) && Number.isInteger(month) && year >= 2020 && year <= 2100 && month >= 1 && month <= 12) {
+      return { year, month }
+    }
+  }
+
+  const yearMatch = normalized.match(/\b(20\d{2})\b/)
+  if (!yearMatch) return null
+  const year = Number(yearMatch[1])
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) return null
+
+  for (const [monthName, monthNumber] of Object.entries(MONTH_NAME_TO_NUMBER)) {
+    if (normalized.includes(monthName)) {
+      return { year, month: monthNumber }
+    }
+  }
+
+  return null
+}
+
 function toFiniteNumber(value: unknown) {
   const num = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(num) ? num : 0
@@ -69,6 +115,24 @@ function normalizeImportedMonthlySalesData(
   const weeklyRaw = Array.isArray(payload.weeklySales) ? payload.weeklySales : []
   const topItemsRaw = Array.isArray(payload.topSellingItems) ? payload.topSellingItems : []
   const dailyRaw = Array.isArray(payload.dailySales) ? payload.dailySales : []
+
+  const topSellingItems = topItemsRaw
+    .map((item) => {
+      const row = (item as Record<string, unknown>) || {}
+      return {
+        itemName: typeof row.itemName === 'string' ? row.itemName : 'Unknown Item',
+        category: typeof row.category === 'string' ? row.category : null,
+        quantitySold: Math.round(toFiniteNumber(row.quantitySold)),
+        unitPrice: toFiniteNumber(row.unitPrice),
+        grossRevenue: toFiniteNumber(row.grossRevenue),
+      }
+    })
+    .filter((item) => item.itemName && item.grossRevenue > 0)
+  const uniqueTopItems = new Map<string, ImportedMonthlySalesItem>()
+  for (const item of topSellingItems) {
+    const key = normalizeTextKey(item.itemName) + `|${item.quantitySold}|${item.unitPrice}|${item.grossRevenue}`
+    if (!uniqueTopItems.has(key)) uniqueTopItems.set(key, item)
+  }
 
   return {
     year,
@@ -98,16 +162,7 @@ function normalizeImportedMonthlySalesData(
         netSales: toFiniteNumber(row.netSales),
       }
     }),
-    topSellingItems: topItemsRaw.map((item) => {
-      const row = (item as Record<string, unknown>) || {}
-      return {
-        itemName: typeof row.itemName === 'string' ? row.itemName : 'Unknown Item',
-        category: typeof row.category === 'string' ? row.category : null,
-        quantitySold: Math.round(toFiniteNumber(row.quantitySold)),
-        unitPrice: toFiniteNumber(row.unitPrice),
-        grossRevenue: toFiniteNumber(row.grossRevenue),
-      }
-    }),
+    topSellingItems: Array.from(uniqueTopItems.values()),
     dailySales: dailyRaw.map((item) => {
       const row = (item as Record<string, unknown>) || {}
       return {
@@ -339,76 +394,26 @@ const EXTRACTION_SCHEMA = {
   required: ['restaurantName', 'branchName', 'reportType', 'summary', 'weeklySales', 'topSellingItems', 'dailySales'],
 } as const
 
-function extractTableItemsWithPdfPlumber(fileBase64: string): ImportedMonthlySalesItem[] {
-  const tmpDir = mkdtempSync(join(tmpdir(), 'monthly-sales-pdf-'))
-  const pdfPath = join(tmpDir, 'report.pdf')
-  try {
-    writeFileSync(pdfPath, Buffer.from(fileBase64, 'base64'))
-    const script = [
-      'import json, re, sys',
-      'import pdfplumber',
-      'path = sys.argv[1]',
-      "unit_re = r'(PCS|PC|KG|G|L|ML|BOTTLE|CUP|PLATE|PORTION|SET|ITEM|BOX)'",
-      "pat = re.compile(r'^\\s*(\\d+)\\s+(.+?)\\s+' + unit_re + r'\\s+([\\d,]+(?:\\.\\d+)?)\\s+([\\d,]+(?:\\.\\d+)?)\\s+([\\d,]+(?:\\.\\d+)?)\\s*$')",
-      'rows = []',
-      'seen = set()',
-      'with pdfplumber.open(path) as pdf:',
-      '  for page in pdf.pages:',
-      "    text = page.extract_text() or ''",
-      '    for line in text.splitlines():',
-      "      line = ' '.join(line.split())",
-      '      m = pat.match(line)',
-      '      if not m:',
-      '        continue',
-      '      idx = int(m.group(1))',
-      '      item = m.group(2).strip()',
-      "      unit_price = float(m.group(4).replace(',', ''))",
-      "      qty = float(m.group(5).replace(',', ''))",
-      "      gross = float(m.group(6).replace(',', ''))",
-      '      key = (idx, item, unit_price, qty, gross)',
-      '      if key in seen:',
-      '        continue',
-      '      seen.add(key)',
-      '      rows.append({',
-      "        'itemName': item,",
-      "        'category': None,",
-      "        'quantitySold': int(round(qty)),",
-      "        'unitPrice': unit_price,",
-      "        'grossRevenue': gross",
-      '      })',
-      "print(json.dumps(rows, ensure_ascii=True))",
-    ].join('\n')
+const SUMMARY_ONLY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    restaurantName: { type: ['string', 'null'] },
+    branchName: { type: ['string', 'null'] },
+    reportType: { type: ['string', 'null'] },
+    summary: EXTRACTION_SCHEMA.properties.summary,
+  },
+  required: ['restaurantName', 'branchName', 'reportType', 'summary'],
+} as const
 
-    const result = spawnSync('python3', ['-c', script, pdfPath], {
-      encoding: 'utf8',
-      timeout: 20_000,
-      maxBuffer: 5 * 1024 * 1024,
-    })
-    if (result.status !== 0 || !result.stdout.trim()) return []
-
-    const parsed = JSON.parse(result.stdout) as Array<{
-      itemName?: unknown
-      category?: unknown
-      quantitySold?: unknown
-      unitPrice?: unknown
-      grossRevenue?: unknown
-    }>
-
-    return parsed
-      .map((row) => ({
-        itemName: typeof row.itemName === 'string' ? row.itemName : 'Unknown Item',
-        category: typeof row.category === 'string' ? row.category : null,
-        quantitySold: Math.max(0, Math.round(toFiniteNumber(row.quantitySold))),
-        unitPrice: Math.max(0, toFiniteNumber(row.unitPrice)),
-        grossRevenue: Math.max(0, toFiniteNumber(row.grossRevenue)),
-      }))
-      .filter((row) => row.itemName && row.grossRevenue > 0)
-  } catch {
-    return []
-  } finally {
-    rmSync(tmpDir, { recursive: true, force: true })
-  }
-}
+const ITEMS_ONLY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    topSellingItems: EXTRACTION_SCHEMA.properties.topSellingItems,
+  },
+  required: ['topSellingItems'],
+} as const
 
 export async function extractMonthlySalesFromPdf(params: {
   fileName: string
@@ -428,7 +433,7 @@ export async function extractMonthlySalesFromPdf(params: {
     new Date(params.year, params.month - 1, 1)
   )
 
-  const prompt = [
+  const basePrompt = [
     `Extract structured restaurant sales data from this monthly sales PDF for ${monthLabel}.`,
     'Return only the values you can actually see in the PDF.',
     'Use numbers only, without currency symbols or commas.',
@@ -441,7 +446,12 @@ export async function extractMonthlySalesFromPdf(params: {
     'Dates must be ISO format YYYY-MM-DD when possible. If the PDF shows "Mar 1, 2026", convert it to "2026-03-01".',
   ].join(' ')
 
-  const callClaudePdfExtraction = async (inputPrompt: string, maxTokens: number) => {
+  const callClaudePdfExtraction = async (
+    inputPrompt: string,
+    maxTokens: number,
+    schema: typeof EXTRACTION_SCHEMA | typeof SUMMARY_ONLY_SCHEMA | typeof ITEMS_ONLY_SCHEMA,
+    toolName: string
+  ) => {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
     try {
@@ -477,14 +487,14 @@ export async function extractMonthlySalesFromPdf(params: {
           ],
           tools: [
             {
-              name: 'monthly_sales_report',
+              name: toolName,
               description: 'Extracted monthly restaurant sales report',
-              input_schema: EXTRACTION_SCHEMA,
+              input_schema: schema,
             },
           ],
           tool_choice: {
             type: 'tool',
-            name: 'monthly_sales_report',
+            name: toolName,
           },
         }),
         signal: controller.signal,
@@ -519,33 +529,63 @@ export async function extractMonthlySalesFromPdf(params: {
     }
   }
 
-  // First pass: full extraction with higher output budget for long item tables.
-  const firstPass = await callClaudePdfExtraction(prompt, 8_000)
+  const summaryPrompt = [basePrompt, 'Return only restaurantName, branchName, reportType, and summary.'].join(' ')
+  const itemsPrompt = [
+    basePrompt,
+    'Return only topSellingItems.',
+    'Each visible table row must produce one item in topSellingItems.',
+    'Do not return only a subset.',
+  ].join(' ')
+
+  const summaryOnly = await callClaudePdfExtraction(summaryPrompt, 2_000, SUMMARY_ONLY_SCHEMA, 'monthly_sales_summary')
+  let itemsOnly = await callClaudePdfExtraction(itemsPrompt, 10_000, ITEMS_ONLY_SCHEMA, 'monthly_sales_items')
+  let normalized = normalizeImportedMonthlySalesData(
+    {
+      restaurantName: summaryOnly.restaurantName || null,
+      branchName: summaryOnly.branchName || null,
+      reportType: summaryOnly.reportType || null,
+      summary: summaryOnly.summary || {},
+      weeklySales: [],
+      dailySales: [],
+      topSellingItems: Array.isArray(itemsOnly.topSellingItems) ? itemsOnly.topSellingItems : [],
+    },
+    params.fileName,
+    params.year,
+    params.month
+  )
 
   // Bounded recovery pass (max one extra call) when table extraction looks truncated.
-  // This prevents loops and keeps token spend capped while improving reliability.
-  if (firstPass.topSellingItems.length < 25) {
+  if (normalized.topSellingItems.length < 25) {
     const retryPrompt = [
-      prompt,
+      itemsPrompt,
       'RETRY MODE:',
       'The previous extraction returned too few item rows.',
       'Re-read all pages and return every visible item row from the table in topSellingItems.',
       'Do not omit rows because of repetition; include all visible numbered rows.',
     ].join(' ')
-    const secondPass = await callClaudePdfExtraction(retryPrompt, 8_000)
-    if (secondPass.topSellingItems.length > firstPass.topSellingItems.length) {
-      const deterministicItems = extractTableItemsWithPdfPlumber(params.fileBase64)
-      if (deterministicItems.length > secondPass.topSellingItems.length) {
-        return { ...secondPass, topSellingItems: deterministicItems }
-      }
-      return secondPass
+    itemsOnly = await callClaudePdfExtraction(retryPrompt, 10_000, ITEMS_ONLY_SCHEMA, 'monthly_sales_items_retry')
+    const retryNormalizedItems = normalizeImportedMonthlySalesData(
+      {
+        restaurantName: summaryOnly.restaurantName || null,
+        branchName: summaryOnly.branchName || null,
+        reportType: summaryOnly.reportType || null,
+        summary: summaryOnly.summary || {},
+        weeklySales: [],
+        dailySales: [],
+        topSellingItems: Array.isArray(itemsOnly.topSellingItems) ? itemsOnly.topSellingItems : [],
+      },
+      params.fileName,
+      params.year,
+      params.month
+    ).topSellingItems
+    if (retryNormalizedItems.length > normalized.topSellingItems.length) {
+      normalized = { ...normalized, topSellingItems: retryNormalizedItems }
     }
   }
 
-  const deterministicItems = extractTableItemsWithPdfPlumber(params.fileBase64)
-  if (deterministicItems.length > firstPass.topSellingItems.length) {
-    return { ...firstPass, topSellingItems: deterministicItems }
+  if (normalized.topSellingItems.length < 10) {
+    throw new Error('Could not extract enough item rows from this PDF. Please upload a clearer POS export PDF.')
   }
 
-  return firstPass
+  return normalized
 }
