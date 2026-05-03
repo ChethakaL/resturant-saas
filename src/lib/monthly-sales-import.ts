@@ -1,4 +1,3 @@
-import OpenAI from 'openai'
 
 export interface ImportedMonthlySalesSummary {
   currency: string
@@ -342,12 +341,14 @@ export async function extractMonthlySalesFromPdf(params: {
   year: number
   month: number
 }) {
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is not configured')
+    throw new Error('ANTHROPIC_API_KEY is not configured')
   }
 
-  const openai = new OpenAI({ apiKey })
+  // Keep extraction costs predictable: one request, no automatic retries, strict output schema.
+  const model = process.env.MONTHLY_SALES_CLAUDE_MODEL || 'claude-haiku-4-5-20251001'
+  const requestTimeoutMs = Number(process.env.MONTHLY_SALES_CLAUDE_TIMEOUT_MS || 120000)
   const monthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(
     new Date(params.year, params.month - 1, 1)
   )
@@ -357,41 +358,110 @@ export async function extractMonthlySalesFromPdf(params: {
     'Return only the values you can actually see in the PDF.',
     'Use numbers only, without currency symbols or commas.',
     'Keep item names exactly as shown in the report.',
+    'IMPORTANT: Extract ALL visible line-item rows in the report table(s); do not sample, summarize, or stop early.',
+    'If rows are numbered (e.g. 1,2,3...), include every visible row number exactly once in topSellingItems.',
+    'Do not limit results to only "top" items; topSellingItems must contain the full item table from the PDF.',
     'If a field is missing, use 0 for numeric values and null for nullable strings.',
     'For dailySales, extract every visible daily row from the PDF, not just one example.',
     'Dates must be ISO format YYYY-MM-DD when possible. If the PDF shows "Mar 1, 2026", convert it to "2026-03-01".',
   ].join(' ')
 
-  const response = await openai.responses.create({
-    model: 'gpt-4.1-mini',
-    input: [
-      {
-        role: 'user',
-        content: [
-          { type: 'input_text', text: prompt },
-          {
-            type: 'input_file',
-            filename: params.fileName,
-            file_data: `data:application/pdf;base64,${params.fileBase64}`,
+  const callClaudePdfExtraction = async (inputPrompt: string, maxTokens: number) => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          temperature: 0,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'document',
+                  source: {
+                    type: 'base64',
+                    media_type: 'application/pdf',
+                    data: params.fileBase64,
+                  },
+                },
+                {
+                  type: 'text',
+                  text: inputPrompt,
+                },
+              ],
+            },
+          ],
+          tools: [
+            {
+              name: 'monthly_sales_report',
+              description: 'Extracted monthly restaurant sales report',
+              input_schema: EXTRACTION_SCHEMA,
+            },
+          ],
+          tool_choice: {
+            type: 'tool',
+            name: 'monthly_sales_report',
           },
-        ],
-      },
-    ],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'monthly_sales_report',
-        strict: true,
-        schema: EXTRACTION_SCHEMA,
-      },
-    },
-  })
+        }),
+        signal: controller.signal,
+      })
 
-  const outputText = (response as unknown as { output_text?: string }).output_text
-  if (!outputText) {
-    throw new Error('No structured output was returned from OpenAI')
+      const data = (await res.json()) as {
+        error?: { message?: string }
+        content?: Array<{ type: string; input?: Record<string, unknown> }>
+      }
+      if (!res.ok) {
+        throw new Error(data.error?.message || 'Claude PDF extraction failed')
+      }
+
+      const toolOutput = data.content?.find((item) => item.type === 'tool_use')
+      if (!toolOutput?.input || typeof toolOutput.input !== 'object') {
+        throw new Error('Claude returned invalid structured output')
+      }
+
+      return normalizeImportedMonthlySalesData(toolOutput.input, params.fileName, params.year, params.month)
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === 'AbortError'
+      ) {
+        throw new Error(
+          `Claude extraction timed out after ${Math.round(requestTimeoutMs / 1000)}s. Try again or increase MONTHLY_SALES_CLAUDE_TIMEOUT_MS.`
+        )
+      }
+      throw error
+    } finally {
+      clearTimeout(timeout)
+    }
   }
 
-  const parsed = JSON.parse(outputText) as Record<string, unknown>
-  return normalizeImportedMonthlySalesData(parsed, params.fileName, params.year, params.month)
+  // First pass: full extraction with higher output budget for long item tables.
+  const firstPass = await callClaudePdfExtraction(prompt, 8_000)
+
+  // Bounded recovery pass (max one extra call) when table extraction looks truncated.
+  // This prevents loops and keeps token spend capped while improving reliability.
+  if (firstPass.topSellingItems.length < 25) {
+    const retryPrompt = [
+      prompt,
+      'RETRY MODE:',
+      'The previous extraction returned too few item rows.',
+      'Re-read all pages and return every visible item row from the table in topSellingItems.',
+      'Do not omit rows because of repetition; include all visible numbered rows.',
+    ].join(' ')
+    const secondPass = await callClaudePdfExtraction(retryPrompt, 8_000)
+    if (secondPass.topSellingItems.length > firstPass.topSellingItems.length) {
+      return secondPass
+    }
+  }
+
+  return firstPass
 }
