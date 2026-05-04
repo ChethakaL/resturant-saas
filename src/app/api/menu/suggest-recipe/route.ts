@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!process.env.GOOGLE_AI_KEY) {
+    if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
       return NextResponse.json(
         { error: 'AI API key not configured' },
         { status: 500 }
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     const ingredientNames = existingIngredients.map((i) => `${i.name} (${i.unit})`).join(', ')
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
+    const genAI = new GoogleGenerativeAI(((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY))
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
     })

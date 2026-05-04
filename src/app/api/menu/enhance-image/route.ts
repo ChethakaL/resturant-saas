@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { enhanceDishImage } from '@/lib/enhance-dish-image'
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
       : 'image/jpeg'
 
     if (useIserveStandards) {
-      const apiKey = process.env.GOOGLE_AI_KEY
+      const apiKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
       if (!apiKey) {
         return NextResponse.json({ error: 'Google AI API key not configured' }, { status: 500 })
       }

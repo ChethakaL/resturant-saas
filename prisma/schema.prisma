@@ -1103,3 +1103,13 @@ enum ShowcaseType {
   CHEFS_HIGHLIGHTS
   RECOMMENDATIONS
 }
+
+/// Platform-wide configuration managed via the superadmin UI.
+/// Singleton row — always id = 'global'. Falls back to .env if a value is null.
+model PlatformConfig {
+  id        String   @id @default("global")
+  config    Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_config")
+}

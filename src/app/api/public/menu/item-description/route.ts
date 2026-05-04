@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { prisma } from '@/lib/prisma'
 import { callGemini, parseGeminiJson } from '@/lib/generative'
 
@@ -99,7 +100,7 @@ Make sure the description is flavorful but grounded in what is hard-coded above.
 }
 
 export async function POST(request: NextRequest) {
-  if (!process.env.GOOGLE_AI_KEY) {
+  if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
     return NextResponse.json(
       { error: 'Google AI API key not configured' },
       { status: 500 }

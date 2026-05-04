@@ -10,6 +10,8 @@ interface SubscriptionPlansProps {
   currentPlan: 'monthly' | 'annual' | null
   loadingPlan: 'monthly' | 'annual' | null
   onSubscribe: (plan: 'monthly' | 'annual') => void
+  priceMonthly: string
+  priceAnnual: string
 }
 
 export function SubscriptionPlans({
@@ -18,10 +20,14 @@ export function SubscriptionPlans({
   currentPlan,
   loadingPlan,
   onSubscribe,
+  priceMonthly,
+  priceAnnual,
 }: SubscriptionPlansProps) {
   const { t } = useI18n()
   const features = [t.sub_feature_menu, t.sub_feature_ai, t.sub_feature_analytics, t.sub_feature_tables, t.sub_feature_theme]
   const comingSoonFeatures = [t.sub_feature_pos, t.sub_feature_hr]
+
+  const savingsAmount = Math.max(0, (Number(priceMonthly) * 12) - Number(priceAnnual))
 
   if (!pricesConfigured) {
     return (
@@ -70,7 +76,7 @@ export function SubscriptionPlans({
           <span className="text-sm font-medium text-slate-500">{t.sub_monthly}</span>
         </div>
         <div className="mb-5">
-          <span className="text-3xl font-bold text-slate-900">$59</span>
+          <span className="text-3xl font-bold text-slate-900">${priceMonthly}</span>
           <span className="text-slate-500">{t.sub_per_month}</span>
           <p className="mt-2 text-sm text-slate-500">{t.sub_cancel_anytime}</p>
         </div>
@@ -102,9 +108,11 @@ export function SubscriptionPlans({
             : 'border-slate-300 hover:border-slate-400'
         }`}
       >
-        <div className="absolute -top-3 right-4 rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-white shadow">
-          {t.sub_save_amount}
-        </div>
+        {savingsAmount > 0 && (
+          <div className="absolute -top-3 right-4 rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-white shadow">
+            Save ${savingsAmount}
+          </div>
+        )}
         <div className="mb-4 flex items-center gap-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
             <Crown className="h-5 w-5" />
@@ -112,10 +120,10 @@ export function SubscriptionPlans({
           <span className="text-sm font-medium text-slate-600">{t.sub_annual}</span>
         </div>
         <div className="mb-5">
-          <span className="text-3xl font-bold text-slate-900">$590</span>
+          <span className="text-3xl font-bold text-slate-900">${priceAnnual}</span>
           <span className="text-slate-500">{t.sub_per_year}</span>
           <p className="mt-2 text-sm text-slate-500">
-            {t.sub_best_value}
+            {savingsAmount > 0 ? `Best value. Save $${savingsAmount} compared to monthly billing.` : 'Best value.'}
           </p>
         </div>
         {featureList}

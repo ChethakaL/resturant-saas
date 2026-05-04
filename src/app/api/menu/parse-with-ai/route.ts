@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
@@ -59,7 +60,7 @@ RULES:
 8. ingredients: Extract from the user text (ingredient lists, recipe steps, "marinate with X", "add Y"). Each item: name (string), quantity (number), unit (kg for meats/veg, g for small, cup for rice/lentils, tsp/tbsp for spices, L for liquids), pieceCount (number for countable items like "2 onions", else null). If no ingredients mentioned, use empty array [].`
 
 async function parseWithGemini(text: string, categoryNames: string[]): Promise<ParseWithAIResponse> {
-  const apiKey = process.env.GOOGLE_AI_KEY
+  const apiKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
   if (!apiKey) throw new Error('Google AI API key not configured')
 
   const genAI = new GoogleGenerativeAI(apiKey)
@@ -189,7 +190,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const hasGemini = !!process.env.GOOGLE_AI_KEY
+    const hasGemini = !!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
     const hasOpenAI = !!process.env.OPENAI_API_KEY
 
     if (!hasGemini && !hasOpenAI) {

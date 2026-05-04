@@ -307,6 +307,7 @@ const uiCopyMap: Record<
     suggestingLabel: string
     chefRecommendationLabel: string
     signatureBadge: string
+    topBadge: string
     chefsRecBadge: string
     guestFavoriteBadge: string
     pairingsButtonLabel: string
@@ -375,6 +376,7 @@ const uiCopyMap: Record<
     suggestingLabel: 'Suggesting…',
     chefRecommendationLabel: "Chef's recommendation",
     signatureBadge: 'Signature Dish',
+    topBadge: 'Top ⭐️',
     chefsRecBadge: "Chef's Choice",
     guestFavoriteBadge: 'Guest Favorite',
     pairingsButtonLabel: 'Pairings',
@@ -442,6 +444,7 @@ const uiCopyMap: Record<
     suggestingLabel: 'جاري الاقتراح…',
     chefRecommendationLabel: 'توصية الشيف',
     signatureBadge: 'الطبق المميز',
+    topBadge: 'أفضل ⭐️',
     chefsRecBadge: 'توصية الشيف',
     guestFavoriteBadge: 'الأكثر طلبًا',
     pairingsButtonLabel: 'مقترحات',
@@ -509,6 +512,7 @@ const uiCopyMap: Record<
     suggestingLabel: 'جاري الاقتراح…',
     chefRecommendationLabel: 'توصية الشيف',
     signatureBadge: 'الطبق المميز',
+    topBadge: 'أفضل ⭐️',
     chefsRecBadge: 'توصية الشيف',
     guestFavoriteBadge: 'الأكثر طلبًا',
     pairingsButtonLabel: 'مقترحات',
@@ -576,6 +580,7 @@ const uiCopyMap: Record<
     suggestingLabel: 'پێشنیار دەکرێت…',
     chefRecommendationLabel: 'پێشنیاری چێشتلێنەر',
     signatureBadge: 'تایبەت',
+    topBadge: 'باشترین ⭐️',
     chefsRecBadge: 'پێشنیاری چێشتلێنەر',
     guestFavoriteBadge: 'دڵخوازی میوانەکان',
     pairingsButtonLabel: 'پێشنیارە هاوپەیوەندەکان',
@@ -628,6 +633,7 @@ const engineCopyMap: Record<
     idleMessage: string
     jumpToSection: string
     signatureBadge: string
+    topBadge: string
     mostLovedBadge: string
     chefSelectionBadge: string
     removeLabel: string
@@ -659,6 +665,7 @@ const engineCopyMap: Record<
     idleMessage: 'Looking for something? Try our',
     jumpToSection: 'Jump to',
     signatureBadge: 'SIGNATURE DISH',
+    topBadge: 'TOP ⭐️',
     mostLovedBadge: 'MOST LOVED',
     chefSelectionBadge: "CHEF'S CHOICE",
     removeLabel: 'Remove',
@@ -689,6 +696,7 @@ const engineCopyMap: Record<
     idleMessage: 'تبحث عن شيء؟ جرّب',
     jumpToSection: 'انتقل إلى',
     signatureBadge: 'طبق مميز',
+    topBadge: 'أفضل ⭐️',
     mostLovedBadge: 'الأكثر حباً',
     chefSelectionBadge: 'اختيار الشيف',
     removeLabel: 'إزالة',
@@ -719,6 +727,7 @@ const engineCopyMap: Record<
     idleMessage: 'تبحث عن شيء؟ جرّب',
     jumpToSection: 'انتقل إلى',
     signatureBadge: 'مميز',
+    topBadge: 'أفضل ⭐️',
     mostLovedBadge: 'الأكثر حباً',
     chefSelectionBadge: 'اختيار الشيف',
     removeLabel: 'إزالة',
@@ -749,6 +758,7 @@ const engineCopyMap: Record<
     idleMessage: 'شتیک دەگەڕیت؟ تاقی',
     jumpToSection: 'بڕو بۆ',
     signatureBadge: 'بەناوبانگترین',
+    topBadge: 'باشترین ⭐️',
     mostLovedBadge: 'خۆشەویستترین',
     chefSelectionBadge: "CHEF'S CHOICE",
     removeLabel: 'لابردن',
@@ -3401,7 +3411,7 @@ export default function SmartMenu({
               )
               if (signatureItem) {
                 badgeMap.set(signatureItem.id, {
-                  label: currentCopy.signatureBadge,
+                  label: currentCopy.topBadge,
                   bg: 'linear-gradient(135deg, #7A5A0A, #D6A93A)',
                   color: '#FFF8E1',
                   border: '1px solid rgba(255, 243, 204, 0.5)',
@@ -3974,7 +3984,7 @@ export default function SmartMenu({
               <div className="mb-3 flex flex-wrap gap-2">
                 {selectedItemForDetail._hints?.isAnchor && (
                   <span className="rounded-full px-3 py-1 text-[0.6rem] font-bold uppercase tracking-[0.08em] text-white" style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}>
-                    {currentEngineCopy.signatureBadge}
+                    {currentEngineCopy.topBadge}
                   </span>
                 )}
                 {selectedItemForDetail._hints?.displayTier === 'featured' && (
@@ -4644,7 +4654,7 @@ export default function SmartMenu({
                             badgeLabels={engineMode === 'classic' || isExtraRevealedItem || resolvedHints?.suppressBadge
                               ? { signature: '', mostLoved: '', chefSelection: '' }
                               : {
-                                  signature: currentEngineCopy.signatureBadge,
+                                  signature: currentEngineCopy.topBadge,
                                   mostLoved: currentEngineCopy.mostLovedBadge,
                                   chefSelection: currentEngineCopy.chefSelectionBadge,
                                 }}

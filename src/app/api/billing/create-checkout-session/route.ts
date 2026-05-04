@@ -4,9 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
 import Stripe from 'stripe'
+import { getPlatformConfig } from '@/lib/platform-config'
 
-const PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY
-const PRICE_ANNUAL = process.env.STRIPE_PRICE_ANNUAL
 const BILLING_CURRENCY = (process.env.STRIPE_BILLING_CURRENCY || 'usd').toLowerCase()
 
 function buildLineItem(
@@ -47,9 +46,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const platformCfg = await getPlatformConfig()
+    const PRICE_MONTHLY = String(platformCfg.priceMonthly ?? process.env.STRIPE_PRICE_MONTHLY ?? '59')
+    const PRICE_ANNUAL = String(platformCfg.priceAnnual ?? process.env.STRIPE_PRICE_ANNUAL ?? '590')
+    const platformReferralDiscount = Number(platformCfg.referralDiscountAmount ?? 10)
+
     if (!PRICE_MONTHLY || !PRICE_ANNUAL) {
       return NextResponse.json(
-        { error: 'Billing not configured. Set STRIPE_PRICE_MONTHLY and STRIPE_PRICE_ANNUAL.' },
+        { error: 'Billing not configured. Set pricing in Platform Settings or .env.' },
         { status: 500 }
       )
     }
@@ -78,7 +82,7 @@ export async function POST(request: NextRequest) {
     }
 
     const isReferred = !!restaurant.referredByRestaurantId
-    const referralDiscount = isReferred ? (plan === 'annual' ? 100 : 10) : 0
+    const referralDiscount = isReferred ? (plan === 'annual' ? 100 : platformReferralDiscount) : 0
 
     const configuredPrice = plan === 'annual' ? PRICE_ANNUAL : PRICE_MONTHLY
     const lineItem = buildLineItem(configuredPrice, plan, referralDiscount)

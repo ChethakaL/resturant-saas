@@ -13,6 +13,8 @@ interface SubscriptionTabProps {
   currentPeriodEnd: string | null
   currentPlan: 'monthly' | 'annual' | null
   pricesConfigured: boolean
+  priceMonthly: string
+  priceAnnual: string
 }
 
 export default function SubscriptionTab({
@@ -20,6 +22,8 @@ export default function SubscriptionTab({
   currentPeriodEnd,
   currentPlan,
   pricesConfigured,
+  priceMonthly,
+  priceAnnual,
 }: SubscriptionTabProps) {
   const searchParams = useSearchParams()
   const pathname = usePathname()
@@ -245,6 +249,8 @@ export default function SubscriptionTab({
           currentPlan={currentPlan}
           loadingPlan={loadingPlan}
           onSubscribe={handleSubscribe}
+          priceMonthly={priceMonthly}
+          priceAnnual={priceAnnual}
         />
       </div>
 

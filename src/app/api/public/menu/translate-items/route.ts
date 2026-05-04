@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { prisma } from '@/lib/prisma'
 import type { MenuItemTranslation } from '@prisma/client'
 import { callGemini, parseGeminiJson } from '@/lib/generative'
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (itemsToTranslate.length > 0 && !dbOnly) {
-      if (!process.env.GOOGLE_AI_KEY) {
+      if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
         return NextResponse.json(
           { error: 'Google AI API key not configured' },
           { status: 500 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
 type LanguageCode = 'en' | 'ar' | 'ar_fusha' | 'ku'
@@ -12,7 +13,7 @@ const LANGUAGE_LABELS: Record<LanguageCode, string> = {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.GOOGLE_AI_KEY) {
+    if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
       return NextResponse.json(
         { error: 'Google AI API key not configured' },
         { status: 500 }
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     const prompt = `You are a bilingual Erbil Iraqi chef rewriting menu content for local diners in ${languageLabel}. Translate every text element below, keep all digits exactly as they already appear (do NOT convert them to Arabic-script numerals), and return the following EXACT JSON structure with no extra text:\n{\n  "id": "item-id",\n  "name": "localized name",\n  "description": "Concise ${languageLabel} description",\n  "aiDescription": "Two-sentence expressive story in ${languageLabel}",\n  "protein": 25,\n  "carbs": 40\n}\nKeep the original ID and include a localized name, a short description, an AI-crafted story, and integer protein/carbs estimates. Numbers should stay as ASCII digits. Here is the item to translate:\n${snippet}`
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
+    const genAI = new GoogleGenerativeAI(((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY))
     // Use gemini-2.5-flash for text translation (stable, generateContent supported)
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',

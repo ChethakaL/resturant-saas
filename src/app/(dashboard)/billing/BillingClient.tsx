@@ -23,6 +23,9 @@ interface BillingClientProps {
   currentPeriodEnd: string | null
   currentPlan: 'monthly' | 'annual' | null
   pricesConfigured: boolean
+  priceMonthly: string
+  priceAnnual: string
+  priceBranch: string
   maxBranches: number
   stripePriceBranchConfigured?: boolean
 }
@@ -41,6 +44,9 @@ export default function BillingClient({
   currentPeriodEnd,
   currentPlan,
   pricesConfigured,
+  priceMonthly,
+  priceAnnual,
+  priceBranch,
   maxBranches,
   stripePriceBranchConfigured = false,
 }: BillingClientProps) {
@@ -185,7 +191,7 @@ export default function BillingClient({
       toast({
         title: 'Branch added',
         description: stripePriceBranchConfigured && isActive && branches.length >= 1
-          ? `"${data.name}" added. You'll be charged $10/month for this branch on your next invoice.`
+          ? `"${data.name}" added. You'll be charged $${priceBranch}/month for this branch on your next invoice.`
           : `"${data.name}" has been created.`,
       })
       setShowAddBranch(false)
@@ -200,7 +206,7 @@ export default function BillingClient({
   }
 
   const handleDeleteBranch = async (id: string, name: string) => {
-    if (!confirm(`Remove branch "${name}"? Tables and sales will be unassigned. Your subscription will be updated and the $10/month charge for this branch will stop at the end of the billing period.`)) return
+    if (!confirm(`Remove branch "${name}"? Tables and sales will be unassigned. Your subscription will be updated and the $${priceBranch}/month charge for this branch will stop at the end of the billing period.`)) return
     try {
       if (stripePriceBranchConfigured && isActive && branches.length > 1) {
         const res = await fetch('/api/billing/cancel-branch', {
@@ -226,7 +232,7 @@ export default function BillingClient({
     }
   }
 
-  const additionalBranchCost = 10 // $10/month per extra branch
+  const additionalBranchCost = Number(priceBranch) || 10
   const extraBranches = Math.max(0, maxBranches - 1)
 
   const handleUpgradeForBranch = async () => {
@@ -246,6 +252,8 @@ export default function BillingClient({
         currentPeriodEnd={currentPeriodEnd}
         currentPlan={currentPlan}
         pricesConfigured={pricesConfigured}
+        priceMonthly={priceMonthly}
+        priceAnnual={priceAnnual}
       />
 
       {/* Branch Management Section */}
@@ -364,7 +372,7 @@ export default function BillingClient({
                 ) : (
                   <Plus className="h-4 w-4 mr-2" />
                 )}
-                Add branch slot — $10/mo
+                Add branch slot — ${priceBranch}/mo
               </Button>
             </CardContent>
           </Card>
@@ -375,7 +383,7 @@ export default function BillingClient({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {paymentDialogMode === 'subscribe' ? 'Payment required to add a branch' : 'Add another branch for $10/month'}
+              {paymentDialogMode === 'subscribe' ? 'Payment required to add a branch' : `Add another branch for $${priceBranch}/month`}
             </DialogTitle>
             <DialogDescription>
               {paymentDialogMode === 'subscribe'
@@ -412,7 +420,7 @@ export default function BillingClient({
                 disabled={redirectingToStripe !== null}
               >
                 {redirectingToStripe === 'portal' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Continue to Stripe for $10/month
+                Continue to Stripe for ${priceBranch}/month
               </Button>
             </DialogFooter>
           )}

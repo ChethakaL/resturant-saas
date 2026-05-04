@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import BillingClient from './BillingClient'
 import { getBranchCapacityForRestaurant } from '@/lib/billing-branches'
+import { getPlatformConfig } from '@/lib/platform-config'
 
 const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
 
@@ -27,8 +28,10 @@ export default async function BillingPage() {
 
   const isActive =
     restaurant?.subscriptionStatus === 'active' || restaurant?.subscriptionStatus === 'trialing'
-  const priceMonthly = process.env.STRIPE_PRICE_MONTHLY
-  const priceAnnual = process.env.STRIPE_PRICE_ANNUAL
+
+  const platformCfg = await getPlatformConfig()
+  const priceMonthly = String(platformCfg.priceMonthly ?? process.env.STRIPE_PRICE_MONTHLY ?? '59')
+  const priceAnnual = String(platformCfg.priceAnnual ?? process.env.STRIPE_PRICE_ANNUAL ?? '590')
   const currentPlan =
     restaurant?.subscriptionPriceId === priceAnnual
       ? 'annual'
@@ -61,6 +64,9 @@ export default async function BillingPage() {
       currentPeriodEnd={restaurant?.currentPeriodEnd?.toISOString() ?? null}
       currentPlan={currentPlan}
       pricesConfigured={!!(priceMonthly && priceAnnual)}
+      priceMonthly={priceMonthly}
+      priceAnnual={priceAnnual}
+      priceBranch={String(platformCfg.priceBranch ?? process.env.STRIPE_PRICE_BRANCH ?? '10')}
       maxBranches={maxBranches}
       stripePriceBranchConfigured={!!STRIPE_PRICE_BRANCH?.trim()}
     />

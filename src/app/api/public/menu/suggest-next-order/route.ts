@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '@/lib/prisma'
 import { parseGeminiJson } from '@/lib/generative'
@@ -64,14 +65,14 @@ export async function POST(request: NextRequest) {
     })
     const lastOrderNames = lastOrderItems.map((i) => i.name).join(', ')
 
-    if (!process.env.GOOGLE_AI_KEY) {
+    if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
       return NextResponse.json(
         { error: 'Google AI API key not configured' },
         { status: 500 }
       )
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
+    const genAI = new GoogleGenerativeAI(((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY))
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
     const listText = itemsWithMargin

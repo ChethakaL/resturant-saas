@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
@@ -163,7 +164,7 @@ export async function POST(request: NextRequest) {
     const terminologyOverrides = parseTerminologyOverrides(foodTerminologyOverridesRaw)
     const terminologyPrompt = buildTerminologyPromptBlock(terminologyOverrides)
 
-    const googleKey = process.env.GOOGLE_AI_KEY
+    const googleKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
     if (!googleKey) {
       return NextResponse.json({ error: 'Google AI key not configured' }, { status: 500 })
     }

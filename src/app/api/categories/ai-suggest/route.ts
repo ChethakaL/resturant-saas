@@ -1,3 +1,4 @@
+import { getPlatformConfig } from '@/lib/platform-config'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -104,7 +105,7 @@ export async function POST() {
       createdCategories.push(name)
     }
 
-    const hasAI = !!(process.env.GOOGLE_AI_KEY ?? process.env.OPENAI_API_KEY)
+    const hasAI = !!(((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY) ?? process.env.OPENAI_API_KEY)
     let assignments: Map<string, string>
 
     if (hasAI) {

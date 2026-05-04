@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { postToImageModel } from '@/lib/retryable-image-api'
 
 async function generateTemplateImageFromPrompt(prompt: string): Promise<string | null> {
-  const apiKey = process.env.GOOGLE_AI_KEY
+  const apiKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
   if (!apiKey || !prompt.trim()) {
     return null
   }

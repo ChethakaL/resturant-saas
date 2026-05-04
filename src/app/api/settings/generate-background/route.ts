@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { postToImageModel } from '@/lib/retryable-image-api'
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!process.env.GOOGLE_AI_KEY) {
+    if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
       return NextResponse.json(
         { error: 'Google AI API key not configured' },
         { status: 500 }
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const imagePrompt = `Wide, high-quality ambient background image for a restaurant menu or dining app. Mood and style: ${description}. The image should be suitable as a full-screen background behind menu text - atmospheric, not too busy, with soft lighting. No text, no logos. Photorealistic or tasteful illustration. 16:9 aspect ratio, horizontal.`
 
-    const response = await postToImageModel(process.env.GOOGLE_AI_KEY, {
+    const response = await postToImageModel(((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY), {
       contents: [{ parts: [{ text: imagePrompt }] }],
       generationConfig: {
         responseModalities: ['image'],
