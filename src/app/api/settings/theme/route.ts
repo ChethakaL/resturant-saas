@@ -139,6 +139,10 @@ export async function PUT(request: Request) {
 
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
     const {
+      primaryColor, accentColor, chefPickColor, borderColor,
+      backgroundStyle, fontFamily,
+      fontMenuTitle, fontCategoryHeader, fontItemName, fontDescription, fontPrice,
+      logoUrl,
       menuTimezone,
       themePreset,
       backgroundImageUrl,
@@ -162,13 +166,35 @@ export async function PUT(request: Request) {
       tableOrderingEnabled,
       showKurdishOnMenu,
       showArabicOnMenu,
-      ...themeData
+      foodTerminologyOverrides,
     } = parsed.data
+
     const newSettings = {
       ...currentSettings,
-      theme: { ...(currentSettings.theme as object ?? {}), ...themeData, ...(menuCarouselStyle !== undefined && { menuCarouselStyle }), ...(descriptionTone !== undefined && { descriptionTone }), ...(restaurantVibeImageKey !== undefined && { restaurantVibeImageKey }), ...(restaurantVibeImageUrl !== undefined && { restaurantVibeImageUrl }), ...(showKurdishOnMenu !== undefined && { showKurdishOnMenu }), ...(showArabicOnMenu !== undefined && { showArabicOnMenu }) },
+      theme: {
+        ...(currentSettings.theme as object ?? {}),
+        ...(primaryColor !== undefined && { primaryColor }),
+        ...(accentColor !== undefined && { accentColor }),
+        ...(chefPickColor !== undefined && { chefPickColor }),
+        ...(borderColor !== undefined && { borderColor }),
+        ...(backgroundStyle !== undefined && { backgroundStyle }),
+        ...(fontFamily !== undefined && { fontFamily }),
+        ...(fontMenuTitle !== undefined && { fontMenuTitle }),
+        ...(fontCategoryHeader !== undefined && { fontCategoryHeader }),
+        ...(fontItemName !== undefined && { fontItemName }),
+        ...(fontDescription !== undefined && { fontDescription }),
+        ...(fontPrice !== undefined && { fontPrice }),
+        ...(logoUrl !== undefined && { logoUrl }),
+        ...(menuCarouselStyle !== undefined && { menuCarouselStyle }),
+        ...(descriptionTone !== undefined && { descriptionTone }),
+        ...(foodTerminologyOverrides !== undefined && { foodTerminologyOverrides }),
+        ...(restaurantVibeImageKey !== undefined && { restaurantVibeImageKey }),
+        ...(restaurantVibeImageUrl !== undefined && { restaurantVibeImageUrl }),
+        ...(showKurdishOnMenu !== undefined && { showKurdishOnMenu }),
+        ...(showArabicOnMenu !== undefined && { showArabicOnMenu }),
+      },
       ...(menuTimezone !== undefined && { menuTimezone }),
-      ...(themePreset !== undefined && { themePreset }),
+      ...(themePreset !== undefined ? { themePreset } : {}),
       ...(backgroundImageUrl !== undefined && { backgroundImageUrl }),
       ...(managementLanguage !== undefined && { managementLanguage }),
       ...(slotTimes !== undefined && { slotTimes }),
@@ -181,7 +207,7 @@ export async function PUT(request: Request) {
     if (restaurantWhatsappNumber !== undefined) {
       const normalizedWhatsappNumber = normalizeWhatsAppNumber(restaurantWhatsappNumber)
       const currentWhatsappSettings = getRestaurantWhatsAppSettings(currentSettings)
-      const mergedSettings = mergeRestaurantWhatsAppSettings(currentSettings, {
+      const mergedSettingsRoot = mergeRestaurantWhatsAppSettings(currentSettings, {
         number: normalizedWhatsappNumber,
         ...(normalizedWhatsappNumber !== currentWhatsappSettings.number
           ? {
@@ -192,7 +218,10 @@ export async function PUT(request: Request) {
             }
           : {}),
       })
-      Object.assign(newSettings, mergedSettings)
+      // Only extract the WhatsApp-specific key to avoid overwriting theme/preset changes
+      if (mergedSettingsRoot.whatsappOrderNotifications) {
+        (newSettings as any).whatsappOrderNotifications = mergedSettingsRoot.whatsappOrderNotifications
+      }
     }
 
     const updateData: Record<string, unknown> = { settings: newSettings }
@@ -211,12 +240,24 @@ export async function PUT(request: Request) {
       data: updateData,
     })
 
+    revalidatePath('/settings')
     revalidatePath('/')
 
     return NextResponse.json({
-      ...themeData,
+      primaryColor: primaryColor ?? (currentSettings.theme as any)?.primaryColor,
+      accentColor: accentColor ?? (currentSettings.theme as any)?.accentColor,
+      chefPickColor: chefPickColor ?? (currentSettings.theme as any)?.chefPickColor,
+      borderColor: borderColor ?? (currentSettings.theme as any)?.borderColor,
+      backgroundStyle: backgroundStyle ?? (currentSettings.theme as any)?.backgroundStyle,
+      fontFamily: fontFamily ?? (currentSettings.theme as any)?.fontFamily,
+      fontMenuTitle: fontMenuTitle ?? (currentSettings.theme as any)?.fontMenuTitle,
+      fontCategoryHeader: fontCategoryHeader ?? (currentSettings.theme as any)?.fontCategoryHeader,
+      fontItemName: fontItemName ?? (currentSettings.theme as any)?.fontItemName,
+      fontDescription: fontDescription ?? (currentSettings.theme as any)?.fontDescription,
+      fontPrice: fontPrice ?? (currentSettings.theme as any)?.fontPrice,
+      logoUrl: logoUrl ?? (currentSettings.theme as any)?.logoUrl,
       menuTimezone: menuTimezone ?? currentSettings.menuTimezone,
-      themePreset: themePreset ?? currentSettings.themePreset,
+      themePreset: themePreset !== undefined ? themePreset : (currentSettings.themePreset ?? null),
       backgroundImageUrl: backgroundImageUrl ?? currentSettings.backgroundImageUrl,
       managementLanguage: managementLanguage ?? currentSettings.managementLanguage ?? 'en',
       restaurantEmail: restaurantEmail ?? null,

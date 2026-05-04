@@ -381,7 +381,8 @@ function getBundlePairScore(a: EngineMenuItem, b: EngineMenuItem): number {
 function generateBundles(
   pairs: CoPurchasePair[],
   items: EngineMenuItem[],
-  correlationThreshold: number
+  correlationThreshold: number,
+  itemModifiers: Record<string, number> = {}
 ): BundleHint[] {
   const itemMap = new Map(items.map((i) => [i.id, i]))
   const withCorrelation = pairs
@@ -412,7 +413,11 @@ function generateBundles(
     if (!a || !b) continue
     const pairScore = getBundlePairScore(a, b)
     if (pairScore <= 0) continue
-    const originalPrice = a.price + b.price
+    const modA = itemModifiers[p.itemIdA] || 0
+    const modB = itemModifiers[p.itemIdB] || 0
+    const priceA = a.price * (1 - modA / 100)
+    const priceB = b.price * (1 - modB / 100)
+    const originalPrice = priceA + priceB
     const discount = Math.round(originalPrice * 0.07)
     const bundlePrice = originalPrice - discount
     const savingsText = `Save ${formatMenuPrice(discount)}`
@@ -657,8 +662,18 @@ export function runMenuEngine(params: RunMenuEngineParams): MenuEngineOutput {
     }
   }
 
+  const allModifiers: Record<string, number> = {}
+  if (opts.scarcityBadges) {
+    for (const item of items) {
+      const scarcity = computeScarcityBadges(item.id, preppedStocks, todaySalesByItem, avgDailySales)
+      if (scarcity.priceModifierPercent > 0) {
+        allModifiers[item.id] = scarcity.priceModifierPercent
+      }
+    }
+  }
+
   const bundles = opts.bundles
-    ? generateBundles(coPurchasePairs, items, opts.bundleCorrelationThreshold ?? 0.35)
+    ? generateBundles(coPurchasePairs, items, opts.bundleCorrelationThreshold ?? 0.35, allModifiers)
     : []
   const moods = opts.moodFlow ? mapMoods(items, quadrants) : []
   const upsellMap: Record<string, UpsellSuggestion[]> = {}

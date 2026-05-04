@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sparkles, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3, ShoppingBag, Minus, Plus, Clock3, ChefHat, GlassWater, Handshake, IceCreamCone, Instagram, Facebook, MessageCircle } from 'lucide-react'
+import { Star, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3, ShoppingBag, Minus, Plus, Clock3, ChefHat, GlassWater, Handshake, IceCreamCone, Instagram, Facebook, MessageCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
@@ -374,8 +374,8 @@ const uiCopyMap: Record<
     tryItemLabel: 'Try',
     suggestingLabel: 'Suggesting…',
     chefRecommendationLabel: "Chef's recommendation",
-    signatureBadge: 'Signature',
-    chefsRecBadge: "Chef's Recommendation",
+    signatureBadge: 'Top Star',
+    chefsRecBadge: "Chef's Choice",
     guestFavoriteBadge: 'Guest Favorite',
     pairingsButtonLabel: 'Pairings',
     moreInfoButtonLabel: 'More info',
@@ -658,9 +658,9 @@ const engineCopyMap: Record<
     dismissLabel: 'No thanks',
     idleMessage: 'Looking for something? Try our',
     jumpToSection: 'Jump to',
-    signatureBadge: '★ SIGNATURE',
+    signatureBadge: '★ TOP STAR',
     mostLovedBadge: '★ MOST LOVED',
-    chefSelectionBadge: "CHEF'S SELECTION",
+    chefSelectionBadge: "CHEF'S CHOICE",
     removeLabel: 'Remove',
     tableLabel: 'Table',
     selectTableLabel: 'Select table',
@@ -688,7 +688,7 @@ const engineCopyMap: Record<
     dismissLabel: 'لا شكراً',
     idleMessage: 'تبحث عن شيء؟ جرّب',
     jumpToSection: 'انتقل إلى',
-    signatureBadge: '★ مميز',
+    signatureBadge: '★ TOP STAR',
     mostLovedBadge: '★ الأكثر حباً',
     chefSelectionBadge: 'اختيار الشيف',
     removeLabel: 'إزالة',
@@ -748,9 +748,9 @@ const engineCopyMap: Record<
     dismissLabel: 'نەخێر',
     idleMessage: 'شتیک دەگەڕیت؟ تاقی',
     jumpToSection: 'بڕو بۆ',
-    signatureBadge: '★ تایبەت',
+    signatureBadge: '★ TOP STAR',
     mostLovedBadge: '★ خۆشەویستترین',
-    chefSelectionBadge: 'هەڵبژاردنی چێشتلێنەر',
+    chefSelectionBadge: "CHEF'S CHOICE",
     removeLabel: 'لابردن',
     tableLabel: 'مێز',
     selectTableLabel: 'مێز هەڵبژێرە',
@@ -3163,7 +3163,7 @@ export default function SmartMenu({
                     backgroundColor: selectedMoodId == null ? accentSoft : surfaceBg,
                   }}
                 >
-                  <Sparkles className="h-5 w-5" style={{ color: selectedMoodId == null ? themeAccent : textMain }} />
+                  <Star className="h-5 w-5 fill-current" style={{ color: selectedMoodId == null ? themeAccent : textMain }} />
                   <span className="text-[0.68rem] font-semibold" style={{ color: selectedMoodId == null ? themeAccent : textMain }}>
                     {localizedContextCopy.everything}
                   </span>
@@ -3176,7 +3176,7 @@ export default function SmartMenu({
                     mood.id === 'sharing' || mood.id === 'share' ? Handshake :
                     mood.id === 'drinks' ? GlassWater :
                     mood.id === 'sweet' ? IceCreamCone :
-                    Sparkles
+                    Star
                   return (
                     <button
                       key={mood.id}
@@ -3563,7 +3563,7 @@ export default function SmartMenu({
                                 style={{ borderColor: accentBorder, backgroundColor: accentSoft, color: themeAccent }}
                                 aria-label={currentCopy.pairingsButtonLabel}
                               >
-                                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                <Star className="h-3.5 w-3.5 shrink-0 fill-current" />
                                 <span className="truncate">{currentCopy.pairingsButtonLabel}</span>
                               </button>
                               <button
@@ -4038,7 +4038,7 @@ export default function SmartMenu({
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-[0.86rem] font-bold"
                 style={{ borderColor: accentBorder, backgroundColor: accentSoft, color: themeAccent }}
               >
-                <Sparkles className="h-4 w-4" />
+                <Star className="h-4 w-4 fill-current" />
                 {currentCopy.pairingsButtonLabel}
               </button>
             </div>
@@ -4064,7 +4064,7 @@ export default function SmartMenu({
             <div className="overflow-y-auto px-5 py-4 sm:px-6 lg:px-8">
               {loadingSuggestions ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-12" style={{ color: textMuted }}>
-                  <Sparkles className="h-7 w-7 animate-spin" style={{ color: themeAccent }} />
+                  <Star className="h-7 w-7 animate-spin fill-current" />
                   <p className="text-sm font-medium">{currentCopy.pairingAnalyzing}</p>
                 </div>
               ) : pairingSuggestions.length === 0 ? (
@@ -4800,7 +4800,7 @@ export default function SmartMenu({
               <div className="max-h-[60vh] overflow-y-auto pr-1">
                 {filteredItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-10 text-center text-white/60">
-                    <Sparkles className="h-8 w-8 text-emerald-400" />
+                    <Star className="h-8 w-8 text-amber-400 fill-current" />
                     <p className="text-sm font-semibold text-white">
                       {currentCopy.noMatchesTitle}
                     </p>
@@ -4879,7 +4879,7 @@ export default function SmartMenu({
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-emerald-500" />
+              <Star className="h-5 w-5 text-amber-500 fill-current" />
               {currentCopy.pairingTitle}{' '}
               <span className="font-semibold">{pairingItemDisplayName}</span>
             </DialogTitle>
@@ -4890,7 +4890,7 @@ export default function SmartMenu({
 
           {loadingSuggestions ? (
             <div className="py-12 text-center">
-              <Sparkles className="h-8 w-8 animate-spin mx-auto text-emerald-500" />
+              <Star className="h-8 w-8 animate-spin mx-auto text-amber-500 fill-current" />
               <p className="mt-4 text-sm text-slate-500">
                 {currentCopy.pairingAnalyzing}
               </p>
@@ -4961,7 +4961,7 @@ export default function SmartMenu({
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-emerald-500" />
+              <Star className="h-5 w-5 text-amber-500 fill-current" />
               {detailTranslation?.name || selectedItemForDetail?.name}
             </DialogTitle>
             <DialogDescription className="text-sm text-slate-600 space-y-1">

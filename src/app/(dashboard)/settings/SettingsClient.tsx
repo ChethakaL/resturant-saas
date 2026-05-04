@@ -20,7 +20,7 @@ import {
   Check,
   Loader2,
   Upload,
-  Sparkles,
+  Star,
   Send,
   Dna,
   ChevronDown,
@@ -217,7 +217,15 @@ export default function SettingsClient({
   const [fontPrice, setFontPrice] = useState<string>(currentTheme.fontPrice || 'DM Sans')
   const [logoUrl, setLogoUrl] = useState(currentTheme.logoUrl || '')
   const [menuTimezone, setMenuTimezone] = useState(currentTheme.menuTimezone || 'Asia/Baghdad')
-  const [themePreset, setThemePreset] = useState<string | null>(currentTheme.themePreset ?? null)
+  const [themePreset, setThemePreset] = useState<string | null>(() => {
+    const p = currentTheme.themePreset
+    if (!p || !THEME_PRESETS[p]) return null
+    const preset = THEME_PRESETS[p]
+    // Validate that the main brand color and background style actually match the preset
+    const isMatch = (currentTheme.primaryColor || '#10b981') === preset.primaryColor &&
+      (currentTheme.backgroundStyle || 'dark') === preset.backgroundStyle
+    return isMatch ? p : null
+  })
   const [managementLanguage, setManagementLanguage] = useState<string>(currentTheme.managementLanguage || 'en')
   const initialManagementLanguage = currentTheme.managementLanguage || 'en'
   const [menuCarouselStyle, setMenuCarouselStyle] = useState<string>(currentTheme.menuCarouselStyle || 'sliding')
@@ -289,6 +297,42 @@ export default function SettingsClient({
     setHasDefaultBackgroundImage(initialHasDefaultBackgroundImage)
     setDefaultBackgroundImageData(initialDefaultBackgroundImageData)
   }, [initialDefaultBackgroundPrompt, initialHasDefaultBackgroundImage, initialDefaultBackgroundImageData])
+
+  // Sync state with currentTheme prop (useful after router.refresh())
+  useEffect(() => {
+    if (currentTheme.restaurantName) setRestaurantName(currentTheme.restaurantName)
+    if (currentTheme.restaurantEmail) setRestaurantEmail(currentTheme.restaurantEmail)
+    if (currentTheme.restaurantPhone) setRestaurantPhone(currentTheme.restaurantPhone)
+    if (currentTheme.restaurantWhatsappNumber) setRestaurantWhatsappNumber(currentTheme.restaurantWhatsappNumber)
+    if (currentTheme.instagramUrl) setInstagramUrl(currentTheme.instagramUrl)
+    if (currentTheme.facebookUrl) setFacebookUrl(currentTheme.facebookUrl)
+    if (currentTheme.whatsappUrl) setWhatsappUrl(currentTheme.whatsappUrl)
+    if (currentTheme.restaurantCity) setRestaurantCity(currentTheme.restaurantCity)
+    if (currentTheme.restaurantAddress) setRestaurantAddress(currentTheme.restaurantAddress)
+    if (currentTheme.primaryColor) setPrimaryColor(currentTheme.primaryColor)
+    if (currentTheme.accentColor) setAccentColor(currentTheme.accentColor)
+    if (currentTheme.chefPickColor) setChefPickColor(currentTheme.chefPickColor)
+    if (currentTheme.borderColor) setBorderColor(currentTheme.borderColor)
+    if (currentTheme.backgroundStyle) setBackgroundStyle(currentTheme.backgroundStyle)
+    if (currentTheme.fontFamily) setFontFamily(currentTheme.fontFamily)
+    if (currentTheme.fontMenuTitle) setFontMenuTitle(currentTheme.fontMenuTitle)
+    if (currentTheme.fontCategoryHeader) setFontCategoryHeader(currentTheme.fontCategoryHeader)
+    if (currentTheme.fontItemName) setFontItemName(currentTheme.fontItemName)
+    if (currentTheme.fontDescription) setFontDescription(currentTheme.fontDescription)
+    if (currentTheme.fontPrice) setFontPrice(currentTheme.fontPrice)
+    if (currentTheme.logoUrl) setLogoUrl(currentTheme.logoUrl)
+
+    // Sync themePreset with validation
+    const p = currentTheme.themePreset
+    if (!p || !THEME_PRESETS[p]) {
+      setThemePreset(null)
+    } else {
+      const preset = THEME_PRESETS[p]
+      const isMatch = (currentTheme.primaryColor || '#10b981') === preset.primaryColor &&
+        (currentTheme.backgroundStyle || 'dark') === preset.backgroundStyle
+      setThemePreset(isMatch ? p : null)
+    }
+  }, [currentTheme])
 
   useEffect(() => {
     if (!themeSuggestDialogOpen) {
@@ -652,7 +696,7 @@ export default function SettingsClient({
       >
         <CardContent className="flex items-center gap-4 p-6">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-900/10 group-hover:scale-105 transition-transform">
-            <Sparkles className="w-6 h-6 text-white" />
+            <Star className="w-6 h-6 text-white fill-current" />
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-slate-800">{i18n.settings_smart_designer}</h3>
@@ -775,8 +819,17 @@ export default function SettingsClient({
                   setThemePreset(key)
                   setPrimaryColor(preset.primaryColor)
                   setAccentColor(preset.accentColor)
+                  setChefPickColor(preset.primaryColor) // Default chef pick to primary for presets
+                  setBorderColor(preset.accentColor) // Default border to accent for presets
                   setBackgroundStyle(preset.backgroundStyle)
                   setFontFamily(preset.fontFamily)
+                  // Update all font layers to match the preset's primary font
+                  setFontMenuTitle(preset.fontFamily)
+                  setFontCategoryHeader(preset.fontFamily)
+                  setFontItemName(preset.fontFamily)
+                  setFontDescription(preset.fontFamily)
+                  setFontPrice(preset.fontFamily)
+                  
                   const suggestedBg = PRESET_SUGGESTED_BACKGROUNDS[key]
                   if (suggestedBg) {
                     setThemeSuggestPrompt(suggestedBg)
@@ -828,10 +881,10 @@ export default function SettingsClient({
         <CardContent>
           <div className="grid gap-6 sm:grid-cols-2">
             {[
-              { label: 'Main Brand Color', desc: 'Buttons, highlights, and key elements on your menu', value: primaryColor, onChange: setPrimaryColor },
-              { label: '"Add to Order" Button', desc: 'Guests tap this to order — make it pop!', value: accentColor, onChange: setAccentColor },
-              { label: 'Chef\'s Pick Badge', desc: 'The "★ Signature" recommendation badge color', value: chefPickColor, onChange: setChefPickColor },
-              { label: 'Featured Highlight', desc: 'Border glow on featured and high-margin items', value: borderColor, onChange: setBorderColor },
+              { label: 'Main Brand Color', desc: 'Buttons, highlights, and key elements on your menu', value: primaryColor, onChange: (val: string) => { setPrimaryColor(val); setThemePreset(null); } },
+              { label: '"Add to Order" Button', desc: 'Guests tap this to order — make it pop!', value: accentColor, onChange: (val: string) => { setAccentColor(val); setThemePreset(null); } },
+              { label: 'Top Star Indicator', desc: 'The "★ Top Star" recommendation badge color', value: chefPickColor, onChange: (val: string) => { setChefPickColor(val); setThemePreset(null); } },
+              { label: 'Featured Highlight', desc: 'Border glow on featured and high-margin items', value: borderColor, onChange: (val: string) => { setBorderColor(val); setThemePreset(null); } },
             ].map((color) => (
               <div key={color.label} className="flex items-center gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-colors">
                 <label className="relative cursor-pointer group">
@@ -873,7 +926,7 @@ export default function SettingsClient({
             ].map((option) => (
               <button
                 key={option.value}
-                onClick={() => setBackgroundStyle(option.value)}
+                onClick={() => { setBackgroundStyle(option.value); setThemePreset(null); }}
                 className={`flex items-center gap-3 rounded-xl border-2 px-5 py-4 transition-all hover:shadow-md ${backgroundStyle === option.value ? 'border-slate-900 bg-slate-50 shadow-md' : 'border-slate-200 hover:border-slate-300'
                   }`}
               >
@@ -1042,10 +1095,11 @@ export default function SettingsClient({
                             <div className="absolute right-4 top-4 h-10 w-10 rounded-full border border-white/20 bg-white/10" />
                             <div className="absolute left-4 bottom-6 h-14 w-14 rounded-full border border-white/15 bg-white/10" />
                             <span
-                              className="absolute left-3 top-3 rounded-full px-3 py-1 text-[0.54rem] font-bold uppercase tracking-[0.1em] text-white"
+                              className="absolute left-3 top-3 rounded-full px-3 py-1 text-[0.54rem] font-bold uppercase tracking-[0.1em] text-white flex items-center gap-1"
                               style={{ backgroundColor: chefPickColor }}
                             >
-                              Chef&apos;s Pick
+                              <Star className="h-2.5 w-2.5 fill-current" />
+                              Top Star
                             </span>
                             <div className="absolute left-3 right-3 bottom-3 flex items-end justify-between gap-3">
                               <div>
@@ -1982,8 +2036,8 @@ export default function SettingsClient({
           <div className="relative flex flex-col w-full max-w-lg h-[70vh] mx-4 rounded-2xl overflow-hidden shadow-2xl bg-white">
             {/* Header */}
             <div className="px-5 py-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                <Sparkles className="w-5 h-5" />
+              <div className="p-2 bg-amber-50 rounded-lg">
+                <Star className="h-5 w-5 text-amber-600 fill-current" />
               </div>
               <div className="flex-1">
                 <h3 className="font-semibold">{i18n.settings_smart_designer}</h3>
@@ -1995,7 +2049,7 @@ export default function SettingsClient({
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {designerMessages.length === 0 && (
                 <div className="text-center py-8">
-                  <Sparkles className="w-10 h-10 mx-auto text-slate-400 mb-3" />
+                  <Star className="w-10 h-10 mx-auto text-amber-400 mb-3 fill-current" />
                   <p className="text-sm text-slate-500">Ask me anything about your restaurant design!</p>
                   <div className="flex flex-wrap justify-center gap-2 mt-4">
                     {['Suggest colors for an Italian bistro', 'Best fonts for fine dining?', 'Should I use a carousel or static row?'].map((q) => (

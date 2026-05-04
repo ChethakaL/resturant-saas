@@ -1,7 +1,7 @@
 'use client'
 
 import { Card } from '@/components/ui/card'
-import { Sparkles, Loader2 } from 'lucide-react'
+import { Star, Loader2 } from 'lucide-react'
 import type { ItemDisplayHints } from '@/types/menu-engine'
 
 export interface MenuItemCardItem {
@@ -69,9 +69,9 @@ function getBadgeLabel(
     if (tier === 'standard') return badgeLabels.chefSelection
     return null
   }
-  if (tier === 'hero' || isAnchor) return '★ SIGNATURE'
+  if (tier === 'hero' || isAnchor) return '★ TOP STAR'
   if (tier === 'featured') return '★ MOST LOVED'
-  if (tier === 'standard') return 'CHEF\'S SELECTION'
+  if (tier === 'standard') return 'CHEF\'S CHOICE'
   return null
 }
 
@@ -113,8 +113,8 @@ export function MenuItemCard({
   const cardBg = isDarkTheme ? 'bg-white/10 border-white/20' : 'bg-white border-slate-200'
   const textMain = isDarkTheme ? 'text-white' : 'text-slate-900'
   const textMuted = isDarkTheme ? 'text-white/70' : 'text-slate-500'
-  const textPrice = isDarkTheme ? 'text-[var(--menu-accent,#f59e0b)]' : 'text-emerald-700'
-  const btnLink = isDarkTheme ? 'text-[var(--menu-accent,#f59e0b)] hover:text-white/90' : 'text-emerald-700 hover:text-emerald-800'
+  const textPrice = isDarkTheme ? 'text-[var(--menu-accent,#f59e0b)]' : 'text-[var(--menu-accent,#10b981)]'
+  const btnLink = isDarkTheme ? 'text-[var(--menu-accent,#f59e0b)] hover:text-white/90' : 'text-[var(--menu-accent,#10b981)] hover:opacity-80'
   const isGrid = layout === 'grid'
 
   if (isGrid) {
@@ -195,7 +195,7 @@ export function MenuItemCard({
               disabled={loadingPairings && isSelectedForPairing}
               className={`flex items-center gap-1 text-[9px] sm:text-[10px] font-medium ${btnLink} transition-colors`}
             >
-              {loadingPairings && isSelectedForPairing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              {loadingPairings && isSelectedForPairing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Star className="h-3 w-3 fill-current" />}
               <span>{pairingsLabel}</span>
             </button>
             <span className={textMuted}>&bull;</span>
@@ -292,7 +292,7 @@ export function MenuItemCard({
               disabled={loadingPairings && isSelectedForPairing}
               className={`flex items-center gap-1 text-[9px] font-medium ${btnLink} transition-colors`}
             >
-              {loadingPairings && isSelectedForPairing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              {loadingPairings && isSelectedForPairing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Star className="h-3 w-3 fill-current" />}
               <span>{pairingsLabel}</span>
             </button>
             <span className={textMuted}>&bull;</span>

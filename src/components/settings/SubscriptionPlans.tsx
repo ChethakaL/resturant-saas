@@ -1,7 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { Loader2, Check, Sparkles, Zap, Crown, Clock } from 'lucide-react'
+import { Loader2, Check, Star, Zap, Crown, Clock } from 'lucide-react'
 import { useI18n } from '@/lib/i18n'
 
 interface SubscriptionPlansProps {
@@ -70,7 +70,7 @@ export function SubscriptionPlans({
           <span className="text-sm font-medium text-slate-500">{t.sub_monthly}</span>
         </div>
         <div className="mb-5">
-          <span className="text-3xl font-bold text-slate-900">$50</span>
+          <span className="text-3xl font-bold text-slate-900">$59</span>
           <span className="text-slate-500">{t.sub_per_month}</span>
           <p className="mt-2 text-sm text-slate-500">{t.sub_cancel_anytime}</p>
         </div>
@@ -112,7 +112,7 @@ export function SubscriptionPlans({
           <span className="text-sm font-medium text-slate-600">{t.sub_annual}</span>
         </div>
         <div className="mb-5">
-          <span className="text-3xl font-bold text-slate-900">$500</span>
+          <span className="text-3xl font-bold text-slate-900">$590</span>
           <span className="text-slate-500">{t.sub_per_year}</span>
           <p className="mt-2 text-sm text-slate-500">
             {t.sub_best_value}
@@ -133,7 +133,7 @@ export function SubscriptionPlans({
             {loadingPlan === 'annual' ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <Sparkles className="mr-2 h-4 w-4" />
+              <Star className="mr-2 h-4 w-4 fill-current" />
             )}
             {t.sub_subscribe_now}
           </Button>

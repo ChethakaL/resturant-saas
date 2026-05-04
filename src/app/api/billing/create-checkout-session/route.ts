@@ -11,7 +11,8 @@ const BILLING_CURRENCY = (process.env.STRIPE_BILLING_CURRENCY || 'usd').toLowerC
 
 function buildLineItem(
   configuredPrice: string,
-  plan: 'monthly' | 'annual'
+  plan: 'monthly' | 'annual',
+  referralDiscountAmount = 0
 ): Stripe.Checkout.SessionCreateParams.LineItem {
   const trimmed = configuredPrice.trim()
 
@@ -30,7 +31,7 @@ function buildLineItem(
     quantity: 1,
     price_data: {
       currency: BILLING_CURRENCY,
-      unit_amount: Math.round(amount * 100),
+      unit_amount: Math.round(Math.max(0, amount - referralDiscountAmount) * 100),
       recurring: { interval: plan === 'annual' ? 'year' : 'month' },
       product_data: {
         name: plan === 'annual' ? 'Restaurant SaaS Annual Plan' : 'Restaurant SaaS Monthly Plan',
@@ -61,16 +62,26 @@ export async function POST(request: NextRequest) {
       requestedReturnPath.startsWith('/') && !requestedReturnPath.startsWith('//')
         ? requestedReturnPath
         : '/billing'
-    const configuredPrice = plan === 'annual' ? PRICE_ANNUAL : PRICE_MONTHLY
-    const lineItem = buildLineItem(configuredPrice, plan)
-
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: session.user.restaurantId },
-      select: { id: true, name: true, email: true, stripeCustomerId: true, stripeSubscriptionId: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        referredByRestaurantId: true,
+      },
     })
     if (!restaurant) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
+
+    const isReferred = !!restaurant.referredByRestaurantId
+    const referralDiscount = isReferred ? (plan === 'annual' ? 100 : 10) : 0
+
+    const configuredPrice = plan === 'annual' ? PRICE_ANNUAL : PRICE_MONTHLY
+    const lineItem = buildLineItem(configuredPrice, plan, referralDiscount)
 
     let customerId = restaurant.stripeCustomerId
     if (!customerId) {
