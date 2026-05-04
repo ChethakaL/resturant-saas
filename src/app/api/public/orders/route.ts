@@ -127,7 +127,8 @@ export async function POST(request: Request) {
     })
 
     try {
-      await sendRestaurantOrderWhatsApp({
+      console.log('[whatsapp-orders] sending through whatsapp')
+      const whatsappResult = await sendRestaurantOrderWhatsApp({
         restaurantName: restaurant.name,
         restaurantPhone: buildRestaurantOrderWhatsAppNumber(restaurant.settings, restaurant.phone),
         orderNumber: sale.orderNumber,
@@ -143,7 +144,14 @@ export async function POST(request: Request) {
           }
         }),
       })
-    } catch (error) {
+      
+      if (whatsappResult.sent) {
+        console.log('[whatsapp-orders] sent successfully')
+      } else if (whatsappResult.skipped) {
+        console.log('[whatsapp-orders] skipped sending whatsapp (missing Twilio config or destination)')
+      }
+    } catch (error: any) {
+      console.log('[whatsapp-orders] reason why it didnt get sent:', error?.message || error)
       console.error('[whatsapp-orders] Failed to send public order notification:', error)
     }
 
