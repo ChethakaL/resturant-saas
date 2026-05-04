@@ -2,6 +2,7 @@ import sharp from 'sharp'
 import { enforceImageDimensions } from '@/lib/image-processor'
 import type { ImageOrientation, ImageSizePreset } from '@/lib/image-format'
 import { postToImageModel } from '@/lib/retryable-image-api'
+import { getPlatformConfig } from './platform-config'
 
 type GeminiPart = {
   inlineData?: {
@@ -32,7 +33,8 @@ async function callGeminiImage(
   parts: Array<Record<string, unknown>>,
   options?: { temperature?: number; topP?: number }
 ): Promise<{ base64: string; mimeType: string }> {
-  const apiKey = process.env.GOOGLE_AI_KEY
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey) throw new Error('Google AI API key not configured')
 
   const payload = {

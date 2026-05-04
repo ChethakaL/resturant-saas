@@ -46,6 +46,7 @@ export default function DashboardSalesDataManager({
           <MonthlySalesPdfUploadCard
             title="Sales data manager"
             description="Review, edit, append, or replace imported monthly sales data used by the dashboard and Smart Profit mode."
+            onImportComplete={() => setOpen(false)}
           />
         </div>
       </DialogContent>

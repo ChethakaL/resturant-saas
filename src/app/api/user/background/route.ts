@@ -6,7 +6,8 @@ import { prisma } from '@/lib/prisma'
 import { postToImageModel } from '@/lib/retryable-image-api'
 
 async function generateTemplateImageFromPrompt(prompt: string): Promise<string | null> {
-  const apiKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey || !prompt.trim()) {
     return null
   }

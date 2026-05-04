@@ -185,7 +185,9 @@ export async function POST(request: NextRequest) {
     })
 
     if (itemsToTranslate.length > 0 && !dbOnly) {
-      if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
+      const config = await getPlatformConfig()
+      const googleKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+      if (!googleKey) {
         return NextResponse.json(
           { error: 'Google AI API key not configured' },
           { status: 500 }

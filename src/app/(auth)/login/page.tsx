@@ -24,6 +24,7 @@ function LoginPageContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isLoading) return
     setError('')
     setIsLoading(true)
 
@@ -37,8 +38,7 @@ function LoginPageContent() {
       if (result?.error) {
         setError('Invalid email or password')
       } else {
-        router.push('/dashboard')
-        router.refresh()
+        router.replace('/dashboard')
       }
     } catch (error) {
       setError('An error occurred. Please try again.')

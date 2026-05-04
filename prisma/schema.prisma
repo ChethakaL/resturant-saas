@@ -47,6 +47,7 @@ model Restaurant {
   mediaAssets            MediaAsset[]
   menuBadgeAiCaches      MenuBadgeAiCache[]
   menuEvents             MenuEvent[]
+  monthlyFinancialImports MonthlyFinancialImport[]
   menuItems              MenuItem[]
   menuShowcases          MenuShowcase[]
   payrolls               Payroll[]
@@ -674,6 +675,33 @@ model DailySummary {
   @@index([restaurantId])
   @@index([date])
   @@map("daily_summaries")
+}
+
+model MonthlyFinancialImport {
+  id            String     @id @default(cuid())
+  restaurantId  String     @map("restaurant_id")
+  year          Int
+  month         Int
+  sourceFileName String    @map("source_file_name")
+  restaurantName String?   @map("restaurant_name")
+  branchName    String?    @map("branch_name")
+  reportType    String?    @map("report_type")
+  currency      String     @default("IQD")
+  totalSales    Float      @default(0) @map("total_sales")
+  totalExpenses Float      @default(0) @map("total_expenses")
+  totalOrders   Int        @default(0) @map("total_orders")
+  avgOrderValue Float      @default(0) @map("avg_order_value")
+  taxCollected  Float      @default(0) @map("tax_collected")
+  discounts     Float      @default(0)
+  netSales      Float      @default(0) @map("net_sales")
+  details       Json?
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, year, month])
+  @@index([restaurantId, year, month])
+  @@map("monthly_financial_imports")
 }
 
 model Table {

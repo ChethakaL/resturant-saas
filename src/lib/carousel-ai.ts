@@ -1,4 +1,5 @@
 import { callGemini } from './generative'
+import { getPlatformConfig } from './platform-config'
 
 export type TimeSlotLabel = 'Breakfast' | 'Morning' | 'Lunch' | 'Evening' | 'Night'
 
@@ -53,7 +54,8 @@ export async function suggestCarouselItems(
     return fallbackByMargin(pool).map((i) => i.id)
   }
 
-  const apiKey = process.env.GOOGLE_AI_KEY
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey) {
     return fallbackByMargin(pool)
       .slice(0, maxItems)

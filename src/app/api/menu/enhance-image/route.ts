@@ -68,7 +68,8 @@ export async function POST(request: NextRequest) {
       : 'image/jpeg'
 
     if (useIserveStandards) {
-      const apiKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
+      const config = await getPlatformConfig()
+      const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
       if (!apiKey) {
         return NextResponse.json({ error: 'Google AI API key not configured' }, { status: 500 })
       }

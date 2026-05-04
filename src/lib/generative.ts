@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getPlatformConfig } from './platform-config'
 
 /** Default for cheap text calls */
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
@@ -8,8 +9,9 @@ export function getReceiptVisionModel(): string {
   return process.env.GEMINI_RECEIPT_MODEL?.trim() || DEFAULT_GEMINI_MODEL
 }
 
-function getGenAI() {
-  const apiKey = process.env.GOOGLE_AI_KEY
+async function getGenAI() {
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey) {
     throw new Error('Google AI API key not configured')
   }
@@ -20,7 +22,7 @@ export async function callGemini(
   prompt: string,
   generationConfig?: { maxOutputTokens?: number; temperature?: number }
 ) {
-  const genAI = getGenAI()
+  const genAI = await getGenAI()
   const model = genAI.getGenerativeModel({
     model: DEFAULT_GEMINI_MODEL,
     ...(generationConfig
@@ -49,7 +51,7 @@ export async function callGeminiWithImage(options: {
   /** Defaults to GEMINI_RECEIPT_MODEL or Flash (cheap). Use Pro for better OCR on dense tables. */
   model?: string
 }) {
-  const genAI = getGenAI()
+  const genAI = await getGenAI()
   const modelName = options.model ?? getReceiptVisionModel()
   const model = genAI.getGenerativeModel({
     model: modelName,

@@ -26,14 +26,14 @@ export default function DailyRevenueMarginChart() {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true)
       try {
-        // Get current month data (from day 1 to today)
+        // Get Year-to-Date data (Jan 1st to today)
         const today = new Date()
-        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0) // Last day of month
+        const startOfYear = new Date(today.getFullYear(), 0, 1)
         
         // Format dates for API
-        const startDateStr = startOfMonth.toISOString().split('T')[0]
+        const startDateStr = startOfYear.toISOString().split('T')[0]
         const endDateStr = today.toISOString().split('T')[0]
         
         const response = await fetch(`/api/reports/daily-revenue-margin?startDate=${startDateStr}&endDate=${endDateStr}`)
@@ -41,13 +41,22 @@ export default function DailyRevenueMarginChart() {
         const result = await response.json()
         setData(result)
       } catch (error) {
-        console.error('Error fetching daily data:', error)
+        console.error('Error fetching chart data:', error)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchData()
+    const handleImportSaved = () => {
+      void fetchData()
+    }
+
+    void fetchData()
+    window.addEventListener('monthly-sales-import-saved', handleImportSaved)
+
+    return () => {
+      window.removeEventListener('monthly-sales-import-saved', handleImportSaved)
+    }
   }, [])
 
   if (loading) {
@@ -58,48 +67,45 @@ export default function DailyRevenueMarginChart() {
     )
   }
 
-  // Create data for all days of current month (1-31), filling missing days with zeros
+  // Aggregate daily data into monthly buckets for the current year
   const today = new Date()
-  const currentMonth = today.getMonth()
   const currentYear = today.getFullYear()
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
-  const todayDay = today.getDate()
+  const currentMonth = today.getMonth()
 
-  // Create a map of existing data by day
-  const dataByDay = new Map<number, DailyData>()
+  // Initialize monthly map
+  const monthlyDataMap = new Map<number, { revenue: number; netProfit: number }>()
+  for (let m = 0; m <= currentMonth; m++) {
+    monthlyDataMap.set(m, { revenue: 0, netProfit: 0 })
+  }
+
+  // Populate map with data
   data.forEach((item) => {
     const date = new Date(item.date)
-    if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
-      dataByDay.set(date.getDate(), item)
+    if (date.getFullYear() === currentYear) {
+      const month = date.getMonth()
+      const current = monthlyDataMap.get(month)
+      if (current) {
+        current.revenue += item.revenue
+        current.netProfit += item.netProfit
+      }
     }
   })
 
-  // Build chart data for all days of the month
+  // Build chart data for all months up to current month
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const chartData = []
-  for (let day = 1; day <= daysInMonth; day++) {
-    const existingData = dataByDay.get(day)
-    const date = new Date(currentYear, currentMonth, day)
-    
-    if (existingData) {
-      // Use actual data
-      const marginAmount = (existingData.revenue * existingData.margin) / 100
-      chartData.push({
-        date: day.toString(),
-        dateLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        Revenue: existingData.revenue,
-        Margin: marginAmount,
-        marginPercent: existingData.margin,
-      })
-    } else {
-      // Fill with zeros for days without data
-      chartData.push({
-        date: day.toString(),
-        dateLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        Revenue: 0,
-        Margin: 0,
-        marginPercent: 0,
-      })
-    }
+  for (let m = 0; m <= currentMonth; m++) {
+    const stats = monthlyDataMap.get(m)!
+    const marginAmount = stats.netProfit
+    const avgMarginPercent = stats.revenue > 0 ? (stats.netProfit / stats.revenue) * 100 : 0
+
+    chartData.push({
+      date: monthNames[m],
+      dateLabel: `${monthNames[m]} ${currentYear}`,
+      Revenue: stats.revenue,
+      Margin: marginAmount,
+      marginPercent: avgMarginPercent,
+    })
   }
 
   return (
@@ -129,7 +135,7 @@ export default function DailyRevenueMarginChart() {
             formatter={(value: number, name: string, payload: any) => {
               if (name === 'Margin') {
                 // Show both amount and percentage in tooltip
-                const marginPercent = payload?.marginPercent || 0
+                const marginPercent = payload?.payload?.marginPercent || 0
                 return [
                   `${formatCurrency(value)} (${formatPercentage(marginPercent, 1)})`,
                   'Margin'

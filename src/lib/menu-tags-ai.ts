@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getPlatformConfig } from './platform-config'
 
 const ALLOWED_TAGS = [
   'vegetarian',
@@ -169,9 +170,11 @@ function validateAutoTags(tags: string[], input: InferMenuTagsInput): string[] {
 }
 
 async function inferTagsWithGemini(input: InferMenuTagsInput): Promise<string[]> {
-  if (!process.env.GOOGLE_AI_KEY) return []
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+  if (!apiKey) return []
 
-  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
+  const genAI = new GoogleGenerativeAI(apiKey)
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const prompt = `You classify restaurant menu items with conservative dietary/style tags.

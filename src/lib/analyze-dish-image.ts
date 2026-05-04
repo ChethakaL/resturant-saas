@@ -2,6 +2,7 @@
  * Uses Gemini (vision) to analyze a dish photo and return specific issues + fix
  * instructions. The image model then uses this to correct floating, angle, distance, etc.
  */
+import { getPlatformConfig } from './platform-config'
 const ANALYSIS_PROMPT = `You are a food photography expert. Look at this image and decide: is this the right size for a real dish?
 
 Think step by step:
@@ -38,7 +39,8 @@ function parseAnalysisResponse(raw: string): AnalyzeDishImageResult {
  * instructions. Returned text is meant to be appended to the enhancement prompt.
  */
 export async function analyzeDishImageForFixes(imageData: string): Promise<AnalyzeDishImageResult | null> {
-  const apiKey = process.env.GOOGLE_AI_KEY
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey) return null
 
   const base64Data = (imageData.includes(',') ? imageData.split(',')[1] : imageData)?.trim() ?? ''

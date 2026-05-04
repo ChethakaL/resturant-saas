@@ -8,6 +8,7 @@ import { getImageBufferFromS3IfOurs } from '@/lib/s3-get-image'
 import { enhanceDishWithLockedBackground } from '@/lib/locked-background-hybrid'
 import { checkDishImageQuality } from '@/lib/dish-image-quality-check'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
+import { getPlatformConfig } from '@/lib/platform-config'
 
 export async function POST(
   _request: Request,
@@ -68,7 +69,13 @@ export async function POST(
     }
 
     const hasReferenceBackground = Boolean(defaultBackgroundImageData.trim())
-    const hasQualityChecker = Boolean(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
+    const config = await getPlatformConfig()
+    const hasQualityChecker = Boolean(
+      config.anthropicApiKey || 
+      config.openaiApiKey || 
+      process.env.ANTHROPIC_API_KEY || 
+      process.env.OPENAI_API_KEY
+    )
 
     let dataUrl: string
 

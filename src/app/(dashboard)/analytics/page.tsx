@@ -8,7 +8,11 @@ import AnalyticsCharts from './AnalyticsCharts'
 import { redirect } from 'next/navigation'
 import MonthlySalesPdfUploadCard from '@/components/dashboard/MonthlySalesPdfUploadCard'
 import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
-import { getCurrentMonthlySalesImport, hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
+import { 
+  getCurrentMonthlySalesImport, 
+  hasCurrentMonthlySalesImport, 
+  getMonthlySalesImports 
+} from '@/lib/monthly-sales-import'
 import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
 
 const TIME_BUCKETS = ['Morning', 'Afternoon', 'Evening'] as const
@@ -23,10 +27,8 @@ function getTimeBucket(date: Date): TimeBucket {
 
 async function getAnalyticsData(restaurantId: string) {
   const endDate = new Date()
-  const startDate = new Date()
-  startDate.setDate(endDate.getDate() - 29)
-  startDate.setHours(0, 0, 0, 0)
-  const monthStart = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+  const yearStart = new Date(endDate.getFullYear(), 0, 1)
+  const startDate = yearStart
 
   const sales = await prisma.sale.findMany({
     where: {
@@ -81,7 +83,9 @@ async function getAnalyticsData(restaurantId: string) {
     month: 'short',
     day: 'numeric',
   })
-  for (let i = 0; i < 30; i += 1) {
+  
+  const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000))
+  for (let i = 0; i <= daysDiff; i += 1) {
     const day = new Date(startDate)
     day.setDate(startDate.getDate() + i)
     const key = day.toISOString().slice(0, 10)
@@ -141,12 +145,12 @@ async function getAnalyticsData(restaurantId: string) {
   const totalProfit = totalRevenue - totalCost
   const margin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
 
-  const monthlySales = await prisma.sale.findMany({
+  const ytdSales = await prisma.sale.findMany({
     where: {
       restaurantId,
       status: 'COMPLETED',
       timestamp: {
-        gte: monthStart,
+        gte: yearStart,
         lte: endDate,
       },
     },
@@ -155,13 +159,13 @@ async function getAnalyticsData(restaurantId: string) {
     },
   })
 
-  const monthlySaleItems = await prisma.saleItem.findMany({
+  const ytdSaleItems = await prisma.saleItem.findMany({
     where: {
       sale: {
         restaurantId,
         status: 'COMPLETED',
         timestamp: {
-          gte: monthStart,
+          gte: yearStart,
           lte: endDate,
         },
       },
@@ -184,7 +188,7 @@ async function getAnalyticsData(restaurantId: string) {
     }
   >()
 
-  monthlySaleItems.forEach((item) => {
+  ytdSaleItems.forEach((item) => {
     const lineRevenue = item.price * item.quantity
     const lineProfit = (item.price - item.cost) * item.quantity
     const bucket = getTimeBucket(item.sale.timestamp)
@@ -220,7 +224,7 @@ async function getAnalyticsData(restaurantId: string) {
   >()
   const topPairByItem = new Map<string, { item: string; count: number }>()
 
-  monthlySales.forEach((sale) => {
+  ytdSales.forEach((sale) => {
     const uniqueItems = Array.from(
       new Set(sale.items.map((item) => item.menuItemId))
     )
@@ -281,7 +285,7 @@ async function getAnalyticsData(restaurantId: string) {
   })
 
   const menuItemNameById = new Map(
-    monthlySaleItems.map((item) => [item.menuItemId, item.menuItem.name])
+    ytdSaleItems.map((item) => [item.menuItemId, item.menuItem.name])
   )
 
   const topSellingItems = [...itemStatsArray]
@@ -361,8 +365,15 @@ export default async function AnalyticsPage() {
   })
   const settings = (restaurant?.settings as Record<string, unknown>) || {}
   const currentPeriod = getCurrentSalesPdfPeriod()
-  const importedSales = getCurrentMonthlySalesImport(settings)
-  if (!hasCurrentMonthlySalesImport(settings)) {
+  const { locale, t } = await getServerTranslations()
+  const allImports = getMonthlySalesImports(settings)
+  const currentYear = new Date().getFullYear()
+  const ytdImports = allImports.filter(i => i.year === currentYear)
+  const importedSales = getCurrentMonthlySalesImport(settings) || allImports[0] || null
+  
+  const displayPeriodLabel = `${currentYear} YTD`
+
+  if (allImports.length === 0) {
     return (
       <div className="space-y-6">
         <div>
@@ -386,7 +397,7 @@ export default async function AnalyticsPage() {
           },
         })
         const costedItems = buildCostedMenuItems(menuItems)
-        const importedByItem = buildImportedSalesByItem(importedSales, costedItems)
+        const importedByItem = buildImportedSalesByItem(ytdImports, costedItems)
         const itemRows = Array.from(importedByItem.entries()).map(([menuItemId, stats]) => {
           const menuItem = menuItems.find((item) => item.id === menuItemId)
           const revenue = stats.revenue
@@ -398,19 +409,29 @@ export default async function AnalyticsPage() {
             quantity: stats.quantity,
           }
         })
+
+        let totalRevenue = 0
+        let totalOrders = 0
+        const allDailySales: any[] = []
+        for (const imp of ytdImports) {
+          totalRevenue += (imp.summary.netSales || imp.summary.totalSales)
+          totalOrders += imp.summary.totalOrders
+          allDailySales.push(...imp.dailySales)
+        }
+
+        const totalCost = Array.from(importedByItem.values()).reduce((sum, item) => sum + item.costSum, 0)
+        const totalProfit = totalRevenue - totalCost
+
         return {
-          totalRevenue: importedSales.summary.netSales || importedSales.summary.totalSales,
-          totalCost: Array.from(importedByItem.values()).reduce((sum, item) => sum + item.costSum, 0),
-          totalProfit: itemRows.reduce((sum, item) => sum + item.profit, 0),
-          margin:
-            (importedSales.summary.netSales || importedSales.summary.totalSales) > 0
-              ? (itemRows.reduce((sum, item) => sum + item.profit, 0) / (importedSales.summary.netSales || importedSales.summary.totalSales)) * 100
-              : 0,
-          trendData: importedSales.dailySales.map((row) => ({
+          totalRevenue,
+          totalCost,
+          totalProfit,
+          margin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
+          trendData: allDailySales.map((row) => ({
             date: row.date,
             revenue: row.netSales || row.grossSales,
             cost: 0,
-          })),
+          })).sort((a, b) => a.date.localeCompare(b.date)),
           categoryData: [],
           topItemsByRevenue: [...itemRows].sort((a, b) => b.revenue - a.revenue).slice(0, 10),
           topItemsByProfit: [...itemRows].sort((a, b) => b.profit - a.profit).slice(0, 10),
@@ -438,13 +459,14 @@ export default async function AnalyticsPage() {
       })()
     : await getAnalyticsData(restaurantId)
 
-  const { t } = await getServerTranslations()
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900">{t.analytics_title}</h1>
-        <p className="text-slate-500 mt-1">{t.analytics_subtitle}</p>
+        <p className="text-slate-500 mt-1">
+          {importedSales ? `${t.analytics_subtitle} (${displayPeriodLabel})` : t.analytics_subtitle}
+        </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

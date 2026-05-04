@@ -1,4 +1,5 @@
 /** Matches dashboard / receipt translation targets */
+import { getPlatformConfig } from '../platform-config'
 export type GoogleTranslateTarget = 'en' | 'ar-fusha' | 'ku'
 
 /**
@@ -31,7 +32,8 @@ export async function googleTranslateTexts(
   targetLocale: GoogleTranslateTarget,
   options?: GoogleTranslateOptions
 ): Promise<string[] | null> {
-  const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY?.trim()
+  const config = await getPlatformConfig()
+  const apiKey = (config.googleTranslateApiKey ?? process.env.GOOGLE_TRANSLATE_API_KEY)?.trim()
   if (!apiKey) return null
 
   const target = targetLanguageCode(targetLocale)

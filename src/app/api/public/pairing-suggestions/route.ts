@@ -116,13 +116,15 @@ export async function POST(request: NextRequest) {
       suggestions = historicalPairings.slice(0, 4)
     } else {
       source = 'ai'
-      if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
+      const config = await getPlatformConfig()
+      const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+      if (!apiKey) {
         return NextResponse.json(
           { error: 'Google AI API key not configured' },
           { status: 500 }
         )
       }
-      const genAI = new GoogleGenerativeAI(((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY))
+      const genAI = new GoogleGenerativeAI(apiKey)
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
       const availableForPairing = isSelectedItemBeverage
         ? allMenuItems.filter((item) => !isBeverage(item))

@@ -1,6 +1,9 @@
+import { getPlatformConfig } from './platform-config'
+
 export interface ImportedMonthlySalesSummary {
   currency: string
   totalSales: number
+  totalExpenses: number
   totalOrders: number
   avgOrderValue: number
   taxCollected: number
@@ -14,6 +17,13 @@ export interface ImportedMonthlySalesItem {
   quantitySold: number
   unitPrice: number
   grossRevenue: number
+}
+
+export interface ImportedMonthlySalesExpenseLine {
+  category: string | null
+  description: string
+  amount: number
+  notes: string | null
 }
 
 export interface ImportedMonthlySalesDay {
@@ -46,6 +56,7 @@ export interface ImportedMonthlySalesData {
   summary: ImportedMonthlySalesSummary
   weeklySales: ImportedMonthlySalesWeek[]
   topSellingItems: ImportedMonthlySalesItem[]
+  expenseLines?: ImportedMonthlySalesExpenseLine[]
   dailySales: ImportedMonthlySalesDay[]
 }
 
@@ -105,6 +116,122 @@ function toFiniteNumber(value: unknown) {
   return Number.isFinite(num) ? num : 0
 }
 
+function roundCurrency(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.round(value * 100) / 100
+}
+
+function isCloseEnough(left: number, right: number) {
+  if (left <= 0 || right <= 0) return false
+  const base = Math.max(Math.abs(left), Math.abs(right))
+  return Math.abs(left - right) / base <= 0.03
+}
+
+function pickSummaryTotal({
+  summaryValue,
+  candidates,
+}: {
+  summaryValue: number
+  candidates: number[]
+}) {
+  const positiveCandidates = candidates.filter((value) => value > 0)
+  if (positiveCandidates.length === 0) {
+    return summaryValue > 0 ? summaryValue : 0
+  }
+  if (summaryValue > 0 && positiveCandidates.some((candidate) => isCloseEnough(summaryValue, candidate))) {
+    return summaryValue
+  }
+  return Math.max(...positiveCandidates)
+}
+
+function parseCurrencyNumber(raw: string | undefined) {
+  if (!raw) return 0
+  const normalized = raw.replace(/[^0-9.-]/g, '')
+  const value = Number(normalized)
+  return Number.isFinite(value) ? value : 0
+}
+
+async function extractSummaryFromPdfText(fileBase64: string) {
+  try {
+    const buffer = Buffer.from(fileBase64, 'base64')
+    const pdfParseModule = await import('pdf-parse')
+    const pdfParse = (pdfParseModule.default || pdfParseModule) as (data: Buffer) => Promise<{ text?: string }>
+    const parsed = await pdfParse(buffer)
+    const text = parsed.text || ''
+    if (!text.trim()) return null
+
+    const compact = text.replace(/\s+/g, ' ')
+    const revenueMatch = compact.match(/Total Revenue[\s\S]{0,40}?IQD\s*([0-9,]+)/i)
+    const expensesMatch = compact.match(/Total Expenses[\s\S]{0,40}?IQD\s*([0-9,]+)/i)
+    const netMatch = compact.match(/(?:Net Profit|Net Sales)[\s\S]{0,40}?IQD\s*([0-9,]+)/i)
+    const totalBandMatch = compact.match(
+      /IQD\s*([0-9,]+)[\s\S]{0,20}?IQD\s*([0-9,]+)[\s\S]{0,20}?IQD\s*([0-9,]+)/i
+    )
+
+    const totalSales = Math.max(parseCurrencyNumber(revenueMatch?.[1]), parseCurrencyNumber(totalBandMatch?.[1]))
+    const totalExpenses = Math.max(parseCurrencyNumber(expensesMatch?.[1]), parseCurrencyNumber(totalBandMatch?.[2]))
+    const netSales = Math.max(parseCurrencyNumber(netMatch?.[1]), parseCurrencyNumber(totalBandMatch?.[3]))
+    const revenueSectionMatch = text.match(/REVENUE\s+Category[\s\S]*?EXPENSES/i)
+    let totalOrders = 0
+    if (revenueSectionMatch?.[0]) {
+      const lines = revenueSectionMatch[0].split('\n')
+      for (const rawLine of lines) {
+        const line = rawLine.trim()
+        if (!line) continue
+        const rowMatch = line.match(/(\d{1,3}(?:,\d{3})*|\d+)\s+(\d{1,3}(?:,\d{3})+)\s+(\d{1,3}(?:,\d{3})+)$/)
+        if (!rowMatch) continue
+        const quantity = parseCurrencyNumber(rowMatch[1])
+        if (quantity > 0) totalOrders += quantity
+      }
+    }
+
+    const expenseLines: ImportedMonthlySalesExpenseLine[] = []
+    const expenseCategories = ['Cost of Goods', 'Staff', 'Utilities', 'Operations']
+    const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+    let inExpensesSection = false
+    for (const line of lines) {
+      if (/^EXPENSES$/i.test(line)) {
+        inExpensesSection = true
+        continue
+      }
+      if (!inExpensesSection) continue
+      if (/^Category\s+Description\s+Amount/i.test(line)) continue
+      if (/^Total Expenses/i.test(line) || /^NET PROFIT/i.test(line) || /^Generated for/i.test(line)) break
+
+      const match = line.match(/^(.*)\s+(\d{1,3}(?:,\d{3})+)\s*(.*)$/)
+      if (!match) continue
+      const amount = parseCurrencyNumber(match[2])
+      if (amount <= 0) continue
+      let beforeAmount = match[1].trim()
+      const notes = match[3]?.trim() ? match[3].trim() : null
+      let category: string | null = null
+      for (const candidate of expenseCategories) {
+        if (beforeAmount.startsWith(candidate)) {
+          category = candidate
+          beforeAmount = beforeAmount.slice(candidate.length).trim()
+          break
+        }
+      }
+      const description = beforeAmount || 'Expense'
+      expenseLines.push({ category, description, amount, notes })
+    }
+
+    if (totalSales <= 0 && netSales <= 0 && expenseLines.length === 0) return null
+
+    return {
+      summary: {
+        totalSales,
+        totalExpenses,
+        netSales,
+        totalOrders,
+      },
+      expenseLines,
+    }
+  } catch {
+    return null
+  }
+}
+
 function normalizeImportedMonthlySalesData(
   payload: Record<string, unknown>,
   fileName: string,
@@ -114,17 +241,22 @@ function normalizeImportedMonthlySalesData(
   const summaryRaw = (payload.summary as Record<string, unknown>) || {}
   const weeklyRaw = Array.isArray(payload.weeklySales) ? payload.weeklySales : []
   const topItemsRaw = Array.isArray(payload.topSellingItems) ? payload.topSellingItems : []
+  const expenseLinesRaw = Array.isArray(payload.expenseLines) ? payload.expenseLines : []
   const dailyRaw = Array.isArray(payload.dailySales) ? payload.dailySales : []
 
   const topSellingItems = topItemsRaw
     .map((item) => {
       const row = (item as Record<string, unknown>) || {}
+      const quantitySold = Math.max(0, Math.round(toFiniteNumber(row.quantitySold)))
+      const unitPrice = Math.max(0, toFiniteNumber(row.unitPrice))
+      const grossRevenueRaw = Math.max(0, toFiniteNumber(row.grossRevenue))
+      const grossRevenue = grossRevenueRaw > 0 ? grossRevenueRaw : quantitySold * unitPrice
       return {
         itemName: typeof row.itemName === 'string' ? row.itemName : 'Unknown Item',
         category: typeof row.category === 'string' ? row.category : null,
-        quantitySold: Math.round(toFiniteNumber(row.quantitySold)),
-        unitPrice: toFiniteNumber(row.unitPrice),
-        grossRevenue: toFiniteNumber(row.grossRevenue),
+        quantitySold,
+        unitPrice,
+        grossRevenue: roundCurrency(grossRevenue),
       }
     })
     .filter((item) => item.itemName && item.grossRevenue > 0)
@@ -133,6 +265,78 @@ function normalizeImportedMonthlySalesData(
     const key = normalizeTextKey(item.itemName) + `|${item.quantitySold}|${item.unitPrice}|${item.grossRevenue}`
     if (!uniqueTopItems.has(key)) uniqueTopItems.set(key, item)
   }
+  const normalizedTopItems = Array.from(uniqueTopItems.values())
+  const expenseLines = expenseLinesRaw
+    .map((line) => {
+      const row = (line as Record<string, unknown>) || {}
+      const description = typeof row.description === 'string' ? row.description.trim() : ''
+      return {
+        category: typeof row.category === 'string' ? row.category : null,
+        description: description || 'Expense',
+        amount: roundCurrency(Math.max(0, toFiniteNumber(row.amount))),
+        notes: typeof row.notes === 'string' ? row.notes : null,
+      }
+    })
+    .filter((line) => line.amount > 0)
+
+  const dailySales = dailyRaw.map((item) => {
+    const row = (item as Record<string, unknown>) || {}
+    const grossSales = Math.max(0, toFiniteNumber(row.grossSales))
+    const netSales = Math.max(0, toFiniteNumber(row.netSales))
+    return {
+      date: typeof row.date === 'string' ? row.date : '',
+      day: typeof row.day === 'string' ? row.day : null,
+      orders: Math.max(0, Math.round(toFiniteNumber(row.orders))),
+      grossSales,
+      discounts: Math.max(0, toFiniteNumber(row.discounts)),
+      netSales: netSales > 0 ? netSales : grossSales,
+      status: typeof row.status === 'string' ? row.status : null,
+    }
+  }).filter((item) => item.date)
+
+  const weeklySales = weeklyRaw.map((item) => {
+    const row = (item as Record<string, unknown>) || {}
+    const grossSales = Math.max(0, toFiniteNumber(row.grossSales))
+    const netSales = Math.max(0, toFiniteNumber(row.netSales))
+    return {
+      weekLabel: typeof row.weekLabel === 'string' ? row.weekLabel : 'Week',
+      period: typeof row.period === 'string' ? row.period : null,
+      orders: Math.max(0, Math.round(toFiniteNumber(row.orders))),
+      grossSales,
+      discounts: Math.max(0, toFiniteNumber(row.discounts)),
+      netSales: netSales > 0 ? netSales : grossSales,
+    }
+  })
+
+  const summaryTotalSales = Math.max(0, toFiniteNumber(summaryRaw.totalSales))
+  const summaryTotalExpenses = Math.max(0, toFiniteNumber(summaryRaw.totalExpenses))
+  const summaryNetSales = Math.max(0, toFiniteNumber(summaryRaw.netSales))
+  const summaryTotalOrders = Math.max(0, Math.round(toFiniteNumber(summaryRaw.totalOrders)))
+  const grossFromItems = normalizedTopItems.reduce((sum, item) => sum + item.grossRevenue, 0)
+  const grossFromDaily = dailySales.reduce((sum, row) => sum + row.grossSales, 0)
+  const netFromDaily = dailySales.reduce((sum, row) => sum + row.netSales, 0)
+  const ordersFromDaily = dailySales.reduce((sum, row) => sum + row.orders, 0)
+  const ordersFromItems = normalizedTopItems.reduce((sum, item) => sum + item.quantitySold, 0)
+
+  const totalSales = roundCurrency(
+    pickSummaryTotal({
+      summaryValue: summaryTotalSales,
+      candidates: [grossFromItems, grossFromDaily],
+    })
+  )
+  const netSales = roundCurrency(
+    pickSummaryTotal({
+      summaryValue: summaryNetSales,
+      candidates: [netFromDaily, Math.max(0, totalSales - summaryTotalExpenses)],
+    })
+  )
+  const totalOrders = Math.round(
+    pickSummaryTotal({
+      summaryValue: summaryTotalOrders,
+      candidates: [ordersFromDaily, ordersFromItems],
+    })
+  )
+  const avgOrderValue = totalOrders > 0 ? roundCurrency(totalSales / totalOrders) : 0
 
   return {
     year,
@@ -144,37 +348,34 @@ function normalizeImportedMonthlySalesData(
     importedAt: new Date().toISOString(),
     summary: {
       currency: typeof summaryRaw.currency === 'string' && summaryRaw.currency.trim() ? summaryRaw.currency : 'IQD',
-      totalSales: toFiniteNumber(summaryRaw.totalSales),
-      totalOrders: Math.round(toFiniteNumber(summaryRaw.totalOrders)),
-      avgOrderValue: toFiniteNumber(summaryRaw.avgOrderValue),
-      taxCollected: toFiniteNumber(summaryRaw.taxCollected),
-      discounts: toFiniteNumber(summaryRaw.discounts),
-      netSales: toFiniteNumber(summaryRaw.netSales),
+      totalSales,
+      totalExpenses: roundCurrency(summaryTotalExpenses),
+      totalOrders,
+      avgOrderValue,
+      taxCollected: roundCurrency(Math.max(0, toFiniteNumber(summaryRaw.taxCollected))),
+      discounts: roundCurrency(Math.max(0, toFiniteNumber(summaryRaw.discounts))),
+      netSales,
     },
-    weeklySales: weeklyRaw.map((item) => {
-      const row = (item as Record<string, unknown>) || {}
-      return {
-        weekLabel: typeof row.weekLabel === 'string' ? row.weekLabel : 'Week',
-        period: typeof row.period === 'string' ? row.period : null,
-        orders: Math.round(toFiniteNumber(row.orders)),
-        grossSales: toFiniteNumber(row.grossSales),
-        discounts: toFiniteNumber(row.discounts),
-        netSales: toFiniteNumber(row.netSales),
-      }
-    }),
-    topSellingItems: Array.from(uniqueTopItems.values()),
-    dailySales: dailyRaw.map((item) => {
-      const row = (item as Record<string, unknown>) || {}
-      return {
-        date: typeof row.date === 'string' ? row.date : '',
-        day: typeof row.day === 'string' ? row.day : null,
-        orders: Math.round(toFiniteNumber(row.orders)),
-        grossSales: toFiniteNumber(row.grossSales),
-        discounts: toFiniteNumber(row.discounts),
-        netSales: toFiniteNumber(row.netSales),
-        status: typeof row.status === 'string' ? row.status : null,
-      }
-    }).filter((item) => item.date),
+    weeklySales,
+    topSellingItems: normalizedTopItems,
+    expenseLines,
+    dailySales,
+  }
+}
+
+export function sanitizeImportedMonthlySalesData(
+  payload: ImportedMonthlySalesData,
+  defaults: { fileName: string; year: number; month: number }
+) {
+  const normalized = normalizeImportedMonthlySalesData(
+    payload as unknown as Record<string, unknown>,
+    defaults.fileName,
+    defaults.year,
+    defaults.month
+  )
+  return {
+    ...normalized,
+    importedAt: typeof payload.importedAt === 'string' && payload.importedAt ? payload.importedAt : normalized.importedAt,
   }
 }
 
@@ -296,9 +497,21 @@ export function mergeMonthlySalesImports(
       netSales: existing.netSales + row.netSales,
     })
   }
+  const expenseLineMap = new Map<string, ImportedMonthlySalesExpenseLine>()
+  for (const line of [...(baseImport.expenseLines || []), ...(nextImport.expenseLines || [])]) {
+    const key = `${normalizeTextKey(line.category || '', line.description, line.notes || '')}|${line.amount}`
+    if (!expenseLineMap.has(key)) {
+      expenseLineMap.set(key, { ...line })
+      continue
+    }
+    const existing = expenseLineMap.get(key)!
+    existing.amount += line.amount
+    expenseLineMap.set(key, existing)
+  }
 
   const totalOrders = baseImport.summary.totalOrders + nextImport.summary.totalOrders
   const totalSales = baseImport.summary.totalSales + nextImport.summary.totalSales
+  const totalExpenses = baseImport.summary.totalExpenses + nextImport.summary.totalExpenses
   const netSales = baseImport.summary.netSales + nextImport.summary.netSales
 
   return {
@@ -309,13 +522,15 @@ export function mergeMonthlySalesImports(
     summary: {
       currency: nextImport.summary.currency || baseImport.summary.currency,
       totalSales,
+      totalExpenses,
       totalOrders,
-      avgOrderValue: totalOrders > 0 ? netSales / totalOrders : 0,
+      avgOrderValue: totalOrders > 0 ? totalSales / totalOrders : 0,
       taxCollected: baseImport.summary.taxCollected + nextImport.summary.taxCollected,
       discounts: baseImport.summary.discounts + nextImport.summary.discounts,
       netSales,
     },
     topSellingItems: Array.from(topSellingMap.values()).sort((a, b) => b.quantitySold - a.quantitySold),
+    expenseLines: Array.from(expenseLineMap.values()),
     dailySales: Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date)),
     weeklySales: Array.from(weeklyMap.values()),
   }
@@ -334,13 +549,14 @@ const EXTRACTION_SCHEMA = {
       properties: {
         currency: { type: 'string' },
         totalSales: { type: 'number' },
+        totalExpenses: { type: 'number' },
         totalOrders: { type: 'number' },
         avgOrderValue: { type: 'number' },
         taxCollected: { type: 'number' },
         discounts: { type: 'number' },
         netSales: { type: 'number' },
       },
-      required: ['currency', 'totalSales', 'totalOrders', 'avgOrderValue', 'taxCollected', 'discounts', 'netSales'],
+      required: ['currency', 'totalSales', 'totalExpenses', 'totalOrders', 'avgOrderValue', 'taxCollected', 'discounts', 'netSales'],
     },
     weeklySales: {
       type: 'array',
@@ -373,6 +589,20 @@ const EXTRACTION_SCHEMA = {
         required: ['itemName', 'category', 'quantitySold', 'unitPrice', 'grossRevenue'],
       },
     },
+    expenseLines: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          category: { type: ['string', 'null'] },
+          description: { type: 'string' },
+          amount: { type: 'number' },
+          notes: { type: ['string', 'null'] },
+        },
+        required: ['category', 'description', 'amount', 'notes'],
+      },
+    },
     dailySales: {
       type: 'array',
       items: {
@@ -391,7 +621,7 @@ const EXTRACTION_SCHEMA = {
       },
     },
   },
-  required: ['restaurantName', 'branchName', 'reportType', 'summary', 'weeklySales', 'topSellingItems', 'dailySales'],
+  required: ['restaurantName', 'branchName', 'reportType', 'summary', 'weeklySales', 'topSellingItems', 'expenseLines', 'dailySales'],
 } as const
 
 const SUMMARY_ONLY_SCHEMA = {
@@ -415,19 +645,30 @@ const ITEMS_ONLY_SCHEMA = {
   required: ['topSellingItems'],
 } as const
 
+const EXPENSES_ONLY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    expenseLines: EXTRACTION_SCHEMA.properties.expenseLines,
+  },
+  required: ['expenseLines'],
+} as const
+
 export async function extractMonthlySalesFromPdf(params: {
   fileName: string
   fileBase64: string
   year: number
   month: number
 }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const config = await getPlatformConfig()
+  const apiKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY is not configured')
   }
 
   // Keep extraction costs predictable: one request, no automatic retries, strict output schema.
   const model = process.env.MONTHLY_SALES_CLAUDE_MODEL || 'claude-haiku-4-5-20251001'
+  const summaryModel = process.env.MONTHLY_SALES_SUMMARY_MODEL || 'claude-sonnet-4-20250514'
   const requestTimeoutMs = Number(process.env.MONTHLY_SALES_CLAUDE_TIMEOUT_MS || 120000)
   const monthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(
     new Date(params.year, params.month - 1, 1)
@@ -437,6 +678,9 @@ export async function extractMonthlySalesFromPdf(params: {
     `Extract structured restaurant sales data from this monthly sales PDF for ${monthLabel}.`,
     'Return only the values you can actually see in the PDF.',
     'Use numbers only, without currency symbols or commas.',
+    'In summary, include totalExpenses whenever it appears in the PDF.',
+    'For summary totals, copy the full multi-digit values exactly as printed; do not drop leading digits.',
+    'Validate arithmetic: netSales should match totalSales - totalExpenses when those are shown.',
     'Keep item names exactly as shown in the report.',
     'IMPORTANT: Extract ALL visible line-item rows in the report table(s); do not sample, summarize, or stop early.',
     'If rows are numbered (e.g. 1,2,3...), include every visible row number exactly once in topSellingItems.',
@@ -449,8 +693,9 @@ export async function extractMonthlySalesFromPdf(params: {
   const callClaudePdfExtraction = async (
     inputPrompt: string,
     maxTokens: number,
-    schema: typeof EXTRACTION_SCHEMA | typeof SUMMARY_ONLY_SCHEMA | typeof ITEMS_ONLY_SCHEMA,
-    toolName: string
+    schema: typeof EXTRACTION_SCHEMA | typeof SUMMARY_ONLY_SCHEMA | typeof ITEMS_ONLY_SCHEMA | typeof EXPENSES_ONLY_SCHEMA,
+    toolName: string,
+    selectedModel = model
   ) => {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
@@ -463,7 +708,7 @@ export async function extractMonthlySalesFromPdf(params: {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model,
+          model: selectedModel,
           max_tokens: maxTokens,
           temperature: 0,
           messages: [
@@ -536,18 +781,84 @@ export async function extractMonthlySalesFromPdf(params: {
     'Each visible table row must produce one item in topSellingItems.',
     'Do not return only a subset.',
   ].join(' ')
+  const expensePrompt = [
+    basePrompt,
+    'Return only expenseLines.',
+    'Extract every visible expense row from the EXPENSES table.',
+    'Each expenseLines row must include category (nullable), description, amount, and notes (nullable).',
+  ].join(' ')
 
-  const summaryOnly = await callClaudePdfExtraction(summaryPrompt, 2_000, SUMMARY_ONLY_SCHEMA, 'monthly_sales_summary')
-  let itemsOnly = await callClaudePdfExtraction(itemsPrompt, 10_000, ITEMS_ONLY_SCHEMA, 'monthly_sales_items')
+  const summaryOnly = await callClaudePdfExtraction(
+    summaryPrompt,
+    2_000,
+    SUMMARY_ONLY_SCHEMA,
+    'monthly_sales_summary',
+    summaryModel
+  )
+  const textSummary = await extractSummaryFromPdfText(params.fileBase64)
+  let expenseOnly: ImportedMonthlySalesData | null = null
+  try {
+    expenseOnly = await callClaudePdfExtraction(expensePrompt, 6_000, EXPENSES_ONLY_SCHEMA, 'monthly_sales_expenses')
+  } catch {
+    expenseOnly = null
+  }
+  const summarySeed = {
+    ...(summaryOnly.summary || {}),
+    ...(textSummary?.summary || {}),
+  }
+  const expenseSeed = Array.isArray(expenseOnly?.expenseLines) ? expenseOnly!.expenseLines : []
+  // Default to detailed extraction so users can review extracted sold items.
+  // Set MONTHLY_SALES_EXTRACT_ITEMS=false only if you explicitly want summary-only mode.
+  const shouldExtractItems = process.env.MONTHLY_SALES_EXTRACT_ITEMS !== 'false'
+  if (!shouldExtractItems) {
+    return normalizeImportedMonthlySalesData(
+      {
+        restaurantName: summaryOnly.restaurantName || null,
+        branchName: summaryOnly.branchName || null,
+        reportType: summaryOnly.reportType || null,
+        summary: summarySeed,
+        weeklySales: [],
+        dailySales: [],
+        topSellingItems: [],
+        expenseLines: expenseSeed,
+      },
+      params.fileName,
+      params.year,
+      params.month
+    )
+  }
+
+  let itemsOnly: ImportedMonthlySalesData
+  try {
+    itemsOnly = await callClaudePdfExtraction(itemsPrompt, 10_000, ITEMS_ONLY_SCHEMA, 'monthly_sales_items')
+  } catch {
+    // Keep imports usable even if detailed rows fail; summary totals still drive dashboard math.
+    return normalizeImportedMonthlySalesData(
+      {
+        restaurantName: summaryOnly.restaurantName || null,
+        branchName: summaryOnly.branchName || null,
+        reportType: summaryOnly.reportType || null,
+        summary: summarySeed,
+        weeklySales: [],
+        dailySales: [],
+        topSellingItems: [],
+        expenseLines: expenseSeed,
+      },
+      params.fileName,
+      params.year,
+      params.month
+    )
+  }
   let normalized = normalizeImportedMonthlySalesData(
     {
       restaurantName: summaryOnly.restaurantName || null,
       branchName: summaryOnly.branchName || null,
       reportType: summaryOnly.reportType || null,
-      summary: summaryOnly.summary || {},
+      summary: summarySeed,
       weeklySales: [],
       dailySales: [],
       topSellingItems: Array.isArray(itemsOnly.topSellingItems) ? itemsOnly.topSellingItems : [],
+      expenseLines: expenseSeed,
     },
     params.fileName,
     params.year,
@@ -569,10 +880,11 @@ export async function extractMonthlySalesFromPdf(params: {
         restaurantName: summaryOnly.restaurantName || null,
         branchName: summaryOnly.branchName || null,
         reportType: summaryOnly.reportType || null,
-        summary: summaryOnly.summary || {},
+        summary: summarySeed,
         weeklySales: [],
         dailySales: [],
         topSellingItems: Array.isArray(itemsOnly.topSellingItems) ? itemsOnly.topSellingItems : [],
+        expenseLines: expenseSeed,
       },
       params.fileName,
       params.year,
@@ -583,8 +895,8 @@ export async function extractMonthlySalesFromPdf(params: {
     }
   }
 
-  if (normalized.topSellingItems.length < 10) {
-    throw new Error('Could not extract enough item rows from this PDF. Please upload a clearer POS export PDF.')
+  if (normalized.topSellingItems.length < 10 && normalized.summary.totalSales <= 0) {
+    throw new Error('Could not extract enough financial data from this PDF. Please upload a clearer POS export PDF.')
   }
 
   return normalized

@@ -2,6 +2,7 @@
  * Uses Claude or OpenAI vision to check if a generated dish-on-background image
  * is good: correctly placed, correctly scaled, not floating. Used to retry generation when BAD.
  */
+import { getPlatformConfig } from './platform-config'
 export type DishImageQualityResult = {
   quality: 'GOOD' | 'BAD'
   reason: string
@@ -46,8 +47,9 @@ export async function checkDishImageQuality(imageDataUrl: string): Promise<DishI
   const mediaType = mime?.startsWith('image/') ? mime : 'image/jpeg'
   if (!base64 || base64.length < 100) return null
 
+  const config = await getPlatformConfig()
   // Try Claude first
-  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  const anthropicKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY
   if (anthropicKey) {
     try {
       const { Anthropic } = await import('@anthropic-ai/sdk')
@@ -84,7 +86,7 @@ export async function checkDishImageQuality(imageDataUrl: string): Promise<DishI
   }
 
   // Fallback: OpenAI vision
-  const openaiKey = process.env.OPENAI_API_KEY
+  const openaiKey = config.openaiApiKey ?? process.env.OPENAI_API_KEY
   if (openaiKey) {
     try {
       const OpenAI = (await import('openai')).default

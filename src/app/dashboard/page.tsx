@@ -23,8 +23,13 @@ import MonthlySalesPdfUploadCard from '@/components/dashboard/MonthlySalesPdfUpl
 import DashboardSalesDataManager from '@/components/dashboard/DashboardSalesDataManager'
 import type { ManagementLocale } from '@/lib/i18n'
 import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
-import { getCurrentMonthlySalesImport, hasCurrentMonthlySalesImport, type ImportedMonthlySalesData } from '@/lib/monthly-sales-import'
+import { 
+  getCurrentMonthlySalesImport, 
+  getMonthlySalesImports,
+  type ImportedMonthlySalesData 
+} from '@/lib/monthly-sales-import'
 import { buildCostedMenuItems, buildImportedSalesByItem, getImportedCurrentDay, getImportedCurrentWeekTotals } from '@/lib/monthly-sales-derived'
+import { getCurrentMonthlyFinancialImport, listMonthlyFinancialImports } from '@/lib/monthly-financial-import-store'
 
 function daysBetweenInclusive(start: Date, end: Date) {
   const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
@@ -96,7 +101,7 @@ function getTimeBucket(date: Date): TimeBucket {
 
 async function getImportedAnalyticsData(
   restaurantId: string,
-  importData: ImportedMonthlySalesData,
+  imports: ImportedMonthlySalesData[],
   locale: ManagementLocale
 ) {
   const translationLang = getDashboardTranslationLanguage(locale)
@@ -117,7 +122,7 @@ async function getImportedAnalyticsData(
   })
 
   const costedItems = buildCostedMenuItems(menuItems)
-  const importedByItem = buildImportedSalesByItem(importData, costedItems)
+  const importedByItem = buildImportedSalesByItem(imports, costedItems)
 
   const itemStatsArray = Array.from(importedByItem.entries()).map(([menuItemId, stats]) => {
     const menuItem = menuItems.find((item) => item.id === menuItemId)
@@ -147,10 +152,10 @@ async function getImportedAnalyticsData(
   }
 }
 
-async function getImportedDashboardData(restaurantId: string, importData: ImportedMonthlySalesData) {
+async function getImportedDashboardData(restaurantId: string, imports: ImportedMonthlySalesData[]) {
   const now = new Date()
-  const todayData = getImportedCurrentDay(importData, now)
-  const thisWeek = getImportedCurrentWeekTotals(importData, now)
+  const todayData = getImportedCurrentDay(imports, now)
+  const thisWeek = getImportedCurrentWeekTotals(imports, now)
 
   const menuItems = await prisma.menuItem.findMany({
     where: { restaurantId },
@@ -160,12 +165,21 @@ async function getImportedDashboardData(restaurantId: string, importData: Import
     },
   })
   const costedItems = buildCostedMenuItems(menuItems)
-  const importedByItem = buildImportedSalesByItem(importData, costedItems)
-  const monthlyRevenue = importData.summary.netSales || importData.summary.totalSales
-  const monthlyCOGS = Array.from(importedByItem.values()).reduce((sum, item) => sum + item.costSum, 0)
-  const monthlyNetProfit = monthlyRevenue - monthlyCOGS
-  const monthlyMargin = monthlyRevenue > 0 ? (monthlyNetProfit / monthlyRevenue) * 100 : 0
-  const foodCostPercent = monthlyRevenue > 0 ? (monthlyCOGS / monthlyRevenue) * 100 : 0
+  const importedByItem = buildImportedSalesByItem(imports, costedItems)
+  
+  let ytdRevenue = 0
+  let ytdOrders = 0
+  let ytdImportedExpenses = 0
+  for (const imp of imports) {
+    ytdRevenue += (imp.summary.netSales || imp.summary.totalSales)
+    ytdOrders += imp.summary.totalOrders
+    ytdImportedExpenses += imp.summary.totalExpenses || 0
+  }
+
+  const ytdCOGS = Array.from(importedByItem.values()).reduce((sum, item) => sum + item.costSum, 0)
+  const ytdNetProfit = ytdRevenue - ytdCOGS - ytdImportedExpenses
+  const ytdMargin = ytdRevenue > 0 ? (ytdNetProfit / ytdRevenue) * 100 : 0
+  const foodCostPercent = ytdRevenue > 0 ? (ytdCOGS / ytdRevenue) * 100 : 0
 
   const topItemsData = Array.from(importedByItem.entries())
     .map(([id, value]) => ({
@@ -187,11 +201,20 @@ async function getImportedDashboardData(restaurantId: string, importData: Import
     where: { restaurantId },
   })
 
+  // YTD forecast
+  const yearStart = new Date(now.getFullYear(), 0, 1)
+  const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0)
+  const daysInYear = isLeapYear(now.getFullYear()) ? 366 : 365
+  const yearStartMs = yearStart.getTime()
+  const daysElapsed = Math.max(Math.ceil((now.getTime() - yearStartMs) / (24 * 60 * 60 * 1000)), 1)
+  const projectedRevenue = (ytdRevenue / daysElapsed) * daysInYear
+  const projectedNetProfit = (ytdNetProfit / daysElapsed) * daysInYear
+
   return {
     today: {
       revenue: todayData?.netSales || todayData?.grossSales || 0,
       orders: todayData?.orders || 0,
-      margin: monthlyMargin,
+      margin: ytdMargin,
       growth: 0,
       tablesInUse,
       totalTables,
@@ -200,24 +223,24 @@ async function getImportedDashboardData(restaurantId: string, importData: Import
       revenue: thisWeek.revenue,
       orders: thisWeek.orders,
     },
-    weeklyTrend: importData.weeklySales.map((item) => ({
+    weeklyTrend: imports.length > 0 ? imports[imports.length - 1].weeklySales.map((item) => ({
       date: item.weekLabel,
       revenue: item.netSales || item.grossSales,
       orders: item.orders,
-    })),
+    })) : [],
     month: {
-      revenue: monthlyRevenue,
-      orders: importData.summary.totalOrders,
-      profit: monthlyNetProfit,
-      margin: monthlyMargin,
+      revenue: ytdRevenue,
+      orders: ytdOrders,
+      profit: ytdNetProfit,
+      margin: ytdMargin,
       foodCostPercent,
     },
     projectedLossForecast: {
-      projectedNetProfit: monthlyNetProfit,
-      isLoss: monthlyNetProfit < 0,
-      projectedRevenue: monthlyRevenue,
-      daysElapsed: now.getDate(),
-      daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
+      projectedNetProfit,
+      isLoss: projectedNetProfit < 0,
+      projectedRevenue,
+      daysElapsed,
+      daysInMonth: daysInYear,
       drivers: [] as Array<{ labelKey: string; amount: number }>,
     },
     topItems: topItemsData,
@@ -237,15 +260,15 @@ async function getImportedDashboardData(restaurantId: string, importData: Import
 
 async function getAnalyticsData(restaurantId: string, locale: ManagementLocale) {
   const endDate = new Date()
-  const monthStart = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+  const yearStart = new Date(endDate.getFullYear(), 0, 1)
   const translationLang = getDashboardTranslationLanguage(locale)
 
-  const monthlySales = await prisma.sale.findMany({
+  const ytdSales = await prisma.sale.findMany({
     where: {
       restaurantId,
       status: 'COMPLETED',
       timestamp: {
-        gte: monthStart,
+        gte: yearStart,
         lte: endDate,
       },
     },
@@ -254,13 +277,13 @@ async function getAnalyticsData(restaurantId: string, locale: ManagementLocale) 
     },
   })
 
-  const monthlySaleItems = await prisma.saleItem.findMany({
+  const ytdSaleItems = await prisma.saleItem.findMany({
     where: {
       sale: {
         restaurantId,
         status: 'COMPLETED',
         timestamp: {
-          gte: monthStart,
+          gte: yearStart,
           lte: endDate,
         },
       },
@@ -295,7 +318,7 @@ async function getAnalyticsData(restaurantId: string, locale: ManagementLocale) 
     }
   >()
 
-  monthlySaleItems.forEach((item) => {
+  ytdSaleItems.forEach((item) => {
     const lineRevenue = item.price * item.quantity
     const lineProfit = (item.price - item.cost) * item.quantity
     const bucket = getTimeBucket(item.sale.timestamp)
@@ -331,7 +354,7 @@ async function getAnalyticsData(restaurantId: string, locale: ManagementLocale) 
   >()
   const topPairByItem = new Map<string, { item: string; count: number }>()
 
-  monthlySales.forEach((sale) => {
+  ytdSales.forEach((sale) => {
     const uniqueItems = Array.from(
       new Set(sale.items.map((item) => item.menuItemId))
     )
@@ -392,7 +415,7 @@ async function getAnalyticsData(restaurantId: string, locale: ManagementLocale) 
   })
 
   const menuItemNameById = new Map(
-    monthlySaleItems.map((item) => [
+    ytdSaleItems.map((item) => [
       item.menuItemId,
       getDisplayName(item.menuItem as typeof item.menuItem & { translations?: { translatedName: string }[] }),
     ])
@@ -459,7 +482,7 @@ async function getDashboardData(restaurantId: string) {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000)
   const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const yearStart = new Date(now.getFullYear(), 0, 1)
 
   // Today's metrics
   const todaySales = await prisma.sale.aggregate({
@@ -560,26 +583,26 @@ async function getDashboardData(restaurantId: string) {
     })
   }
 
-  // Monthly metrics
-  const monthlySales = await prisma.sale.aggregate({
+  // YTD metrics
+  const ytdSales = await prisma.sale.aggregate({
     where: {
       restaurantId,
-      timestamp: { gte: monthStart },
+      timestamp: { gte: yearStart },
       status: 'COMPLETED',
     },
     _sum: { total: true },
     _count: true,
   })
 
-  const monthlyRevenue = monthlySales._sum.total || 0
-  const monthlyOrders = monthlySales._count
+  const ytdRevenue = ytdSales._sum.total || 0
+  const ytdOrders = ytdSales._count
 
-  // Monthly COGS and profit
-  const monthlySaleItems = await prisma.saleItem.findMany({
+  // YTD COGS and profit
+  const ytdSaleItems = await prisma.saleItem.findMany({
     where: {
       sale: {
         restaurantId,
-        timestamp: { gte: monthStart },
+        timestamp: { gte: yearStart },
         status: 'COMPLETED',
       },
     },
@@ -590,12 +613,12 @@ async function getDashboardData(restaurantId: string) {
     },
   })
 
-  const monthlyCOGSFromSales = monthlySaleItems.reduce(
+  const ytdCOGSFromSales = ytdSaleItems.reduce(
     (sum, item) => sum + (item.quantity * item.cost),
     0
   )
 
-  const [monthlyExpenses, monthlyExpenseTransactions, monthlyWasteRecords, monthlyPayrolls, monthlyMealPrepSessions] = await Promise.all([
+  const [ytdExpenses, ytdExpenseTransactions, ytdWasteRecords, ytdPayrolls, ytdMealPrepSessions] = await Promise.all([
     prisma.expense.findMany({
       where: { restaurantId },
     }),
@@ -603,7 +626,7 @@ async function getDashboardData(restaurantId: string) {
       where: {
         restaurantId,
         date: {
-          gte: monthStart,
+          gte: yearStart,
           lte: now,
         },
       },
@@ -612,7 +635,7 @@ async function getDashboardData(restaurantId: string) {
       where: {
         restaurantId,
         date: {
-          gte: monthStart,
+          gte: yearStart,
           lte: now,
         },
       },
@@ -624,7 +647,7 @@ async function getDashboardData(restaurantId: string) {
         restaurantId,
         status: 'PAID',
         period: {
-          gte: monthStart,
+          gte: yearStart,
           lte: now,
         },
       },
@@ -633,7 +656,7 @@ async function getDashboardData(restaurantId: string) {
       where: {
         restaurantId,
         prepDate: {
-          gte: monthStart,
+          gte: yearStart,
           lte: now,
         },
       },
@@ -647,44 +670,46 @@ async function getDashboardData(restaurantId: string) {
     }),
   ])
 
-  const mealPrepCOGS = monthlyMealPrepSessions.reduce((sum, session) => {
+  const mealPrepCOGS = ytdMealPrepSessions.reduce((sum, session) => {
     return sum + session.inventoryUsages.reduce((sessionSum, usage) => {
       return sessionSum + (usage.quantityUsed * usage.ingredient.costPerUnit)
     }, 0)
   }, 0)
 
-  const monthlyCOGS = monthlyCOGSFromSales + mealPrepCOGS
+  const ytdCOGS = ytdCOGSFromSales + mealPrepCOGS
 
   // DISABLED for now: HR/rent-style expenses. Re-enable when needed (e.g. full P&L).
-  // const recurringExpenseTotal = monthlyExpenses.reduce((sum, expense) => {
-  //   return sum + expenseTotalForPeriod(expense, monthStart, now)
+  // const recurringExpenseTotal = ytdExpenses.reduce((sum, expense) => {
+  //   return sum + expenseTotalForPeriod(expense, yearStart, now)
   // }, 0)
   const recurringExpenseTotal = 0
 
   // Only count inventory purchases as operating expenses (exclude RENT, UTILITIES, etc.)
-  const expenseTransactionsTotal = monthlyExpenseTransactions
+  const expenseTransactionsTotal = ytdExpenseTransactions
     .filter((tx) => tx.category === 'INVENTORY_PURCHASE')
     .reduce((sum, tx) => sum + tx.amount, 0)
 
-  const wasteTotal = monthlyWasteRecords.reduce((sum, waste) => sum + waste.cost, 0)
+  const wasteTotal = ytdWasteRecords.reduce((sum, waste) => sum + waste.cost, 0)
 
   // DISABLED for now: payroll (HR). Re-enable when needed.
-  // const payrollTotal = monthlyPayrolls.reduce((sum, payroll) => sum + payroll.totalPaid, 0)
+  // const payrollTotal = ytdPayrolls.reduce((sum, payroll) => sum + payroll.totalPaid, 0)
   const payrollTotal = 0
 
   const totalOperatingExpenses = recurringExpenseTotal + expenseTransactionsTotal + wasteTotal
 
-  const monthlyNetProfit = monthlyRevenue - monthlyCOGS - totalOperatingExpenses - payrollTotal
-  const monthlyMargin = monthlyRevenue > 0 ? (monthlyNetProfit / monthlyRevenue) * 100 : 0
-  const foodCostPercent = monthlyRevenue > 0 ? (monthlyCOGS / monthlyRevenue) * 100 : 0
+  const ytdNetProfit = ytdRevenue - ytdCOGS - totalOperatingExpenses - payrollTotal
+  const ytdMargin = ytdRevenue > 0 ? (ytdNetProfit / ytdRevenue) * 100 : 0
+  const foodCostPercent = ytdRevenue > 0 ? (ytdCOGS / ytdRevenue) * 100 : 0
 
-  // MTD run-rate forecast for "early warning likely losses this month"
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  const daysElapsed = Math.max(now.getDate(), 1)
-  const projectedRevenue = (monthlyRevenue / daysElapsed) * daysInMonth
-  const projectedCOGS = (monthlyCOGS / daysElapsed) * daysInMonth
-  const projectedExpenses = (totalOperatingExpenses / daysElapsed) * daysInMonth
-  const projectedPayroll = (payrollTotal / daysElapsed) * daysInMonth
+  // YTD run-rate forecast for "early warning likely losses this year"
+  const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0)
+  const daysInYear = isLeapYear(now.getFullYear()) ? 366 : 365
+  const yearStartMs = yearStart.getTime()
+  const daysElapsed = Math.max(Math.ceil((now.getTime() - yearStartMs) / (24 * 60 * 60 * 1000)), 1)
+  const projectedRevenue = (ytdRevenue / daysElapsed) * daysInYear
+  const projectedCOGS = (ytdCOGS / daysElapsed) * daysInYear
+  const projectedExpenses = (totalOperatingExpenses / daysElapsed) * daysInYear
+  const projectedPayroll = (payrollTotal / daysElapsed) * daysInYear
   const projectedNetProfit = projectedRevenue - projectedCOGS - projectedExpenses - projectedPayroll
   const forecastDrivers: Array<{ labelKey: string; amount: number }> = []
   if (projectedCOGS > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_cogs', amount: projectedCOGS })
@@ -696,7 +721,7 @@ async function getDashboardData(restaurantId: string) {
     isLoss: projectedNetProfit < 0,
     projectedRevenue,
     daysElapsed,
-    daysInMonth,
+    daysInMonth: daysInYear, // rename variable if needed in component, but keeping same structure for now
     drivers: forecastDrivers.slice(0, 3),
   }
 
@@ -739,7 +764,7 @@ async function getDashboardData(restaurantId: string) {
     revenue: item._sum.price || 0,
   }))
 
-  const wastageTotalCost = monthlyWasteRecords.reduce((sum, w) => sum + w.cost, 0)
+  const wastageTotalCost = ytdWasteRecords.reduce((sum, w) => sum + w.cost, 0)
 
   // Low stock alerts
   const allIngredients = await prisma.ingredient.findMany({
@@ -814,18 +839,18 @@ async function getDashboardData(restaurantId: string) {
     },
     weeklyTrend,
     month: {
-      revenue: monthlyRevenue,
-      orders: monthlyOrders,
-      profit: monthlyNetProfit,
-      margin: monthlyMargin,
+      revenue: ytdRevenue,
+      orders: ytdOrders,
+      profit: ytdNetProfit,
+      margin: ytdMargin,
       foodCostPercent,
     },
     projectedLossForecast,
     topItems: topItemsData,
     wastage: {
       totalCost: wastageTotalCost,
-      recordCount: monthlyWasteRecords.length,
-      records: monthlyWasteRecords.slice(0, 10),
+      recordCount: ytdWasteRecords.length,
+      records: ytdWasteRecords.slice(0, 10),
     },
     inventory: {
       lowStock: lowStockItems.length,
@@ -840,7 +865,11 @@ async function getDashboardData(restaurantId: string) {
   }
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: { month?: string; year?: string }
+}) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
   const { locale, t } = await getServerTranslations()
@@ -854,8 +883,29 @@ export default async function DashboardPage() {
   })
   const settings = (restaurant?.settings as Record<string, unknown>) || {}
   const currentSalesPdfPeriod = getCurrentSalesPdfPeriod()
-  const importedSales = getCurrentMonthlySalesImport(settings)
-  const dashboardUnlocked = hasCurrentMonthlySalesImport(settings)
+  
+  const requestedYear = searchParams?.year ? Number(searchParams.year) : null
+  const requestedMonth = searchParams?.month ? Number(searchParams.month) : null
+  
+  const dbImports = await listMonthlyFinancialImports(restaurantId)
+  const allImports = dbImports.length > 0 ? dbImports : getMonthlySalesImports(settings)
+  const currentYear = new Date().getFullYear()
+  const targetYear = requestedYear || currentYear
+  const ytdImports = allImports.filter(i => i.year === targetYear && (requestedMonth ? i.month <= requestedMonth : true))
+  
+  const importedSales = (requestedYear && requestedMonth)
+    ? allImports.find(i => i.year === requestedYear && i.month === requestedMonth) || null
+    : ((await getCurrentMonthlyFinancialImport(restaurantId)) || getCurrentMonthlySalesImport(settings) || allImports[0] || null)
+
+  const dashboardUnlocked = allImports.length > 0
+
+  const displayPeriod = importedSales 
+    ? { year: importedSales.year, month: importedSales.month }
+    : currentSalesPdfPeriod
+  
+  const displayPeriodLabel = requestedMonth 
+    ? formatSalesPdfPeriod(displayPeriod.year, displayPeriod.month, locale)
+    : `${targetYear} YTD`
 
   if (!dashboardUnlocked) {
     const periodLabel = formatSalesPdfPeriod(currentSalesPdfPeriod.year, currentSalesPdfPeriod.month, locale)
@@ -877,13 +927,73 @@ export default async function DashboardPage() {
     )
   }
 
-  const data = importedSales
-    ? await getImportedDashboardData(restaurantId, importedSales)
-    : await getDashboardData(restaurantId)
+  // Always fetch live data for YTD context (parallelized to reduce first-load latency)
+  const [liveData, liveAnalytics] = await Promise.all([
+    getDashboardData(restaurantId),
+    getAnalyticsData(restaurantId, locale),
+  ])
 
-  const analyticsData = importedSales
-    ? await getImportedAnalyticsData(restaurantId, importedSales, locale)
-    : await getAnalyticsData(restaurantId, locale)
+  let data = liveData
+  let analyticsData = liveAnalytics
+
+  if (ytdImports.length > 0) {
+    const [importedData, importedAnalytics] = await Promise.all([
+      getImportedDashboardData(restaurantId, ytdImports),
+      getImportedAnalyticsData(restaurantId, ytdImports, locale),
+    ])
+
+    // Merge logic: Today and Week should prefer live data if available, but for YTD we SUM them.
+    // However, typically imported data is historical. Live data is current.
+    
+    // Merge Top Stats (YTD)
+    data = {
+      ...liveData,
+      today: {
+        ...liveData.today,
+        // If today is in an imported month (unlikely for live systems), we'd need to merge.
+        // But usually today's sales are only in the database.
+      },
+      month: {
+        revenue: liveData.month.revenue + importedData.month.revenue,
+        orders: liveData.month.orders + importedData.month.orders,
+        profit: liveData.month.profit + importedData.month.profit,
+        margin: 0, // Recalculate
+        foodCostPercent: 0, // Recalculate
+      }
+    }
+    // Recalculate YTD Margin
+    data.month.margin = data.month.revenue > 0 ? (data.month.profit / data.month.revenue) * 100 : 0
+    data.month.foodCostPercent = data.month.revenue > 0 ? ((data.month.revenue - data.month.profit) / data.month.revenue) * 100 : 0
+
+    // Merge Analytics (Top Selling Items)
+    const mergedItemsMap = new Map<string, any>()
+    
+    // Add live items
+    analyticsData.topSellingItems.forEach(item => {
+      mergedItemsMap.set(item.id, { ...item })
+    })
+    
+    // Add/Merge imported items
+    importedAnalytics.topSellingItems.forEach(item => {
+      const existing = mergedItemsMap.get(item.id)
+      if (existing) {
+        existing.quantity += item.quantity
+        existing.revenue += item.revenue
+        existing.profit += item.profit
+      } else {
+        mergedItemsMap.set(item.id, { ...item })
+      }
+    })
+
+    const allMergedItems = Array.from(mergedItemsMap.values())
+    analyticsData = {
+      topSellingItems: allMergedItems.sort((a, b) => b.quantity - a.quantity).slice(0, 10),
+      worstSellingItems: allMergedItems.filter(i => i.quantity > 0).sort((a, b) => a.quantity - b.quantity).slice(0, 10),
+      highestMarginItems: allMergedItems.filter(i => i.revenue > 0).sort((a, b) => b.margin - a.margin).slice(0, 10),
+      lowestMarginItems: allMergedItems.filter(i => i.revenue > 0).sort((a, b) => a.margin - b.margin).slice(0, 10),
+      topCombos: analyticsData.topCombos // Keep live combos for now
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -928,7 +1038,7 @@ export default async function DashboardPage() {
           <p className="text-slate-500 mt-1">{t.dashboard_welcome}, {session!.user.name}</p>
         </div>
         <DashboardSalesDataManager
-          currentPeriodLabel={formatSalesPdfPeriod(currentSalesPdfPeriod.year, currentSalesPdfPeriod.month)}
+          currentPeriodLabel={displayPeriodLabel}
         />
       </div>
 
@@ -1030,7 +1140,7 @@ export default async function DashboardPage() {
         </div>
 
         <div>
-          <h2 className="text-xl font-bold text-slate-900 mb-4">{t.dashboard_this_month}</h2>
+          <h2 className="text-xl font-bold text-slate-900 mb-4">{displayPeriodLabel}</h2>
           <Card>
             <CardContent className="pt-6">
               <div className="space-y-4">

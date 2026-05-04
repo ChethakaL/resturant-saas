@@ -21,6 +21,7 @@ export interface PlatformConfigValues {
   openaiApiKey?: string
   anthropicApiKey?: string
   googleFontsApiKey?: string
+  googleTranslateApiKey?: string
   tavilyApiKey?: string
 
   // Subscription Pricing (in USD)
@@ -64,6 +65,7 @@ export async function getPlatformConfig(): Promise<PlatformConfigValues> {
     openaiApiKey: (dbConfig.openaiApiKey as string) || process.env.OPENAI_API_KEY || undefined,
     anthropicApiKey: (dbConfig.anthropicApiKey as string) || process.env.ANTHROPIC_API_KEY || undefined,
     googleFontsApiKey: (dbConfig.googleFontsApiKey as string) || process.env.GOOGLE_FONTS_API_KEY || undefined,
+    googleTranslateApiKey: (dbConfig.googleTranslateApiKey as string) || process.env.GOOGLE_TRANSLATE_API_KEY || undefined,
     tavilyApiKey: (dbConfig.tavilyApiKey as string) || process.env.TAVILY_API_KEY || undefined,
 
     // Pricing — DB wins, then .env

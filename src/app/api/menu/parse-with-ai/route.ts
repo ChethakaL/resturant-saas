@@ -60,7 +60,8 @@ RULES:
 8. ingredients: Extract from the user text (ingredient lists, recipe steps, "marinate with X", "add Y"). Each item: name (string), quantity (number), unit (kg for meats/veg, g for small, cup for rice/lentils, tsp/tbsp for spices, L for liquids), pieceCount (number for countable items like "2 onions", else null). If no ingredients mentioned, use empty array [].`
 
 async function parseWithGemini(text: string, categoryNames: string[]): Promise<ParseWithAIResponse> {
-  const apiKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey) throw new Error('Google AI API key not configured')
 
   const genAI = new GoogleGenerativeAI(apiKey)
@@ -92,7 +93,8 @@ ${JSON_SCHEMA}`
 }
 
 async function parseWithOpenAI(text: string, categoryNames: string[]): Promise<ParseWithAIResponse> {
-  const apiKey = process.env.OPENAI_API_KEY
+  const config = await getPlatformConfig()
+  const apiKey = config.openaiApiKey ?? process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OpenAI API key not configured')
 
   const openai = new OpenAI({ apiKey })
@@ -190,8 +192,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const hasGemini = !!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
-    const hasOpenAI = !!process.env.OPENAI_API_KEY
+    const config = await getPlatformConfig()
+    const hasGemini = !!(config.geminiApiKey || process.env.GOOGLE_AI_KEY)
+    const hasOpenAI = !!(config.openaiApiKey || process.env.OPENAI_API_KEY)
 
     if (!hasGemini && !hasOpenAI) {
       return NextResponse.json(

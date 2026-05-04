@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { parseGeminiJson } from '@/lib/generative'
+import { getPlatformConfig } from '../platform-config'
 import {
   buildReceiptLinesPrompt,
   type ReceiptTargetLocale,
@@ -15,7 +16,8 @@ export async function openaiBatchTranslateReceipt(
   texts: string[],
   targetLocale: ReceiptTargetLocale
 ): Promise<string[] | null> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  const config = await getPlatformConfig()
+  const apiKey = (config.openaiApiKey ?? process.env.OPENAI_API_KEY)?.trim()
   if (!apiKey) return null
 
   const model = process.env.OPENAI_RECEIPT_TRANSLATE_MODEL?.trim() || DEFAULT_MODEL

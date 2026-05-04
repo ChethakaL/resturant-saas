@@ -14,12 +14,16 @@ import {
   detectPeriodFromFileName,
   extractMonthlySalesFromPdf,
   type ImportedMonthlySalesData,
+  mergeMonthlySalesImports,
+  sanitizeImportedMonthlySalesData,
   getCurrentMonthlySalesImport,
   getMonthlySalesImports,
-  hasCurrentMonthlySalesImport,
-  mergeMonthlySalesImports,
-  upsertMonthlySalesImport,
 } from '@/lib/monthly-sales-import'
+import {
+  getCurrentMonthlyFinancialImport,
+  listMonthlyFinancialImports,
+  upsertMonthlyFinancialImport,
+} from '@/lib/monthly-financial-import-store'
 
 const MAX_SIZE = 10 * 1024 * 1024
 const ALLOWED_TYPES = ['application/pdf']
@@ -37,7 +41,7 @@ function getS3Client() {
   })
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.restaurantId) {
@@ -52,15 +56,19 @@ export async function GET() {
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
     const currentPeriod = getCurrentSalesPdfPeriod()
     const uploads = getMonthlySalesPdfRecords(settings)
-    const imports = getMonthlySalesImports(settings)
-    const currentImport = getCurrentMonthlySalesImport(settings)
+    const dbImports = await listMonthlyFinancialImports(session.user.restaurantId)
+    const imports = dbImports.length > 0 ? dbImports : getMonthlySalesImports(settings)
+    const currentImport =
+      (await getCurrentMonthlyFinancialImport(session.user.restaurantId)) || getCurrentMonthlySalesImport(settings)
+
+    const includeDetails = new URL(request.url).searchParams.get('includeDetails') === 'true'
 
     return NextResponse.json({
       currentPeriod: {
         ...currentPeriod,
         label: formatSalesPdfPeriod(currentPeriod.year, currentPeriod.month),
       },
-      active: hasCurrentMonthlySalesImport(settings),
+      active: Boolean(currentImport),
       uploads: uploads.map((item) => ({
         ...item,
         periodLabel: formatSalesPdfPeriod(item.year, item.month),
@@ -72,7 +80,14 @@ export async function GET() {
         importedAt: item.importedAt,
         periodLabel: formatSalesPdfPeriod(item.year, item.month),
         summary: item.summary,
-        data: item,
+        data: includeDetails
+          ? item
+          : {
+              ...item,
+              topSellingItems: [],
+              dailySales: [],
+              weeklySales: [],
+            },
       })),
       currentImportSummary: currentImport?.summary || null,
     })
@@ -130,16 +145,28 @@ export async function POST(request: NextRequest) {
 
     let parsedImport: ImportedMonthlySalesData
     if (typeof editedDataRaw === 'string' && editedDataRaw.trim()) {
-      parsedImport = JSON.parse(editedDataRaw) as ImportedMonthlySalesData
-      parsedImport = {
-        ...parsedImport,
-        year,
-        month,
-      }
+      const editedPayload = JSON.parse(editedDataRaw) as ImportedMonthlySalesData
+      parsedImport = sanitizeImportedMonthlySalesData(
+        {
+          ...editedPayload,
+          year,
+          month,
+        },
+        {
+          fileName: file?.name || editedPayload.sourceFileName || `manual-${year}-${String(month).padStart(2, '0')}.pdf`,
+          year,
+          month,
+        }
+      )
     } else {
-      parsedImport = await extractMonthlySalesFromPdf({
+      const extracted = await extractMonthlySalesFromPdf({
         fileName: file!.name,
         fileBase64: buffer!.toString('base64'),
+        year,
+        month,
+      })
+      parsedImport = sanitizeImportedMonthlySalesData(extracted, {
+        fileName: file!.name,
         year,
         month,
       })
@@ -157,7 +184,8 @@ export async function POST(request: NextRequest) {
       select: { settings: true },
     })
     const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
-    const existingImport = getMonthlySalesImports(currentSettings).find((item) => item.year === year && item.month === month) || null
+    const dbImports = await listMonthlyFinancialImports(session.user.restaurantId)
+    const existingImport = dbImports.find((item) => item.year === year && item.month === month) || null
     const importToSave = importMode === 'append' && existingImport
       ? mergeMonthlySalesImports(existingImport, parsedImport)
       : parsedImport
@@ -194,11 +222,11 @@ export async function POST(request: NextRequest) {
       uploadedFileName = file.name
     }
 
-    const nextSettings = upsertMonthlySalesImport(withPdfSettings, importToSave)
+    await upsertMonthlyFinancialImport(session.user.restaurantId, importToSave)
 
     await prisma.restaurant.update({
       where: { id: session.user.restaurantId },
-      data: { settings: nextSettings },
+      data: { settings: withPdfSettings },
     })
 
     revalidatePath('/dashboard')

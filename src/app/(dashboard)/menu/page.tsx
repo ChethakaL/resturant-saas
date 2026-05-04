@@ -17,7 +17,7 @@ import MenuItemsTable from '@/components/menu/MenuItemsTable'
 import MenuPageTabs from '@/components/menu/MenuPageTabs'
 import { parseSlotTimes } from '@/lib/time-slots'
 import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
-import { hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
+import { hasCurrentMonthlySalesImport, getMonthlySalesImports } from '@/lib/monthly-sales-import'
 import { buildPublicMenuUrl } from '@/lib/public-menu-url'
 
 const PAGE_SIZE = 20
@@ -201,7 +201,7 @@ export default async function MenuPage({
   const settings = (restaurant?.settings as Record<string, unknown>) || {}
   const menuEngineSettings = (settings.menuEngine as Record<string, unknown>) || null
   const currentSalesPdfPeriod = getCurrentSalesPdfPeriod()
-  const smartProfitUnlocked = hasCurrentMonthlySalesImport(settings)
+  const smartProfitUnlocked = getMonthlySalesImports(settings).length > 0
   const slotTimesRaw = parseSlotTimes(settings.slotTimes)
   const rawSlug = (restaurant?.slug || '').trim()
   const clientFacingMenuUrl = buildPublicMenuUrl(rawSlug)

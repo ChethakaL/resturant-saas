@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getPlatformConfig } from './platform-config'
 
 export type MediaClassification = {
   type: 'FOOD' | 'DRINK' | 'AMBIANCE' | 'OTHER'
@@ -38,7 +39,8 @@ Use OTHER if unclear.
 itemNameTag should be a short plain-English label like "mango juice", "grilled steak", "restaurant interior".
 categoryTag should be a short browse tag like "Grills", "Juices", "Desserts", "Coffee", "Dining Room", "Mocktails", "Starters", "Seafood", "Cocktails", or "Decor".`
 
-  const openaiKey = process.env.OPENAI_API_KEY
+  const config = await getPlatformConfig()
+  const openaiKey = config.openaiApiKey ?? process.env.OPENAI_API_KEY
   if (openaiKey) {
     try {
       const openai = new OpenAI({ apiKey: openaiKey })
@@ -62,7 +64,7 @@ categoryTag should be a short browse tag like "Grills", "Juices", "Desserts", "C
     }
   }
 
-  const googleKey = process.env.GOOGLE_AI_KEY
+  const googleKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (googleKey) {
     try {
       const genAI = new GoogleGenerativeAI(googleKey)

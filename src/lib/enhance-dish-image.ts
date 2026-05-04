@@ -12,6 +12,7 @@ import {
   analysisSaysStillFloating,
 } from '@/lib/analyze-dish-image'
 import { postToImageModel } from '@/lib/retryable-image-api'
+import { getPlatformConfig } from './platform-config'
 
 const ENHANCEMENT_PROMPT = `
 You are editing a real photo of a cooked dish. Create a restaurant-quality menu photo of THE SAME EXACT DISH.
@@ -58,7 +59,8 @@ export async function enhanceDishImage(options: EnhanceDishImageOptions): Promis
     sizePreset = 'medium',
   } = options
 
-  const apiKey = process.env.GOOGLE_AI_KEY
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey) {
     throw new Error('Google AI API key not configured')
   }

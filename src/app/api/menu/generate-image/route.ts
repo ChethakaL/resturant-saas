@@ -41,7 +41,9 @@ export async function POST(request: NextRequest) {
       sizePreset?: ImageSizePreset
     } = await request.json()
 
-    if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
+    const config = await getPlatformConfig()
+    const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+    if (!apiKey) {
       return NextResponse.json(
         { error: 'Google AI API key not configured' },
         { status: 500 }
@@ -118,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     console.log('Generating image with image model:', imagePrompt.slice(0, 200) + '…')
 
-    const response = await postToImageModel(((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY), {
+    const response = await postToImageModel(apiKey, {
       contents: [
         {
           parts: [

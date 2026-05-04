@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { callGemini, parseGeminiJson } from '@/lib/generative'
+import { getPlatformConfig } from '../platform-config'
 import { normalizeUiSourceText } from '@/lib/i18n/server-ui-translations'
 import { googleTranslateTexts, type GoogleTranslateOptions } from '@/lib/i18n/google-translate-api'
 import { openaiBatchTranslateReceipt } from '@/lib/i18n/openai-receipt-translate'
@@ -59,9 +60,10 @@ export async function translateReceiptStringsToLocale(
     return texts.slice()
   }
 
-  const hasOpenAI = !!process.env.OPENAI_API_KEY?.trim()
+  const config = await getPlatformConfig()
+  const hasOpenAI = !!(config.openaiApiKey || process.env.OPENAI_API_KEY?.trim())
   const hasGoogle = !!process.env.GOOGLE_TRANSLATE_API_KEY?.trim()
-  const hasGemini = !!process.env.GOOGLE_AI_KEY?.trim()
+  const hasGemini = !!(config.geminiApiKey || process.env.GOOGLE_AI_KEY?.trim())
 
   if (!hasOpenAI && !hasGoogle && !hasGemini) {
     console.warn(

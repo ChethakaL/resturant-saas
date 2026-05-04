@@ -128,7 +128,8 @@ export async function POST(request: NextRequest) {
 
         let resultJson: any
 
-        const googleKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
+        const config = await getPlatformConfig()
+        const googleKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
         try {
             if (googleKey) {
                 const genAI = new GoogleGenerativeAI(googleKey)
@@ -155,7 +156,10 @@ export async function POST(request: NextRequest) {
                 const match = rawText.match(/\{[\s\S]*\}/)
                 resultJson = JSON.parse(match ? match[0] : rawText)
             } else {
-                const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+                const config = await getPlatformConfig()
+                const openai = new OpenAI({ 
+                    apiKey: config.openaiApiKey ?? process.env.OPENAI_API_KEY 
+                })
                 const completion = await openai.chat.completions.create({
                     model: 'gpt-4o-mini',
                     messages: [{ role: 'user', content: finalPrompt }],

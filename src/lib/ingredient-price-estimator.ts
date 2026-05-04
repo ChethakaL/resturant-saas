@@ -1,6 +1,7 @@
 /**
  * Fetches estimated ingredient prices using Tavily search or AI fallback
  */
+import { getPlatformConfig } from './platform-config'
 
 interface IngredientPriceEstimate {
     costPerUnit: number
@@ -69,8 +70,9 @@ async function estimatePriceWithAI(
     ingredientName: string,
     unit: string
 ): Promise<IngredientPriceEstimate | null> {
-    const googleKey = process.env.GOOGLE_AI_KEY
-    const openaiKey = process.env.OPENAI_API_KEY
+    const config = await getPlatformConfig()
+    const googleKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+    const openaiKey = config.openaiApiKey ?? process.env.OPENAI_API_KEY
 
     if (!googleKey && !openaiKey) return null
 

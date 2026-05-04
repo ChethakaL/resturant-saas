@@ -22,7 +22,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        if (!(await getPlatformConfig()).geminiApiKey && !((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)) {
+        const config = await getPlatformConfig()
+        const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+        if (!apiKey) {
             return NextResponse.json(
                 { error: 'Google AI API key not configured' },
                 { status: 500 }
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
 
         const { messages, phase = 'designer' }: DNAChatRequest = await request.json()
 
-        const genAI = new GoogleGenerativeAI(((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY))
+        const genAI = new GoogleGenerativeAI(apiKey)
         const model = genAI.getGenerativeModel({
             model: 'gemini-2.5-flash',
             generationConfig: {

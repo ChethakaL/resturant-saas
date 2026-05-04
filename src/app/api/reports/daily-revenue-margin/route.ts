@@ -2,7 +2,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { getCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
+import { getMonthlySalesImports } from '@/lib/monthly-sales-import'
+import { listMonthlyFinancialImports } from '@/lib/monthly-financial-import-store'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,6 +59,10 @@ function expenseTotalForPeriod(
   }
 }
 
+function getDaysInMonth(year: number, monthIndexZeroBased: number) {
+  return new Date(year, monthIndexZeroBased + 1, 0).getDate()
+}
+
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -94,30 +99,74 @@ export async function GET(request: Request) {
       select: { settings: true },
     })
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
-    const importedSales = getCurrentMonthlySalesImport(settings)
-    if (importedSales) {
-      const importedRows = importedSales.dailySales
-        .map((row) => ({
-          date: row.date,
-          revenue: row.netSales || row.grossSales,
-          margin: 0,
-          netProfit: 0,
-        }))
-        .filter((row) => {
+    
+    const dbImports = await listMonthlyFinancialImports(session.user.restaurantId)
+    const allImports = dbImports.length > 0 ? dbImports : getMonthlySalesImports(settings)
+    const importedDailyStats = new Map<string, { revenue: number; margin: number; netProfit: number }>()
+    
+    for (const imp of allImports) {
+      const monthlyRevenue = Number(imp?.summary?.totalSales || 0)
+      const monthlyNetProfit = Number(imp?.summary?.netSales || (monthlyRevenue - Number(imp?.summary?.totalExpenses || 0)))
+      const hasDailyRows = Array.isArray(imp.dailySales) && imp.dailySales.length > 0
+
+      if (hasDailyRows) {
+        imp.dailySales.forEach((row: any) => {
           const date = new Date(`${row.date}T00:00:00`)
-          return date >= startDate && date <= endDate
+          if (date >= startDate && date <= endDate) {
+            const key = row.date
+            const current = importedDailyStats.get(key) || { revenue: 0, margin: 0, netProfit: 0 }
+            const rowRevenue = Number(row.netSales || row.grossSales || 0)
+            const rowNetProfit = Number(row.netProfit || rowRevenue)
+            importedDailyStats.set(key, {
+              revenue: current.revenue + rowRevenue,
+              margin: row.margin || 0,
+              netProfit: current.netProfit + rowNetProfit,
+            })
+          }
         })
-      return NextResponse.json(importedRows)
+        continue
+      }
+
+      // If the PDF has only monthly summary data, distribute monthly totals across days
+      // so Jan -> today charts still include that month.
+      if (
+        Number.isInteger(imp?.year) &&
+        Number.isInteger(imp?.month) &&
+        imp.month >= 1 &&
+        imp.month <= 12 &&
+        monthlyRevenue > 0
+      ) {
+        const monthStart = new Date(imp.year, imp.month - 1, 1)
+        const monthEnd = new Date(imp.year, imp.month, 0, 23, 59, 59, 999)
+        const effectiveStart = monthStart > startDate ? monthStart : startDate
+        const effectiveEnd = monthEnd < endDate ? monthEnd : endDate
+        if (effectiveEnd < effectiveStart) continue
+
+        const daysInMonth = getDaysInMonth(imp.year, imp.month - 1)
+        const dailyRevenue = monthlyRevenue / daysInMonth
+        const dailyNetProfit = monthlyNetProfit / daysInMonth
+
+        const cursor = new Date(effectiveStart)
+        cursor.setHours(0, 0, 0, 0)
+        while (cursor <= effectiveEnd) {
+          const key = cursor.toISOString().split('T')[0]
+          const current = importedDailyStats.get(key) || { revenue: 0, margin: 0, netProfit: 0 }
+          importedDailyStats.set(key, {
+            revenue: current.revenue + dailyRevenue,
+            margin: 0,
+            netProfit: current.netProfit + dailyNetProfit,
+          })
+          cursor.setDate(cursor.getDate() + 1)
+        }
+      }
     }
 
     // Fetch all data sources
     const [
       sales,
       mealPrepSessions,
-      expenses,
       expenseTransactions,
       wasteRecords,
-      payrolls,
     ] = await Promise.all([
       // Sales
       prisma.sale.findMany({
@@ -147,12 +196,6 @@ export async function GET(request: Request) {
           },
         },
       }),
-      // Recurring expenses
-      prisma.expense.findMany({
-        where: {
-          restaurantId: session.user.restaurantId,
-        },
-      }),
       // One-time expense transactions
       prisma.expenseTransaction.findMany({
         where: {
@@ -173,34 +216,12 @@ export async function GET(request: Request) {
           },
         },
       }),
-      // Payroll
-      prisma.payroll.findMany({
-        where: {
-          restaurantId: session.user.restaurantId,
-          status: 'PAID',
-          OR: [
-            {
-              paidDate: {
-                gte: startDate,
-                lte: endDate,
-              },
-            },
-            {
-              period: {
-                gte: startDate,
-                lte: endDate,
-              },
-            },
-          ],
-        },
-      }),
     ])
 
     // DISABLED for now: recurring expenses (e.g. rent). Re-enable when full P&L is needed.
     // const recurringExpenseTotal = expenses.reduce((sum, expense) => {
     //   return sum + expenseTotalForPeriod(expense, startDate, endDate)
     // }, 0)
-    const periodDays = daysBetweenInclusive(startDate, endDate)
     const dailyRecurringExpense = 0
 
     // Group data by day
@@ -285,13 +306,31 @@ export async function GET(request: Request) {
       day.payroll = dailyPayroll
     })
 
+    // Merge imported data with live daily data
+    importedDailyStats.forEach((imp, date) => {
+      const live = dailyData.get(date)
+      if (live) {
+        live.revenue += imp.revenue
+        live.netProfit += imp.netProfit
+        // For margin, we'll recalculate at the end
+      } else {
+        dailyData.set(date, {
+          revenue: imp.revenue,
+          cogs: 0,
+          expenses: 0,
+          payroll: 0,
+          netProfit: imp.netProfit,
+          margin: 0,
+        })
+      }
+    })
+
     // Calculate net profit and margin for each day
     const result = Array.from(dailyData.entries())
       .map(([date, data]) => {
         const grossProfit = data.revenue - data.cogs
-        const netProfit = grossProfit - data.expenses - data.payroll
+        const netProfit = data.netProfit || (grossProfit - data.expenses - data.payroll)
         const margin = data.revenue > 0 ? (netProfit / data.revenue) * 100 : 0
-
         return {
           date,
           revenue: data.revenue,

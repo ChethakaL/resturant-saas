@@ -164,7 +164,8 @@ export async function POST(request: NextRequest) {
     const terminologyOverrides = parseTerminologyOverrides(foodTerminologyOverridesRaw)
     const terminologyPrompt = buildTerminologyPromptBlock(terminologyOverrides)
 
-    const googleKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
+    const config = await getPlatformConfig()
+    const googleKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
     if (!googleKey) {
       return NextResponse.json({ error: 'Google AI key not configured' }, { status: 500 })
     }

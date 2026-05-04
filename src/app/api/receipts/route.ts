@@ -175,8 +175,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const googleKey = ((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY)
-    const anthropicKey = process.env.ANTHROPIC_API_KEY
+    const config = await getPlatformConfig()
+    const googleKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+    const anthropicKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY
     if (!googleKey && !anthropicKey) {
       return NextResponse.json(
         { error: 'Configure GOOGLE_AI_KEY (recommended) or ANTHROPIC_API_KEY' },

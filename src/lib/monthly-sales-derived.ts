@@ -47,28 +47,34 @@ export function matchImportedItemToMenuItem(
   return includes || null
 }
 
-export function buildImportedSalesByItem(importData: ImportedMonthlySalesData, menuItems: CostedMenuItem[]) {
+export function buildImportedSalesByItem(imports: ImportedMonthlySalesData[], menuItems: CostedMenuItem[]) {
   const map = new Map<string, { quantity: number; costSum: number; revenue: number; name: string }>()
 
-  for (const row of importData.topSellingItems) {
-    const matched = matchImportedItemToMenuItem(row, menuItems)
-    if (!matched) continue
-    const current = map.get(matched.id) || { quantity: 0, costSum: 0, revenue: 0, name: matched.name }
-    current.quantity += row.quantitySold
-    current.revenue += row.grossRevenue
-    current.costSum += matched.cost * row.quantitySold
-    map.set(matched.id, current)
+  for (const importData of imports) {
+    for (const row of importData.topSellingItems) {
+      const matched = matchImportedItemToMenuItem(row, menuItems)
+      if (!matched) continue
+      const current = map.get(matched.id) || { quantity: 0, costSum: 0, revenue: 0, name: matched.name }
+      current.quantity += row.quantitySold
+      current.revenue += row.grossRevenue
+      current.costSum += matched.cost * row.quantitySold
+      map.set(matched.id, current)
+    }
   }
 
   return map
 }
 
-export function getImportedCurrentDay(importData: ImportedMonthlySalesData, now = new Date()) {
+export function getImportedCurrentDay(imports: ImportedMonthlySalesData[], now = new Date()) {
   const key = now.toISOString().slice(0, 10)
-  return importData.dailySales.find((row) => row.date === key) || null
+  for (const importData of imports) {
+    const found = importData.dailySales.find((row) => row.date === key)
+    if (found) return found
+  }
+  return null
 }
 
-export function getImportedCurrentWeekTotals(importData: ImportedMonthlySalesData, now = new Date()) {
+export function getImportedCurrentWeekTotals(imports: ImportedMonthlySalesData[], now = new Date()) {
   const day = now.getDay()
   const monday = new Date(now)
   monday.setDate(now.getDate() - ((day + 6) % 7))
@@ -77,17 +83,19 @@ export function getImportedCurrentWeekTotals(importData: ImportedMonthlySalesDat
   sunday.setDate(monday.getDate() + 6)
   sunday.setHours(23, 59, 59, 999)
 
-  const rows = importData.dailySales.filter((row) => {
-    const date = new Date(`${row.date}T00:00:00`)
-    return date >= monday && date <= sunday
-  })
+  let revenue = 0
+  let orders = 0
 
-  return rows.reduce(
-    (acc, row) => {
-      acc.revenue += row.netSales || row.grossSales
-      acc.orders += row.orders || 0
-      return acc
-    },
-    { revenue: 0, orders: 0 }
-  )
+  for (const importData of imports) {
+    const rows = importData.dailySales.filter((row) => {
+      const date = new Date(`${row.date}T00:00:00`)
+      return date >= monday && date <= sunday
+    })
+    for (const row of rows) {
+      revenue += row.netSales || row.grossSales
+      orders += row.orders || 0
+    }
+  }
+
+  return { revenue, orders }
 }

@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { getSettingsForMode } from '@/lib/menu-engine-defaults'
 import type { EngineMode } from '@/types/menu-engine'
 import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
-import { hasCurrentMonthlySalesImport } from '@/lib/monthly-sales-import'
+import { hasCurrentMonthlySalesImport, getMonthlySalesImports } from '@/lib/monthly-sales-import'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,10 +88,10 @@ export async function PUT(request: Request) {
     const mode = parsed.data.mode
     const currentPeriod = getCurrentSalesPdfPeriod()
 
-    if (mode === 'adaptive' && !hasCurrentMonthlySalesImport(currentSettings)) {
+    if (mode === 'adaptive' && getMonthlySalesImports(currentSettings).length === 0) {
       return NextResponse.json(
         {
-          error: `Upload the ${formatSalesPdfPeriod(currentPeriod.year, currentPeriod.month)} sales PDF in Profit & Loss before enabling Smart Profit mode.`,
+          error: `Upload at least one sales PDF in Profit & Loss before enabling Smart Profit mode.`,
         },
         { status: 403 }
       )

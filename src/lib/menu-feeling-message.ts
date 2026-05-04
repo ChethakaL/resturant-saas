@@ -1,4 +1,5 @@
 import { callGemini, parseGeminiJson } from './generative'
+import { getPlatformConfig } from './platform-config'
 
 type LanguageCode = 'en' | 'ar_fusha' | 'ku'
 type TimeSlot = 'breakfast' | 'day' | 'evening' | 'night'
@@ -243,7 +244,9 @@ async function generateAiFeelingMessage({
   temperature: number | null
   apparentTemperature: number | null
 }): Promise<string | null> {
-  if (!process.env.GOOGLE_AI_KEY) return null
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+  if (!apiKey) return null
 
   const languageLabel =
     language === 'ar_fusha' ? 'Arabic' : language === 'ku' ? 'Kurdish Sorani' : 'English'

@@ -6,6 +6,7 @@
 
 import { unstable_cache } from 'next/cache'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getPlatformConfig } from './platform-config'
 
 export interface MenuItemForBadge {
   id: string
@@ -28,7 +29,9 @@ const CACHE_SECONDS = 600 // 10 min — menu content changes infrequently
  * AI is not configured or fails.
  */
 export async function suggestMenuBadges(items: MenuItemForBadge[]): Promise<BadgePicks> {
-  if (!process.env.GOOGLE_AI_KEY || items.length === 0) {
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+  if (!apiKey || items.length === 0) {
     return { signatureIds: [], mostLovedIds: [] }
   }
 
@@ -41,7 +44,7 @@ export async function suggestMenuBadges(items: MenuItemForBadge[]): Promise<Badg
     tags: (i.tags || []).slice(0, 5),
   }))
 
-  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
+  const genAI = new GoogleGenerativeAI(apiKey)
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const prompt = `You are a restaurant menu strategist. Given a list of menu items, choose ONLY a few items that truly deserve special badges.

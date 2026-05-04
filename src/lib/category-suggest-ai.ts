@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import OpenAI from 'openai'
+import { getPlatformConfig } from './platform-config'
 import type { DefaultCategoryKey } from './category-suggest'
 
 const AI_CATEGORIES: DefaultCategoryKey[] = [
@@ -27,7 +28,8 @@ export interface ItemForAIClassify {
 async function classifyWithGemini(
   items: ItemForAIClassify[]
 ): Promise<Map<string, DefaultCategoryKey>> {
-  const apiKey = process.env.GOOGLE_AI_KEY
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey) throw new Error('GOOGLE_AI_KEY not set')
 
   const genAI = new GoogleGenerativeAI(apiKey)
@@ -66,7 +68,8 @@ ${lines.join('\n')}`
 async function classifyWithOpenAI(
   items: ItemForAIClassify[]
 ): Promise<Map<string, DefaultCategoryKey>> {
-  const apiKey = process.env.OPENAI_API_KEY
+  const config = await getPlatformConfig()
+  const apiKey = config.openaiApiKey ?? process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY not set')
 
   const openai = new OpenAI({ apiKey })
@@ -171,8 +174,9 @@ export async function classifyCategoriesWithAI(
   if (items.length === 0) return new Map()
 
   const result = new Map<string, DefaultCategoryKey>()
-  const hasGemini = !!process.env.GOOGLE_AI_KEY
-  const hasOpenAI = !!process.env.OPENAI_API_KEY
+  const config = await getPlatformConfig()
+  const hasGemini = !!(config.geminiApiKey || process.env.GOOGLE_AI_KEY)
+  const hasOpenAI = !!(config.openaiApiKey || process.env.OPENAI_API_KEY)
 
   if (!hasGemini && !hasOpenAI) {
     throw new Error('No AI API key. Set GOOGLE_AI_KEY or OPENAI_API_KEY in .env')

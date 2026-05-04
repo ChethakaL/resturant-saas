@@ -5,6 +5,7 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getPlatformConfig } from './platform-config'
 
 const DEFAULT_MAX_WORDS = 18
 const MAX_WORDS_WHEN_TONE_SET = 70
@@ -26,13 +27,15 @@ export interface GenerateDescriptionInput {
 export async function generateMenuDescription(
   input: GenerateDescriptionInput
 ): Promise<string | null> {
-  if (!process.env.GOOGLE_AI_KEY) return null
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+  if (!apiKey) return null
 
   const { itemName, categoryName, tags, price, existingDraft, descriptionTone } = input
   const hasTone = Boolean(descriptionTone?.trim())
   const maxWords = hasTone ? MAX_WORDS_WHEN_TONE_SET : DEFAULT_MAX_WORDS
 
-  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY)
+  const genAI = new GoogleGenerativeAI(apiKey)
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const prompt = `You are a menu description writer for a restaurant.

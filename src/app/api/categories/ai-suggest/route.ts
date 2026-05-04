@@ -105,7 +105,8 @@ export async function POST() {
       createdCategories.push(name)
     }
 
-    const hasAI = !!(((await getPlatformConfig()).geminiApiKey ?? process.env.GOOGLE_AI_KEY) ?? process.env.OPENAI_API_KEY)
+    const config = await getPlatformConfig()
+    const hasAI = !!(config.geminiApiKey || process.env.GOOGLE_AI_KEY || config.openaiApiKey || process.env.OPENAI_API_KEY)
     let assignments: Map<string, string>
 
     if (hasAI) {

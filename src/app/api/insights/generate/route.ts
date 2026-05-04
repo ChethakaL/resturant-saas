@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { getPlatformConfig } from '@/lib/platform-config'
 
 export async function POST() {
   try {
@@ -70,7 +71,10 @@ export async function POST() {
       .sort((a, b) => b.profit - a.profit)
       .slice(0, 5)
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const config = await getPlatformConfig()
+    const anthropic = new Anthropic({ 
+      apiKey: config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY 
+    })
     const prompt = `
 You are a financial analyst for a restaurant. Provide 6-8 bullet insights about profitability, menu performance, and cost control.
 
