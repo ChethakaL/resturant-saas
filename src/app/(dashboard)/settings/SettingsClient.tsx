@@ -883,7 +883,7 @@ export default function SettingsClient({
             {[
               { label: 'Main Brand Color', desc: 'Buttons, highlights, and key elements on your menu', value: primaryColor, onChange: (val: string) => { setPrimaryColor(val); setThemePreset(null); } },
               { label: '"Add to Order" Button', desc: 'Guests tap this to order — make it pop!', value: accentColor, onChange: (val: string) => { setAccentColor(val); setThemePreset(null); } },
-              { label: 'Top Star Indicator', desc: 'The "★ Top Star" recommendation badge color', value: chefPickColor, onChange: (val: string) => { setChefPickColor(val); setThemePreset(null); } },
+              { label: 'Signature Dish Indicator', desc: 'The recommendation badge color for your top items', value: chefPickColor, onChange: (val: string) => { setChefPickColor(val); setThemePreset(null); } },
               { label: 'Featured Highlight', desc: 'Border glow on featured and high-margin items', value: borderColor, onChange: (val: string) => { setBorderColor(val); setThemePreset(null); } },
             ].map((color) => (
               <div key={color.label} className="flex items-center gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-colors">

@@ -413,14 +413,12 @@ function generateBundles(
     if (!a || !b) continue
     const pairScore = getBundlePairScore(a, b)
     if (pairScore <= 0) continue
-    const modA = itemModifiers[p.itemIdA] || 0
-    const modB = itemModifiers[p.itemIdB] || 0
-    const priceA = a.price * (1 - modA / 100)
-    const priceB = b.price * (1 - modB / 100)
-    const originalPrice = priceA + priceB
-    const discount = Math.round(originalPrice * 0.07)
-    const bundlePrice = originalPrice - discount
-    const savingsText = `Save ${formatMenuPrice(discount)}`
+
+    // Use original base prices only — ignore any active promotions or modifiers
+    const originalPrice = a.price + b.price
+    const bundlePrice = originalPrice // No automatic discount applied by the engine
+    const savingsText = '' // No savings text since price is sum of parts
+
     const orderedItems = getBundleItemType(a) === 'Drinks' ? [b, a] : [a, b]
     bundles.push({
       id: `bundle-${p.itemIdA}-${p.itemIdB}`,
