@@ -161,25 +161,22 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch all data sources
-    const [
-      sales,
-      mealPrepSessions,
-      expenseTransactions,
-      wasteRecords,
-    ] = await Promise.all([
-      // Sales
-      prisma.sale.findMany({
-        where: {
-          restaurantId: session.user.restaurantId,
-          status: 'COMPLETED',
-          timestamp: { gte: startDate, lte: endDate },
-        },
-        include: {
-          items: true,
-        },
-      }),
-      // Meal prep sessions
+    // Fetch aggregated metrics using SQL views (fast) + meal prep COGS.
+    const [salesAgg, expenseAgg, mealPrepSessions] = await Promise.all([
+      prisma.$queryRaw<Array<{ day: Date; revenue: number; cogs: number; orders: number }>>`
+        SELECT day, revenue, cogs, orders
+        FROM vw_daily_sales_metrics
+        WHERE restaurant_id = ${session.user.restaurantId}
+          AND day >= ${startDate}
+          AND day <= ${endDate}
+      `,
+      prisma.$queryRaw<Array<{ day: Date; expenses: number }>>`
+        SELECT day, expenses
+        FROM vw_daily_expense_metrics
+        WHERE restaurant_id = ${session.user.restaurantId}
+          AND day >= ${startDate}
+          AND day <= ${endDate}
+      `,
       prisma.mealPrepSession.findMany({
         where: {
           restaurantId: session.user.restaurantId,
@@ -193,26 +190,6 @@ export async function GET(request: Request) {
             include: {
               ingredient: true,
             },
-          },
-        },
-      }),
-      // One-time expense transactions
-      prisma.expenseTransaction.findMany({
-        where: {
-          restaurantId: session.user.restaurantId,
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-        },
-      }),
-      // Waste records
-      prisma.wasteRecord.findMany({
-        where: {
-          restaurantId: session.user.restaurantId,
-          date: {
-            gte: startDate,
-            lte: endDate,
           },
         },
       }),
@@ -250,17 +227,13 @@ export async function GET(request: Request) {
       })
     }
 
-    // Add sales revenue and COGS
-    sales.forEach((sale) => {
-      const key = sale.timestamp.toISOString().split('T')[0]
+    // Add aggregated sales revenue and COGS from SQL view
+    salesAgg.forEach((row) => {
+      const key = new Date(row.day).toISOString().split('T')[0]
       const day = dailyData.get(key)
       if (day) {
-        day.revenue += sale.total
-        const saleCOGS = sale.items.reduce(
-          (sum, item) => sum + item.cost * item.quantity,
-          0
-        )
-        day.cogs += saleCOGS
+        day.revenue += Number(row.revenue || 0)
+        day.cogs += Number(row.cogs || 0)
       }
     })
 
@@ -277,25 +250,12 @@ export async function GET(request: Request) {
       }
     })
 
-    // Add one-time expenses: only inventory purchases (exclude RENT, UTILITIES, HR-style, etc.)
-    // Exclude expense transactions that are from waste records (they're already counted in wasteRecords)
-    expenseTransactions.forEach((tx) => {
-      if (tx.notes?.includes('Waste record:')) return
-      if (tx.category !== 'INVENTORY_PURCHASE') return
-
-      const key = tx.date.toISOString().split('T')[0]
+    // Add aggregated inventory + waste expenses from SQL view
+    expenseAgg.forEach((row) => {
+      const key = new Date(row.day).toISOString().split('T')[0]
       const day = dailyData.get(key)
       if (day) {
-        day.expenses += tx.amount
-      }
-    })
-
-    // Add waste costs (these are NOT in expenseTransactions - they're separate waste records)
-    wasteRecords.forEach((waste) => {
-      const key = waste.date.toISOString().split('T')[0]
-      const day = dailyData.get(key)
-      if (day) {
-        day.expenses += waste.cost
+        day.expenses += Number(row.expenses || 0)
       }
     })
 

@@ -477,7 +477,8 @@ async function getAnalyticsData(restaurantId: string, locale: ManagementLocale) 
   }
 }
 
-async function getDashboardData(restaurantId: string) {
+async function getDashboardData(restaurantId: string, options?: { includeYtd?: boolean }) {
+  const includeYtd = options?.includeYtd ?? true
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000)
@@ -583,186 +584,194 @@ async function getDashboardData(restaurantId: string) {
     })
   }
 
-  // YTD metrics
-  const ytdSales = await prisma.sale.aggregate({
-    where: {
-      restaurantId,
-      timestamp: { gte: yearStart },
-      status: 'COMPLETED',
-    },
-    _sum: { total: true },
-    _count: true,
-  })
+  let ytdRevenue = 0
+  let ytdOrders = 0
+  let ytdNetProfit = 0
+  let ytdMargin = 0
+  let foodCostPercent = 0
+  let projectedLossForecast = {
+    projectedNetProfit: 0,
+    isLoss: false,
+    projectedRevenue: 0,
+    daysElapsed: 1,
+    daysInMonth: 365,
+    drivers: [] as Array<{ labelKey: string; amount: number }>,
+  }
+  let topItemsData: Array<{ name: string; quantity: number; revenue: number }> = []
+  let ytdWasteRecords: Array<{ id: string; ingredient: { name: string; unit: string }; quantity: number; cost: number; reason: string | null }> = []
 
-  const ytdRevenue = ytdSales._sum.total || 0
-  const ytdOrders = ytdSales._count
-
-  // YTD COGS and profit
-  const ytdSaleItems = await prisma.saleItem.findMany({
-    where: {
-      sale: {
+  if (includeYtd) {
+    // YTD metrics
+    const ytdSales = await prisma.sale.aggregate({
+      where: {
         restaurantId,
         timestamp: { gte: yearStart },
         status: 'COMPLETED',
       },
-    },
-    select: {
-      quantity: true,
-      cost: true,
-      price: true,
-    },
-  })
+      _sum: { total: true },
+      _count: true,
+    })
 
-  const ytdCOGSFromSales = ytdSaleItems.reduce(
-    (sum, item) => sum + (item.quantity * item.cost),
-    0
-  )
+    ytdRevenue = ytdSales._sum.total || 0
+    ytdOrders = ytdSales._count
 
-  const [ytdExpenses, ytdExpenseTransactions, ytdWasteRecords, ytdPayrolls, ytdMealPrepSessions] = await Promise.all([
-    prisma.expense.findMany({
-      where: { restaurantId },
-    }),
-    prisma.expenseTransaction.findMany({
+    // YTD COGS and profit
+    const ytdSaleItems = await prisma.saleItem.findMany({
       where: {
-        restaurantId,
-        date: {
-          gte: yearStart,
-          lte: now,
+        sale: {
+          restaurantId,
+          timestamp: { gte: yearStart },
+          status: 'COMPLETED',
         },
       },
-    }),
-    prisma.wasteRecord.findMany({
-      where: {
-        restaurantId,
-        date: {
-          gte: yearStart,
-          lte: now,
-        },
+      select: {
+        quantity: true,
+        cost: true,
+        price: true,
       },
-      include: { ingredient: true },
-      orderBy: { date: 'desc' },
-    }),
-    prisma.payroll.findMany({
-      where: {
-        restaurantId,
-        status: 'PAID',
-        period: {
-          gte: yearStart,
-          lte: now,
-        },
-      },
-    }),
-    prisma.mealPrepSession.findMany({
-      where: {
-        restaurantId,
-        prepDate: {
-          gte: yearStart,
-          lte: now,
-        },
-      },
-      include: {
-        inventoryUsages: {
-          include: {
-            ingredient: true,
+    })
+
+    const ytdCOGSFromSales = ytdSaleItems.reduce(
+      (sum, item) => sum + (item.quantity * item.cost),
+      0
+    )
+
+    const [ytdExpenseTransactions, _ytdPayrolls, ytdMealPrepSessions, _ignored, ytdWasteRaw] = await Promise.all([
+      prisma.expenseTransaction.findMany({
+        where: {
+          restaurantId,
+          date: {
+            gte: yearStart,
+            lte: now,
           },
         },
-      },
-    }),
-  ])
+      }),
+      prisma.payroll.findMany({
+        where: {
+          restaurantId,
+          status: 'PAID',
+          period: {
+            gte: yearStart,
+            lte: now,
+          },
+        },
+      }),
+      prisma.mealPrepSession.findMany({
+        where: {
+          restaurantId,
+          prepDate: {
+            gte: yearStart,
+            lte: now,
+          },
+        },
+        include: {
+          inventoryUsages: {
+            include: {
+              ingredient: true,
+            },
+          },
+        },
+      }),
+      prisma.expense.findMany({
+        where: { restaurantId },
+        select: { id: true },
+      }),
+      prisma.wasteRecord.findMany({
+        where: {
+          restaurantId,
+          date: {
+            gte: yearStart,
+            lte: now,
+          },
+        },
+        include: { ingredient: true },
+        orderBy: { date: 'desc' },
+      }),
+    ])
+    ytdWasteRecords = ytdWasteRaw
 
-  const mealPrepCOGS = ytdMealPrepSessions.reduce((sum, session) => {
-    return sum + session.inventoryUsages.reduce((sessionSum, usage) => {
-      return sessionSum + (usage.quantityUsed * usage.ingredient.costPerUnit)
+    const mealPrepCOGS = ytdMealPrepSessions.reduce((sum, session) => {
+      return sum + session.inventoryUsages.reduce((sessionSum, usage) => {
+        return sessionSum + (usage.quantityUsed * usage.ingredient.costPerUnit)
+      }, 0)
     }, 0)
-  }, 0)
 
-  const ytdCOGS = ytdCOGSFromSales + mealPrepCOGS
+    const ytdCOGS = ytdCOGSFromSales + mealPrepCOGS
 
-  // DISABLED for now: HR/rent-style expenses. Re-enable when needed (e.g. full P&L).
-  // const recurringExpenseTotal = ytdExpenses.reduce((sum, expense) => {
-  //   return sum + expenseTotalForPeriod(expense, yearStart, now)
-  // }, 0)
-  const recurringExpenseTotal = 0
+    const recurringExpenseTotal = 0
 
-  // Only count inventory purchases as operating expenses (exclude RENT, UTILITIES, etc.)
-  const expenseTransactionsTotal = ytdExpenseTransactions
-    .filter((tx) => tx.category === 'INVENTORY_PURCHASE')
-    .reduce((sum, tx) => sum + tx.amount, 0)
+    const expenseTransactionsTotal = ytdExpenseTransactions
+      .filter((tx) => tx.category === 'INVENTORY_PURCHASE')
+      .reduce((sum, tx) => sum + tx.amount, 0)
 
-  const wasteTotal = ytdWasteRecords.reduce((sum, waste) => sum + waste.cost, 0)
+    const wasteTotal = ytdWasteRecords.reduce((sum, waste) => sum + waste.cost, 0)
+    const payrollTotal = 0
+    const totalOperatingExpenses = recurringExpenseTotal + expenseTransactionsTotal + wasteTotal
 
-  // DISABLED for now: payroll (HR). Re-enable when needed.
-  // const payrollTotal = ytdPayrolls.reduce((sum, payroll) => sum + payroll.totalPaid, 0)
-  const payrollTotal = 0
+    ytdNetProfit = ytdRevenue - ytdCOGS - totalOperatingExpenses - payrollTotal
+    ytdMargin = ytdRevenue > 0 ? (ytdNetProfit / ytdRevenue) * 100 : 0
+    foodCostPercent = ytdRevenue > 0 ? (ytdCOGS / ytdRevenue) * 100 : 0
 
-  const totalOperatingExpenses = recurringExpenseTotal + expenseTransactionsTotal + wasteTotal
+    const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0)
+    const daysInYear = isLeapYear(now.getFullYear()) ? 366 : 365
+    const yearStartMs = yearStart.getTime()
+    const daysElapsed = Math.max(Math.ceil((now.getTime() - yearStartMs) / (24 * 60 * 60 * 1000)), 1)
+    const projectedRevenue = (ytdRevenue / daysElapsed) * daysInYear
+    const projectedCOGS = (ytdCOGS / daysElapsed) * daysInYear
+    const projectedExpenses = (totalOperatingExpenses / daysElapsed) * daysInYear
+    const projectedPayroll = (payrollTotal / daysElapsed) * daysInYear
+    const projectedNetProfit = projectedRevenue - projectedCOGS - projectedExpenses - projectedPayroll
+    const forecastDrivers: Array<{ labelKey: string; amount: number }> = []
+    if (projectedCOGS > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_cogs', amount: projectedCOGS })
+    if (projectedPayroll > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_labor', amount: projectedPayroll })
+    if (projectedExpenses > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_operating', amount: projectedExpenses })
+    forecastDrivers.sort((a, b) => b.amount - a.amount)
+    projectedLossForecast = {
+      projectedNetProfit,
+      isLoss: projectedNetProfit < 0,
+      projectedRevenue,
+      daysElapsed,
+      daysInMonth: daysInYear,
+      drivers: forecastDrivers.slice(0, 3),
+    }
 
-  const ytdNetProfit = ytdRevenue - ytdCOGS - totalOperatingExpenses - payrollTotal
-  const ytdMargin = ytdRevenue > 0 ? (ytdNetProfit / ytdRevenue) * 100 : 0
-  const foodCostPercent = ytdRevenue > 0 ? (ytdCOGS / ytdRevenue) * 100 : 0
-
-  // YTD run-rate forecast for "early warning likely losses this year"
-  const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0)
-  const daysInYear = isLeapYear(now.getFullYear()) ? 366 : 365
-  const yearStartMs = yearStart.getTime()
-  const daysElapsed = Math.max(Math.ceil((now.getTime() - yearStartMs) / (24 * 60 * 60 * 1000)), 1)
-  const projectedRevenue = (ytdRevenue / daysElapsed) * daysInYear
-  const projectedCOGS = (ytdCOGS / daysElapsed) * daysInYear
-  const projectedExpenses = (totalOperatingExpenses / daysElapsed) * daysInYear
-  const projectedPayroll = (payrollTotal / daysElapsed) * daysInYear
-  const projectedNetProfit = projectedRevenue - projectedCOGS - projectedExpenses - projectedPayroll
-  const forecastDrivers: Array<{ labelKey: string; amount: number }> = []
-  if (projectedCOGS > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_cogs', amount: projectedCOGS })
-  if (projectedPayroll > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_labor', amount: projectedPayroll })
-  if (projectedExpenses > 0) forecastDrivers.push({ labelKey: 'dashboard_forecast_operating', amount: projectedExpenses })
-  forecastDrivers.sort((a, b) => b.amount - a.amount)
-  const projectedLossForecast = {
-    projectedNetProfit,
-    isLoss: projectedNetProfit < 0,
-    projectedRevenue,
-    daysElapsed,
-    daysInMonth: daysInYear, // rename variable if needed in component, but keeping same structure for now
-    drivers: forecastDrivers.slice(0, 3),
-  }
-
-  // Top selling items (this week)
-  const topItems = await prisma.saleItem.groupBy({
-    by: ['menuItemId'],
-    where: {
-      sale: {
-        restaurantId,
-        timestamp: { gte: weekStart },
-        status: 'COMPLETED',
+    const topItems = await prisma.saleItem.groupBy({
+      by: ['menuItemId'],
+      where: {
+        sale: {
+          restaurantId,
+          timestamp: { gte: weekStart },
+          status: 'COMPLETED',
+        },
       },
-    },
-    _sum: {
-      quantity: true,
-      price: true,
-    },
-    orderBy: {
       _sum: {
-        quantity: 'desc',
+        quantity: true,
+        price: true,
       },
-    },
-    take: 5,
-  })
+      orderBy: {
+        _sum: {
+          quantity: 'desc',
+        },
+      },
+      take: 5,
+    })
 
-  // Batch fetch menu items instead of N+1 queries
-  const topItemIds = topItems.map((item) => item.menuItemId)
-  const menuItemsMap = topItemIds.length > 0
-    ? new Map(
-      (await prisma.menuItem.findMany({
-        where: { id: { in: topItemIds } },
-        select: { id: true, name: true },
-      })).map((item) => [item.id, item.name])
-    )
-    : new Map<string, string>()
+    const topItemIds = topItems.map((item) => item.menuItemId)
+    const menuItemsMap = topItemIds.length > 0
+      ? new Map(
+        (await prisma.menuItem.findMany({
+          where: { id: { in: topItemIds } },
+          select: { id: true, name: true },
+        })).map((item) => [item.id, item.name])
+      )
+      : new Map<string, string>()
 
-  const topItemsData = topItems.map((item) => ({
-    name: menuItemsMap.get(item.menuItemId) || 'Unknown',
-    quantity: item._sum.quantity || 0,
-    revenue: item._sum.price || 0,
-  }))
+    topItemsData = topItems.map((item) => ({
+      name: menuItemsMap.get(item.menuItemId) || 'Unknown',
+      quantity: item._sum.quantity || 0,
+      revenue: item._sum.price || 0,
+    }))
+  }
 
   const wastageTotalCost = ytdWasteRecords.reduce((sum, w) => sum + w.cost, 0)
 
@@ -927,16 +936,23 @@ export default async function DashboardPage({
     )
   }
 
-  // Always fetch live data for YTD context (parallelized to reduce first-load latency)
+  const hasImports = ytdImports.length > 0
+  // When imports exist, skip expensive live YTD analytics path and use lightweight live snapshot.
   const [liveData, liveAnalytics] = await Promise.all([
-    getDashboardData(restaurantId),
-    getAnalyticsData(restaurantId, locale),
+    getDashboardData(restaurantId, { includeYtd: !hasImports }),
+    hasImports ? Promise.resolve({
+      topSellingItems: [] as any[],
+      worstSellingItems: [] as any[],
+      highestMarginItems: [] as any[],
+      lowestMarginItems: [] as any[],
+      topCombos: [] as any[],
+    }) : getAnalyticsData(restaurantId, locale),
   ])
 
   let data = liveData
   let analyticsData = liveAnalytics
 
-  if (ytdImports.length > 0) {
+  if (hasImports) {
     const [importedData, importedAnalytics] = await Promise.all([
       getImportedDashboardData(restaurantId, ytdImports),
       getImportedAnalyticsData(restaurantId, ytdImports, locale),
