@@ -112,7 +112,7 @@ function RegisterForm() {
                 <Label htmlFor="slug">Restaurant page link</Label>
                 <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden transition-all focus-within:ring-2 focus-within:ring-amber-500/20 focus-within:border-amber-600 group">
                   <span className="bg-slate-50 px-3 py-2.5 text-[11px] font-medium text-slate-400 border-r border-slate-200 whitespace-nowrap hidden sm:block group-focus-within:text-amber-700/60 transition-colors">
-                    https://restaurant.babalilm-ai.com/
+                    https://restaurant.iserveplus.com/
                   </span>
                   <span className="bg-slate-50 px-2 py-2.5 text-[11px] font-medium text-slate-400 border-r border-slate-200 whitespace-nowrap sm:hidden">
                     .../

@@ -8,7 +8,7 @@ export function buildPublicMenuUrl(slugOrUrl: string) {
 
   const baseUrl =
     (process.env.NEXT_PUBLIC_RESTAURANT_MENU_BASE_URL || '').trim().replace(/\/+$/, '') ||
-    'https://restaurant.babalilm-ai.com'
+    'https://restaurant.iserveplus.com'
 
   return `${baseUrl}/${rawValue.replace(/^\/+/, '')}`
 }
