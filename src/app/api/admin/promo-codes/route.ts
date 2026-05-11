@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { stripe } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 
-const PROMO_TYPES = ['ONE_YEAR_FREE', 'ONE_MONTH_FREE'] as const
+const PROMO_TYPES = ['ONE_YEAR_FREE', 'ONE_MONTH_FREE', 'PERCENTAGE'] as const
 type PromoType = (typeof PROMO_TYPES)[number]
 
 function isValidPromoType(v: unknown): v is PromoType {
@@ -70,7 +71,15 @@ export async function POST(request: NextRequest) {
 
     if (!isValidPromoType(type)) {
       return NextResponse.json(
-        { error: 'Type must be ONE_YEAR_FREE or ONE_MONTH_FREE' },
+        { error: 'Invalid promo type' },
+        { status: 400 }
+      )
+    }
+
+    const percentOff = typeof body.percentOff === 'number' ? body.percentOff : null
+    if (type === 'PERCENTAGE' && (percentOff === null || percentOff <= 0 || percentOff > 100)) {
+      return NextResponse.json(
+        { error: 'Percentage off must be between 0 and 100' },
         { status: 400 }
       )
     }
@@ -80,10 +89,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Promo code already exists' }, { status: 400 })
     }
 
+    // Create Stripe Coupon
+    let stripeCouponId: string | undefined
+    try {
+      const couponParams: any = {
+        name: `${code} (${type})`,
+        id: code, // Use the code as the ID for easier management
+      }
+
+      if (type === 'ONE_YEAR_FREE') {
+        couponParams.percent_off = 100
+        couponParams.duration = 'repeating'
+        couponParams.duration_in_months = 12
+      } else if (type === 'ONE_MONTH_FREE') {
+        couponParams.percent_off = 100
+        couponParams.duration = 'once'
+      } else if (type === 'PERCENTAGE') {
+        couponParams.percent_off = percentOff
+        couponParams.duration = 'forever'
+      }
+
+      const coupon = await stripe.coupons.create(couponParams)
+      stripeCouponId = coupon.id
+    } catch (err: any) {
+      console.error('Stripe coupon creation error:', err)
+      return NextResponse.json(
+        { error: `Stripe Error: ${err.message}` },
+        { status: 500 }
+      )
+    }
+
     const promo = await prisma.promoCode.create({
       data: {
         code,
         type,
+        value: type === 'PERCENTAGE' ? percentOff : null,
+        stripeCouponId,
         maxRedemptions: maxRedemptions ?? undefined,
       },
       include: {

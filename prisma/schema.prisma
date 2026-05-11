@@ -70,6 +70,7 @@ model PromoCode {
   id             String            @id @default(cuid())
   code           String            @unique
   type           String
+  value          Float?
   stripeCouponId String?           @map("stripe_coupon_id")
   maxRedemptions Int?              @map("max_redemptions")
   timesRedeemed  Int               @default(0) @map("times_redeemed")

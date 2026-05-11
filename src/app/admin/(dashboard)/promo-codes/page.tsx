@@ -19,7 +19,8 @@ import { Tag, Plus, Loader2, Trash2, Building2, Search, ExternalLink } from 'luc
 type PromoCode = {
   id: string
   code: string
-  type: string
+  type: 'ONE_YEAR_FREE' | 'ONE_MONTH_FREE' | 'PERCENTAGE'
+  value: number | null
   stripeCouponId: string | null
   maxRedemptions: number | null
   timesRedeemed: number
@@ -43,7 +44,8 @@ export default function AdminPromoCodesPage() {
   const [loading, setLoading] = useState(true)
   const [createLoading, setCreateLoading] = useState(false)
   const [code, setCode] = useState('')
-  const [type, setType] = useState<'ONE_YEAR_FREE' | 'ONE_MONTH_FREE'>('ONE_YEAR_FREE')
+  const [type, setType] = useState<'ONE_YEAR_FREE' | 'ONE_MONTH_FREE' | 'PERCENTAGE'>('ONE_YEAR_FREE')
+  const [percentOff, setPercentOff] = useState('16.95')
   const [maxRedemptions, setMaxRedemptions] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -99,6 +101,7 @@ export default function AdminPromoCodesPage() {
         body: JSON.stringify({
           code: trimmed,
           type,
+          percentOff: type === 'PERCENTAGE' ? parseFloat(percentOff) : undefined,
           maxRedemptions: maxRedemptions ? parseInt(maxRedemptions, 10) : undefined,
         }),
       })
@@ -192,8 +195,26 @@ export default function AdminPromoCodesPage() {
               >
                 <option value="ONE_YEAR_FREE">1 Year Free</option>
                 <option value="ONE_MONTH_FREE">1 Month Free</option>
+                <option value="PERCENTAGE">Percentage Off</option>
               </select>
             </div>
+            {type === 'PERCENTAGE' && (
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700">Percent Off</label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={percentOff}
+                    onChange={(e) => setPercentOff(e.target.value)}
+                    className="w-24 pr-6"
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                </div>
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-sm font-medium text-slate-700">Max Redemptions (optional)</label>
               <Input
@@ -263,10 +284,16 @@ export default function AdminPromoCodesPage() {
                           className={
                             p.type === 'ONE_YEAR_FREE'
                               ? 'text-emerald-600 font-medium'
-                              : 'text-amber-600 font-medium'
+                              : p.type === 'ONE_MONTH_FREE'
+                                ? 'text-amber-600 font-medium'
+                                : 'text-blue-600 font-medium'
                           }
                         >
-                          {p.type === 'ONE_YEAR_FREE' ? '1 Year Free' : '1 Month Free'}
+                          {p.type === 'ONE_YEAR_FREE'
+                            ? '1 Year Free'
+                            : p.type === 'ONE_MONTH_FREE'
+                              ? '1 Month Free'
+                              : `${p.value}% Off`}
                         </span>
                       </td>
                       <td className="py-3 pr-4">{p.timesRedeemed}</td>
@@ -345,7 +372,15 @@ export default function AdminPromoCodesPage() {
             <DialogDescription>
               {redemptionTarget?.redemptions.length ?? 0} redemption
               {redemptionTarget?.redemptions.length === 1 ? '' : 's'}
-              {redemptionTarget ? ` · ${redemptionTarget.type === 'ONE_YEAR_FREE' ? '1 Year Free' : '1 Month Free'}` : ''}
+              {redemptionTarget
+                ? ` · ${
+                    redemptionTarget.type === 'ONE_YEAR_FREE'
+                      ? '1 Year Free'
+                      : redemptionTarget.type === 'ONE_MONTH_FREE'
+                        ? '1 Month Free'
+                        : `${redemptionTarget.value}% Off`
+                  }`
+                : ''}
             </DialogDescription>
           </DialogHeader>
 

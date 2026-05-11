@@ -44,7 +44,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       valid: true,
       type: promo.type,
-      message: promo.type === 'ONE_YEAR_FREE' ? '1 year free!' : '1 month free!',
+      message:
+        promo.type === 'ONE_YEAR_FREE'
+          ? '1 year free!'
+          : promo.type === 'ONE_MONTH_FREE'
+            ? '1 month free!'
+            : `${promo.value}% discount applied!`,
     })
   } catch (error) {
     console.error('Validate promo error:', error)
