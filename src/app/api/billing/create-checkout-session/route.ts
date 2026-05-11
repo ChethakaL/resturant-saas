@@ -132,20 +132,23 @@ export async function POST(request: NextRequest) {
     const trialDays = isFirstSubscription && !promoCouponId ? 3 : undefined
 
     const origin = request.headers.get('origin') || process.env.NEXTAUTH_URL || 'http://localhost:3000'
-    const subscriptionData: Stripe.Checkout.SessionCreateParams['subscription_data'] = {
-      metadata: { restaurantId: restaurant.id },
-      ...(trialDays && { trial_period_days: trialDays }),
-      ...(promoCouponId && { coupon: promoCouponId }),
-    }
-
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       line_items: [lineItem],
+      // Stripe doesn't allow both allow_promotion_codes and discounts in the same session.
+      // If we have a pre-applied promo, we use discounts. Otherwise, we allow the user to enter one.
+      ...(promoCouponId 
+        ? { discounts: [{ coupon: promoCouponId }] }
+        : { allow_promotion_codes: true }
+      ),
       success_url: `${origin}${returnPath}${returnPath.includes('?') ? '&' : '?'}success=true`,
       cancel_url: `${origin}${returnPath}${returnPath.includes('?') ? '&' : '?'}canceled=true`,
       metadata: { restaurantId: restaurant.id, plan, ...(promotionCode && { promotionCode }) },
-      subscription_data: subscriptionData,
+      subscription_data: {
+        metadata: { restaurantId: restaurant.id },
+        ...(trialDays && { trial_period_days: trialDays }),
+      },
     })
 
     return NextResponse.json({ url: checkoutSession.url })

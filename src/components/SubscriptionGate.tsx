@@ -20,6 +20,8 @@ interface SubscriptionGateProps {
   subscription?: {
     currentPlan: 'monthly' | 'annual' | null
     pricesConfigured: boolean
+    priceMonthly?: string
+    priceAnnual?: string
   }
   children: React.ReactNode
 }
@@ -27,9 +29,15 @@ interface SubscriptionGateProps {
 /** Shows a popup with subscription plans when subscription is required but inactive. */
 export function SubscriptionGate({
   hasActiveSubscription,
-  subscription = { currentPlan: null, pricesConfigured: false },
+  subscription = {},
   children,
 }: SubscriptionGateProps) {
+  const {
+    currentPlan = null,
+    pricesConfigured = false,
+    priceMonthly = '59',
+    priceAnnual = '590'
+  } = subscription
   const pathname = usePathname()
   const router = useRouter()
   const { toast } = useToast()
@@ -38,6 +46,7 @@ export function SubscriptionGate({
   const [promoCode, setPromoCode] = useState('')
   const [promoApplied, setPromoApplied] = useState(false)
   const [applyingPromo, setApplyingPromo] = useState(false)
+  const [discountPercentage, setDiscountPercentage] = useState<number>(0)
 
   const showPopup = !hasActiveSubscription && pathname !== '/billing' && pathname !== '/dashboard/billing'
 
@@ -89,9 +98,22 @@ export function SubscriptionGate({
       const data = await res.json()
       if (res.ok && data.success) {
         setPromoApplied(true)
-        toast({ title: 'Subscription activated!', description: data.message || 'Enjoy your free period.' })
-        router.refresh()
+        if (data.type === 'PERCENTAGE') {
+          setDiscountPercentage(data.value || 0)
+          toast({ 
+            title: 'Promo code recognized!', 
+            description: data.message || 'The discount will be applied when you proceed to checkout.' 
+          })
+        } else {
+          setDiscountPercentage(100) // Free period
+          toast({ 
+            title: 'Subscription activated!', 
+            description: data.message || 'Enjoy your free period.' 
+          })
+          router.refresh()
+        }
       } else {
+        setDiscountPercentage(0)
         toast({ title: data.error || 'Invalid promo code', variant: 'destructive' })
       }
     } catch {
@@ -166,11 +188,14 @@ export function SubscriptionGate({
               </p>
             </div>
             <SubscriptionPlans
-              pricesConfigured={subscription.pricesConfigured}
+              pricesConfigured={pricesConfigured}
               isActive={false}
-              currentPlan={subscription.currentPlan}
+              currentPlan={currentPlan}
               loadingPlan={loadingPlan}
               onSubscribe={handleSubscribe}
+              priceMonthly={priceMonthly}
+              priceAnnual={priceAnnual}
+              discountPercentage={discountPercentage}
             />
           </div>
 

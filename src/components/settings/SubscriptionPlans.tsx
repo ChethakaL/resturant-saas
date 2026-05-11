@@ -12,6 +12,7 @@ interface SubscriptionPlansProps {
   onSubscribe: (plan: 'monthly' | 'annual') => void
   priceMonthly: string
   priceAnnual: string
+  discountPercentage?: number
 }
 
 export function SubscriptionPlans({
@@ -20,14 +21,25 @@ export function SubscriptionPlans({
   currentPlan,
   loadingPlan,
   onSubscribe,
-  priceMonthly,
-  priceAnnual,
+  priceMonthly = '59',
+  priceAnnual = '590',
+  discountPercentage = 0,
 }: SubscriptionPlansProps) {
   const { t } = useI18n()
   const features = [t.sub_feature_menu, t.sub_feature_ai, t.sub_feature_analytics, t.sub_feature_tables, t.sub_feature_theme]
   const comingSoonFeatures = [t.sub_feature_pos, t.sub_feature_hr]
 
   const savingsAmount = Math.max(0, (Number(priceMonthly) * 12) - Number(priceAnnual))
+
+  const calculateDiscounted = (price: string) => {
+    const val = Number(price)
+    if (isNaN(val) || discountPercentage <= 0) return null
+    const discounted = val * (1 - discountPercentage / 100)
+    return discounted.toFixed(2).replace(/\.00$/, '')
+  }
+
+  const monthlyDiscounted = calculateDiscounted(priceMonthly)
+  const annualDiscounted = calculateDiscounted(priceAnnual)
 
   if (!pricesConfigured) {
     return (
@@ -75,8 +87,15 @@ export function SubscriptionPlans({
           </div>
           <span className="text-sm font-medium text-slate-500">{t.sub_monthly}</span>
         </div>
-        <div className="mb-5">
-          <span className="text-3xl font-bold text-slate-900">${priceMonthly}</span>
+        <div className="mb-5 flex items-baseline gap-1.5 flex-wrap">
+          {monthlyDiscounted ? (
+            <>
+              <span className="text-3xl font-bold text-slate-900">${monthlyDiscounted}</span>
+              <span className="text-lg text-slate-400 line-through font-medium">${priceMonthly}</span>
+            </>
+          ) : (
+            <span className="text-3xl font-bold text-slate-900">${priceMonthly}</span>
+          )}
           <span className="text-slate-500">{t.sub_per_month}</span>
           <p className="mt-2 text-sm text-slate-500">{t.sub_cancel_anytime}</p>
         </div>
@@ -119,8 +138,15 @@ export function SubscriptionPlans({
           </div>
           <span className="text-sm font-medium text-slate-600">{t.sub_annual}</span>
         </div>
-        <div className="mb-5">
-          <span className="text-3xl font-bold text-slate-900">${priceAnnual}</span>
+        <div className="mb-5 flex items-baseline gap-1.5 flex-wrap">
+          {annualDiscounted ? (
+            <>
+              <span className="text-3xl font-bold text-slate-900">${annualDiscounted}</span>
+              <span className="text-lg text-slate-400 line-through font-medium">${priceAnnual}</span>
+            </>
+          ) : (
+            <span className="text-3xl font-bold text-slate-900">${priceAnnual}</span>
+          )}
           <span className="text-slate-500">{t.sub_per_year}</span>
           <p className="mt-2 text-sm text-slate-500">
             {savingsAmount > 0 ? `Best value. Save $${savingsAmount} compared to monthly billing.` : 'Best value.'}

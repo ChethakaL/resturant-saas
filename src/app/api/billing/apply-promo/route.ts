@@ -25,7 +25,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid promo code' }, { status: 400 })
     }
     if (promo.type === 'PERCENTAGE') {
-      return NextResponse.json({ error: 'This promo code must be applied at checkout.' }, { status: 400 })
+      return NextResponse.json({ 
+        success: true, 
+        type: 'PERCENTAGE', 
+        value: promo.value,
+        message: 'Promo code valid! Discount will be applied at checkout.' 
+      })
     }
     if (!promo.stripeCouponId) {
       return NextResponse.json({ error: 'This promo code is not properly configured.' }, { status: 400 })

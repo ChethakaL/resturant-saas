@@ -8,6 +8,7 @@ import { SubscriptionGate } from '@/components/SubscriptionGate'
 import ChatbotWidget from '@/components/chatbot/ChatbotWidget'
 import RestaurantDNAGate from '@/components/settings/RestaurantDNAGate'
 import { getServerTranslations } from '@/lib/i18n/server'
+import { getPlatformConfig } from '@/lib/platform-config'
 
 export default async function DashboardLayout({
   children,
@@ -35,7 +36,12 @@ export default async function DashboardLayout({
 
   // Waiters use /waiter portal; they never hit this layout. Only restaurant users.
   let hasActiveSubscription = true
-  let subscriptionData: { currentPlan: 'monthly' | 'annual' | null; pricesConfigured: boolean } = {
+  let subscriptionData: { 
+    currentPlan: 'monthly' | 'annual' | null; 
+    pricesConfigured: boolean;
+    priceMonthly?: string;
+    priceAnnual?: string;
+  } = {
     currentPlan: null,
     pricesConfigured: false,
   }
@@ -54,16 +60,20 @@ export default async function DashboardLayout({
     })
     hasActiveSubscription =
       restaurant?.subscriptionStatus === 'active' || restaurant?.subscriptionStatus === 'trialing'
-    const priceMonthly = process.env.STRIPE_PRICE_MONTHLY
-    const priceAnnual = process.env.STRIPE_PRICE_ANNUAL
+    const platformCfg = await getPlatformConfig()
+    const priceMonthly = String(platformCfg.priceMonthly || process.env.STRIPE_PRICE_MONTHLY || '59')
+    const priceAnnual = String(platformCfg.priceAnnual || process.env.STRIPE_PRICE_ANNUAL || '590')
+    
     subscriptionData = {
       currentPlan:
-        restaurant?.subscriptionPriceId === priceAnnual
+        restaurant?.subscriptionPriceId === process.env.STRIPE_PRICE_ANNUAL
           ? 'annual'
-          : restaurant?.subscriptionPriceId === priceMonthly
+          : restaurant?.subscriptionPriceId === process.env.STRIPE_PRICE_MONTHLY
             ? 'monthly'
             : null,
       pricesConfigured: !!(priceMonthly && priceAnnual),
+      priceMonthly,
+      priceAnnual,
     }
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
     onboardingComplete = !!settings.onboardingComplete
