@@ -65,6 +65,9 @@ export default function MenuItemsTable({
   const [items, setItems] = useState(menuItems)
   const [updatingIds, setUpdatingIds] = useState<string[]>([])
   const [deletingIds, setDeletingIds] = useState<string[]>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [chefPickUpdatingIds, setChefPickUpdatingIds] = useState<string[]>([])
   const [menuItemToDelete, setMenuItemToDelete] =
     useState<MenuItemWithMetrics | null>(null)
@@ -97,6 +100,11 @@ export default function MenuItemsTable({
 
   useEffect(() => {
     itemsRef.current = items
+  }, [items])
+
+  useEffect(() => {
+    const itemIds = new Set(items.map((item) => item.id))
+    setSelectedIds((prev) => prev.filter((id) => itemIds.has(id)))
   }, [items])
 
   useEffect(() => {
@@ -260,6 +268,63 @@ export default function MenuItemsTable({
       setDeletingIds((prev) => prev.filter((itemId) => itemId !== id))
     }
   }, [deletingIds, menuItemToDelete, toast])
+
+  const allSelected = items.length > 0 && selectedIds.length === items.length
+  const selectedItems = items.filter((item) => selectedIds.includes(item.id))
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? [] : items.map((item) => item.id))
+  }
+
+  const toggleSelectItem = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
+    )
+  }
+
+  const confirmBulkDelete = async () => {
+    if (selectedIds.length === 0 || bulkDeleting) return
+
+    const idsToDelete = selectedIds
+    setBulkDeleting(true)
+    setDeletingIds((prev) => Array.from(new Set([...prev, ...idsToDelete])))
+
+    try {
+      const response = await fetch('/api/menu/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: idsToDelete }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result?.error ?? 'Failed to delete selected menu items.')
+      }
+
+      const deletedIds = Array.isArray(result.deletedIds) ? result.deletedIds : idsToDelete
+      setItems((prev) => prev.filter((item) => !deletedIds.includes(item.id)))
+      setSelectedIds((prev) => prev.filter((id) => !deletedIds.includes(id)))
+      setBulkDeleteOpen(false)
+      toast({
+        title: 'Menu items deleted',
+        description: `${result.deletedCount ?? deletedIds.length} item${(result.deletedCount ?? deletedIds.length) === 1 ? '' : 's'} removed from your menu.`,
+      })
+      router.refresh()
+    } catch (error) {
+      console.error('Failed to delete selected menu items', error)
+      toast({
+        title: 'Bulk delete failed',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Something went wrong. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setBulkDeleting(false)
+      setDeletingIds((prev) => prev.filter((itemId) => !idsToDelete.includes(itemId)))
+    }
+  }
 
   const startEditingPrice = (item: MenuItemWithMetrics) => {
     setEditingPriceId(item.id)
@@ -426,9 +491,48 @@ export default function MenuItemsTable({
         </div>
       ) : (
         <>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-sm text-slate-600">
+              <span className="font-medium text-slate-900">{selectedIds.length}</span> selected
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedIds.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedIds([])}
+                  disabled={bulkDeleting}
+                >
+                  Clear selection
+                </Button>
+              )}
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+                disabled={selectedIds.length === 0 || bulkDeleting}
+              >
+                {bulkDeleting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash className="h-4 w-4 mr-2" />
+                )}
+                Delete selected
+              </Button>
+            </div>
+          </div>
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200">
+                <th className="w-10 py-3 px-4">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all menu items on this page"
+                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  />
+                </th>
                 <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wide">
                   {t.menu_col_item_name}
                 </th>
@@ -459,6 +563,7 @@ export default function MenuItemsTable({
               {items.map((item) => {
                 const isUpdating = updatingIds.includes(item.id)
                 const isDeleting = deletingIds.includes(item.id)
+                const isSelected = selectedIds.includes(item.id)
                 const isEditingPrice = editingPriceId === item.id
                 const isSavingPrice = savingPriceId === item.id
                 const costPercent =
@@ -471,8 +576,17 @@ export default function MenuItemsTable({
                 return (
                   <tr
                     key={item.id}
-                    className="border-b border-slate-100 hover:bg-slate-50"
+                    className={`border-b border-slate-100 hover:bg-slate-50 ${isSelected ? 'bg-slate-50' : ''}`}
                   >
+                    <td className="py-3 px-4">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectItem(item.id)}
+                        aria-label={`Select ${item.name}`}
+                        className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                      />
+                    </td>
                     {/* Item Name */}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
@@ -697,6 +811,56 @@ export default function MenuItemsTable({
                   {menuItemToDelete && deletingIds.includes(menuItemToDelete.id)
                     ? t.menu_deleting
                     : t.common_delete}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete selected menu items?</DialogTitle>
+                <DialogDescription>
+                  This will permanently delete {selectedIds.length} selected menu item{selectedIds.length === 1 ? '' : 's'}.
+                </DialogDescription>
+              </DialogHeader>
+              {selectedItems.length > 0 && (
+                <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200 p-3 text-sm text-slate-700">
+                  {selectedItems.slice(0, 12).map((item) => (
+                    <div key={item.id} className="truncate">
+                      {item.name}
+                    </div>
+                  ))}
+                  {selectedItems.length > 12 && (
+                    <div className="mt-2 text-slate-500">
+                      +{selectedItems.length - 12} more
+                    </div>
+                  )}
+                </div>
+              )}
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(false)}
+                  disabled={bulkDeleting}
+                >
+                  {t.common_cancel}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={confirmBulkDelete}
+                  disabled={bulkDeleting || selectedIds.length === 0}
+                >
+                  {bulkDeleting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete selected'
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
