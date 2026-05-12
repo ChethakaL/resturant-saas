@@ -252,8 +252,6 @@ export default function SettingsClient({
   const [whatsappVerifiedAt, setWhatsappVerifiedAt] = useState<string | null>(currentTheme.restaurantWhatsappVerifiedAt || null)
   const [whatsappLastInboundAt, setWhatsappLastInboundAt] = useState<string | null>(currentTheme.restaurantWhatsappLastInboundAt || null)
   const [startingWhatsappVerification, setStartingWhatsappVerification] = useState(false)
-  const [resetDialogOpen, setResetDialogOpen] = useState(false)
-  const [resettingDemoAccount, setResettingDemoAccount] = useState(false)
   const [fontDropdownOpen, setFontDropdownOpen] = useState(false)
 
   // Dish photo background state
@@ -473,36 +471,6 @@ export default function SettingsClient({
       toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to save theme', variant: 'destructive' })
     } finally {
       setSavingTheme(false)
-    }
-  }
-
-  const resetDemoAccount = async () => {
-    setResettingDemoAccount(true)
-    try {
-      const response = await fetch('/api/settings/reset-demo-account', {
-        method: 'POST',
-      })
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        throw new Error(data?.error || 'Failed to reset demo account')
-      }
-
-      toast({
-        title: 'Demo account reset',
-        description: 'Restaurant data was cleared and Restaurant DNA onboarding will open again.',
-      })
-      setResetDialogOpen(false)
-      router.refresh()
-      window.location.reload()
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to reset demo account',
-        variant: 'destructive',
-      })
-    } finally {
-      setResettingDemoAccount(false)
     }
   }
 
@@ -1927,24 +1895,6 @@ export default function SettingsClient({
         )}
       </Card>
 
-      <Card className="border-red-200 bg-red-50/40">
-        <CardHeader>
-          <CardTitle className="text-red-700">{td('Demo account reset')}</CardTitle>
-          <p className="text-sm text-red-600">
-            {td('This clears menu items, categories, sales, expenses, inventory, tables, branches, employees, featured sections, and Restaurant DNA setup for this restaurant. It does not touch the global UI translations.')}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={() => setResetDialogOpen(true)}
-          >
-            {td('Reset demo account')}
-          </Button>
-        </CardContent>
-      </Card>
-
       {/* Save Button */}
       <div className="sticky bottom-6 z-10">
         <Button onClick={saveTheme} disabled={savingTheme}
@@ -1954,37 +1904,6 @@ export default function SettingsClient({
           {i18n.settings_save_button}
         </Button>
       </div>
-
-      {/* Theme Suggest Dialog */}
-      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{td('Reset demo account?')}</DialogTitle>
-            <DialogDescription>
-              {td('This will delete this restaurant’s menu items, categories, sales, expenses, inventory, tables, branches, employees, featured sections, and related demo data. Restaurant DNA onboarding will appear again after reload. UI translations will not be reset.')}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setResetDialogOpen(false)}
-              disabled={resettingDemoAccount}
-            >
-              {i18n.common_cancel}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={resetDemoAccount}
-              disabled={resettingDemoAccount}
-            >
-              {resettingDemoAccount ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {td('Yes, reset everything')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Theme Suggest Dialog */}
       <Dialog open={themeSuggestDialogOpen} onOpenChange={setThemeSuggestDialogOpen}>
