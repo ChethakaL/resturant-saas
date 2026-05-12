@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
 import Stripe from 'stripe'
 import { getPlatformConfig } from '@/lib/platform-config'
+import { reconcileRestaurantMainSubscriptions } from '@/lib/billing-subscription-sync'
+import { isSubscriptionAccessActive, formatSubscriptionPeriodEnd } from '@/lib/subscription-status'
 
 const BILLING_CURRENCY = (process.env.STRIPE_BILLING_CURRENCY || 'usd').toLowerCase()
 
@@ -101,6 +103,25 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    const recon = await reconcileRestaurantMainSubscriptions({
+      restaurantId: restaurant.id,
+      stripeCustomerId: customerId,
+    })
+    if (recon.synced && recon.primaryStatus && isSubscriptionAccessActive(recon.primaryStatus)) {
+      const until = formatSubscriptionPeriodEnd(recon.currentPeriodEnd, 'en-US')
+      return NextResponse.json(
+        {
+          error: 'You already have an active subscription for this restaurant.',
+          code: 'ALREADY_SUBSCRIBED',
+          currentPeriodEnd: recon.currentPeriodEnd,
+          message: until
+            ? `You already have an active subscription through ${until}.`
+            : 'You already have an active subscription for this restaurant.',
+        },
+        { status: 409 }
+      )
+    }
+
     let promoCouponId: string | null = null
     if (promotionCode) {
       const promo = await prisma.promoCode.findUnique({
@@ -128,10 +149,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const isFirstSubscription = !restaurant.stripeSubscriptionId
+    const freshSub = await prisma.restaurant.findUnique({
+      where: { id: restaurant.id },
+      select: { stripeSubscriptionId: true },
+    })
+    const isFirstSubscription = !freshSub?.stripeSubscriptionId
     const trialDays = isFirstSubscription && !promoCouponId ? 3 : undefined
 
     const origin = request.headers.get('origin') || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+    const returnSep = returnPath.includes('?') ? '&' : '?'
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
@@ -142,8 +168,9 @@ export async function POST(request: NextRequest) {
         ? { discounts: [{ coupon: promoCouponId }] }
         : { allow_promotion_codes: true }
       ),
-      success_url: `${origin}${returnPath}${returnPath.includes('?') ? '&' : '?'}success=true`,
-      cancel_url: `${origin}${returnPath}${returnPath.includes('?') ? '&' : '?'}canceled=true`,
+      // session_id lets the app sync Postgres when webhooks do not reach this host (e.g. local dev).
+      success_url: `${origin}${returnPath}${returnSep}success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}${returnPath}${returnSep}canceled=true`,
       metadata: { restaurantId: restaurant.id, plan, ...(promotionCode && { promotionCode }) },
       subscription_data: {
         metadata: { restaurantId: restaurant.id },

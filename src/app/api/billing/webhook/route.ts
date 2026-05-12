@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
+import { reconcileRestaurantMainSubscriptions } from '@/lib/billing-subscription-sync'
 import Stripe from 'stripe'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
@@ -33,6 +34,12 @@ export async function POST(request: NextRequest) {
         const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
         const restaurantId = subscription.metadata?.restaurantId || session.metadata?.restaurantId
         if (!restaurantId) break
+        console.info('[billing] webhook checkout.session.completed', {
+          restaurantId,
+          subscriptionId: subscription.id,
+          subscriptionStatus: subscription.status,
+          checkoutSessionId: session.id,
+        })
         const isBranchAddon =
           subscription.metadata?.kind === 'branch_addon' || session.metadata?.kind === 'branch_addon'
 
@@ -75,20 +82,19 @@ export async function POST(request: NextRequest) {
           where: { id: restaurantId },
           select: { referredByRestaurantId: true },
         })
-        const priceMonthly = process.env.STRIPE_PRICE_MONTHLY
-        const priceAnnual = process.env.STRIPE_PRICE_ANNUAL
-        const mainPlanItem = subscription.items.data.find(
-          (item) => item.price.id === priceMonthly || item.price.id === priceAnnual
-        )
-        await prisma.restaurant.update({
-          where: { id: restaurantId },
-          data: {
-            stripeSubscriptionId: subscription.id,
-            subscriptionStatus: subscription.status,
-            subscriptionPriceId: mainPlanItem?.price?.id ?? subscription.items.data[0]?.price?.id ?? null,
-            currentPeriodEnd: new Date((subscription.current_period_end ?? 0) * 1000),
-          },
-        })
+        const customerIdForReconcile =
+          typeof subscription.customer === 'string'
+            ? subscription.customer
+            : subscription.customer && typeof subscription.customer === 'object' && 'id' in subscription.customer
+              ? (subscription.customer as { id: string }).id
+              : null
+        if (customerIdForReconcile) {
+          await reconcileRestaurantMainSubscriptions({
+            restaurantId,
+            stripeCustomerId: customerIdForReconcile,
+            preferSubscriptionId: subscription.id,
+          })
+        }
         // Referral bonus: grant referrer 10% off their next month
         if (restaurant?.referredByRestaurantId) {
           try {
@@ -118,6 +124,15 @@ export async function POST(request: NextRequest) {
         const restaurantId = subscription.metadata?.restaurantId
         if (!restaurantId) break
         if (subscription.metadata?.kind === 'branch_addon') {
+          break
+        }
+        const row = await prisma.restaurant.findUnique({
+          where: { id: restaurantId },
+          select: { stripeSubscriptionId: true },
+        })
+        if (!row) break
+        // Cancelling a duplicate subscription must not overwrite the canonical row we keep in DB.
+        if (row.stripeSubscriptionId && row.stripeSubscriptionId !== subscription.id) {
           break
         }
         const status = event.type === 'customer.subscription.deleted' ? 'canceled' : subscription.status

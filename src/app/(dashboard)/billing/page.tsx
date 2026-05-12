@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import BillingClient from './BillingClient'
 import { getBranchCapacityForRestaurant } from '@/lib/billing-branches'
 import { getPlatformConfig } from '@/lib/platform-config'
+import { isSubscriptionAccessActive } from '@/lib/subscription-status'
 
 const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
 
@@ -26,8 +27,7 @@ export default async function BillingPage() {
     },
   })
 
-  const isActive =
-    restaurant?.subscriptionStatus === 'active' || restaurant?.subscriptionStatus === 'trialing'
+  const isActive = isSubscriptionAccessActive(restaurant?.subscriptionStatus)
 
   const platformCfg = await getPlatformConfig()
   const priceMonthly = String(platformCfg.priceMonthly ?? process.env.STRIPE_PRICE_MONTHLY ?? '59')

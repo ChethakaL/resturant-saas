@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-
-export const dynamic = 'force-dynamic'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isSubscriptionAccessActive } from '@/lib/subscription-status'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
@@ -25,8 +26,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
 
-    const isActive =
-      restaurant.subscriptionStatus === 'active' || restaurant.subscriptionStatus === 'trialing'
+    const isActive = isSubscriptionAccessActive(restaurant.subscriptionStatus)
     const currentPeriodEnd = restaurant.currentPeriodEnd?.toISOString() ?? null
 
     return NextResponse.json({

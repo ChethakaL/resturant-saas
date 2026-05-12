@@ -1,7 +1,9 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isSubscriptionAccessActive } from '@/lib/subscription-status'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { ManagementLanguageProvider } from '@/components/layout/ManagementLanguageProvider'
 import { SubscriptionGate } from '@/components/SubscriptionGate'
@@ -9,6 +11,8 @@ import ChatbotWidget from '@/components/chatbot/ChatbotWidget'
 import RestaurantDNAGate from '@/components/settings/RestaurantDNAGate'
 import { getServerTranslations } from '@/lib/i18n/server'
 import { getPlatformConfig } from '@/lib/platform-config'
+
+export const dynamic = 'force-dynamic'
 
 export default async function DashboardLayout({
   children,
@@ -58,8 +62,7 @@ export default async function DashboardLayout({
         settings: true,
       },
     })
-    hasActiveSubscription =
-      restaurant?.subscriptionStatus === 'active' || restaurant?.subscriptionStatus === 'trialing'
+    hasActiveSubscription = isSubscriptionAccessActive(restaurant?.subscriptionStatus)
     const platformCfg = await getPlatformConfig()
     const priceMonthly = String(platformCfg.priceMonthly || process.env.STRIPE_PRICE_MONTHLY || '59')
     const priceAnnual = String(platformCfg.priceAnnual || process.env.STRIPE_PRICE_ANNUAL || '590')
@@ -82,10 +85,11 @@ export default async function DashboardLayout({
 
   return (
     <ManagementLanguageProvider initialLocale={locale}>
-      <SubscriptionGate
-        hasActiveSubscription={!!hasActiveSubscription}
-        subscription={subscriptionData}
-      >
+      <Suspense fallback={null}>
+        <SubscriptionGate
+          hasActiveSubscription={!!hasActiveSubscription}
+          subscription={subscriptionData}
+        >
         <div className="flex h-screen h-[100dvh] overflow-hidden">
           {/* Sidebar */}
           <Sidebar
@@ -110,7 +114,8 @@ export default async function DashboardLayout({
             hasActiveSubscription={!!hasActiveSubscription}
           />
         </div>
-      </SubscriptionGate>
+        </SubscriptionGate>
+      </Suspense>
     </ManagementLanguageProvider>
   )
 }

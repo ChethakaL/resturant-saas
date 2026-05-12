@@ -116,6 +116,18 @@ export default function BillingClient({
         }),
       })
       const data = await res.json()
+      if (res.status === 409 && data.code === 'ALREADY_SUBSCRIBED') {
+        const payload = data as { message?: string }
+        toast({
+          title: 'Already subscribed',
+          description:
+            typeof payload.message === 'string'
+              ? payload.message
+              : 'Your restaurant already has an active plan. Refreshing…',
+        })
+        router.refresh()
+        return
+      }
       if (!res.ok) throw new Error(data.error || 'Failed to start checkout')
       if (data.url) {
         window.location.href = data.url

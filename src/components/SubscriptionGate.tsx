@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
@@ -18,8 +18,8 @@ import { useI18n } from '@/lib/i18n'
 interface SubscriptionGateProps {
   hasActiveSubscription: boolean
   subscription?: {
-    currentPlan: 'monthly' | 'annual' | null
-    pricesConfigured: boolean
+    currentPlan?: 'monthly' | 'annual' | null
+    pricesConfigured?: boolean
     priceMonthly?: string
     priceAnnual?: string
   }
@@ -39,16 +39,103 @@ export function SubscriptionGate({
     priceAnnual = '590'
   } = subscription
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const { toast } = useToast()
   const { t } = useI18n()
+  const stripeCheckoutSessionId = (searchParams.get('session_id') ?? '').trim()
+  const postPaymentReturn =
+    searchParams.get('success') === 'true' || Boolean(stripeCheckoutSessionId)
+  const [postCheckoutSyncExhausted, setPostCheckoutSyncExhausted] = useState(false)
   const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'annual' | null>(null)
   const [promoCode, setPromoCode] = useState('')
   const [promoApplied, setPromoApplied] = useState(false)
   const [applyingPromo, setApplyingPromo] = useState(false)
   const [discountPercentage, setDiscountPercentage] = useState<number>(0)
 
-  const showPopup = !hasActiveSubscription && pathname !== '/billing' && pathname !== '/dashboard/billing'
+  useEffect(() => {
+    if (!postPaymentReturn || hasActiveSubscription) {
+      setPostCheckoutSyncExhausted(false)
+      return
+    }
+
+    let cancelled = false
+    let attempts = 0
+    const maxAttempts = 36
+
+    ;(async () => {
+      try {
+        const syncRes = await fetch('/api/billing/sync-from-stripe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...(stripeCheckoutSessionId
+              ? { checkoutSessionId: stripeCheckoutSessionId }
+              : {}),
+          }),
+        })
+        const syncData = (await syncRes.json()) as {
+          ok?: boolean
+          isActive?: boolean
+          reason?: string
+          subscriptionStatus?: string | null
+        }
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[SubscriptionGate] sync-from-stripe', syncData)
+        }
+        if (!cancelled && syncData.isActive) {
+          router.refresh()
+          return
+        }
+      } catch (e) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[SubscriptionGate] sync-from-stripe request failed', e)
+        }
+      }
+
+      while (!cancelled && attempts < maxAttempts) {
+        attempts += 1
+        try {
+          if (attempts % 8 === 0) {
+            await fetch('/api/billing/sync-from-stripe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...(stripeCheckoutSessionId
+                  ? { checkoutSessionId: stripeCheckoutSessionId }
+                  : {}),
+              }),
+            })
+          }
+          const res = await fetch('/api/billing/status')
+          if (res.ok) {
+            const data = (await res.json()) as { isActive?: boolean }
+            if (data.isActive) {
+              router.refresh()
+              return
+            }
+          }
+        } catch {
+          /* network blip — retry */
+        }
+        await new Promise((r) => setTimeout(r, 1500))
+      }
+      if (!cancelled) setPostCheckoutSyncExhausted(true)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [postPaymentReturn, hasActiveSubscription, router, stripeCheckoutSessionId])
+
+  const confirmingCheckout =
+    postPaymentReturn && !hasActiveSubscription && !postCheckoutSyncExhausted
+
+  const showPopup =
+    !hasActiveSubscription &&
+    !confirmingCheckout &&
+    pathname !== '/billing' &&
+    pathname !== '/dashboard/billing'
 
   const handleSubscribe = async (plan: 'monthly' | 'annual') => {
     setLoadingPlan(plan)
@@ -63,6 +150,18 @@ export function SubscriptionGate({
         }),
       })
       const data = await res.json()
+      if (res.status === 409 && data.code === 'ALREADY_SUBSCRIBED') {
+        const payload = data as { message?: string }
+        toast({
+          title: 'Already subscribed',
+          description:
+            typeof payload.message === 'string'
+              ? payload.message
+              : 'Your restaurant already has an active plan. Refreshing…',
+        })
+        router.refresh()
+        return
+      }
       if (!res.ok) throw new Error(data.error || 'Failed to start checkout')
       if (data.url) window.location.href = data.url
       else throw new Error('No checkout URL returned')
@@ -133,6 +232,18 @@ export function SubscriptionGate({
   return (
     <>
       {children}
+      {confirmingCheckout && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/35 backdrop-blur-[1px]">
+          <div className="mx-4 max-w-sm rounded-xl bg-white p-8 text-center shadow-xl">
+            <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-teal-600" />
+            <p className="font-medium text-slate-800">Confirming your subscription…</p>
+            <p className="mt-2 text-sm text-slate-500">
+              This usually takes a few seconds after payment. If nothing changes, refresh the page or open
+              Billing from the menu.
+            </p>
+          </div>
+        </div>
+      )}
       <Dialog open={showPopup}>
         <DialogContent
           className="max-w-3xl max-h-[90vh] overflow-y-auto [&>button]:hidden"
