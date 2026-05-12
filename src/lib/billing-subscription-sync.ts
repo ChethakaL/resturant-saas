@@ -1,6 +1,10 @@
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
 import type Stripe from 'stripe'
+import {
+  getStripeCouponIdsFromSubscription,
+  recordPromoRedemptionForRestaurant,
+} from '@/lib/promo-redemptions'
 
 function isRestaurantMainSubscription(sub: Stripe.Subscription, restaurantId: string): boolean {
   if (sub.metadata?.kind === 'branch_addon') return false
@@ -106,6 +110,11 @@ export async function reconcileRestaurantMainSubscriptions(params: {
     },
   })
 
+  await recordPromoRedemptionForRestaurant({
+    restaurantId,
+    stripeCouponIds: getStripeCouponIdsFromSubscription(primary),
+  })
+
   console.info('[billing] reconcile: synced restaurant from Stripe', {
     restaurantId,
     stripeSubscriptionId: primary.id,
@@ -121,4 +130,3 @@ export async function reconcileRestaurantMainSubscriptions(params: {
     canceledSubscriptionIds,
   }
 }
-

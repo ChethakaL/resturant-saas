@@ -20,6 +20,16 @@ function LoginPageContent() {
 
   useEffect(() => {
     if (searchParams.get('registered') === '1') setRegistered(true)
+    const checkoutSessionId = searchParams.get('session_id')?.trim()
+    if (searchParams.get('payment') === 'success' && checkoutSessionId) {
+      fetch('/api/auth/sync-signup-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checkoutSessionId }),
+      }).catch((error) => {
+        console.warn('Signup checkout sync failed', error)
+      })
+    }
   }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {

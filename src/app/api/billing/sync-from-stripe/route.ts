@@ -5,6 +5,10 @@ import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
 import { reconcileRestaurantMainSubscriptions } from '@/lib/billing-subscription-sync'
 import { isSubscriptionAccessActive } from '@/lib/subscription-status'
+import {
+  getStripeCouponIdsFromSubscription,
+  recordPromoRedemptionForRestaurant,
+} from '@/lib/promo-redemptions'
 
 export const dynamic = 'force-dynamic'
 
@@ -163,6 +167,15 @@ export async function POST(request: NextRequest) {
           subscriptionPriceId: firstItem?.price?.id ?? null,
           currentPeriodEnd: cpe ? new Date(cpe * 1000) : null,
         },
+      })
+
+      await recordPromoRedemptionForRestaurant({
+        restaurantId: restaurant.id,
+        promotionCode:
+          typeof cs.metadata?.promotionCode === 'string'
+            ? cs.metadata.promotionCode
+            : null,
+        stripeCouponIds: getStripeCouponIdsFromSubscription(subscription),
       })
 
       appliedFromCheckoutSession = true

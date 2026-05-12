@@ -43,6 +43,7 @@ export default function AdminPromoCodesPage() {
   const [promos, setPromos] = useState<PromoCode[]>([])
   const [loading, setLoading] = useState(true)
   const [createLoading, setCreateLoading] = useState(false)
+  const [syncingRedemptions, setSyncingRedemptions] = useState(false)
   const [code, setCode] = useState('')
   const [type, setType] = useState<'ONE_YEAR_FREE' | 'ONE_MONTH_FREE' | 'PERCENTAGE'>('ONE_YEAR_FREE')
   const [percentOff, setPercentOff] = useState('16.95')
@@ -157,13 +158,49 @@ export default function AdminPromoCodesPage() {
     }
   }
 
+  async function syncStripeRedemptions() {
+    setSyncingRedemptions(true)
+    try {
+      const res = await fetch('/api/admin/promo-codes/sync-redemptions', {
+        method: 'POST',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to sync redemptions')
+      }
+      await fetchPromos()
+      toast({
+        title: 'Stripe redemptions synced',
+        description: `${data.createdRedemptions ?? 0} new redemption${(data.createdRedemptions ?? 0) === 1 ? '' : 's'} recorded.`,
+      })
+    } catch (e) {
+      toast({
+        title: 'Sync failed',
+        description: e instanceof Error ? e.message : 'Failed to sync redemptions',
+        variant: 'destructive',
+      })
+    } finally {
+      setSyncingRedemptions(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Promo Codes</h1>
-        <p className="text-slate-600 mt-1">
-          Create promo codes for 1 year free or 1 month free. Share codes with restaurants to give them discounts.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Promo Codes</h1>
+          <p className="text-slate-600 mt-1">
+            Create promo codes for 1 year free or 1 month free. Share codes with restaurants to give them discounts.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={syncStripeRedemptions}
+          disabled={syncingRedemptions}
+        >
+          {syncingRedemptions && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+          Sync Stripe redemptions
+        </Button>
       </div>
 
       <Card>
