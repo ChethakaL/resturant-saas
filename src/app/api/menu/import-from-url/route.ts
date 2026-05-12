@@ -10,6 +10,19 @@ const MAX_TEXT_LENGTH = 80_000
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
+function isForbiddenUrlFetch(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /403|Forbidden/i.test(message)
+}
+
+function isAiModelUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  const status = typeof error === 'object' && error !== null && 'status' in error
+    ? (error as { status?: unknown }).status
+    : undefined
+  return status === 503 || /503|Service Unavailable|high demand|try again later/i.test(message)
+}
+
 function stripHtmlToText(html: string): string {
   const withoutScriptStyle = html.replace(
     /<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi,
@@ -293,6 +306,20 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Import from URL error:', error)
+    if (isForbiddenUrlFetch(error)) {
+      return NextResponse.json(
+        { error: 'AI is forbidden to access this URL' },
+        { status: 403 }
+      )
+    }
+
+    if (isAiModelUnavailable(error)) {
+      return NextResponse.json(
+        { error: 'AI model is not available, Please Try Again Later' },
+        { status: 503 }
+      )
+    }
+
     return NextResponse.json(
       {
         error: 'Failed to import menu from URL',

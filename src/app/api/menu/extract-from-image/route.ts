@@ -28,6 +28,14 @@ interface ExtractedMenuItem {
   ingredients?: ParsedIngredient[]
 }
 
+function isAiModelUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  const status = typeof error === 'object' && error !== null && 'status' in error
+    ? (error as { status?: unknown }).status
+    : undefined
+  return status === 503 || /503|Service Unavailable|high demand|try again later/i.test(message)
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -63,25 +71,19 @@ export async function POST(request: NextRequest) {
       model: 'gemini-2.5-flash',
     })
 
-    const prompt = `You are analyzing a restaurant menu image. Extract ALL menu items visible in this image.
+    const prompt = `You are analyzing a restaurant menu image. Extract every menu item visible in this image.
 
-For each menu item, provide complete recipe information:
-1. **name**: The exact name of the dish
-2. **description**: A brief description (if visible on menu, otherwise create a compelling one based on the name)
-3. **categoryName**: Best-fit category name (e.g., "Drinks", "Main Dishes", "Desserts", "Sides", "Appetizers")
-4. **price**: The price in numbers only (if visible, otherwise estimate a reasonable price between 1000-5000 IQD based on the type of dish)
-5. **calories**: Estimate calories if not shown
-6. **tags**: Array of dietary tags like ["vegetarian", "spicy", "halal", "seafood", "vegan", "gluten-free", etc.]
-7. **recipeSteps**: Array of step-by-step cooking instructions (create logical steps based on the dish name)
-8. **recipeTips**: Array of helpful cooking tips for this dish
-9. **prepTime**: Estimated preparation time (e.g., "15 min")
-10. **cookTime**: Estimated cooking time (e.g., "30 min")
-11. **recipeYield**: Number of servings this recipe makes (default to 1 for single serving)
-12. **ingredients**: Array of ingredients needed with {name, quantity, unit, pieceCount}
-    - Use appropriate units: kg for meats/vegetables, g for small amounts, cup for rice/lentils, tsp/tbsp for spices, L for liquids
-    - pieceCount for countable items like "2 onions", otherwise null
+Return ONLY a valid JSON array. No markdown. No comments. No trailing text.
 
-Return ONLY a valid JSON array in this exact format, no additional text:
+For each item include only these fields:
+- name: exact dish/drink name
+- description: visible description if present; otherwise short plain description from name
+- categoryName: visible category or best-fit category
+- price: visible price as a number only. Do not convert currency. If no price is visible, use 0
+- calories: visible calories as a number, otherwise null
+- tags: short dietary/category tags only when obvious, otherwise []
+
+Use this exact format:
 [
   {
     "name": "Grilled Chicken",
@@ -89,27 +91,15 @@ Return ONLY a valid JSON array in this exact format, no additional text:
     "categoryName": "Main Dishes",
     "price": 2500,
     "calories": 350,
-    "tags": ["protein-rich", "halal"],
-    "recipeSteps": ["Marinate chicken with herbs and spices for 30 minutes", "Preheat grill to medium-high heat", "Grill chicken for 6-7 minutes per side until cooked through", "Let rest for 5 minutes before serving"],
-    "recipeTips": ["Don't overcook to keep the chicken juicy", "Let the chicken rest before slicing to retain moisture"],
-    "prepTime": "15 min",
-    "cookTime": "20 min",
-    "recipeYield": 1,
-    "ingredients": [
-      {"name": "chicken breast", "quantity": 0.2, "unit": "kg", "pieceCount": null},
-      {"name": "olive oil", "quantity": 2, "unit": "tbsp", "pieceCount": null},
-      {"name": "garlic", "quantity": 3, "unit": "g", "pieceCount": 2},
-      {"name": "mixed herbs", "quantity": 1, "unit": "tsp", "pieceCount": null}
-    ]
+    "tags": ["protein-rich", "halal"]
   }
 ]
 
 IMPORTANT:
 - Extract ALL items from the menu, not just a few
-- If prices are in a different currency, convert to IQD
-- Be thorough and extract every single menu item visible
-- Create realistic recipe steps, tips, and ingredient lists for each dish
-- Return valid JSON only, no markdown, no explanations`
+- Preserve menu prices exactly as numbers
+- Do not invent recipes, ingredients, prep times, or cooking tips
+- If image is dense, prioritize complete names and prices over descriptions`
 
     const result = await model.generateContent([
       {
@@ -122,7 +112,7 @@ IMPORTANT:
     ])
 
     const response = result.response.text()
-    console.log('Raw Gemini response:', response)
+    console.log(`Gemini menu image extraction response length: ${response.length}`)
 
     // Clean the response to extract JSON
     let jsonText = response.trim()
@@ -241,6 +231,13 @@ IMPORTANT:
     })
   } catch (error) {
     console.error('Error extracting menu items:', error)
+    if (isAiModelUnavailable(error)) {
+      return NextResponse.json(
+        { error: 'AI model is not available, Please Try Again Later' },
+        { status: 503 }
+      )
+    }
+
     return NextResponse.json(
       {
         error: 'Failed to extract menu items',
