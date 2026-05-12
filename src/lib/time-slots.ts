@@ -4,7 +4,7 @@
  * Slot names are fixed: breakfast / day / evening / night.
  * The *boundaries* are configurable per restaurant (stored in settings.slotTimes).
  *
- * Default: breakfast 6–10, day 10–14, evening 14–18, night 18–6.
+ * Default: breakfast 6–10, day 10–19, evening 19–24, night 0–6.
  */
 
 export type SlotName = 'breakfast' | 'day' | 'evening' | 'night'
@@ -25,8 +25,8 @@ export interface SlotTimes {
 
 export const DEFAULT_SLOT_TIMES: SlotTimes = {
   breakfast: { start: 6, end: 10 },
-  day: { start: 10, end: 14 },
-  evening: { start: 14, end: 18 },
+  day: { start: 10, end: 19 },
+  evening: { start: 19, end: 24 },
 }
 
 /** Parse slot times from JSON stored in restaurant settings. Falls back to defaults. */
@@ -112,8 +112,8 @@ export function mapSlotToGreetingContext(slot: SlotName, hour: number): Greeting
   // Clock-based guardrails win for greeting labels to avoid mislabeling when
   // custom slot windows overlap (e.g. breakfast 8-14 and day 13-24).
   if (hour >= 5 && hour < 11) return 'morning'
-  if (hour >= 11 && hour < 16) return 'lunch'
-  if (hour >= 16 && hour < 24) return 'evening'
+  if (hour >= 11 && hour < 19) return 'lunch'
+  if (hour >= 19 && hour < 24) return 'evening'
 
   if (slot === 'breakfast') return 'morning'
   if (slot === 'day') return 'lunch'

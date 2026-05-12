@@ -76,6 +76,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
     const [qrModalOpen, setQrModalOpen] = useState(false)
     const [qrTableNumber, setQrTableNumber] = useState<string | null>(null)
     const [deletingTableId, setDeletingTableId] = useState<string | null>(null)
+    const [clearingTableId, setClearingTableId] = useState<string | null>(null)
     const { toast } = useToast()
 
     const fetchBranches = useCallback(async () => {
@@ -192,6 +193,41 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
             })
         } finally {
             setDeletingTableId(null)
+        }
+    }
+
+    const handleClearTable = async (table: TableData) => {
+        setClearingTableId(table.id)
+        try {
+            const res = await fetch(`/api/tables/${table.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'AVAILABLE' }),
+            })
+            const data = await res.json().catch(() => null)
+            if (!res.ok) {
+                toast({
+                    title: 'Clear failed',
+                    description: data?.error || 'Failed to clear table',
+                    variant: 'destructive',
+                })
+                return
+            }
+
+            setTables((prev) => prev.map((t) => (t.id === table.id ? { ...t, status: 'AVAILABLE' } : t)))
+            void fetchTables()
+            toast({
+                title: 'Table cleared',
+                description: `Table ${table.number} is now available.`,
+            })
+        } catch {
+            toast({
+                title: 'Clear failed',
+                description: 'Failed to clear table',
+                variant: 'destructive',
+            })
+        } finally {
+            setClearingTableId(null)
         }
     }
 
@@ -354,6 +390,21 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                                                                 }}
                                                             >
                                                                 <QrCode className="h-4 w-4" />
+                                                            </button>
+                                                        )}
+                                                        {table.status === 'OCCUPIED' && (
+                                                            <button
+                                                                type="button"
+                                                                title="Clear occupied table"
+                                                                disabled={clearingTableId === table.id}
+                                                                className="px-2 py-1 rounded-md bg-green-50 text-xs font-semibold text-green-700 hover:bg-green-100 disabled:text-slate-300 disabled:bg-slate-50"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault()
+                                                                    e.stopPropagation()
+                                                                    void handleClearTable(table)
+                                                                }}
+                                                            >
+                                                                {clearingTableId === table.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Clear'}
                                                             </button>
                                                         )}
                                                         <button

@@ -5,6 +5,69 @@ import { NextResponse } from 'next/server'
 import { sendRestaurantOrderWhatsApp } from '@/lib/whatsapp-orders'
 import { buildRestaurantOrderWhatsAppNumber } from '@/lib/restaurant-whatsapp'
 
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const restaurantId = searchParams.get('restaurantId') || undefined
+    const tableNumber = searchParams.get('tableNumber') || searchParams.get('table') || undefined
+
+    if (!restaurantId || !tableNumber) {
+      return NextResponse.json({ error: 'Restaurant and table are required' }, { status: 400 })
+    }
+
+    const table = await prisma.table.findUnique({
+      where: { restaurantId_number: { restaurantId, number: tableNumber } },
+      select: { id: true, number: true },
+    })
+
+    if (!table) {
+      return NextResponse.json({ order: null })
+    }
+
+    const orders = await prisma.sale.findMany({
+      where: {
+        restaurantId,
+        tableId: table.id,
+        status: { in: ['PENDING', 'PREPARING', 'READY'] },
+      },
+      include: {
+        items: {
+          include: {
+            menuItem: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    if (orders.length === 0) {
+      return NextResponse.json({ order: null })
+    }
+
+    return NextResponse.json({
+      order: {
+        orderNumber: orders.map((order) => order.orderNumber).join(', '),
+        tableNumber: table.number,
+        total: orders.reduce((sum, order) => sum + order.total, 0),
+        lines: orders.flatMap((order) =>
+          order.items.map((item) => ({
+            id: item.id,
+            name: item.menuItem.name,
+            quantity: item.quantity,
+            total: item.price * item.quantity,
+          }))
+        ),
+      },
+    })
+  } catch (error: any) {
+    console.error('Error fetching public table order:', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to fetch table order' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)

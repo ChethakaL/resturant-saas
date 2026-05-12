@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { notFound } from 'next/navigation'
+import { TableOrderActions, TableStatusActions } from './TableDetailActions'
 
 async function getTable(tableId: string, restaurantId: string) {
   const table = await prisma.table.findFirst({
@@ -106,6 +107,7 @@ export default async function TableDetailPage({
           <p className="text-slate-500 mt-1">Capacity: {table.capacity} seats</p>
         </div>
         <div className="flex gap-2 items-center">
+          <TableStatusActions tableId={table.id} status={table.status} />
           <span className={`px-4 py-2 rounded-lg font-semibold ${getStatusColor(table.status)}`}>
             {table.status}
           </span>
@@ -136,6 +138,7 @@ export default async function TableDetailPage({
                       <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getOrderStatusColor(order.status)}`}>
                         {order.status}
                       </span>
+                      <TableOrderActions orderId={order.id} status={order.status} />
                       <Button size="sm" asChild>
                         <Link href={`/orders/${order.id}`}>View</Link>
                       </Button>

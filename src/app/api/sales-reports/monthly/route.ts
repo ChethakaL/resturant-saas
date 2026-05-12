@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { revalidatePath } from 'next/cache'
+import { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import {
   formatSalesPdfPeriod,
   getCurrentSalesPdfPeriod,
   getMonthlySalesPdfRecords,
+  deleteMonthlySalesPdfRecord,
   upsertMonthlySalesPdfRecord,
 } from '@/lib/monthly-sales-pdf'
 import {
@@ -21,6 +23,7 @@ import {
 } from '@/lib/monthly-sales-import'
 import {
   getCurrentMonthlyFinancialImport,
+  deleteMonthlyFinancialImport,
   listMonthlyFinancialImports,
   upsertMonthlyFinancialImport,
 } from '@/lib/monthly-financial-import-store'
@@ -226,7 +229,7 @@ export async function POST(request: NextRequest) {
 
     await prisma.restaurant.update({
       where: { id: session.user.restaurantId },
-      data: { settings: withPdfSettings },
+      data: { settings: withPdfSettings as Prisma.InputJsonObject },
     })
 
     revalidatePath('/dashboard')
@@ -259,6 +262,72 @@ export async function POST(request: NextRequest) {
         error: 'Failed to upload monthly sales PDF',
         details: error instanceof Error ? error.message : 'Unknown error',
       },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.restaurantId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const url = new URL(request.url)
+    const year = Number(url.searchParams.get('year'))
+    const month = Number(url.searchParams.get('month'))
+    if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+      return NextResponse.json({ error: 'Invalid year.' }, { status: 400 })
+    }
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      return NextResponse.json({ error: 'Invalid month.' }, { status: 400 })
+    }
+
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: session.user.restaurantId },
+      select: { settings: true },
+    })
+    const currentSettings = (restaurant?.settings as Record<string, unknown>) || {}
+    const upload = getMonthlySalesPdfRecords(currentSettings).find(
+      (item) => item.year === year && item.month === month
+    )
+
+    await deleteMonthlyFinancialImport(session.user.restaurantId, year, month)
+
+    const nextSettings = deleteMonthlySalesPdfRecord(currentSettings, year, month)
+    await prisma.restaurant.update({
+      where: { id: session.user.restaurantId },
+      data: { settings: nextSettings as Prisma.InputJsonObject },
+    })
+
+    if (upload?.storageKey && process.env.AWS_S3_BUCKET_NAME) {
+      try {
+        await getS3Client().send(
+          new DeleteObjectCommand({
+            Bucket: process.env.AWS_S3_BUCKET_NAME,
+            Key: upload.storageKey,
+          })
+        )
+      } catch (error) {
+        console.warn('Monthly sales PDF metadata deleted, but S3 delete failed:', error)
+      }
+    }
+
+    revalidatePath('/dashboard')
+    revalidatePath('/dashboard/analytics')
+    revalidatePath('/dashboard/profit-loss')
+    revalidatePath('/dashboard/menu')
+    revalidatePath('/')
+
+    return NextResponse.json({
+      success: true,
+      deleted: { year, month, periodLabel: formatSalesPdfPeriod(year, month) },
+    })
+  } catch (error) {
+    console.error('Failed to delete monthly sales import:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete monthly sales import' },
       { status: 500 }
     )
   }

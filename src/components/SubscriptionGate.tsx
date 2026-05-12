@@ -52,6 +52,40 @@ export function SubscriptionGate({
   const [promoApplied, setPromoApplied] = useState(false)
   const [applyingPromo, setApplyingPromo] = useState(false)
   const [discountPercentage, setDiscountPercentage] = useState<number>(0)
+  const [silentSyncing, setSilentSyncing] = useState(false)
+
+  useEffect(() => {
+    if (hasActiveSubscription || postPaymentReturn) return
+    let cancelled = false
+
+    ;(async () => {
+      setSilentSyncing(true)
+      try {
+        const res = await fetch('/api/billing/sync-from-stripe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+        if (!cancelled && res.ok) {
+          const data = (await res.json()) as { isActive?: boolean }
+          if (data.isActive) {
+            router.refresh()
+            return
+          }
+        }
+      } catch (e) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[SubscriptionGate] silent sync failed', e)
+        }
+      } finally {
+        if (!cancelled) setSilentSyncing(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasActiveSubscription, postPaymentReturn, router])
 
   useEffect(() => {
     if (!postPaymentReturn || hasActiveSubscription) {
@@ -134,6 +168,7 @@ export function SubscriptionGate({
   const showPopup =
     !hasActiveSubscription &&
     !confirmingCheckout &&
+    !silentSyncing &&
     pathname !== '/billing' &&
     pathname !== '/dashboard/billing'
 

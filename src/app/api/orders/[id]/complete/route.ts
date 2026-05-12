@@ -18,12 +18,12 @@ export async function POST(
       : params
     const orderId = resolvedParams.id
 
-    // Verify order belongs to restaurant and is pending
+    // Verify order belongs to restaurant and is still active
     const existing = await prisma.sale.findFirst({
       where: {
         id: orderId,
         restaurantId: session.user.restaurantId,
-        status: 'PENDING',
+        status: { in: ['PENDING', 'PREPARING', 'READY'] },
       },
       include: {
         table: true,
@@ -31,20 +31,12 @@ export async function POST(
     })
 
     if (!existing) {
-      return NextResponse.json({ error: 'Order not found or not pending' }, { status: 404 })
+      return NextResponse.json({ error: 'Order not found or not active' }, { status: 404 })
     }
 
     const order = await prisma.$transaction(async (tx) => {
-      // Update table status if assigned
-      if (existing.tableId) {
-        await tx.table.update({
-          where: { id: existing.tableId },
-          data: { status: 'AVAILABLE' },
-        })
-      }
-
       // Update order status to COMPLETED
-      return tx.sale.update({
+      const completed = await tx.sale.update({
         where: { id: orderId },
         data: {
           status: 'COMPLETED',
@@ -60,6 +52,23 @@ export async function POST(
           waiter: true,
         },
       })
+
+      if (existing.tableId) {
+        const remainingActiveOrders = await tx.sale.count({
+          where: {
+            tableId: existing.tableId,
+            restaurantId: session.user.restaurantId,
+            status: { in: ['PENDING', 'PREPARING', 'READY'] },
+          },
+        })
+
+        await tx.table.update({
+          where: { id: existing.tableId },
+          data: { status: remainingActiveOrders === 0 ? 'AVAILABLE' : 'OCCUPIED' },
+        })
+      }
+
+      return completed
     })
 
     return NextResponse.json({ success: true, order })

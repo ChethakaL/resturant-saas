@@ -10,15 +10,15 @@ export const dynamic = 'force-dynamic'
 
 type Slot = 'breakfast' | 'day' | 'evening' | 'night'
 
-/** Get time slot for a date in tz: breakfast 6–10, day 10–14, evening 14–18, night 18–6. */
+/** Get time slot for a date in tz: breakfast 6–10, day 10–19, evening 19–24, night 0–6. */
 function getTimeSlotForDate(date: Date, tz: string): Slot {
   const hour = parseInt(
     new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: tz }).format(date),
     10
   )
   if (hour >= 6 && hour < 10) return 'breakfast'
-  if (hour >= 10 && hour < 14) return 'day'
-  if (hour >= 14 && hour < 18) return 'evening'
+  if (hour >= 10 && hour < 19) return 'day'
+  if (hour >= 19 && hour < 24) return 'evening'
   return 'night'
 }
 

@@ -71,3 +71,17 @@ export function upsertMonthlySalesPdfRecord(
     monthlySalesPdfUploads: [nextRecord, ...records].slice(0, 24),
   }
 }
+
+export function deleteMonthlySalesPdfRecord(
+  settings: Record<string, unknown> | null | undefined,
+  year: number,
+  month: number
+) {
+  const currentSettings = settings || {}
+  return {
+    ...currentSettings,
+    monthlySalesPdfUploads: getMonthlySalesPdfRecords(currentSettings).filter(
+      (item) => !(item.year === year && item.month === month)
+    ),
+  }
+}

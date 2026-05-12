@@ -128,3 +128,9 @@ export async function upsertMonthlyFinancialImport(
     },
   })
 }
+
+export async function deleteMonthlyFinancialImport(restaurantId: string, year: number, month: number) {
+  await prisma.monthlyFinancialImport.deleteMany({
+    where: { restaurantId, year, month },
+  })
+}

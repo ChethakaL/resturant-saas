@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import Snowfall from 'react-snowfall'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,13 +18,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Star, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3, ShoppingBag, Minus, Plus, Clock3, ChefHat, GlassWater, Handshake, IceCreamCone, Instagram, Facebook, MessageCircle } from 'lucide-react'
+import { Star, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3, ShoppingBag, Minus, Plus, Clock3, ChefHat, GlassWater, Handshake, IceCreamCone, Instagram, Facebook, MessageCircle, QrCode } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
 import { MenuItemCard } from './MenuItemCard'
 import { MoodSelector } from './MoodSelector'
 import { getOrCreateGuestId, getStoredLastOrder, setStoredLastOrder } from './MenuPersonalizationWrapper'
+import { TableQrScanner } from './TableQrScanner'
+import { extractTableNumberFromQrText } from '@/lib/table-qr-parse'
 import { getAllVariants, getVariant } from '@/lib/experiments'
 import { logMenuEvent } from '@/lib/menu-events'
 import { googleFontUrl, resolveGoogleFont } from '@/lib/google-fonts'
@@ -145,6 +147,20 @@ interface MenuItemTranslation {
   carbs?: number | null
 }
 
+type SubmittedOrderLine = {
+  id: string
+  name: string
+  quantity: number
+  total: number
+}
+
+type SubmittedOrder = {
+  orderNumber?: string
+  tableNumber: string | null
+  lines: SubmittedOrderLine[]
+  total: number
+}
+
 type TranslationCache = Partial<Record<LanguageCode, Record<string, MenuItemTranslation>>>
 
 const LANGUAGE_OPTIONS_ALL: { value: LanguageCode; label: string }[] = [
@@ -170,7 +186,7 @@ function getAutoContextForTimeZone(timeZone?: string | null, preferBrowserTimeZo
     )
 
     if (hour >= 6 && hour < 11) return 'morning'
-    if (hour >= 11 && hour < 16) return 'lunch'
+    if (hour >= 11 && hour < 19) return 'lunch'
     return 'evening'
   } catch {
     return 'morning'
@@ -179,7 +195,7 @@ function getAutoContextForTimeZone(timeZone?: string | null, preferBrowserTimeZo
 
 function getTimeContextForHour(hour: number): 'morning' | 'lunch' | 'evening' {
   if (hour >= 6 && hour < 11) return 'morning'
-  if (hour >= 11 && hour < 16) return 'lunch'
+  if (hour >= 11 && hour < 19) return 'lunch'
   return 'evening'
 }
 
@@ -638,12 +654,30 @@ const engineCopyMap: Record<
     chefSelectionBadge: string
     removeLabel: string
     tableLabel: string
+    fixedTableLabel: string
+    showOrderToWaiter: string
+    orderButtonLabel: string
+    confirmAddedItems: string
+    currentTableOrder: string
+    newItemsLabel: string
+    addMoreItems: string
+    orderReadyTitle: string
     selectTableLabel: string
     changeLabel: string
     optionalLabel: string
     selectYourTableLabel: string
     tableHelperLabel: string
     noTableLabel: string
+    scanQrTitle: string
+    scanQrDescription: string
+    scanQrStep1: string
+    scanQrStep2: string
+    scanQrStep3: string
+    scanQrStartCamera: string
+    scanQrStopCamera: string
+    scanQrAlternativeTitle: string
+    scanQrInvalidQr: string
+    scanQrTableApplied: string
     totalLabel: string
     placingLabel: string
   }
@@ -670,12 +704,31 @@ const engineCopyMap: Record<
     chefSelectionBadge: "CHEF'S CHOICE",
     removeLabel: 'Remove',
     tableLabel: 'Table',
+    fixedTableLabel: "You're at table",
+    showOrderToWaiter: 'Show my order to waiter',
+    orderButtonLabel: 'Order',
+    confirmAddedItems: 'Confirm added items',
+    currentTableOrder: 'Current table order',
+    newItemsLabel: 'New items to add',
+    addMoreItems: 'Add more items',
+    orderReadyTitle: 'Show this order to your waiter',
     selectTableLabel: 'Select table',
     changeLabel: 'Change',
     optionalLabel: 'Optional',
     selectYourTableLabel: 'Select your table',
     tableHelperLabel: 'Tap your table on the layout, or choose not to select.',
     noTableLabel: "I'm not at a table",
+    scanQrTitle: 'Scan your table QR code',
+    scanQrDescription:
+      'Use Scan table QR below, then point your camera at the code on the table you’re sitting at. Your table updates automatically when it’s read.',
+    scanQrStep1: "Open your phone's Camera app.",
+    scanQrStep2: 'Aim at the QR sticker on your table until the camera reads it.',
+    scanQrStep3: 'Tap the link or banner that appears. Your browser will return here with the correct table.',
+    scanQrStartCamera: 'Scan table QR',
+    scanQrStopCamera: 'Stop camera',
+    scanQrAlternativeTitle: 'Or use your phone’s Camera app',
+    scanQrInvalidQr: 'That code is not a table link for this menu.',
+    scanQrTableApplied: 'Table set',
     totalLabel: 'Total',
     placingLabel: 'Placing…',
   },
@@ -701,12 +754,31 @@ const engineCopyMap: Record<
     chefSelectionBadge: 'اختيار الشيف',
     removeLabel: 'إزالة',
     tableLabel: 'الطاولة',
+    fixedTableLabel: 'أنت على الطاولة',
+    showOrderToWaiter: 'اعرض طلبك للنادل',
+    orderButtonLabel: 'اطلب',
+    confirmAddedItems: 'تأكيد الأصناف الجديدة',
+    currentTableOrder: 'طلب الطاولة الحالي',
+    newItemsLabel: 'أصناف جديدة للإضافة',
+    addMoreItems: 'إضافة أصناف أخرى',
+    orderReadyTitle: 'اعرض هذا الطلب للنادل',
     selectTableLabel: 'اختر الطاولة',
     changeLabel: 'تغيير',
     optionalLabel: 'اختياري',
     selectYourTableLabel: 'اختر طاولتك',
     tableHelperLabel: 'اضغط على طاولتك في المخطط أو اختر عدم التحديد.',
     noTableLabel: 'لست على طاولة',
+    scanQrTitle: 'امسح رمز QR الموجود على طاولتك',
+    scanQrDescription:
+      'استخدم «مسح رمز الطاولة» أدناه، ثم وجّه الكاميرا نحو الرمز على الطاولة التي تجلس عندها. يُحدَّد الطاولة تلقائياً عند قراءة الرمز.',
+    scanQrStep1: 'افتح تطبيق الكاميرا في هاتفك.',
+    scanQrStep2: 'وجّه الكاميرا نحو ملصق QR على الطاولة حتى يُقرأ الرمز.',
+    scanQrStep3: 'اضغط على الرابط أو التنبيه الذي يظهر. سيعود المتصفح هنا مع رقم الطاولة الصحيح.',
+    scanQrStartCamera: 'مسح رمز الطاولة',
+    scanQrStopCamera: 'إيقاف الكاميرا',
+    scanQrAlternativeTitle: 'أو استخدم تطبيق الكاميرا',
+    scanQrInvalidQr: 'هذا الرمز ليس رابط طاولة لهذه القائمة.',
+    scanQrTableApplied: 'تم تعيين الطاولة',
     totalLabel: 'الإجمالي',
     placingLabel: 'جارٍ الإرسال…',
   },
@@ -732,12 +804,31 @@ const engineCopyMap: Record<
     chefSelectionBadge: 'اختيار الشيف',
     removeLabel: 'إزالة',
     tableLabel: 'الطاولة',
+    fixedTableLabel: 'أنت على الطاولة',
+    showOrderToWaiter: 'اعرض طلبك للنادل',
+    orderButtonLabel: 'اطلب',
+    confirmAddedItems: 'تأكيد الأصناف الجديدة',
+    currentTableOrder: 'طلب الطاولة الحالي',
+    newItemsLabel: 'أصناف جديدة للإضافة',
+    addMoreItems: 'إضافة أصناف أخرى',
+    orderReadyTitle: 'اعرض هذا الطلب للنادل',
     selectTableLabel: 'اختر الطاولة',
     changeLabel: 'تغيير',
     optionalLabel: 'اختياري',
     selectYourTableLabel: 'اختر طاولتك',
     tableHelperLabel: 'اضغط على طاولتك في المخطط أو اختر عدم التحديد.',
     noTableLabel: 'لست على طاولة',
+    scanQrTitle: 'امسح رمز QR الموجود على طاولتك',
+    scanQrDescription:
+      'استخدم «مسح رمز الطاولة» أدناه، ثم وجّه الكاميرا نحو الرمز على الطاولة التي تجلس عندها. يُحدَّد الطاولة تلقائياً عند قراءة الرمز.',
+    scanQrStep1: 'افتح تطبيق الكاميرا في هاتفك.',
+    scanQrStep2: 'وجّه الكاميرا نحو ملصق QR على الطاولة حتى يُقرأ الرمز.',
+    scanQrStep3: 'اضغط على الرابط أو التنبيه الذي يظهر. سيعود المتصفح هنا مع رقم الطاولة الصحيح.',
+    scanQrStartCamera: 'مسح رمز الطاولة',
+    scanQrStopCamera: 'إيقاف الكاميرا',
+    scanQrAlternativeTitle: 'أو استخدم تطبيق الكاميرا',
+    scanQrInvalidQr: 'هذا الرمز ليس رابط طاولة لهذه القائمة.',
+    scanQrTableApplied: 'تم تعيين الطاولة',
     totalLabel: 'الإجمالي',
     placingLabel: 'جارٍ الإرسال…',
   },
@@ -763,12 +854,31 @@ const engineCopyMap: Record<
     chefSelectionBadge: "CHEF'S CHOICE",
     removeLabel: 'لابردن',
     tableLabel: 'مێز',
+    fixedTableLabel: 'تۆ لەسەر مێزی',
+    showOrderToWaiter: 'داواکارییەکەت پیشانی گارسۆن بدە',
+    orderButtonLabel: 'داواکاری',
+    confirmAddedItems: 'زیادکراوەکان پشتڕاست بکەوە',
+    currentTableOrder: 'داواکاریی ئێستای مێز',
+    newItemsLabel: 'خواردنی نوێ بۆ زیادکردن',
+    addMoreItems: 'خواردنی زیاتر زیاد بکە',
+    orderReadyTitle: 'ئەم داواکارییە پیشانی گارسۆن بدە',
     selectTableLabel: 'مێز هەڵبژێرە',
     changeLabel: 'گۆڕین',
     optionalLabel: 'ئیختیاری',
     selectYourTableLabel: 'مێزەکەت هەڵبژێرە',
     tableHelperLabel: 'لە نەخشەکەدا لەسەر مێزەکەت بکە یان هەڵنەبژێرە.',
     noTableLabel: 'لەسەر مێزێک نیم',
+    scanQrTitle: 'QR ـی سەر مێزەکەت سکان بکە',
+    scanQrDescription:
+      '«سکانی QR ـی مێز» لە خوارەوە بەکاربهێنە، پاشان کامێراکە بەرەو QR ـی سەر ئەو مێزەی کە تێیدا نیشتەویت بگرە. مێزەکەت خۆکار نوێ دەبێتەوە کاتێک دەخوێنرێتەوە.',
+    scanQrStep1: 'کامێرای مۆبایلەکەت بکەرەوە.',
+    scanQrStep2: 'کامێراکە بەرەو QR ـی سەر مێزەکەت بگرە تا بخوێنرێتەوە.',
+    scanQrStep3: 'لەسەر بەستەر یان ئاگادارییەکە کرتە بکە. وێبگە دەگەڕێتەوە بۆ ئێرە لەگەڵ ژمارەی مێزەکەت.',
+    scanQrStartCamera: 'سکانی QR ـی مێز',
+    scanQrStopCamera: 'وەستاندنی کامێرا',
+    scanQrAlternativeTitle: 'یان کامێرای مۆبایل بەکاربهێنە',
+    scanQrInvalidQr: 'ئەم کۆدە بەستەری مێز نییە بۆ ئەم مێنیوە.',
+    scanQrTableApplied: 'مێز دامەزرا',
     totalLabel: 'کۆی گشتی',
     placingLabel: 'دادەنرێت…',
   },
@@ -894,6 +1004,8 @@ export default function SmartMenu({
   }
 
   const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const languageStorageKey = `smart-menu-language:${restaurantId}:${pathname || '/'}`
 
   // Compute the current time context early so category time-bounding can use it
@@ -942,12 +1054,18 @@ export default function SmartMenu({
   })
   const [cart, setCart] = useState<Record<string, number>>({})
   const [basketOpen, setBasketOpen] = useState(false)
-  const [tablePickerOpen, setTablePickerOpen] = useState(false)
-  const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(tableNumber ?? null)
+  const [tableQrCameraActive, setTableQrCameraActive] = useState(false)
+  const qrTableNumber = tableNumber?.trim() || null
+  const hasQrTable = Boolean(qrTableNumber)
   const [liveTables, setLiveTables] = useState(() => tables ?? [])
   const pendingSelfOrderTableRef = useRef<string | null>(null)
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
   const [orderSuccessMessage, setOrderSuccessMessage] = useState<string | null>(null)
+  const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null)
+  const [showSubmittedOrder, setShowSubmittedOrder] = useState(false)
+  const submittedOrderStorageKey = hasQrTable
+    ? `iserve_table_order:${restaurantId}:${qrTableNumber}`
+    : null
   const [lastOrder, setLastOrder] = useState<{ itemIds: string[]; names: string[] } | null>(null)
   const [nextOrderSuggestion, setNextOrderSuggestion] = useState<{ itemId: string; name: string; message: string } | null>(null)
   const [nextOrderSuggestionLoading, setNextOrderSuggestionLoading] = useState(false)
@@ -1020,8 +1138,49 @@ export default function SmartMenu({
   }, [languageStorageKey, language])
 
   useEffect(() => {
-    setSelectedTableNumber(tableNumber ?? null)
-  }, [tableNumber])
+    if (!submittedOrderStorageKey || !qrTableNumber) return
+
+    try {
+      const stored = window.localStorage.getItem(submittedOrderStorageKey)
+      if (stored) {
+        setSubmittedOrder(JSON.parse(stored) as SubmittedOrder)
+      }
+    } catch {
+      // Ignore bad local order snapshots; live order fetch below is source of truth.
+    }
+
+    let cancelled = false
+    const refreshSubmittedOrder = () => {
+      fetch(`/api/public/orders?restaurantId=${encodeURIComponent(restaurantId)}&tableNumber=${encodeURIComponent(qrTableNumber)}`)
+        .then(async (response) => {
+          if (!response.ok) return null
+          return response.json()
+        })
+        .then((data) => {
+          if (cancelled) return
+          const liveOrder = data?.order as SubmittedOrder | null | undefined
+          if (liveOrder) {
+            setSubmittedOrder(liveOrder)
+            window.localStorage.setItem(submittedOrderStorageKey, JSON.stringify(liveOrder))
+          } else {
+            setSubmittedOrder(null)
+            setShowSubmittedOrder(false)
+            window.localStorage.removeItem(submittedOrderStorageKey)
+          }
+        })
+        .catch(() => {
+          // Keep local snapshot if live fetch fails.
+        })
+    }
+
+    refreshSubmittedOrder()
+    const interval = window.setInterval(refreshSubmittedOrder, 15000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [qrTableNumber, restaurantId, submittedOrderStorageKey])
 
   useEffect(() => {
     setLiveTables(tables ?? [])
@@ -1089,29 +1248,6 @@ export default function SmartMenu({
     }
   }, [refreshTables, tables])
 
-  useEffect(() => {
-    if (!selectedTableNumber) return
-
-    const selectedTable = liveTables.find((table) => table.number === selectedTableNumber)
-    if (selectedTable && selectedTable.status && selectedTable.status !== 'AVAILABLE') {
-      if (pendingSelfOrderTableRef.current === selectedTable.number) {
-        pendingSelfOrderTableRef.current = null
-        return
-      }
-      setSelectedTableNumber(null)
-      toast({
-        title: 'Table no longer available',
-        description: `Table ${selectedTable.number} was updated by staff. Please choose another table.`,
-        variant: 'destructive',
-      })
-    }
-  }, [liveTables, selectedTableNumber, toast])
-
-  const selectableTables = useMemo(
-    () => liveTables.filter((table) => (table.status ?? 'AVAILABLE') === 'AVAILABLE'),
-    [liveTables]
-  )
-
   const hideImages = !forceShowImages && getVariant('photo_visibility') === 'hide'
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)
@@ -1124,6 +1260,7 @@ export default function SmartMenu({
       [itemId]: (prev[itemId] ?? 0) + 1,
     }))
     setOrderSuccessMessage(null)
+    setShowSubmittedOrder(false)
     setCheckoutNudgeDismissed(false)
     if (!options?.skipUpsell && engineMode !== 'classic' && (upsellMap[itemId]?.length ?? 0) > 0) {
       setUpsellAfterAdd({ itemId })
@@ -1139,6 +1276,7 @@ export default function SmartMenu({
       return next
     })
     setOrderSuccessMessage(null)
+    setShowSubmittedOrder(false)
     setCheckoutNudgeDismissed(false)
   }, [])
 
@@ -1411,6 +1549,35 @@ export default function SmartMenu({
 
   const currentCopy = uiCopyMap[language]
   const currentEngineCopy = engineCopyMap[language]
+
+  const applyTableFromQrDecoded = useCallback(
+    (raw: string) => {
+      if (typeof window === 'undefined') return
+      const copy = engineCopyMap[language]
+      const table = extractTableNumberFromQrText(raw, {
+        pathname: pathname || '/',
+        origin: window.location.origin,
+      })
+      if (!table) {
+        toast({
+          title: copy.scanQrInvalidQr,
+          variant: 'destructive',
+        })
+        return
+      }
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('table', table)
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : `${pathname}`)
+      setTableQrCameraActive(false)
+      toast({
+        title: copy.scanQrTableApplied,
+        description: `${copy.tableLabel} ${table}`,
+      })
+    },
+    [language, pathname, router, searchParams, toast]
+  )
+
   const socialFooterLinks = useMemo(() => {
     const links = theme?.socialLinks ?? null
     return [
@@ -2374,9 +2541,25 @@ export default function SmartMenu({
 
   const placeOrder = useCallback(async () => {
     if (cartItems.length === 0 || isPlacingOrder) return
+    if (!hasQrTable || !qrTableNumber) {
+      toast({
+        title: currentEngineCopy.scanQrTitle,
+        description: currentEngineCopy.scanQrDescription,
+        variant: 'destructive',
+      })
+      return
+    }
 
     setIsPlacingOrder(true)
     setOrderSuccessMessage(null)
+    const submittedLines = cartItems.map((line) => ({
+      id: line.item.id,
+      name: getDisplayNameForItem(line.item),
+      quantity: line.quantity,
+      total: line.item.price * line.quantity,
+    }))
+    const submittedTotal = cartTotal
+    const submittedTableNumber = qrTableNumber
 
     try {
       const response = await fetch('/api/public/orders', {
@@ -2386,7 +2569,7 @@ export default function SmartMenu({
         },
         body: JSON.stringify({
           restaurantId,
-          tableNumber: selectedTableNumber ?? undefined,
+          tableNumber: submittedTableNumber ?? undefined,
           items: cartItems.map((line) => ({
             menuItemId: line.item.id,
             quantity: line.quantity,
@@ -2400,8 +2583,7 @@ export default function SmartMenu({
         throw new Error(data?.error || 'Failed to place order')
       }
 
-      pendingSelfOrderTableRef.current = selectedTableNumber ?? null
-      setSelectedTableNumber(null)
+      pendingSelfOrderTableRef.current = submittedTableNumber
 
       setStoredLastOrder(
         restaurantId,
@@ -2415,6 +2597,32 @@ export default function SmartMenu({
 
       setCart({})
       setBasketOpen(false)
+      setSubmittedOrder((prev) => {
+        if (!prev) {
+          const nextOrder = {
+            orderNumber: data?.orderNumber,
+            tableNumber: submittedTableNumber,
+            lines: submittedLines,
+            total: submittedTotal,
+          }
+          if (submittedOrderStorageKey) {
+            window.localStorage.setItem(submittedOrderStorageKey, JSON.stringify(nextOrder))
+          }
+          return nextOrder
+        }
+
+        const nextOrder = {
+          orderNumber: [prev.orderNumber, data?.orderNumber].filter(Boolean).join(', '),
+          tableNumber: prev.tableNumber ?? submittedTableNumber,
+          lines: [...prev.lines, ...submittedLines],
+          total: prev.total + submittedTotal,
+        }
+        if (submittedOrderStorageKey) {
+          window.localStorage.setItem(submittedOrderStorageKey, JSON.stringify(nextOrder))
+        }
+        return nextOrder
+      })
+      setShowSubmittedOrder(false)
       setOrderSuccessMessage(
         data?.orderNumber
           ? `Order ${data.orderNumber} sent. Your waiter has been notified.`
@@ -2430,7 +2638,7 @@ export default function SmartMenu({
     } finally {
       setIsPlacingOrder(false)
     }
-  }, [cartItems, getDisplayNameForItem, isPlacingOrder, restaurantId, selectedTableNumber, toast])
+  }, [cartItems, cartTotal, currentEngineCopy.scanQrDescription, currentEngineCopy.scanQrTitle, getDisplayNameForItem, hasQrTable, isPlacingOrder, qrTableNumber, restaurantId, submittedOrderStorageKey, toast])
 
   const getMoodLabel = (mood: MoodOption) =>
     mood.label[language === 'ar_fusha' ? 'ar' : language] ?? mood.label.en
@@ -3055,14 +3263,29 @@ export default function SmartMenu({
                 </Popover>
                 <button
                   type="button"
-                  onClick={() => setTablePickerOpen(true)}
+                  onClick={() => {
+                    if (hasQrTable) setBasketOpen(true)
+                    else {
+                      setTableQrCameraActive(false)
+                      setBasketOpen(true)
+                    }
+                  }}
                   className="flex items-center gap-1 rounded-full border px-3 py-1.5"
                   style={{ borderColor: hexToRgba('#ffffff', 0.12), backgroundColor: hexToRgba('#ffffff', 0.05) }}
                 >
-                  <span className="text-[0.66rem] text-white/55">{currentEngineCopy.tableLabel}</span>
-                  <span className="text-[0.8rem] font-bold" style={{ color: themeAccent }}>
-                    {selectedTableNumber || '--'}
-                  </span>
+                  {hasQrTable ? (
+                    <>
+                      <span className="text-[0.66rem] text-white/55">{currentEngineCopy.tableLabel}</span>
+                      <span className="text-[0.8rem] font-bold" style={{ color: themeAccent }}>
+                        {qrTableNumber}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <QrCode className="h-3.5 w-3.5" style={{ color: themeAccent }} />
+                      <span className="text-[0.72rem] font-bold" style={{ color: themeAccent }}>Scan QR</span>
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -3686,71 +3909,8 @@ export default function SmartMenu({
           </div>
         )}
 
-        {(basketOpen || selectedItemForDetail || tablePickerOpen || currentUpsellSuggestions.length > 0 || showPairingSuggestions) && (
-          <div className="fixed inset-0 z-50 bg-[rgba(26,10,6,0.55)] backdrop-blur-sm" onClick={() => { setBasketOpen(false); setSelectedItemForDetail(null); setTablePickerOpen(false); setUpsellAfterAdd(null); setShowPairingSuggestions(false) }} />
-        )}
-
-        {tablePickerOpen && (
-          <div className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[70vh] max-w-2xl flex-col overflow-hidden rounded-t-[28px]" style={{ backgroundColor: pageBg }}>
-            <div className="mx-auto mt-3 h-1 w-10 rounded-full" style={{ backgroundColor: dividerColor }} />
-            <div className="flex items-center justify-between px-5 py-4 sm:px-6" style={{ borderBottom: `1px solid ${dividerColor}` }}>
-              <div>
-                <h3 className="font-menu-title text-[1.2rem] font-bold" style={{ color: textMain }}>
-                  {currentEngineCopy.selectYourTableLabel}
-                </h3>
-                <p className="mt-1 text-sm" style={{ color: textMuted }}>
-                  {currentEngineCopy.tableHelperLabel}
-                </p>
-              </div>
-              <button type="button" onClick={() => setTablePickerOpen(false)} className="rounded-full p-2" style={{ backgroundColor: surfaceSoft, color: textMuted }}>
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="overflow-y-auto px-5 py-5 sm:px-6">
-              <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
-                {liveTables.map((table) => {
-                  const isAvailable = (table.status ?? 'AVAILABLE') === 'AVAILABLE'
-                  return (
-                  <button
-                    key={table.id}
-                    type="button"
-                    disabled={!isAvailable}
-                    onClick={() => {
-                      if (!isAvailable) return
-                      setSelectedTableNumber(table.number)
-                      setTablePickerOpen(false)
-                    }}
-                    className="aspect-square rounded-2xl text-sm font-semibold transition"
-                    style={{
-                      backgroundColor: !isAvailable ? surfaceSoft : selectedTableNumber === table.number ? themeAccent : surfaceBg,
-                      color: !isAvailable ? textMuted : selectedTableNumber === table.number ? '#ffffff' : textMain,
-                      border: `1px solid ${!isAvailable ? dividerColor : selectedTableNumber === table.number ? themeAccent : dividerColor}`,
-                      opacity: isAvailable ? 1 : 0.5,
-                      cursor: isAvailable ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    <span className="block">{table.number}</span>
-                    {!isAvailable && (
-                      <span className="mt-1 block text-[0.62rem] font-medium uppercase tracking-[0.08em]">
-                        {table.status === 'OCCUPIED' ? 'Occupied' : 'Reserved'}
-                      </span>
-                    )}
-                  </button>
-                )})}
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTableNumber(null)
-                  setTablePickerOpen(false)
-                }}
-                className="mt-4 w-full rounded-2xl px-4 py-3 text-sm font-semibold"
-                style={{ backgroundColor: surfaceSoft, color: textMain }}
-              >
-                {currentEngineCopy.noTableLabel}
-              </button>
-            </div>
-          </div>
+        {(basketOpen || selectedItemForDetail || currentUpsellSuggestions.length > 0 || showPairingSuggestions) && (
+          <div className="fixed inset-0 z-50 bg-[rgba(26,10,6,0.55)] backdrop-blur-sm" onClick={() => { setBasketOpen(false); setSelectedItemForDetail(null); setTableQrCameraActive(false); setUpsellAfterAdd(null); setShowPairingSuggestions(false) }} />
         )}
 
         {basketOpen && (
@@ -3758,15 +3918,48 @@ export default function SmartMenu({
             <div className="mx-auto mt-3 h-1 w-10 rounded-full" style={{ backgroundColor: dividerColor }} />
             <div className="flex items-center justify-between px-5 py-4 sm:px-6 lg:px-8" style={{ borderBottom: `1px solid ${dividerColor}` }}>
               <h3 className="font-menu-title text-[1.3rem] font-bold" style={{ color: textMain }}>{currentEngineCopy.cartTitle}</h3>
-              <button type="button" onClick={() => setBasketOpen(false)} className="rounded-full p-2" style={{ backgroundColor: surfaceSoft, color: textMuted }}>
+              <button type="button" onClick={() => { setBasketOpen(false); setTableQrCameraActive(false) }} className="rounded-full p-2" style={{ backgroundColor: surfaceSoft, color: textMuted }}>
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-3 sm:px-6 lg:px-8">
-              {cartItems.length === 0 ? (
-                <div className="py-14 text-center" style={{ color: textMuted }}>{currentCopy.noItemsMessage}</div>
-              ) : (
-                <div className="space-y-4">
+              <div className="space-y-4">
+                {submittedOrder && (
+                  <div className="rounded-2xl border p-3" style={{ borderColor: dividerColor, backgroundColor: surfaceSoft }}>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[0.65rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
+                          {currentEngineCopy.currentTableOrder}
+                        </div>
+                        {submittedOrder.orderNumber && (
+                          <div className="mt-1 text-[0.72rem]" style={{ color: textMuted }}>
+                            {submittedOrder.orderNumber}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-[0.86rem] font-bold" style={{ color: textMain }}>
+                        {formatMenuPriceWithVariant(submittedOrder.total, priceVariant)}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      {submittedOrder.lines.map((line) => (
+                        <div key={line.id} className="flex items-center justify-between gap-3 text-[0.78rem]">
+                          <span className="min-w-0 truncate" style={{ color: textMuted }}>{line.quantity}x {line.name}</span>
+                          <span className="font-semibold" style={{ color: textMain }}>{formatMenuPriceWithVariant(line.total, priceVariant)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {cartItems.length === 0 ? (
+                  <div className="py-10 text-center" style={{ color: textMuted }}>{currentCopy.noItemsMessage}</div>
+                ) : (
+                  <>
+                  {submittedOrder && (
+                    <div className="text-[0.65rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
+                      {currentEngineCopy.newItemsLabel}
+                    </div>
+                  )}
                   {cartItems.map((line) => (
                     <div key={line.item.id} className="flex items-center gap-3 pb-4" style={{ borderBottom: `1px solid ${dividerColor}` }}>
                       <img
@@ -3840,54 +4033,70 @@ export default function SmartMenu({
                       </div>
                     </div>
                   )}
-                </div>
-              )}
+                  </>
+                )}
+              </div>
             </div>
             <div className="px-5 py-4 sm:px-6 lg:px-8" style={{ borderTop: `1px solid ${dividerColor}` }}>
-              {liveTables.length > 0 && (
-                <div className="mb-4">
-                  <div className="mb-2 text-[0.65rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
-                    {currentEngineCopy.tableLabel}
+              {hasQrTable ? (
+                <div className="mb-4 rounded-2xl border px-4 py-3" style={{ borderColor: accentBorder, backgroundColor: accentSoft }}>
+                  <div className="text-[0.65rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
+                    {currentEngineCopy.fixedTableLabel}
                   </div>
-                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                  <div className="mt-1 font-menu-title text-[1.25rem] font-bold" style={{ color: textMain }}>
+                    {currentEngineCopy.tableLabel} {qrTableNumber}
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="mb-4 w-full rounded-2xl border px-4 py-4 text-center"
+                  style={{ borderColor: accentBorder, backgroundColor: accentSoft }}
+                >
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: surfaceBg, color: themeAccent }}>
+                    <QrCode className="h-6 w-6" />
+                  </div>
+                  <div className="mt-3 font-menu-title text-[1.15rem] font-bold" style={{ color: textMain }}>
+                    {currentEngineCopy.scanQrTitle}
+                  </div>
+                  <p className="mt-2 text-left text-sm leading-6" style={{ color: textMuted }}>
+                    {currentEngineCopy.scanQrDescription}
+                  </p>
+                  {!tableQrCameraActive ? (
                     <button
                       type="button"
-                      onClick={() => setSelectedTableNumber(null)}
-                      className="rounded-full border px-3 py-2 text-[0.72rem] font-semibold"
-                      style={{
-                        borderColor: selectedTableNumber == null ? accentBorder : dividerColor,
-                        backgroundColor: selectedTableNumber == null ? accentSoft : surfaceBg,
-                        color: selectedTableNumber == null ? themeAccent : textMain,
-                      }}
+                      onClick={() => setTableQrCameraActive(true)}
+                      className="mt-4 w-full rounded-2xl px-4 py-3.5 text-[0.9rem] font-bold text-white"
+                      style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
                     >
-                      {currentEngineCopy.noTableLabel}
+                      {currentEngineCopy.scanQrStartCamera}
                     </button>
-                    {liveTables.map((table) => {
-                      const isAvailable = (table.status ?? 'AVAILABLE') === 'AVAILABLE'
-                      return (
+                  ) : (
+                    <div className="mt-4 space-y-3 text-left">
+                      <TableQrScanner
+                        active={tableQrCameraActive}
+                        onDecoded={applyTableFromQrDecoded}
+                        className="w-full"
+                      />
                       <button
-                        key={table.id}
                         type="button"
-                        disabled={!isAvailable}
-                        onClick={() => setSelectedTableNumber(table.number)}
-                        className="rounded-full border px-3 py-2 text-[0.72rem] font-semibold"
-                        style={{
-                          borderColor: !isAvailable ? dividerColor : selectedTableNumber === table.number ? accentBorder : dividerColor,
-                          backgroundColor: !isAvailable ? surfaceSoft : selectedTableNumber === table.number ? accentSoft : surfaceBg,
-                          color: !isAvailable ? textMuted : selectedTableNumber === table.number ? themeAccent : textMain,
-                          opacity: isAvailable ? 1 : 0.55,
-                          cursor: isAvailable ? 'pointer' : 'not-allowed',
-                        }}
+                        onClick={() => setTableQrCameraActive(false)}
+                        className="w-full rounded-2xl border px-4 py-3 text-[0.88rem] font-semibold"
+                        style={{ borderColor: dividerColor, color: textMain, backgroundColor: surfaceSoft }}
                       >
-                        {currentEngineCopy.tableLabel} {table.number}{!isAvailable ? ` · ${table.status === 'OCCUPIED' ? 'Occupied' : 'Reserved'}` : ''}
+                        {currentEngineCopy.scanQrStopCamera}
                       </button>
-                    )})}
-                  </div>
-                  {selectableTables.length === 0 && (
-                    <p className="mt-2 text-[0.72rem]" style={{ color: textMuted }}>
-                      No tables are currently available. You can still place the order without selecting one.
-                    </p>
+                    </div>
                   )}
+                  <details className="mt-4 rounded-xl border px-3 py-2 text-left" style={{ borderColor: dividerColor, backgroundColor: surfaceSoft }}>
+                    <summary className="cursor-pointer text-sm font-semibold" style={{ color: textMain }}>
+                      {currentEngineCopy.scanQrAlternativeTitle}
+                    </summary>
+                    <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-6" style={{ color: textMuted }}>
+                      <li>{currentEngineCopy.scanQrStep1}</li>
+                      <li>{currentEngineCopy.scanQrStep2}</li>
+                      <li>{currentEngineCopy.scanQrStep3}</li>
+                    </ol>
+                  </details>
                 </div>
               )}
               <div className="mb-4 flex items-center justify-between">
@@ -3899,11 +4108,74 @@ export default function SmartMenu({
               <button
                 type="button"
                 onClick={placeOrder}
-                disabled={cartItems.length === 0 || isPlacingOrder}
+                disabled={cartItems.length === 0 || isPlacingOrder || !hasQrTable}
                 className="w-full rounded-2xl px-4 py-4 text-[0.92rem] font-bold text-white disabled:opacity-60"
                 style={{ backgroundColor: headerBg }}
               >
-                {isPlacingOrder ? currentEngineCopy.placingLabel : currentEngineCopy.placeOrder}
+                {isPlacingOrder ? currentEngineCopy.placingLabel : submittedOrder ? currentEngineCopy.confirmAddedItems : currentEngineCopy.orderButtonLabel}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {submittedOrder && cartCount === 0 && !basketOpen && !showSubmittedOrder && (
+          <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-lg px-3 pb-3">
+            <button
+              type="button"
+              onClick={() => setShowSubmittedOrder(true)}
+              className="w-full rounded-2xl px-4 py-4 text-[0.92rem] font-bold text-white shadow-2xl"
+              style={{ backgroundColor: headerBg }}
+            >
+              {currentEngineCopy.showOrderToWaiter}
+            </button>
+          </div>
+        )}
+
+        {submittedOrder && showSubmittedOrder && !basketOpen && (
+          <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-lg px-3 pb-3">
+            <div className="rounded-3xl border p-4 shadow-2xl" style={{ borderColor: accentBorder, backgroundColor: pageBg }}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-[0.72rem] font-bold uppercase tracking-[0.14em]" style={{ color: textMuted }}>
+                    {submittedOrder.tableNumber ? `${currentEngineCopy.tableLabel} ${submittedOrder.tableNumber}` : currentEngineCopy.cartTitle}
+                  </div>
+                  <h3 className="mt-1 font-menu-title text-[1.15rem] font-bold" style={{ color: textMain }}>
+                    {currentEngineCopy.orderReadyTitle}
+                  </h3>
+                  {submittedOrder.orderNumber && (
+                    <p className="mt-1 text-[0.76rem]" style={{ color: textMuted }}>
+                      {submittedOrder.orderNumber}
+                    </p>
+                  )}
+                </div>
+                <button type="button" onClick={() => setShowSubmittedOrder(false)} className="rounded-full p-2" style={{ backgroundColor: surfaceSoft, color: textMuted }}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {submittedOrder.lines.map((line) => (
+                  <div key={line.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate" style={{ color: textMain }}>{line.quantity}x {line.name}</span>
+                    <span className="font-semibold" style={{ color: textMain }}>{formatMenuPriceWithVariant(line.total, priceVariant)}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between border-t pt-2 text-sm font-bold" style={{ borderColor: dividerColor, color: textMain }}>
+                  <span>{currentEngineCopy.totalLabel}</span>
+                  <span>{formatMenuPriceWithVariant(submittedOrder.total, priceVariant)}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSubmittedOrder(false)
+                  window.requestAnimationFrame(() => {
+                    menuListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  })
+                }}
+                className="mt-4 w-full rounded-2xl px-4 py-3 text-[0.86rem] font-bold text-white"
+                style={{ backgroundColor: headerBg }}
+              >
+                {currentEngineCopy.addMoreItems}
               </button>
             </div>
           </div>

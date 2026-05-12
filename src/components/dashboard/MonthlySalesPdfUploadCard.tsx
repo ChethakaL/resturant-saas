@@ -96,6 +96,7 @@ export default function MonthlySalesPdfUploadCard({
   const [previewData, setPreviewData] = useState<ImportedMonthlySalesData | null>(null)
   const [extractedSnapshot, setExtractedSnapshot] = useState<ImportedMonthlySalesData | null>(null)
   const [importMode, setImportMode] = useState<'replace' | 'append'>('replace')
+  const [deletingKey, setDeletingKey] = useState<string | null>(null)
   const [translationsReady, setTranslationsReady] = useState(locale === 'en')
   const [status, setStatus] = useState<{
     loading: boolean
@@ -156,6 +157,11 @@ export default function MonthlySalesPdfUploadCard({
         'Saved for',
         'that month.',
         'Import failed',
+        'Delete',
+        'Delete monthly sales data?',
+        'This will remove the imported sales data and uploaded PDF for this month.',
+        'Monthly sales data deleted',
+        'Delete failed',
       ].map((text) => fetchTranslation(text)))
 
       if (!cancelled) {
@@ -381,12 +387,12 @@ export default function MonthlySalesPdfUploadCard({
   }
 
   const handleConfirmImport = async () => {
-    if (!file || !previewData) return
+    if (!previewData) return
 
     setIsSaving(true)
     try {
       const formData = new FormData()
-      formData.append('report', file)
+      if (file) formData.append('report', file)
       formData.append('year', year)
       formData.append('month', month)
       formData.append('editedData', JSON.stringify(previewData))
@@ -429,6 +435,40 @@ export default function MonthlySalesPdfUploadCard({
       })
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleDeleteMonth = async (targetYear: number, targetMonth: number, periodLabel: string) => {
+    const confirmed = window.confirm(`${td('Delete monthly sales data?')}\n\n${periodLabel}\n${td('This will remove the imported sales data and uploaded PDF for this month.')}`)
+    if (!confirmed) return
+
+    const key = `${targetYear}-${targetMonth}`
+    setDeletingKey(key)
+    try {
+      const res = await fetch(`/api/sales-reports/monthly?year=${targetYear}&month=${targetMonth}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Delete failed')
+
+      toast({
+        title: td('Monthly sales data deleted'),
+        description: data.deleted?.periodLabel || periodLabel,
+      })
+      setRefreshKey((value) => value + 1)
+      router.refresh()
+      onImportComplete?.()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('monthly-sales-import-saved'))
+      }
+    } catch (error) {
+      toast({
+        title: td('Delete failed'),
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingKey(null)
     }
   }
 
@@ -571,9 +611,26 @@ export default function MonthlySalesPdfUploadCard({
                       <p className="font-medium text-slate-900">{upload.periodLabel}</p>
                       <p className="text-slate-500">{upload.fileName}</p>
                     </div>
-                    <span className="text-slate-500">
-                      {new Date(upload.uploadedAt).toLocaleDateString(localeForDates)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500">
+                        {new Date(upload.uploadedAt).toLocaleDateString(localeForDates)}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                        disabled={deletingKey === `${upload.year}-${upload.month}`}
+                        onClick={() => handleDeleteMonth(upload.year, upload.month, upload.periodLabel)}
+                      >
+                        {deletingKey === `${upload.year}-${upload.month}` ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                        <span className="ml-1">{td('Delete')}</span>
+                      </Button>
+                    </div>
                   </div>
               ))}
             </div>
@@ -627,6 +684,20 @@ export default function MonthlySalesPdfUploadCard({
                         }}
                       >
                         {td('Edit')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                        disabled={deletingKey === `${item.year}-${item.month}`}
+                        onClick={() => handleDeleteMonth(item.year, item.month, item.periodLabel)}
+                      >
+                        {deletingKey === `${item.year}-${item.month}` ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                        <span className="ml-1">{td('Delete')}</span>
                       </Button>
                     </div>
                   </div>

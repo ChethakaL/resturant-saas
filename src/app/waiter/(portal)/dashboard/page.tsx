@@ -98,10 +98,12 @@ function TableCard({
     table,
     isSelected,
     onClick,
+    onNewOrder,
 }: {
     table: Table
     isSelected: boolean
     onClick: () => void
+    onNewOrder: () => void
 }) {
     const hasActiveOrders = table.sales.length > 0
     const statusColor =
@@ -115,16 +117,21 @@ function TableCard({
         table.status === 'OCCUPIED' ? UtensilsCrossed : table.status === 'RESERVED' ? ClipboardList : CheckCircle2
 
     return (
-        <button
+        <div
+            role="button"
+            tabIndex={0}
             onClick={onClick}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') onClick()
+            }}
             className={`
-        group relative rounded-xl border p-4 transition-all duration-200 ${statusColor}
+        group relative rounded-xl border p-3 text-left transition-all duration-200 sm:p-4 ${statusColor}
         ${isSelected ? 'ring-2 ring-emerald-500 scale-[1.02] shadow-lg' : 'hover:shadow-md'}
         active:scale-[0.98]
       `}
         >
             <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl font-bold text-slate-900">T{table.number}</span>
+                <span className="text-xl font-bold text-slate-900 sm:text-2xl">T{table.number}</span>
                 <StatusIcon className="h-5 w-5 text-slate-500" />
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-600">
@@ -141,7 +148,31 @@ function TableCard({
                     </span>
                 </div>
             )}
-        </button>
+            <div className="mt-3 grid grid-cols-1 gap-2 md:hidden">
+                {hasActiveOrders && (
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            onClick()
+                        }}
+                        className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
+                    >
+                        View order{table.sales.length > 1 ? 's' : ''}
+                    </button>
+                )}
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation()
+                        onNewOrder()
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900"
+                >
+                    New order
+                </button>
+            </div>
+        </div>
     )
 }
 
@@ -237,7 +268,7 @@ function NewOrderPanel({
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
             {/* Panel */}
-            <div className="relative ml-auto w-full max-w-4xl bg-slate-900 border-l border-white/10 flex flex-col overflow-hidden animate-slide-in-right">
+            <div className="relative ml-auto flex w-full max-w-4xl flex-col overflow-hidden border-l border-white/10 bg-slate-900 animate-slide-in-right">
                 {/* Header */}
                 <div className="flex items-center justify-between p-5 border-b border-white/10 bg-slate-900/80 backdrop-blur">
                     <div>
@@ -252,7 +283,7 @@ function NewOrderPanel({
                     </button>
                 </div>
 
-                <div className="flex flex-1 overflow-hidden">
+                <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
                     {/* Menu items section */}
                     <div className="flex-1 flex flex-col overflow-hidden">
                         {/* Search + filter */}
@@ -305,7 +336,7 @@ function NewOrderPanel({
                                     <p>No menu items found</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-4">
                                     {filteredItems.map((item) => {
                                         const inCart = cart.find((c) => c.menuItem.id === item.id)
                                         return (
@@ -364,7 +395,7 @@ function NewOrderPanel({
                     </div>
 
                     {/* Cart sidebar */}
-                    <div className="w-80 border-l border-white/10 flex flex-col bg-slate-950/50">
+                    <div className="max-h-[42vh] border-t border-white/10 bg-slate-950/50 flex flex-col lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
                         <div className="p-4 border-b border-white/5">
                             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1053,25 +1084,30 @@ export default function WaiterDashboard() {
     return (
         <>
             {/* Content - admin-style light theme, sidebar provides nav */}
-            <main className="space-y-6">
+            <main className="space-y-5">
                 {unconfirmedOrders.length > 0 && (
-                    <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
+                    <div className="sticky top-0 z-30 -mx-4 rounded-none border-y-2 border-amber-300 bg-amber-50 p-4 shadow-sm sm:mx-0 sm:rounded-xl sm:border-2">
                         <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-900">
                             <Bell className="h-4 w-4" />
-                            New order{unconfirmedOrders.length > 1 ? 's' : ''} from customer (QR menu) — confirm to take
+                            {unconfirmedOrders.length} QR order{unconfirmedOrders.length > 1 ? 's' : ''} waiting
                         </p>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                             {unconfirmedOrders.map((order) => (
                                 <div
                                     key={order.id}
-                                    className="flex items-center gap-3 bg-white rounded-lg px-4 py-2 border border-amber-200"
+                                    className="flex w-56 shrink-0 flex-col gap-2 rounded-lg border border-amber-200 bg-white px-3 py-3 sm:w-64"
                                 >
-                                    <span className="font-medium text-slate-900">
-                                        Table {order.table?.number} — {order.orderNumber}
-                                    </span>
-                                    <span className="text-sm text-slate-500">
-                                        {order.total.toLocaleString()} {currency} · {order.items.length} items
-                                    </span>
+                                    <div>
+                                        <span className="block truncate font-medium text-slate-900">
+                                            Table {order.table?.number}
+                                        </span>
+                                        <span className="block truncate text-xs text-slate-500">
+                                            {order.orderNumber}
+                                        </span>
+                                        <span className="text-sm text-slate-500">
+                                            {order.total.toLocaleString()} {currency} · {order.items.length} items
+                                        </span>
+                                    </div>
                                     <button
                                         onClick={async () => {
                                             const res = await fetch(`/api/waiter/orders/${order.id}`, {
@@ -1088,7 +1124,7 @@ export default function WaiterDashboard() {
                                                 setSelectedOrder(await res.json())
                                             }
                                         }}
-                                        className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg"
+                                        className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600"
                                     >
                                         Confirm
                                     </button>
@@ -1099,14 +1135,14 @@ export default function WaiterDashboard() {
                 )}
                 {activeTab === 'tables' && (
                     <div>
-                        <div className="flex items-center justify-between mb-5">
+                        <div className="flex flex-col gap-3 mb-5 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <h2 className="text-lg font-bold text-slate-900">Table Layout</h2>
                                 <p className="text-sm text-slate-500">{tables.length} tables total</p>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                                 <Button variant="outline" size="sm" onClick={handleRefresh}>Refresh</Button>
-                                <div className="flex items-center gap-3 text-xs text-slate-500">
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                                     <span className="flex items-center gap-1.5">
                                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                                         Available
@@ -1123,7 +1159,7 @@ export default function WaiterDashboard() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                             {tables.map((table) => (
                                 <TableCard
                                     key={table.id}
@@ -1136,22 +1172,26 @@ export default function WaiterDashboard() {
                                             setSelectedOrder(table.sales[0])
                                         }
                                     }}
+                                    onNewOrder={() => {
+                                        setSelectedTable(table)
+                                        setShowNewOrder(true)
+                                    }}
                                 />
                             ))}
                         </div>
 
                         {/* Selected table info */}
                         {selectedTable && (
-                            <Card className="mt-5">
-                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                            <Card className="mt-5 hidden md:block">
+                                <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
                                         <CardTitle>Table {selectedTable.number}</CardTitle>
                                         <p className="text-sm text-slate-500 mt-1">
                                             {selectedTable.capacity} seats
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                        <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
                                             {[
                                                 { status: 'AVAILABLE', label: 'Available' },
                                                 { status: 'OCCUPIED', label: 'Occupied' },

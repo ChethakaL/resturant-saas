@@ -73,15 +73,31 @@ export async function PATCH(
       return NextResponse.json({ error: 'Table not found' }, { status: 404 })
     }
 
-    const table = await prisma.table.update({
-      where: {
-        id: existingTable.id,
-      },
-      data: {
-        status: data.status,
-        number: data.number,
-        capacity: data.capacity,
-      },
+    const table = await prisma.$transaction(async (tx) => {
+      if (data.status === 'AVAILABLE') {
+        await tx.sale.updateMany({
+          where: {
+            tableId: existingTable.id,
+            restaurantId: session.user.restaurantId,
+            status: { in: ['PENDING', 'PREPARING', 'READY'] },
+          },
+          data: {
+            status: 'COMPLETED',
+            paidAt: new Date(),
+          },
+        })
+      }
+
+      return tx.table.update({
+        where: {
+          id: existingTable.id,
+        },
+        data: {
+          status: data.status,
+          number: data.number,
+          capacity: data.capacity,
+        },
+      })
     })
 
     return NextResponse.json(table)

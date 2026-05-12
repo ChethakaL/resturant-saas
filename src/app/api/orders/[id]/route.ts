@@ -122,18 +122,39 @@ export async function DELETE(
       return NextResponse.json({ error: 'Order already cancelled' }, { status: 400 })
     }
 
-    const order = await prisma.sale.update({
-      where: { id: sale.id },
-      data: {
-        status: 'CANCELLED',
-      },
-      include: {
-        items: {
-          include: {
-            menuItem: true,
+    const order = await prisma.$transaction(async (tx) => {
+      const cancelled = await tx.sale.update({
+        where: { id: sale.id },
+        data: {
+          status: 'CANCELLED',
+        },
+        include: {
+          items: {
+            include: {
+              menuItem: true,
+            },
           },
         },
-      },
+      })
+
+      if (sale.tableId) {
+        const remainingActiveOrders = await tx.sale.count({
+          where: {
+            tableId: sale.tableId,
+            restaurantId: session.user.restaurantId,
+            status: { in: ['PENDING', 'PREPARING', 'READY'] },
+          },
+        })
+
+        if (remainingActiveOrders === 0) {
+          await tx.table.update({
+            where: { id: sale.tableId },
+            data: { status: 'AVAILABLE' },
+          })
+        }
+      }
+
+      return cancelled
     })
 
     return NextResponse.json(order)

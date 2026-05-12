@@ -11,6 +11,7 @@ import ChatbotWidget from '@/components/chatbot/ChatbotWidget'
 import RestaurantDNAGate from '@/components/settings/RestaurantDNAGate'
 import { getServerTranslations } from '@/lib/i18n/server'
 import { getPlatformConfig } from '@/lib/platform-config'
+import { reconcileRestaurantMainSubscriptions } from '@/lib/billing-subscription-sync'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,9 +60,24 @@ export default async function DashboardLayout({
         name: true,
         subscriptionStatus: true,
         subscriptionPriceId: true,
+        stripeCustomerId: true,
         settings: true,
       },
     })
+    if (!isSubscriptionAccessActive(restaurant?.subscriptionStatus) && restaurant?.stripeCustomerId) {
+      try {
+        const sync = await reconcileRestaurantMainSubscriptions({
+          restaurantId: session.user.restaurantId,
+          stripeCustomerId: restaurant.stripeCustomerId,
+        })
+        if (sync.synced) {
+          restaurant.subscriptionStatus = sync.primaryStatus
+          restaurant.subscriptionPriceId = restaurant.subscriptionPriceId
+        }
+      } catch (error) {
+        console.error('[dashboard layout] Failed to reconcile subscription from Stripe:', error)
+      }
+    }
     hasActiveSubscription = isSubscriptionAccessActive(restaurant?.subscriptionStatus)
     const platformCfg = await getPlatformConfig()
     const priceMonthly = String(platformCfg.priceMonthly || process.env.STRIPE_PRICE_MONTHLY || '59')

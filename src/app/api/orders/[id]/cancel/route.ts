@@ -22,6 +22,7 @@ export async function POST(
           restaurantId: session.user.restaurantId,
         },
         include: {
+          table: true,
           items: {
             include: {
               menuItem: {
@@ -96,6 +97,23 @@ export async function POST(
           },
         },
       })
+
+      if (existingOrder.tableId) {
+        const remainingActiveOrders = await tx.sale.count({
+          where: {
+            tableId: existingOrder.tableId,
+            restaurantId: session.user.restaurantId,
+            status: { in: ['PENDING', 'PREPARING', 'READY'] },
+          },
+        })
+
+        if (remainingActiveOrders === 0) {
+          await tx.table.update({
+            where: { id: existingOrder.tableId },
+            data: { status: 'AVAILABLE' },
+          })
+        }
+      }
 
       return cancelledOrder
     })
