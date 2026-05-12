@@ -98,11 +98,13 @@ function TableCard({
     table,
     isSelected,
     onClick,
+    onViewOrders,
     onNewOrder,
 }: {
     table: Table
     isSelected: boolean
     onClick: () => void
+    onViewOrders: () => void
     onNewOrder: () => void
 }) {
     const hasActiveOrders = table.sales.length > 0
@@ -154,13 +156,23 @@ function TableCard({
                         type="button"
                         onClick={(event) => {
                             event.stopPropagation()
-                            onClick()
+                            onViewOrders()
                         }}
                         className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
                     >
                         View order{table.sales.length > 1 ? 's' : ''}
                     </button>
                 )}
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation()
+                        onClick()
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900"
+                >
+                    Table status
+                </button>
                 <button
                     type="button"
                     onClick={(event) => {
@@ -198,6 +210,7 @@ function NewOrderPanel({
     const [notes, setNotes] = useState('')
     const [customerName, setCustomerName] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
 
     const addToCart = (item: MenuItem) => {
         setCart((prev) => {
@@ -255,6 +268,7 @@ function NewOrderPanel({
                 throw new Error(data.error || 'Failed to create order')
             }
             onOrderCreated()
+            setIsMobileCartOpen(false)
         } catch (err: any) {
             alert(err.message || 'Failed to create order')
         } finally {
@@ -268,14 +282,14 @@ function NewOrderPanel({
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
             {/* Panel */}
-            <div className="relative ml-auto flex w-full max-w-4xl flex-col overflow-hidden border-l border-white/10 bg-slate-900 animate-slide-in-right">
+            <div className="relative ml-auto flex h-full w-full max-w-4xl flex-col overflow-hidden border-l border-white/10 bg-slate-900 animate-slide-in-right">
                 {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-white/10 bg-slate-900/80 backdrop-blur">
-                    <div>
-                        <h2 className="text-xl font-bold text-white">New Order — Table {tableNumber}</h2>
-                        <p className="text-sm text-slate-400 mt-0.5">Select items to add to this order</p>
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-900/80 p-3 backdrop-blur sm:p-5">
+                    <div className="min-w-0">
+                        <h2 className="truncate text-lg font-bold text-white sm:text-xl">New Order — Table {tableNumber}</h2>
+                        <p className="mt-0.5 hidden text-sm text-slate-400 sm:block">Select items to add to this order</p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+                    <button onClick={onClose} className="shrink-0 p-2 hover:bg-white/5 rounded-xl transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <line x1="18" y1="6" x2="6" y2="18" />
                             <line x1="6" y1="6" x2="18" y2="18" />
@@ -283,11 +297,11 @@ function NewOrderPanel({
                     </button>
                 </div>
 
-                <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
                     {/* Menu items section */}
-                    <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {/* Search + filter */}
-                        <div className="p-4 space-y-3 border-b border-white/5">
+                        <div className="shrink-0 space-y-2 border-b border-white/5 p-3 sm:space-y-3 sm:p-4">
                             <div className="relative">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <circle cx="11" cy="11" r="8" />
@@ -298,13 +312,13 @@ function NewOrderPanel({
                                     placeholder="Search menu items..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                                    className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-base text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 sm:py-2.5 sm:text-sm"
                                 />
                             </div>
                             <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
                                 <button
                                     onClick={() => setSelectedCategory('all')}
-                                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${selectedCategory === 'all'
+                                    className={`shrink-0 px-4 py-2 rounded-lg text-sm font-semibold transition-colors sm:px-3 sm:py-1.5 sm:text-xs sm:font-medium ${selectedCategory === 'all'
                                         ? 'bg-amber-500 text-white'
                                         : 'bg-white/5 text-slate-400 hover:bg-white/10'
                                         }`}
@@ -315,7 +329,7 @@ function NewOrderPanel({
                                     <button
                                         key={cat.id}
                                         onClick={() => setSelectedCategory(cat.id)}
-                                        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${selectedCategory === cat.id
+                                        className={`shrink-0 px-4 py-2 rounded-lg text-sm font-semibold transition-colors sm:px-3 sm:py-1.5 sm:text-xs sm:font-medium ${selectedCategory === cat.id
                                             ? 'bg-amber-500 text-white'
                                             : 'bg-white/5 text-slate-400 hover:bg-white/10'
                                             }`}
@@ -327,7 +341,7 @@ function NewOrderPanel({
                         </div>
 
                         {/* Items grid */}
-                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-3 pb-28 custom-scrollbar sm:p-4 sm:pb-4">
                             {filteredItems.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center h-full text-slate-500">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-3 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -336,7 +350,7 @@ function NewOrderPanel({
                                     <p>No menu items found</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-4">
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 lg:gap-4">
                                     {filteredItems.map((item) => {
                                         const inCart = cart.find((c) => c.menuItem.id === item.id)
                                         return (
@@ -344,7 +358,7 @@ function NewOrderPanel({
                                                 key={item.id}
                                                 onClick={() => addToCart(item)}
                                                 className={`
-                                                  group relative text-left rounded-xl border transition-all duration-150 overflow-hidden flex flex-col h-full
+                                                  group relative text-left rounded-xl border transition-all duration-150 overflow-hidden flex h-full min-h-[104px] flex-row sm:min-h-0 sm:flex-col
                                                   ${inCart
                                                         ? 'bg-amber-500/10 border-amber-500/30 ring-1 ring-amber-500/20 shadow-lg shadow-amber-500/5'
                                                         : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06] hover:border-white/10'
@@ -352,7 +366,7 @@ function NewOrderPanel({
                                                   active:scale-[0.97]
                                                 `}
                                             >
-                                                <div className="relative w-full h-32 sm:h-36 md:h-40 bg-slate-800 shrink-0 overflow-hidden">
+                                                <div className="relative h-[104px] w-[112px] shrink-0 overflow-hidden bg-slate-800 sm:h-36 sm:w-full md:h-40">
                                                     {item.imageUrl ? (
                                                         <img
                                                             src={item.imageUrl}
@@ -379,10 +393,10 @@ function NewOrderPanel({
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="p-3">
-                                                    <p className="text-sm font-semibold text-white truncate">{item.name}</p>
-                                                    <p className="text-[10px] text-slate-500">{(item as any).categoryName}</p>
-                                                    <p className="text-sm font-bold text-amber-400 mt-2">
+                                                <div className="flex min-w-0 flex-1 flex-col justify-center p-3">
+                                                    <p className="line-clamp-2 text-base font-semibold leading-tight text-white sm:truncate sm:text-sm">{item.name}</p>
+                                                    <p className="mt-1 truncate text-xs text-slate-500 sm:text-[10px]">{(item as any).categoryName}</p>
+                                                    <p className="mt-2 text-base font-bold text-amber-400 sm:text-sm">
                                                         {item.price.toLocaleString()} {currency}
                                                     </p>
                                                 </div>
@@ -395,8 +409,27 @@ function NewOrderPanel({
                     </div>
 
                     {/* Cart sidebar */}
-                    <div className="max-h-[42vh] border-t border-white/10 bg-slate-950/50 flex flex-col lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
-                        <div className="p-4 border-b border-white/5">
+                    <div className="absolute inset-x-0 bottom-0 z-10 flex max-h-[78dvh] flex-col border-t border-white/10 bg-slate-950 shadow-2xl shadow-black/40 sm:relative sm:max-h-[42vh] sm:bg-slate-950/50 sm:shadow-none lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
+                        <button
+                            type="button"
+                            onClick={() => setIsMobileCartOpen((open) => !open)}
+                            className="flex items-center justify-between gap-3 p-3 text-left sm:hidden"
+                        >
+                            <span className="text-sm font-semibold text-white flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <circle cx="9" cy="21" r="1" />
+                                    <circle cx="20" cy="21" r="1" />
+                                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                                </svg>
+                                Order ({cart.length})
+                            </span>
+                            <span className="flex items-center gap-2 text-right">
+                                <span className="text-lg font-bold text-white">{cartTotal.toLocaleString()} {currency}</span>
+                                <span className="text-xs font-semibold text-amber-300">{isMobileCartOpen ? 'Hide' : 'Edit'}</span>
+                            </span>
+                        </button>
+
+                        <div className="hidden p-4 border-b border-white/5 sm:block">
                             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <circle cx="9" cy="21" r="1" />
@@ -407,9 +440,9 @@ function NewOrderPanel({
                             </h3>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                        <div className={`${isMobileCartOpen ? 'block' : 'hidden'} flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar sm:block sm:p-4 sm:space-y-3`}>
                             {cart.length === 0 ? (
-                                <p className="text-sm text-slate-500 text-center py-8">Tap items to add</p>
+                                <p className="text-sm text-slate-500 text-center py-4 sm:py-8">Tap items to add</p>
                             ) : (
                                 cart.map((c) => (
                                     <div key={c.menuItem.id} className="flex items-center gap-3 bg-white/[0.03] border border-white/5 rounded-xl p-2 pr-3">
@@ -447,7 +480,7 @@ function NewOrderPanel({
                         </div>
 
                         {/* Customer name + notes */}
-                        <div className="p-4 border-t border-white/5 space-y-2">
+                        <div className={`${isMobileCartOpen ? 'block' : 'hidden'} p-3 border-t border-white/5 space-y-2 sm:block sm:p-4`}>
                             <input
                                 type="text"
                                 placeholder="Customer name (optional)"
@@ -465,8 +498,8 @@ function NewOrderPanel({
                         </div>
 
                         {/* Submit */}
-                        <div className="p-4 border-t border-white/10 bg-slate-900">
-                            <div className="flex items-center justify-between mb-3">
+                        <div className="border-t border-white/10 bg-slate-900 p-3 sm:p-4">
+                            <div className="mb-2 hidden items-center justify-between sm:mb-3 sm:flex">
                                 <span className="text-sm text-slate-400">Total</span>
                                 <span className="text-xl font-bold text-white">{cartTotal.toLocaleString()} {currency}</span>
                             </div>
@@ -1167,10 +1200,10 @@ export default function WaiterDashboard() {
                                     isSelected={selectedTable?.id === table.id}
                                     onClick={() => {
                                         setSelectedTable(table)
-                                        if (table.sales.length > 0) {
-                                            // Show the most recent active order
-                                            setSelectedOrder(table.sales[0])
-                                        }
+                                    }}
+                                    onViewOrders={() => {
+                                        setSelectedTable(table)
+                                        if (table.sales.length > 0) setSelectedOrder(table.sales[0])
                                     }}
                                     onNewOrder={() => {
                                         setSelectedTable(table)
@@ -1258,6 +1291,86 @@ export default function WaiterDashboard() {
                                     )}
                                 </CardContent>
                             </Card>
+                        )}
+
+                        {selectedTable && (
+                            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white shadow-2xl shadow-slate-950/20 md:hidden">
+                                <div className="mx-auto h-1.5 w-12 rounded-full bg-slate-300 mt-2" />
+                                <div className="p-4">
+                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-slate-900">Table {selectedTable.number}</h3>
+                                            <p className="text-xs text-slate-500">{selectedTable.capacity} seats</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedTable(null)}
+                                            className="rounded-full border border-slate-200 p-2 text-slate-500"
+                                            aria-label="Close table actions"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="mb-3 grid grid-cols-3 gap-2 rounded-xl bg-slate-100 p-1">
+                                        {[
+                                            { status: 'AVAILABLE', label: 'Available' },
+                                            { status: 'OCCUPIED', label: 'Occupied' },
+                                            { status: 'RESERVED', label: 'Reserved' },
+                                        ].map((s) => (
+                                            <button
+                                                key={s.status}
+                                                type="button"
+                                                onClick={async () => {
+                                                    try {
+                                                        const res = await fetch(`/api/tables/${selectedTable.id}`, {
+                                                            method: 'PATCH',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ status: s.status }),
+                                                        })
+                                                        if (res.ok) {
+                                                            setSelectedTable((prev) => (prev ? { ...prev, status: s.status } : null))
+                                                            fetchTables()
+                                                        }
+                                                    } catch { }
+                                                }}
+                                                className={`rounded-lg px-2 py-3 text-xs font-semibold transition-colors ${
+                                                    selectedTable.status === s.status
+                                                        ? 'bg-white text-slate-900 shadow'
+                                                        : 'text-slate-600'
+                                                }`}
+                                            >
+                                                {s.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {selectedTable.sales.length > 0 && (
+                                        <div className="mb-3 max-h-32 space-y-2 overflow-y-auto">
+                                            {selectedTable.sales.map((order) => (
+                                                <button
+                                                    key={order.id}
+                                                    type="button"
+                                                    onClick={() => setSelectedOrder(order)}
+                                                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-left"
+                                                >
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-900">{order.orderNumber}</p>
+                                                        <p className="text-xs text-slate-500">
+                                                            {order.items.length} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </p>
+                                                    </div>
+                                                    <StatusBadge status={order.status} />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <Button className="w-full" onClick={() => setShowNewOrder(true)}>
+                                        New Order
+                                    </Button>
+                                </div>
+                            </div>
                         )}
                     </div>
                 )}
