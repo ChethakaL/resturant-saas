@@ -114,6 +114,11 @@ export interface TranslationStrings {
     menu_next: string
     menu_create_item: string
     menu_edit_item: string
+    menu_publish_selected: string
+    menu_publish_all: string
+    menu_publishing: string
+    menu_publish_success: string
+    menu_publish_all_success: string
 
     /* ── Menu Table ── */
     menu_col_item_name: string
@@ -599,6 +604,11 @@ const en: TranslationStrings = {
     menu_next: 'Next',
     menu_create_item: 'Create Menu Item',
     menu_edit_item: 'Edit Menu Item',
+    menu_publish_selected: 'Publish selected',
+    menu_publish_all: 'Publish all drafts',
+    menu_publishing: 'Publishing...',
+    menu_publish_success: 'Successfully published {0} items.',
+    menu_publish_all_success: 'Successfully published {0} draft items.',
 
     /* Menu Table */
     menu_col_item_name: 'Item Name',
@@ -1080,6 +1090,11 @@ const ku: TranslationStrings = {
     menu_next: 'دواتر',
     menu_create_item: 'دروستکردنی خواردنی نوێ',
     menu_edit_item: 'دەستکاریکردنی خواردن',
+    menu_publish_selected: 'بڵاوکردنەوەی هەڵبژێردراو',
+    menu_publish_all: 'بڵاوکردنەوەی هەموو ڕەشنووسەکان',
+    menu_publishing: 'لە بڵاوکردنەوەدایە...',
+    menu_publish_success: 'بە سەرکەوتوویی {0} ئایتم بڵاوکرایەوە.',
+    menu_publish_all_success: 'بە سەرکەوتوویی هەموو {0} ئایتمە ڕەشنووسەکان بڵاوکرانەوە.',
 
     /* Menu Table */
     menu_col_item_name: 'ناوی خواردن',
@@ -1561,6 +1576,11 @@ const arFusha: TranslationStrings = {
     menu_next: 'التالي',
     menu_create_item: 'إنشاء صنف جديد',
     menu_edit_item: 'تعديل الصنف',
+    menu_publish_selected: 'نشر المحدد',
+    menu_publish_all: 'نشر جميع المسودات',
+    menu_publishing: 'جارٍ النشر...',
+    menu_publish_success: 'تم نشر {0} أصناف بنجاح.',
+    menu_publish_all_success: 'تم نشر جميع {0} المسودات بنجاح.',
 
     /* Menu Table */
     menu_col_item_name: 'اسم الصنف',

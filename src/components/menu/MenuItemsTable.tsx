@@ -68,6 +68,7 @@ export default function MenuItemsTable({
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkPublishing, setBulkPublishing] = useState(false)
   const [chefPickUpdatingIds, setChefPickUpdatingIds] = useState<string[]>([])
   const [menuItemToDelete, setMenuItemToDelete] =
     useState<MenuItemWithMetrics | null>(null)
@@ -326,6 +327,71 @@ export default function MenuItemsTable({
     }
   }
 
+  const confirmBulkPublish = async (ids?: string[]) => {
+    const idsToPublish = ids || selectedIds
+    if (idsToPublish.length === 0 || bulkPublishing) return
+
+    setBulkPublishing(true)
+    try {
+      const response = await fetch('/api/menu/bulk-publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: idsToPublish }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) throw new Error(result?.error || 'Failed to publish items')
+
+      toast({
+        title: t.menu_published,
+        description: t.menu_publish_success.replace('{0}', String(result.publishedCount)),
+      })
+      
+      router.refresh()
+    } catch (error) {
+      console.error('Bulk publish error:', error)
+      toast({
+        title: t.common_error,
+        description: error instanceof Error ? error.message : 'Something went wrong',
+        variant: 'destructive',
+      })
+    } finally {
+      setBulkPublishing(false)
+    }
+  }
+
+  const handlePublishAll = async () => {
+    if (bulkPublishing) return
+    
+    setBulkPublishing(true)
+    try {
+      const response = await fetch('/api/menu/bulk-publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publishAll: true }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) throw new Error(result?.error || 'Failed to publish items')
+
+      toast({
+        title: t.menu_published,
+        description: t.menu_publish_all_success.replace('{0}', String(result.publishedCount)),
+      })
+      
+      router.refresh()
+    } catch (error) {
+      console.error('Publish all error:', error)
+      toast({
+        title: t.common_error,
+        description: error instanceof Error ? error.message : 'Something went wrong',
+        variant: 'destructive',
+      })
+    } finally {
+      setBulkPublishing(false)
+    }
+  }
+
   const startEditingPrice = (item: MenuItemWithMetrics) => {
     setEditingPriceId(item.id)
     setEditingPriceValue(String(item.price))
@@ -495,22 +561,51 @@ export default function MenuItemsTable({
             <div className="text-sm text-slate-600">
               <span className="font-medium text-slate-900">{selectedIds.length}</span> selected
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePublishAll}
+                disabled={bulkPublishing}
+              >
+                {bulkPublishing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 mr-2" />
+                )}
+                {t.menu_publish_all}
+              </Button>
               {selectedIds.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedIds([])}
-                  disabled={bulkDeleting}
-                >
-                  Clear selection
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedIds([])}
+                    disabled={bulkDeleting || bulkPublishing}
+                  >
+                    Clear selection
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    onClick={() => confirmBulkPublish()}
+                    disabled={bulkPublishing || bulkDeleting}
+                  >
+                    {bulkPublishing ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4 mr-2" />
+                    )}
+                    {t.menu_publish_selected}
+                  </Button>
+                </>
               )}
               <Button
                 variant="destructive"
                 size="sm"
                 onClick={() => setBulkDeleteOpen(true)}
-                disabled={selectedIds.length === 0 || bulkDeleting}
+                disabled={selectedIds.length === 0 || bulkDeleting || bulkPublishing}
               >
                 {bulkDeleting ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
