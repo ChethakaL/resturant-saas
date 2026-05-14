@@ -59,8 +59,8 @@ GUIDELINES:
 2. description: Professional sensory menu description (max 18 words) in English. Focus on key ingredients and taste profile.
 3. price: Calculate a realistic selling price in IQD. 
    - CATEGORIZATION: Decide if this is a "FOOD" item or a "DRINK" item.
-   - FOOD LOGIC: Price = (Estimated Direct Cost per serving) / 0.75 (Target: 25% margin on selling price).
-   - DRINK LOGIC: Price = (Estimated Direct Cost per serving) / 0.85 (Target: 15% margin on selling price).
+   - FOOD LOGIC: Price = (Estimated Direct Cost per serving) + 70% (i.e. Cost * 1.70).
+   - DRINK LOGIC: Price = (Estimated Direct Cost per serving) + 85% (i.e. Cost * 1.85).
    - If user provided a price, still validate it against this logic in your "tips".
 4. recipeYield: Number of servings (default to a standard batch like 4 or 6, or 1 for individual items).
 5. recipeSteps: Detailed SOP steps for a commercial kitchen.

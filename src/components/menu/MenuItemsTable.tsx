@@ -21,6 +21,7 @@ import { Edit, Loader2, Trash, Check, X, DollarSign } from 'lucide-react'
 import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
 import { useDynamicTranslate } from '@/lib/i18n'
 import { isZeroCostAllowed } from '@/lib/costing'
+import { classifyItemType } from '@/lib/category-suggest'
 
 export interface MenuItemWithMetrics {
   id: string
@@ -40,8 +41,9 @@ export interface MenuItemWithMetrics {
   chefPickOrder?: number | null
 }
 
-/** 30% food cost target → 70% gross profit margin */
-const TARGET_FOOD_COST = 0.3
+/** Markup targets */
+const FOOD_MARKUP = 1.70 // Cost + 70%
+const DRINK_MARKUP = 1.85 // Cost + 85%
 
 function getMarginColor(margin: number) {
   if (margin >= 60) return 'text-green-600'
@@ -51,9 +53,18 @@ function getMarginColor(margin: number) {
   return 'text-red-700'
 }
 
-function getSuggestedPrice(cost: number): number {
+function getSuggestedPrice(cost: number, categoryName: string | null): number {
   if (cost <= 0) return 0
-  return Math.ceil(cost / TARGET_FOOD_COST)
+  const type = classifyItemType({
+    id: '',
+    name: '',
+    categoryName,
+    marginPercent: 0,
+    unitsSold: 0,
+  })
+
+  const markup = type === 'Drinks' ? DRINK_MARKUP : FOOD_MARKUP
+  return Math.ceil(cost * markup)
 }
 
 export default function MenuItemsTable({
@@ -664,7 +675,7 @@ export default function MenuItemsTable({
                 const costPercent =
                   item.price > 0 ? (item.cost / item.price) * 100 : 0
                 const profitPercent = item.margin
-                const suggestedPrice = getSuggestedPrice(item.cost)
+                const suggestedPrice = getSuggestedPrice(item.cost, item.category.name)
                 const priceDiff =
                   suggestedPrice > 0 ? item.price - suggestedPrice : 0
 

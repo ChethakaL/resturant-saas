@@ -103,9 +103,9 @@ ${inventory.map(i => `- ${i.name} (${i.unit}, Cost: ${i.costPerUnit} IQD)`).join
    **After resolving ALL ingredients** (silently or through questions): Compute the total direct cost yourself from the ingredient quantities × costPerUnit values. State it clearly: "The direct ingredient cost for one serving is approximately X IQD (breakdown: ingredient A: X, ingredient B: Y, …)." Then apply the correct COGS target for the item type in step 7 and immediately proceed to step 8 (Finalize) — do not ask the user for anything else unless the price needs confirmation.
 7. **Pricing**: 
    - Decide if the item is FOOD or DRINK (infer from category: e.g. Beverages, Drinks, Coffee, Tea = drink; otherwise food; ask the user if unclear).
-   - Food uses a 30% COGS target. Suggested Price = (Direct Cost) / 0.30.
-   - Drinks use a 15% COGS target. Suggested Price = (Direct Cost) / 0.15.
-   - In the message, explicitly mention the percentage used, for example: "Based on a 30% food COGS target, the suggested selling price is X IQD." or "Based on a 15% drink COGS target, the suggested selling price is X IQD."
+   - Food uses a markup of 70%. Suggested Price = (Direct Cost) * 1.70.
+   - Drinks use a markup of 85%. Suggested Price = (Direct Cost) * 1.85.
+   - In the message, explicitly mention the percentage used, for example: "Based on a 70% food markup, the suggested selling price is X IQD." or "Based on an 85% drink markup, the suggested selling price is X IQD."
    - State the reasoning clearly.
 8. **Finalize**: When all is done, say "FINISHED" and generate a professional sensory description (taste, texture, key ingredients; max ~18 words) and put it in the "data.description" field so the form autofills. Always include the full "data" block with name, categoryName, recipeYield, price, ingredients, recipeSteps, recipeTips, and description when finishing.
 
