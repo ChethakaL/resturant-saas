@@ -119,6 +119,30 @@ export interface TranslationStrings {
     menu_publishing: string
     menu_publish_success: string
     menu_publish_all_success: string
+    menu_all_categories: string
+    menu_category_search_placeholder: string
+    menu_category_search_no_results: string
+    menu_adjust_prices: string
+    menu_adjust_prices_title: string
+    menu_adjust_prices_description: string
+    menu_adjust_prices_percent_label: string
+    menu_adjust_prices_percent_hint: string
+    menu_adjust_prices_scope_label: string
+    menu_adjust_prices_scope_selected: string
+    menu_adjust_prices_scope_selected_count: string
+    menu_adjust_prices_scope_selected_empty: string
+    menu_adjust_prices_scope_category: string
+    menu_adjust_prices_scope_category_name: string
+    menu_adjust_prices_scope_all: string
+    menu_adjust_prices_scope_all_hint: string
+    menu_adjust_prices_apply: string
+    menu_adjust_prices_applying: string
+    menu_adjust_prices_success_title: string
+    menu_adjust_prices_success: string
+    menu_adjust_prices_failed: string
+    menu_adjust_prices_invalid_percent: string
+    menu_adjust_prices_no_selection: string
+    menu_adjust_prices_no_category: string
 
     /* ── Menu Table ── */
     menu_col_item_name: string
@@ -609,6 +633,31 @@ const en: TranslationStrings = {
     menu_publishing: 'Publishing...',
     menu_publish_success: 'Successfully published {0} items.',
     menu_publish_all_success: 'Successfully published {0} draft items.',
+    menu_all_categories: 'All categories',
+    menu_category_search_placeholder: 'Search categories...',
+    menu_category_search_no_results: 'No categories match your search.',
+    menu_adjust_prices: 'Adjust prices',
+    menu_adjust_prices_title: 'Adjust prices by percentage',
+    menu_adjust_prices_description:
+      'Increase or decrease selling prices. Use a positive number to raise prices (e.g. 10 for +10%) or a negative number to lower them (e.g. -5 for -5%).',
+    menu_adjust_prices_percent_label: 'Percentage change',
+    menu_adjust_prices_percent_hint: 'Example: 10 raises prices by 10%. -5 lowers them by 5%.',
+    menu_adjust_prices_scope_label: 'Apply to',
+    menu_adjust_prices_scope_selected: 'Selected items only',
+    menu_adjust_prices_scope_selected_count: '{0} item(s) selected',
+    menu_adjust_prices_scope_selected_empty: 'Select items in the table first',
+    menu_adjust_prices_scope_category: 'All items in category',
+    menu_adjust_prices_scope_category_name: 'Category: {0}',
+    menu_adjust_prices_scope_all: 'All menu items',
+    menu_adjust_prices_scope_all_hint: 'Every item in your menu, across all categories',
+    menu_adjust_prices_apply: 'Apply adjustment',
+    menu_adjust_prices_applying: 'Applying...',
+    menu_adjust_prices_success_title: 'Prices updated',
+    menu_adjust_prices_success: 'Updated {0} item(s) by {1}%.',
+    menu_adjust_prices_failed: 'Failed to adjust prices',
+    menu_adjust_prices_invalid_percent: 'Enter a non-zero percentage.',
+    menu_adjust_prices_no_selection: 'Select at least one item, or choose another scope.',
+    menu_adjust_prices_no_category: 'Filter by a category first, or choose another scope.',
 
     /* Menu Table */
     menu_col_item_name: 'Item Name',
@@ -1095,6 +1144,31 @@ const ku: TranslationStrings = {
     menu_publishing: 'لە بڵاوکردنەوەدایە...',
     menu_publish_success: 'بە سەرکەوتوویی {0} ئایتم بڵاوکرایەوە.',
     menu_publish_all_success: 'بە سەرکەوتوویی هەموو {0} ئایتمە ڕەشنووسەکان بڵاوکرانەوە.',
+    menu_all_categories: 'هەموو پۆلەکان',
+    menu_category_search_placeholder: 'گەڕان لە پۆلەکان...',
+    menu_category_search_no_results: 'هیچ پۆلێک نەدۆزرایەوە.',
+    menu_adjust_prices: 'گۆڕینی نرخ',
+    menu_adjust_prices_title: 'گۆڕینی نرخ بە ڕێژە',
+    menu_adjust_prices_description:
+      'نرخەکان بەرز بکەرەوە یان دابەزێنە. ژمارەی ئەرێنی بۆ بەرزکردنەوە (وەک 10 بۆ +10%) یان ژمارەی نەرێنی بۆ دابەزاندن (وەک -5 بۆ -5%).',
+    menu_adjust_prices_percent_label: 'ڕێژەی گۆڕان',
+    menu_adjust_prices_percent_hint: 'نموونە: 10 نرخەکان 10% بەرز دەکاتەوە. -5 5% دابەزێنێت.',
+    menu_adjust_prices_scope_label: 'جێبەجێکردن بۆ',
+    menu_adjust_prices_scope_selected: 'تەنها ئایتمە هەڵبژێردراوەکان',
+    menu_adjust_prices_scope_selected_count: '{0} ئایتم هەڵبژێردراوە',
+    menu_adjust_prices_scope_selected_empty: 'سەرەتا ئایتم لە خشتەکەدا هەڵبژێرە',
+    menu_adjust_prices_scope_category: 'هەموو ئایتمەکانی پۆل',
+    menu_adjust_prices_scope_category_name: 'پۆل: {0}',
+    menu_adjust_prices_scope_all: 'هەموو ئایتمەکانی مێنوو',
+    menu_adjust_prices_scope_all_hint: 'هەموو ئایتمەکانی مێنوو، لە هەموو پۆلەکاندا',
+    menu_adjust_prices_apply: 'جێبەجێکردن',
+    menu_adjust_prices_applying: 'لە جێبەجێکردندایە...',
+    menu_adjust_prices_success_title: 'نرخەکان نوێکرانەوە',
+    menu_adjust_prices_success: '{0} ئایتم بە {1}% نوێکرایەوە.',
+    menu_adjust_prices_failed: 'گۆڕینی نرخ سەرکەوتوو نەبوو',
+    menu_adjust_prices_invalid_percent: 'ڕێژەیەکی نا سفر بنووسە.',
+    menu_adjust_prices_no_selection: 'لانیکەم یەک ئایتم هەڵبژێرە، یان دەستەواژەیەکی تر هەڵبژێرە.',
+    menu_adjust_prices_no_category: 'سەرەتا بە پۆل فلتەر بکە، یان دەستەواژەیەکی تر هەڵبژێرە.',
 
     /* Menu Table */
     menu_col_item_name: 'ناوی خواردن',
@@ -1581,6 +1655,31 @@ const arFusha: TranslationStrings = {
     menu_publishing: 'جارٍ النشر...',
     menu_publish_success: 'تم نشر {0} أصناف بنجاح.',
     menu_publish_all_success: 'تم نشر جميع {0} المسودات بنجاح.',
+    menu_all_categories: 'جميع الفئات',
+    menu_category_search_placeholder: 'البحث في الفئات...',
+    menu_category_search_no_results: 'لا توجد فئات مطابقة.',
+    menu_adjust_prices: 'تعديل الأسعار',
+    menu_adjust_prices_title: 'تعديل الأسعار بنسبة مئوية',
+    menu_adjust_prices_description:
+      'ارفع أو خفّض أسعار البيع. استخدم رقماً موجباً للزيادة (مثل 10 لزيادة 10%) أو سالباً للتخفيض (مثل -5 لتخفيض 5%).',
+    menu_adjust_prices_percent_label: 'نسبة التغيير',
+    menu_adjust_prices_percent_hint: 'مثال: 10 يرفع الأسعار 10%. -5 يخفضها 5%.',
+    menu_adjust_prices_scope_label: 'تطبيق على',
+    menu_adjust_prices_scope_selected: 'الأصناف المحددة فقط',
+    menu_adjust_prices_scope_selected_count: '{0} صنف/أصناف محددة',
+    menu_adjust_prices_scope_selected_empty: 'حدد أصنافاً من الجدول أولاً',
+    menu_adjust_prices_scope_category: 'جميع أصناف الفئة',
+    menu_adjust_prices_scope_category_name: 'الفئة: {0}',
+    menu_adjust_prices_scope_all: 'جميع أصناف القائمة',
+    menu_adjust_prices_scope_all_hint: 'كل صنف في قائمتك، عبر جميع الفئات',
+    menu_adjust_prices_apply: 'تطبيق التعديل',
+    menu_adjust_prices_applying: 'جارٍ التطبيق...',
+    menu_adjust_prices_success_title: 'تم تحديث الأسعار',
+    menu_adjust_prices_success: 'تم تحديث {0} صنف/أصناف بنسبة {1}%.',
+    menu_adjust_prices_failed: 'فشل تعديل الأسعار',
+    menu_adjust_prices_invalid_percent: 'أدخل نسبة غير صفرية.',
+    menu_adjust_prices_no_selection: 'حدد صنفاً واحداً على الأقل، أو اختر نطاقاً آخر.',
+    menu_adjust_prices_no_category: 'صفِّ حسب فئة أولاً، أو اختر نطاقاً آخر.',
 
     /* Menu Table */
     menu_col_item_name: 'اسم الصنف',

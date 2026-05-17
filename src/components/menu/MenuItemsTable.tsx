@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
-import { Edit, Loader2, Trash, Check, X, DollarSign } from 'lucide-react'
+import { Edit, Loader2, Trash, Check, X, DollarSign, Percent } from 'lucide-react'
 import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
 import { useDynamicTranslate } from '@/lib/i18n'
 import { isZeroCostAllowed } from '@/lib/costing'
@@ -67,10 +67,18 @@ function getSuggestedPrice(cost: number, categoryName: string | null): number {
   return Math.ceil(cost * markup)
 }
 
+type BulkPriceScope = 'selected' | 'category' | 'all'
+
 export default function MenuItemsTable({
   menuItems,
+  activeCategoryId,
+  activeCategoryName,
+  categoryItemCount,
 }: {
   menuItems: MenuItemWithMetrics[]
+  activeCategoryId?: string
+  activeCategoryName?: string
+  categoryItemCount?: number
 }) {
   const router = useRouter()
   const [items, setItems] = useState(menuItems)
@@ -80,6 +88,10 @@ export default function MenuItemsTable({
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkPublishing, setBulkPublishing] = useState(false)
+  const [bulkAdjustOpen, setBulkAdjustOpen] = useState(false)
+  const [bulkAdjusting, setBulkAdjusting] = useState(false)
+  const [adjustPercent, setAdjustPercent] = useState('')
+  const [adjustScope, setAdjustScope] = useState<BulkPriceScope>('selected')
   const [chefPickUpdatingIds, setChefPickUpdatingIds] = useState<string[]>([])
   const [menuItemToDelete, setMenuItemToDelete] =
     useState<MenuItemWithMetrics | null>(null)
@@ -371,6 +383,104 @@ export default function MenuItemsTable({
     }
   }
 
+  const getDefaultAdjustScope = (): BulkPriceScope => {
+    if (selectedIds.length > 0) return 'selected'
+    if (activeCategoryId) return 'category'
+    return 'all'
+  }
+
+  const openBulkAdjustDialog = () => {
+    setAdjustPercent('')
+    setAdjustScope(getDefaultAdjustScope())
+    setBulkAdjustOpen(true)
+  }
+
+  const confirmBulkAdjustPrices = async () => {
+    const percentChange = parseFloat(adjustPercent)
+    if (isNaN(percentChange) || percentChange === 0) {
+      toast({
+        title: t.common_error,
+        description: t.menu_adjust_prices_invalid_percent,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (adjustScope === 'selected' && selectedIds.length === 0) {
+      toast({
+        title: t.common_error,
+        description: t.menu_adjust_prices_no_selection,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (adjustScope === 'category' && !activeCategoryId) {
+      toast({
+        title: t.common_error,
+        description: t.menu_adjust_prices_no_category,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setBulkAdjusting(true)
+    try {
+      const body: Record<string, unknown> = { percentChange }
+      if (adjustScope === 'selected') {
+        body.ids = selectedIds
+      } else if (adjustScope === 'category') {
+        body.categoryId = activeCategoryId
+      } else {
+        body.applyToAll = true
+      }
+
+      const response = await fetch('/api/menu/bulk-adjust-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result?.error ?? t.menu_adjust_prices_failed)
+      }
+
+      if (adjustScope === 'selected') {
+        const multiplier = 1 + percentChange / 100
+        setItems((prev) =>
+          prev.map((item) => {
+            if (!selectedIds.includes(item.id)) return item
+            const newPrice = Math.max(0, Math.round(item.price * multiplier))
+            const profit = newPrice - item.cost
+            const margin = newPrice > 0 ? (profit / newPrice) * 100 : 0
+            return { ...item, price: newPrice, profit, margin }
+          })
+        )
+      }
+
+      setBulkAdjustOpen(false)
+      setAdjustPercent('')
+      toast({
+        title: t.menu_adjust_prices_success_title,
+        description: t.menu_adjust_prices_success
+          .replace('{0}', String(result.updatedCount ?? 0))
+          .replace('{1}', percentChange > 0 ? `+${percentChange}` : String(percentChange)),
+      })
+      router.refresh()
+    } catch (error) {
+      console.error('Bulk price adjust error:', error)
+      toast({
+        title: t.common_error,
+        description:
+          error instanceof Error ? error.message : t.menu_adjust_prices_failed,
+        variant: 'destructive',
+      })
+    } finally {
+      setBulkAdjusting(false)
+    }
+  }
+
   const handlePublishAll = async () => {
     if (bulkPublishing) return
     
@@ -573,6 +683,15 @@ export default function MenuItemsTable({
               <span className="font-medium text-slate-900">{selectedIds.length}</span> selected
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openBulkAdjustDialog}
+                disabled={bulkAdjusting || bulkDeleting || bulkPublishing}
+              >
+                <Percent className="h-4 w-4 mr-2" />
+                {t.menu_adjust_prices}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -917,6 +1036,130 @@ export default function MenuItemsTable({
                   {menuItemToDelete && deletingIds.includes(menuItemToDelete.id)
                     ? t.menu_deleting
                     : t.common_delete}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={bulkAdjustOpen} onOpenChange={setBulkAdjustOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t.menu_adjust_prices_title}</DialogTitle>
+                <DialogDescription>{t.menu_adjust_prices_description}</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="adjust-percent">{t.menu_adjust_prices_percent_label}</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="adjust-percent"
+                      type="number"
+                      step="any"
+                      placeholder="10"
+                      value={adjustPercent}
+                      onChange={(e) => setAdjustPercent(e.target.value)}
+                      disabled={bulkAdjusting}
+                      className="max-w-[140px]"
+                    />
+                    <span className="text-sm text-slate-500">%</span>
+                  </div>
+                  <p className="text-xs text-slate-500">{t.menu_adjust_prices_percent_hint}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t.menu_adjust_prices_scope_label}</Label>
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2 rounded-md border border-slate-200 p-3 cursor-pointer hover:bg-slate-50">
+                      <input
+                        type="radio"
+                        name="adjust-scope"
+                        checked={adjustScope === 'selected'}
+                        onChange={() => setAdjustScope('selected')}
+                        disabled={bulkAdjusting || selectedIds.length === 0}
+                        className="mt-1"
+                      />
+                      <span className="text-sm">
+                        <span className="font-medium text-slate-900">
+                          {t.menu_adjust_prices_scope_selected}
+                        </span>
+                        <span className="block text-slate-500">
+                          {selectedIds.length > 0
+                            ? t.menu_adjust_prices_scope_selected_count.replace(
+                                '{0}',
+                                String(selectedIds.length)
+                              )
+                            : t.menu_adjust_prices_scope_selected_empty}
+                        </span>
+                      </span>
+                    </label>
+                    {activeCategoryId && activeCategoryName && (
+                      <label className="flex items-start gap-2 rounded-md border border-slate-200 p-3 cursor-pointer hover:bg-slate-50">
+                        <input
+                          type="radio"
+                          name="adjust-scope"
+                          checked={adjustScope === 'category'}
+                          onChange={() => setAdjustScope('category')}
+                          disabled={bulkAdjusting}
+                          className="mt-1"
+                        />
+                        <span className="text-sm">
+                          <span className="font-medium text-slate-900">
+                            {t.menu_adjust_prices_scope_category}
+                          </span>
+                          <span className="block text-slate-500">
+                            {t.menu_adjust_prices_scope_category_name.replace(
+                              '{0}',
+                              getTranslatedCategoryName(activeCategoryName, t)
+                            )}
+                            {categoryItemCount != null
+                              ? ` (${categoryItemCount} ${t.menu_items})`
+                              : ''}
+                          </span>
+                        </span>
+                      </label>
+                    )}
+                    <label className="flex items-start gap-2 rounded-md border border-slate-200 p-3 cursor-pointer hover:bg-slate-50">
+                      <input
+                        type="radio"
+                        name="adjust-scope"
+                        checked={adjustScope === 'all'}
+                        onChange={() => setAdjustScope('all')}
+                        disabled={bulkAdjusting}
+                        className="mt-1"
+                      />
+                      <span className="text-sm">
+                        <span className="font-medium text-slate-900">
+                          {t.menu_adjust_prices_scope_all}
+                        </span>
+                        <span className="block text-slate-500">
+                          {t.menu_adjust_prices_scope_all_hint}
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkAdjustOpen(false)}
+                  disabled={bulkAdjusting}
+                >
+                  {t.common_cancel}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={confirmBulkAdjustPrices}
+                  disabled={bulkAdjusting || !adjustPercent.trim()}
+                >
+                  {bulkAdjusting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {t.menu_adjust_prices_applying}
+                    </>
+                  ) : (
+                    t.menu_adjust_prices_apply
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>

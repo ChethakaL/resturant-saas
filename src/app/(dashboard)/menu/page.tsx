@@ -14,6 +14,7 @@ import BulkMenuImport from '@/components/menu/BulkMenuImport'
 import ImportByDigitalMenu from '@/components/menu/ImportByDigitalMenu'
 import CategoriesButtonWithHelp from '@/components/menu/CategoriesButtonWithHelp'
 import MenuItemsTable from '@/components/menu/MenuItemsTable'
+import CategoryFilterSelect from '@/components/menu/CategoryFilterSelect'
 import MenuPageTabs from '@/components/menu/MenuPageTabs'
 import { parseSlotTimes } from '@/lib/time-slots'
 import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
@@ -35,13 +36,15 @@ async function getMenuData(
   page: number,
   translationLang: string | null,
   search?: string,
-  statusFilter?: string
+  statusFilter?: string,
+  categoryFilter?: string
 ) {
   const skip = (page - 1) * PAGE_SIZE
 
   const normalizedSearch = search?.trim() ?? ''
   const where: Prisma.MenuItemWhereInput = {
     restaurantId,
+    ...(categoryFilter ? { categoryId: categoryFilter } : {}),
     ...(normalizedSearch
       ? translationLang
         ? {
@@ -125,6 +128,7 @@ async function getMenuData(
           : statusFilter === 'COSTING_INCOMPLETE'
             ? Prisma.sql`AND mi."costingStatus" = 'INCOMPLETE'`
             : Prisma.empty}
+      ${categoryFilter ? Prisma.sql`AND mi."categoryId" = ${categoryFilter}` : Prisma.empty}
   `)
 
   const itemsWithMetrics = menuItems.map((item) => {
@@ -166,7 +170,12 @@ async function getMenuData(
 export default async function MenuPage({
   searchParams,
 }: {
-  searchParams?: { page?: string; search?: string | string[]; status?: string }
+  searchParams?: {
+    page?: string
+    search?: string | string[]
+    status?: string
+    category?: string
+  }
 }) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
@@ -179,13 +188,21 @@ export default async function MenuPage({
         ? rawSearch[0]?.trim() ?? ''
         : ''
   const statusFilter = searchParams?.status ?? ''
+  const categoryFilter = searchParams?.category?.trim() ?? ''
 
   // Defer showcases + all menu items to optimization tab (loaded client-side when user opens that tab)
   const { locale, t } = await getServerTranslations()
   const translationLang = getTranslationLanguage(locale)
 
   const [data, user, restaurant] = await Promise.all([
-    getMenuData(restaurantId, page, translationLang, normalizedSearch, statusFilter),
+    getMenuData(
+      restaurantId,
+      page,
+      translationLang,
+      normalizedSearch,
+      statusFilter,
+      categoryFilter || undefined
+    ),
     prisma.user.findUnique({
       where: { id: session!.user.id },
       select: { defaultBackgroundPrompt: true },
@@ -198,6 +215,15 @@ export default async function MenuPage({
   const defaultBackgroundPrompt = user?.defaultBackgroundPrompt ?? ''
   const searchQuery = (normalizedSearch ? `&search=${encodeURIComponent(normalizedSearch)}` : '')
     + (statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : '')
+    + (categoryFilter ? `&category=${encodeURIComponent(categoryFilter)}` : '')
+  const activeCategory = categoryFilter
+    ? data.categories.find((c) => c.id === categoryFilter)
+    : undefined
+  const categoryItemCount = activeCategory
+    ? await prisma.menuItem.count({
+        where: { restaurantId, categoryId: activeCategory.id },
+      })
+    : undefined
   const settings = (restaurant?.settings as Record<string, unknown>) || {}
   const menuEngineSettings = (settings.menuEngine as Record<string, unknown>) || null
   const currentSalesPdfPeriod = getCurrentSalesPdfPeriod()
@@ -308,11 +334,21 @@ export default async function MenuPage({
                     <option value="ACTIVE">{t.menu_published}</option>
                     <option value="COSTING_INCOMPLETE">{t.menu_costing_incomplete}</option>
                   </select>
+                  <CategoryFilterSelect
+                    categories={data.categories.map((category) => ({
+                      id: category.id,
+                      name: category.name,
+                    }))}
+                    defaultValue={categoryFilter}
+                    allCategoriesLabel={t.menu_all_categories}
+                    searchPlaceholder={t.menu_category_search_placeholder}
+                    noResultsLabel={t.menu_category_search_no_results}
+                  />
                   <Button size="sm" type="submit">
                     {t.menu_search}
                   </Button>
                 </div>
-                {(normalizedSearch || statusFilter) && (
+                {(normalizedSearch || statusFilter || categoryFilter) && (
                   <Link href="/dashboard/menu?page=1">
                     <Button variant="outline" size="sm">
                       {t.menu_clear}
@@ -321,7 +357,12 @@ export default async function MenuPage({
                 )}
               </form>
 
-              <MenuItemsTable menuItems={data.menuItems} />
+              <MenuItemsTable
+                menuItems={data.menuItems}
+                activeCategoryId={activeCategory?.id}
+                activeCategoryName={activeCategory?.name}
+                categoryItemCount={categoryItemCount}
+              />
 
               {/* Pagination */}
               {data.totalPages > 1 && (
