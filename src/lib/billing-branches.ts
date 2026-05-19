@@ -1,29 +1,17 @@
 import type Stripe from 'stripe'
 import { stripe } from '@/lib/stripe'
+import {
+  BRANCH_ADDON_PRODUCT_NAME,
+  branchAddonQuantityOnSubscription,
+  buildBranchSubscriptionItemParams,
+  getBranchBillingConfig,
+  isBranchAddonSubscriptionItem,
+  resolveBranchAddonItems,
+  type BranchBillingConfig,
+} from '@/lib/branch-billing'
 
 export function isActiveStripeSubscription(subscription: Stripe.Subscription) {
   return subscription.status === 'active' || subscription.status === 'trialing'
-}
-
-export function getBranchQuantityFromSubscription(
-  subscription: Stripe.Subscription,
-  branchPriceId: string,
-  mainSubscriptionId?: string | null
-) {
-  const branchItem = subscription.items.data.find((item) => item.price.id === branchPriceId)
-  if (!branchItem) {
-    return 0
-  }
-
-  if (subscription.id === mainSubscriptionId) {
-    return branchItem.quantity ?? 0
-  }
-
-  if (subscription.metadata?.kind === 'branch_addon') {
-    return branchItem.quantity ?? 0
-  }
-
-  return 0
 }
 
 export async function listCustomerSubscriptions(customerId: string) {
@@ -50,13 +38,31 @@ export async function listCustomerSubscriptions(customerId: string) {
   return subscriptions
 }
 
+export async function retrieveSubscription(subscriptionId: string) {
+  return stripe.subscriptions.retrieve(subscriptionId)
+}
+
+export async function countExtraBranchSlots(
+  subscriptions: Stripe.Subscription[],
+  mainSubscriptionId?: string | null
+) {
+  let total = 0
+  for (const subscription of subscriptions) {
+    if (!isActiveStripeSubscription(subscription)) {
+      continue
+    }
+    total += await branchAddonQuantityOnSubscription(subscription, mainSubscriptionId)
+  }
+  return total
+}
+
 export async function getBranchCapacityForRestaurant(params: {
-  branchPriceId: string
   stripeCustomerId?: string | null
   stripeSubscriptionId?: string | null
   settings?: unknown
+  branchBilling?: BranchBillingConfig
 }) {
-  const { branchPriceId, stripeCustomerId, stripeSubscriptionId, settings } = params
+  const { stripeCustomerId, stripeSubscriptionId, settings } = params
   const settingsRecord = (settings as Record<string, unknown>) || {}
   const fallbackMaxBranches = (settingsRecord.maxBranches as number) || 1
 
@@ -68,16 +74,28 @@ export async function getBranchCapacityForRestaurant(params: {
     }
   }
 
-  const subscriptions = stripeCustomerId
-    ? await listCustomerSubscriptions(stripeCustomerId)
-    : stripeSubscriptionId
-      ? [await stripe.subscriptions.retrieve(stripeSubscriptionId)]
-      : []
+  let subscriptions: Stripe.Subscription[]
+
+  if (stripeSubscriptionId) {
+    subscriptions = [await retrieveSubscription(stripeSubscriptionId)]
+    if (stripeCustomerId) {
+      const all = await listCustomerSubscriptions(stripeCustomerId)
+      const extra = all.filter(
+        (sub) =>
+          sub.id !== stripeSubscriptionId &&
+          isActiveStripeSubscription(sub) &&
+          sub.metadata?.kind === 'branch_addon'
+      )
+      subscriptions = [...subscriptions, ...extra]
+    }
+  } else if (stripeCustomerId) {
+    subscriptions = await listCustomerSubscriptions(stripeCustomerId)
+  } else {
+    subscriptions = []
+  }
 
   const activeSubscriptions = subscriptions.filter(isActiveStripeSubscription)
-  const extraBranchSlots = activeSubscriptions.reduce((total, subscription) => {
-    return total + getBranchQuantityFromSubscription(subscription, branchPriceId, stripeSubscriptionId)
-  }, 0)
+  const extraBranchSlots = await countExtraBranchSlots(activeSubscriptions, stripeSubscriptionId)
 
   return {
     maxBranches: 1 + extraBranchSlots,
@@ -86,9 +104,8 @@ export async function getBranchCapacityForRestaurant(params: {
   }
 }
 
-export function findBranchSubscriptionItem(
+export async function findBranchSubscriptionItem(
   subscriptions: Stripe.Subscription[],
-  branchPriceId: string,
   mainSubscriptionId?: string | null
 ) {
   for (const subscription of subscriptions) {
@@ -96,7 +113,8 @@ export function findBranchSubscriptionItem(
       continue
     }
 
-    const branchItem = subscription.items.data.find((item) => item.price.id === branchPriceId)
+    const branchItems = await resolveBranchAddonItems(subscription.items.data)
+    const branchItem = branchItems[0]
     if (!branchItem) {
       continue
     }
@@ -107,4 +125,69 @@ export function findBranchSubscriptionItem(
   }
 
   return null
+}
+
+export type BranchSlotStripeResult = {
+  action: 'created' | 'updated'
+  subscriptionItemId: string
+  quantity: number
+  branchPriceUsd: number
+}
+
+/** Adds paid branch slots to the restaurant's main Stripe subscription. */
+export async function incrementPaidBranchSlots(
+  stripeSubscriptionId: string,
+  slotsToAdd: number,
+  branchBilling?: BranchBillingConfig
+): Promise<BranchSlotStripeResult> {
+  if (slotsToAdd <= 0) {
+    throw new Error('slotsToAdd must be at least 1')
+  }
+
+  const billing = branchBilling ?? (await getBranchBillingConfig())
+
+  const mainSubscription = await retrieveSubscription(stripeSubscriptionId)
+  if (!isActiveStripeSubscription(mainSubscription)) {
+    throw new Error('Your subscription is not active. Renew to add branches.')
+  }
+
+  const branchSubscription = await findBranchSubscriptionItem([mainSubscription], stripeSubscriptionId)
+  const branchItem = branchSubscription?.item
+
+  if (branchItem) {
+    const quantity = (branchItem.quantity ?? 0) + slotsToAdd
+    const updated = await stripe.subscriptionItems.update(branchItem.id, {
+      quantity,
+      proration_behavior: 'always_invoice',
+    })
+    const result: BranchSlotStripeResult = {
+      action: 'updated',
+      subscriptionItemId: updated.id,
+      quantity,
+      branchPriceUsd: billing.branchPriceUsd,
+    }
+    console.info('[billing/branch-slot] Stripe subscription item updated', result)
+    return result
+  }
+
+  const itemParams = await buildBranchSubscriptionItemParams(
+    billing.branchPriceUsd,
+    billing.branchPriceId,
+    slotsToAdd
+  )
+
+  const created = await stripe.subscriptionItems.create({
+    subscription: stripeSubscriptionId,
+    proration_behavior: 'always_invoice',
+    ...itemParams,
+  })
+
+  const result: BranchSlotStripeResult = {
+    action: 'created',
+    subscriptionItemId: created.id,
+    quantity: created.quantity ?? slotsToAdd,
+    branchPriceUsd: billing.branchPriceUsd,
+  }
+  console.info('[billing/branch-slot] Stripe subscription item created', result)
+  return result
 }

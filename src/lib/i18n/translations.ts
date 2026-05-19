@@ -428,6 +428,8 @@ export interface TranslationStrings {
     sub_monthly_plan: string
     sub_subscription_active: string
     sub_renews_on: string
+    sub_extra_branches_addon: string
+    sub_included_branch: string
     sub_manage_subscription: string
     sub_portal_description: string
     sub_choose_plan: string
@@ -940,6 +942,8 @@ const en: TranslationStrings = {
     sub_monthly_plan: 'Monthly plan · $50/month',
     sub_subscription_active: 'Your subscription is active',
     sub_renews_on: 'Renews on {{date}}',
+    sub_extra_branches_addon: '+ {{count}} extra branch(es) · ${{price}}/month each',
+    sub_included_branch: '1 branch included in your plan',
     sub_manage_subscription: 'Manage subscription',
     sub_portal_description: 'Update payment method, view invoices, or cancel — in your secure Stripe portal.',
     sub_choose_plan: 'Choose your plan',
@@ -1451,6 +1455,8 @@ const ku: TranslationStrings = {
     sub_monthly_plan: 'پلانی مانگانە · ٥٠$/مانگ',
     sub_subscription_active: 'بەشدارییەکەت چالاکە',
     sub_renews_on: 'نوێدەکرێتەوە لە {{date}}',
+    sub_extra_branches_addon: '+ {{count}} لقی زیادە · ${{price}}/مانگ بۆ هەر یەک',
+    sub_included_branch: '١ لق لەگەڵ پلانەکەتدا',
     sub_manage_subscription: 'بەڕێوەبردنی بەشداری',
     sub_portal_description: 'شێوازی پارەدان نوێ بکە، وتارەکان ببینە، یان هەڵوەشێنەوە — لە پۆرتاڵی ئاسوودەی Stripe.',
     sub_choose_plan: 'پلانەکەت هەڵبژێرە',
@@ -1962,6 +1968,8 @@ const arFusha: TranslationStrings = {
     sub_monthly_plan: 'الخطة الشهرية · 50$/شهر',
     sub_subscription_active: 'اشتراكك نشط',
     sub_renews_on: 'يتجدد في {{date}}',
+    sub_extra_branches_addon: '+ {{count}} فرع إضافي · ${{price}}/شهر لكل فرع',
+    sub_included_branch: 'فرع واحد مشمول في خطتك',
     sub_manage_subscription: 'إدارة الاشتراك',
     sub_portal_description: 'تحديث طريقة الدفع، عرض الفواتير، أو الإلغاء — في بوابة Stripe الآمنة.',
     sub_choose_plan: 'اختر خطتك',

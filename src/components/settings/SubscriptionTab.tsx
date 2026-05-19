@@ -15,6 +15,8 @@ interface SubscriptionTabProps {
   pricesConfigured: boolean
   priceMonthly: string
   priceAnnual: string
+  extraBranchSlots?: number
+  priceBranch?: string
 }
 
 export default function SubscriptionTab({
@@ -24,6 +26,8 @@ export default function SubscriptionTab({
   pricesConfigured,
   priceMonthly,
   priceAnnual,
+  extraBranchSlots = 0,
+  priceBranch = '10',
 }: SubscriptionTabProps) {
   const searchParams = useSearchParams()
   const pathname = usePathname()
@@ -120,6 +124,10 @@ export default function SubscriptionTab({
       })
     : null
 
+  const basePlanPrice =
+    currentPlan === 'annual' ? priceAnnual : currentPlan === 'monthly' ? priceMonthly : null
+  const branchAddonTotal = extraBranchSlots * (Number(priceBranch) || 10)
+
   const handleApplyPromo = async () => {
     const trimmed = promoCode.trim()
     if (!trimmed) {
@@ -187,16 +195,38 @@ export default function SubscriptionTab({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">{t.sub_active_subscription}</h3>
-                <p className="mt-0.5 text-sm text-slate-500">
-                  {currentPlan === 'annual'
-                    ? t.sub_annual_plan
-                    : currentPlan === 'monthly'
-                      ? t.sub_monthly_plan
-                      : t.sub_subscription_active}
-                  {periodEndLabel && (
-                    <span className="block mt-0.5 text-xs text-slate-400">{t.sub_renews_on.replace('{{date}}', periodEndLabel)}</span>
+                <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                  <li className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                    {currentPlan === 'annual'
+                      ? `${t.sub_annual} · $${basePlanPrice ?? priceAnnual}/year`
+                      : currentPlan === 'monthly'
+                        ? `${t.sub_monthly} · $${basePlanPrice ?? priceMonthly}/month`
+                        : t.sub_subscription_active}
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+                    {t.sub_included_branch}
+                  </li>
+                  {extraBranchSlots > 0 && (
+                    <li className="flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <span>
+                        {t.sub_extra_branches_addon
+                          .replace('{{count}}', String(extraBranchSlots))
+                          .replace('{{price}}', priceBranch)}
+                        {branchAddonTotal > 0 && (
+                          <span className="text-slate-400">{` ($${branchAddonTotal}/mo)`}</span>
+                        )}
+                      </span>
+                    </li>
                   )}
-                </p>
+                </ul>
+                {periodEndLabel && (
+                  <p className="mt-2 text-xs text-slate-400">
+                    {t.sub_renews_on.replace('{{date}}', periodEndLabel)}
+                  </p>
+                )}
               </div>
             </div>
             <Button

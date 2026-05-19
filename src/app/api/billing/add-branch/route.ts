@@ -2,18 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getBranchBillingConfig } from '@/lib/branch-billing'
 import {
-  findBranchSubscriptionItem,
   getBranchCapacityForRestaurant,
+  incrementPaidBranchSlots,
 } from '@/lib/billing-branches'
-
-const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
 
 /**
  * POST /api/billing/add-branch
- * Adds an extra branch: creates a Stripe subscription item for $10/mo (if not already at limit)
- * and creates the branch. Requires an active subscription.
+ * Creates a branch; adds the Platform Settings branch price to Stripe when needed.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -22,12 +19,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!STRIPE_PRICE_BRANCH?.trim()) {
-      return NextResponse.json(
-        { error: 'Branch add-on not configured. Set STRIPE_PRICE_BRANCH to a Stripe price ID ($10/month).' },
-        { status: 500 }
-      )
-    }
+    const branchBilling = await getBranchBillingConfig()
 
     const body = await request.json()
     const name = body.name?.trim()
@@ -59,16 +51,18 @@ export async function POST(request: NextRequest) {
     })
 
     const capacity = await getBranchCapacityForRestaurant({
-      branchPriceId: STRIPE_PRICE_BRANCH,
       stripeCustomerId: restaurant.stripeCustomerId,
       stripeSubscriptionId: restaurant.stripeSubscriptionId,
       settings: restaurant.settings,
+      branchBilling,
     })
     const maxBranches = capacity.maxBranches
 
     if (currentBranchCount >= maxBranches) {
       return NextResponse.json(
-        { error: `Branch limit reached (${maxBranches}). Each extra branch is $10/month — add payment to continue.` },
+        {
+          error: `Branch limit reached (${maxBranches}). Each extra branch is $${branchBilling.branchPriceUsd}/month — add a branch slot first.`,
+        },
         { status: 403 }
       )
     }
@@ -84,32 +78,11 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const mainSubscription = await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)
-      if (!['active', 'trialing'].includes(mainSubscription.status)) {
-        return NextResponse.json(
-          { error: 'Your subscription is not active. Renew to add branches.' },
-          { status: 403 }
-        )
-      }
-
-      const branchSubscription = findBranchSubscriptionItem(
-        [mainSubscription],
-        STRIPE_PRICE_BRANCH,
-        restaurant.stripeSubscriptionId
+      await incrementPaidBranchSlots(
+        restaurant.stripeSubscriptionId,
+        delta,
+        branchBilling
       )
-      const branchItem = branchSubscription?.item
-
-      if (branchItem) {
-        await stripe.subscriptionItems.update(branchItem.id, {
-          quantity: (branchItem.quantity ?? 0) + delta,
-        })
-      } else {
-        await stripe.subscriptionItems.create({
-          subscription: restaurant.stripeSubscriptionId,
-          price: STRIPE_PRICE_BRANCH,
-          quantity: delta,
-        })
-      }
     }
 
     const branch = await prisma.branch.create({

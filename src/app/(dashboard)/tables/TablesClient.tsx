@@ -4,10 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, MapPin, Building2, Users, QrCode, Trash2, Loader2 } from 'lucide-react'
+import { Plus, Building2, Users, QrCode, Trash2, Loader2 } from 'lucide-react'
 import { TableQRModal } from '@/components/tables/TableQRModal'
 import { formatCurrency } from '@/lib/utils'
-import AddBranchModal, { AddBranchFormData } from '@/components/branches/AddBranchModal'
 import ManageWaitersModal from '@/components/waiters/ManageWaitersModal'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/components/ui/use-toast'
@@ -68,9 +67,6 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
     const [selectedBranch, setSelectedBranch] = useState<string>('all')
     const [tables, setTables] = useState<TableData[]>([])
     const [loading, setLoading] = useState(true)
-    const [showAddBranch, setShowAddBranch] = useState(false)
-    const [addingBranch, setAddingBranch] = useState(false)
-    const [branchError, setBranchError] = useState('')
     const [waiters, setWaiters] = useState<Waiter[]>([])
     const [showManageWaiters, setShowManageWaiters] = useState(false)
     const [qrModalOpen, setQrModalOpen] = useState(false)
@@ -125,35 +121,6 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
         setLoading(true)
         fetchTables()
     }, [fetchTables])
-
-    const handleAddBranch = async (formData: AddBranchFormData) => {
-        setBranchError('')
-        setAddingBranch(true)
-        try {
-            const res = await fetch('/api/branches', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: formData.name,
-                    address: formData.address ?? null,
-                    phone: formData.phone ?? null,
-                }),
-            })
-            const data = await res.json()
-            if (!res.ok) {
-                setBranchError(data.error || 'Failed to add branch')
-                throw new Error(data.error)
-            }
-            setShowAddBranch(false)
-            fetchBranches()
-            setSelectedBranch(data.id)
-        } catch (err) {
-            if (err instanceof Error && err.message) return
-            setBranchError('Failed to add branch')
-        } finally {
-            setAddingBranch(false)
-        }
-    }
 
     const stats = {
         total: tables.length,
@@ -258,10 +225,6 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                             </select>
                         </div>
                     )}
-                    <Button variant="outline" size="sm" onClick={() => setShowAddBranch(true)}>
-                        <MapPin className="h-4 w-4 mr-1" />
-                        {branches.length === 0 ? t.tables_add_branch : t.tables_new_branch}
-                    </Button>
                     <Button asChild>
                         <Link href="/tables/new">
                             <Plus className="mr-2 h-4 w-4" />
@@ -270,15 +233,6 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                     </Button>
                 </div>
             </div>
-
-            {/* Add Branch popup */}
-            <AddBranchModal
-                open={showAddBranch}
-                onOpenChange={(open) => { setShowAddBranch(open); setBranchError('') }}
-                onSubmit={handleAddBranch}
-                loading={addingBranch}
-                error={branchError || null}
-            />
 
             {/* Manage Waiters popup */}
             <ManageWaitersModal

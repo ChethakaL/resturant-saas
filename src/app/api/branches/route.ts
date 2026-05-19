@@ -2,6 +2,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { stripe } from '@/lib/stripe'
+import { isActiveStripeSubscription } from '@/lib/billing-branches'
+import { getPlatformConfig } from '@/lib/platform-config'
 
 export async function GET() {
     try {
@@ -32,11 +35,28 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Check branch limit
         const restaurant = await prisma.restaurant.findUnique({
             where: { id: session.user.restaurantId },
-            select: { settings: true },
+            select: { settings: true, stripeSubscriptionId: true },
         })
+
+        const platformCfg = await getPlatformConfig()
+        const stripeConfigured = !!(platformCfg.stripeSecretKey || process.env.STRIPE_SECRET_KEY)
+
+        if (stripeConfigured && restaurant?.stripeSubscriptionId) {
+            const subscription = await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)
+            if (isActiveStripeSubscription(subscription)) {
+                return NextResponse.json(
+                    {
+                        error:
+                            'Add branches from Subscription (Billing). Extra branches are $10/month each.',
+                    },
+                    { status: 403 }
+                )
+            }
+        }
+
+        // Check branch limit
         const settings = (restaurant?.settings as Record<string, unknown>) || {}
         const maxBranches = (settings.maxBranches as number) || 1
         const currentCount = await prisma.branch.count({

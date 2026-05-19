@@ -3,9 +3,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
-import { findBranchSubscriptionItem, listCustomerSubscriptions } from '@/lib/billing-branches'
-
-const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
+import {
+  findBranchSubscriptionItem,
+  listCustomerSubscriptions,
+  retrieveSubscription,
+} from '@/lib/billing-branches'
+import { getPlatformConfig } from '@/lib/platform-config'
 
 /**
  * POST /api/billing/cancel-branch
@@ -51,15 +54,17 @@ export async function POST(request: NextRequest) {
       select: { stripeSubscriptionId: true, stripeCustomerId: true },
     })
 
-    if ((restaurant?.stripeSubscriptionId || restaurant?.stripeCustomerId) && STRIPE_PRICE_BRANCH) {
+    const platformCfg = await getPlatformConfig()
+    const stripeConfigured = !!(platformCfg.stripeSecretKey || process.env.STRIPE_SECRET_KEY)
+
+    if ((restaurant?.stripeSubscriptionId || restaurant?.stripeCustomerId) && stripeConfigured) {
       const subscriptions = restaurant?.stripeCustomerId
         ? await listCustomerSubscriptions(restaurant.stripeCustomerId)
         : restaurant?.stripeSubscriptionId
-          ? [await stripe.subscriptions.retrieve(restaurant.stripeSubscriptionId)]
+          ? [await retrieveSubscription(restaurant.stripeSubscriptionId)]
           : []
-      const branchSubscription = findBranchSubscriptionItem(
+      const branchSubscription = await findBranchSubscriptionItem(
         subscriptions,
-        STRIPE_PRICE_BRANCH,
         restaurant?.stripeSubscriptionId
       )
       if (branchSubscription) {

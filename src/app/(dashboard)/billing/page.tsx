@@ -4,10 +4,9 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import BillingClient from './BillingClient'
 import { getBranchCapacityForRestaurant } from '@/lib/billing-branches'
+import { getBranchBillingConfig } from '@/lib/branch-billing'
 import { getPlatformConfig } from '@/lib/platform-config'
 import { isSubscriptionAccessActive } from '@/lib/subscription-status'
-
-const STRIPE_PRICE_BRANCH = process.env.STRIPE_PRICE_BRANCH
 
 export default async function BillingPage() {
   const session = await getServerSession(authOptions)
@@ -30,6 +29,7 @@ export default async function BillingPage() {
   const isActive = isSubscriptionAccessActive(restaurant?.subscriptionStatus)
 
   const platformCfg = await getPlatformConfig()
+  const branchBilling = await getBranchBillingConfig()
   const priceMonthly = String(platformCfg.priceMonthly ?? process.env.STRIPE_PRICE_MONTHLY ?? '59')
   const priceAnnual = String(platformCfg.priceAnnual ?? process.env.STRIPE_PRICE_ANNUAL ?? '590')
   const currentPlan =
@@ -40,22 +40,28 @@ export default async function BillingPage() {
         : null
 
   let maxBranches = 1
-  if (STRIPE_PRICE_BRANCH) {
+  let extraBranchSlots = 0
+  const stripeBillingEnabled = !!(platformCfg.stripeSecretKey || process.env.STRIPE_SECRET_KEY)
+
+  if (stripeBillingEnabled && (restaurant?.stripeCustomerId || restaurant?.stripeSubscriptionId)) {
     try {
       const capacity = await getBranchCapacityForRestaurant({
-        branchPriceId: STRIPE_PRICE_BRANCH,
         stripeCustomerId: restaurant?.stripeCustomerId,
         stripeSubscriptionId: restaurant?.stripeSubscriptionId,
         settings: restaurant?.settings,
+        branchBilling,
       })
       maxBranches = capacity.maxBranches
+      extraBranchSlots = capacity.extraBranchSlots
     } catch {
       const settings = (restaurant?.settings as Record<string, unknown>) || {}
       maxBranches = (settings.maxBranches as number) || 1
+      extraBranchSlots = Math.max(0, maxBranches - 1)
     }
   } else {
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
     maxBranches = (settings.maxBranches as number) || 1
+    extraBranchSlots = Math.max(0, maxBranches - 1)
   }
 
   return (
@@ -66,9 +72,10 @@ export default async function BillingPage() {
       pricesConfigured={!!(priceMonthly && priceAnnual)}
       priceMonthly={priceMonthly}
       priceAnnual={priceAnnual}
-      priceBranch={String(platformCfg.priceBranch ?? process.env.STRIPE_PRICE_BRANCH ?? '10')}
+      priceBranch={String(branchBilling.branchPriceUsd)}
       maxBranches={maxBranches}
-      stripePriceBranchConfigured={!!STRIPE_PRICE_BRANCH?.trim()}
+      extraBranchSlots={extraBranchSlots}
+      stripePriceBranchConfigured={stripeBillingEnabled}
     />
   )
 }

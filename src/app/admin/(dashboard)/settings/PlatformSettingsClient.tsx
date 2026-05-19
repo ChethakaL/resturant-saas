@@ -192,7 +192,7 @@ export default function PlatformSettingsClient() {
               />
               <PriceField
                 label="Branch Add-on Price"
-                description="Per additional branch per month (USD)"
+                description="Per extra branch per month (USD). Stripe is billed automatically — no Stripe Dashboard price ID needed."
                 id="priceBranch"
                 value={config.priceBranch}
                 onChange={set('priceBranch')}

@@ -27,6 +27,7 @@ interface BillingClientProps {
   priceAnnual: string
   priceBranch: string
   maxBranches: number
+  extraBranchSlots: number
   stripePriceBranchConfigured?: boolean
 }
 
@@ -48,6 +49,7 @@ export default function BillingClient({
   priceAnnual,
   priceBranch,
   maxBranches,
+  extraBranchSlots,
   stripePriceBranchConfigured = false,
 }: BillingClientProps) {
   const router = useRouter()
@@ -58,7 +60,9 @@ export default function BillingClient({
   const [addingBranch, setAddingBranch] = useState(false)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [paymentDialogMode, setPaymentDialogMode] = useState<'subscribe' | 'upgrade'>('subscribe')
-  const [redirectingToStripe, setRedirectingToStripe] = useState<'monthly' | 'annual' | 'portal' | null>(null)
+  const [branchSlotConfirmOpen, setBranchSlotConfirmOpen] = useState(false)
+  const [openAddBranchAfterSlotPurchase, setOpenAddBranchAfterSlotPurchase] = useState(false)
+  const [redirectingToStripe, setRedirectingToStripe] = useState<'monthly' | 'annual' | 'branch' | null>(null)
   const upgradeCardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -99,9 +103,15 @@ export default function BillingClient({
     }
   }
 
-  const openPaymentDialog = (mode: 'subscribe' | 'upgrade') => {
+  const openPaymentDialog = (mode: 'subscribe' | 'upgrade', options?: { openAddBranchAfter?: boolean }) => {
     setPaymentDialogMode(mode)
+    setOpenAddBranchAfterSlotPurchase(Boolean(options?.openAddBranchAfter))
     setPaymentDialogOpen(true)
+  }
+
+  const openBranchSlotConfirm = (openAddBranchAfter = true) => {
+    setOpenAddBranchAfterSlotPurchase(openAddBranchAfter)
+    setBranchSlotConfirmOpen(true)
   }
 
   const redirectToSubscriptionCheckout = async (plan: 'monthly' | 'annual') => {
@@ -144,23 +154,34 @@ export default function BillingClient({
     }
   }
 
-  const redirectToBillingPortal = async () => {
-    setRedirectingToStripe('portal')
+  const purchaseBranchSlot = async (options?: { openAddBranchAfter?: boolean }) => {
+    setRedirectingToStripe('branch')
     try {
-      const res = await fetch('/api/billing/upgrade-for-branch', { method: 'POST' })
+      const res = await fetch('/api/billing/purchase-branch-slot', { method: 'POST' })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to open Stripe billing')
-      if (data.url) {
-        window.location.href = data.url
-        return
+      if (!res.ok) throw new Error(data.error || 'Failed to add branch slot')
+
+      toast({
+        title: 'Branch slot added',
+        description:
+          typeof data.message === 'string'
+            ? data.message
+            : `+$${priceBranch}/month added to your subscription. You can create the branch now.`,
+      })
+      setPaymentDialogOpen(false)
+      setBranchSlotConfirmOpen(false)
+      fetchBranches()
+      router.refresh()
+      if (options?.openAddBranchAfter) {
+        setShowAddBranch(true)
       }
-      throw new Error('No billing URL returned')
     } catch (error) {
       toast({
-        title: 'Stripe billing failed',
-        description: error instanceof Error ? error.message : 'Could not open Stripe billing.',
+        title: 'Could not add branch slot',
+        description: error instanceof Error ? error.message : 'Please try again or contact support.',
         variant: 'destructive',
       })
+    } finally {
       setRedirectingToStripe(null)
     }
   }
@@ -186,7 +207,9 @@ export default function BillingClient({
         const needsSubscription = res.status === 403 && errorText.includes('subscription')
         if (isLimitReached) {
           setShowAddBranch(false)
-          openPaymentDialog(stripePriceBranchConfigured && isActive ? 'upgrade' : 'subscribe')
+          openPaymentDialog(stripePriceBranchConfigured && isActive ? 'upgrade' : 'subscribe', {
+            openAddBranchAfter: true,
+          })
           setTimeout(() => upgradeCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
           fetchBranches()
           router.refresh()
@@ -247,10 +270,6 @@ export default function BillingClient({
   const additionalBranchCost = Number(priceBranch) || 10
   const extraBranches = Math.max(0, maxBranches - 1)
 
-  const handleUpgradeForBranch = async () => {
-    openPaymentDialog(isActive ? 'upgrade' : 'subscribe')
-  }
-
   const { t } = useI18n()
 
   return (
@@ -266,6 +285,8 @@ export default function BillingClient({
         pricesConfigured={pricesConfigured}
         priceMonthly={priceMonthly}
         priceAnnual={priceAnnual}
+        extraBranchSlots={extraBranchSlots}
+        priceBranch={priceBranch}
       />
 
       {/* Branch Management Section */}
@@ -374,12 +395,12 @@ export default function BillingClient({
                 </p>
               </div>
               <Button
-                onClick={handleUpgradeForBranch}
+                onClick={() => openBranchSlotConfirm(true)}
                 disabled={redirectingToStripe !== null}
                 className="shrink-0"
                 size="lg"
               >
-                {redirectingToStripe !== null ? (
+                {redirectingToStripe === 'branch' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Plus className="h-4 w-4 mr-2" />
@@ -400,7 +421,7 @@ export default function BillingClient({
             <DialogDescription>
               {paymentDialogMode === 'subscribe'
                 ? 'Branches are a paid feature. Choose a plan below and continue to Stripe checkout before adding your branch.'
-                : `Your current subscription is active. To add another branch, continue to Stripe and approve an extra $${additionalBranchCost}/month branch charge.`}
+                : `Your card on file will be charged now (prorated for this billing period, then $${additionalBranchCost}/month for each extra branch). Do you want to continue?`}
             </DialogDescription>
           </DialogHeader>
 
@@ -428,14 +449,61 @@ export default function BillingClient({
             <DialogFooter>
               <Button
                 type="button"
-                onClick={() => void redirectToBillingPortal()}
+                onClick={() =>
+                  void purchaseBranchSlot({ openAddBranchAfter: openAddBranchAfterSlotPurchase })
+                }
                 disabled={redirectingToStripe !== null}
               >
-                {redirectingToStripe === 'portal' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Continue to Stripe for ${priceBranch}/month
+                {redirectingToStripe === 'branch' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Yes — charge my card ${priceBranch}/mo
               </Button>
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={branchSlotConfirmOpen} onOpenChange={setBranchSlotConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm extra branch — ${priceBranch}/month</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-slate-600 pt-1">
+                <p>
+                  You are about to add <strong>1 extra branch slot</strong> to your subscription.
+                </p>
+                <p>
+                  Your saved payment method will be <strong>charged now</strong> (Stripe may bill a
+                  prorated amount for the rest of this billing period, then{' '}
+                  <strong>${priceBranch}/month</strong> for this branch going forward).
+                </p>
+                <p className="text-slate-500">
+                  After confirming, you can enter the new branch name and details.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBranchSlotConfirmOpen(false)}
+              disabled={redirectingToStripe === 'branch'}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() =>
+                void purchaseBranchSlot({ openAddBranchAfter: openAddBranchAfterSlotPurchase })
+              }
+              disabled={redirectingToStripe === 'branch'}
+            >
+              {redirectingToStripe === 'branch' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Yes, charge my card
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
