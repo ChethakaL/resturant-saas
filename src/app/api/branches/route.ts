@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
         // Check branch limit
         const settings = (restaurant?.settings as Record<string, unknown>) || {}
-        const maxBranches = (settings.maxBranches as number) || 1
+        const maxBranches = Math.max(0, (settings.maxBranches as number) || 0)
         const currentCount = await prisma.branch.count({
             where: { restaurantId: session.user.restaurantId },
         })

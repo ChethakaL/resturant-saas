@@ -39,7 +39,7 @@ export default async function BillingPage() {
         ? 'monthly'
         : null
 
-  let maxBranches = 1
+  let maxBranches = 0
   let extraBranchSlots = 0
   const stripeBillingEnabled = !!(platformCfg.stripeSecretKey || process.env.STRIPE_SECRET_KEY)
 
@@ -55,13 +55,13 @@ export default async function BillingPage() {
       extraBranchSlots = capacity.extraBranchSlots
     } catch {
       const settings = (restaurant?.settings as Record<string, unknown>) || {}
-      maxBranches = (settings.maxBranches as number) || 1
-      extraBranchSlots = Math.max(0, maxBranches - 1)
+      maxBranches = Math.max(0, (settings.maxBranches as number) || 0)
+      extraBranchSlots = maxBranches
     }
   } else {
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
-    maxBranches = (settings.maxBranches as number) || 1
-    extraBranchSlots = Math.max(0, maxBranches - 1)
+    maxBranches = Math.max(0, (settings.maxBranches as number) || 0)
+    extraBranchSlots = maxBranches
   }
 
   return (

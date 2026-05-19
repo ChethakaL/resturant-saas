@@ -409,8 +409,12 @@ export interface TranslationStrings {
     billing_subtitle: string
     billing_branches: string
     billing_plan_includes: string
+    billing_plan_branches_paid: string
     billing_using_branches: string
     billing_extra_branches_cost: string
+    billing_paid_branch_slots: string
+    billing_no_branches_paid_desc: string
+    billing_buy_first_branch_slot: string
     billing_no_branches: string
     billing_add_first_branch_desc: string
     billing_add_first_branch: string
@@ -430,6 +434,7 @@ export interface TranslationStrings {
     sub_renews_on: string
     sub_extra_branches_addon: string
     sub_included_branch: string
+    sub_branches_not_included: string
     sub_manage_subscription: string
     sub_portal_description: string
     sub_choose_plan: string
@@ -924,8 +929,12 @@ const en: TranslationStrings = {
     billing_subtitle: 'Manage your subscription plan',
     billing_branches: 'Branches',
     billing_plan_includes: 'Your plan includes {{count}} branch. Additional branches cost ${{price}}/month each.',
-    billing_using_branches: 'Using {{used}} of {{total}} branches',
+    billing_plan_branches_paid: 'Branches are not included in your plan. Each branch costs ${{price}}/month.',
+    billing_using_branches: 'Using {{used}} of {{total}} paid branch slots',
     billing_extra_branches_cost: '+${{price}}/month for {{count}} extra branch(es)',
+    billing_paid_branch_slots: '${{price}}/month for {{count}} paid branch slot(s)',
+    billing_no_branches_paid_desc: 'Purchase a branch slot (${{price}}/month) before you can add your first location.',
+    billing_buy_first_branch_slot: 'Buy first branch slot — ${{price}}/mo',
     billing_no_branches: 'No branches yet',
     billing_add_first_branch_desc: 'Add your first branch to organize tables and sales by location.',
     billing_add_first_branch: 'Add Your First Branch',
@@ -936,7 +945,7 @@ const en: TranslationStrings = {
     billing_add_branch: 'Add Branch',
     billing_need_more_branches: 'Need more branches?',
     billing_extra_branch_cost_desc: 'Each additional branch is ${{price}}/month. Contact us to upgrade.',
-    billing_extra_branch_cost_desc_invoice: 'Each additional branch is ${{price}}/month. Add one below and it will be reflected on your next invoice.',
+    billing_extra_branch_cost_desc_invoice: 'Each branch is ${{price}}/month. Purchase a branch slot below (charged to your card on file).',
     sub_active_subscription: 'Active subscription',
     sub_annual_plan: 'Annual plan · $500/year',
     sub_monthly_plan: 'Monthly plan · $50/month',
@@ -944,6 +953,7 @@ const en: TranslationStrings = {
     sub_renews_on: 'Renews on {{date}}',
     sub_extra_branches_addon: '+ {{count}} extra branch(es) · ${{price}}/month each',
     sub_included_branch: '1 branch included in your plan',
+    sub_branches_not_included: 'Branches not included — ${{price}}/month per branch',
     sub_manage_subscription: 'Manage subscription',
     sub_portal_description: 'Update payment method, view invoices, or cancel — in your secure Stripe portal.',
     sub_choose_plan: 'Choose your plan',
@@ -1437,8 +1447,12 @@ const ku: TranslationStrings = {
     billing_subtitle: 'بەڕێوەبردنی پلانی بەشداری',
     billing_branches: 'لقەکان',
     billing_plan_includes: 'پلانەکەت {{count}} لق لەخۆدەگرێت. لقە زیادەکان {{price}}$/مانگ هەر یەک.',
-    billing_using_branches: '{{used}} لە {{total}} لق بەکاردەهێنرێت',
+    billing_plan_branches_paid: 'لق لە پلانەکەدا نییە. هەر لقێک {{price}}$/مانگە.',
+    billing_using_branches: '{{used}} لە {{total}} شوێنی لقی پارەدراو',
     billing_extra_branches_cost: '+{{price}}$/مانگ بۆ {{count}} لقی زیادە',
+    billing_paid_branch_slots: '{{price}}$/مانگ بۆ {{count}} شوێنی لقی پارەدراو',
+    billing_no_branches_paid_desc: 'یەکەم شوێنی لق بکڕە ({{price}}$/مانگ) پێش زیادکردنی شوێنەکەت.',
+    billing_buy_first_branch_slot: 'کڕینی یەکەم شوێنی لق — {{price}}$/مانگ',
     billing_no_branches: 'هێشتا لق نییە',
     billing_add_first_branch_desc: 'یەکەم لقت زیاد بکە بۆ ڕێکخستنی مێزەکان و فرۆشتن بە شوێن.',
     billing_add_first_branch: 'یەکەم لقت زیاد بکە',
@@ -1457,6 +1471,7 @@ const ku: TranslationStrings = {
     sub_renews_on: 'نوێدەکرێتەوە لە {{date}}',
     sub_extra_branches_addon: '+ {{count}} لقی زیادە · ${{price}}/مانگ بۆ هەر یەک',
     sub_included_branch: '١ لق لەگەڵ پلانەکەتدا',
+    sub_branches_not_included: 'لق لە پلاندا نییە — {{price}}$/مانگ بۆ هەر لق',
     sub_manage_subscription: 'بەڕێوەبردنی بەشداری',
     sub_portal_description: 'شێوازی پارەدان نوێ بکە، وتارەکان ببینە، یان هەڵوەشێنەوە — لە پۆرتاڵی ئاسوودەی Stripe.',
     sub_choose_plan: 'پلانەکەت هەڵبژێرە',
@@ -1950,8 +1965,12 @@ const arFusha: TranslationStrings = {
     billing_subtitle: 'إدارة خطة اشتراكك',
     billing_branches: 'الفروع',
     billing_plan_includes: 'تتضمن خطتك فرعاً واحداً. كل فرع إضافي يكلف {{price}}$/شهر.',
-    billing_using_branches: 'استخدام {{used}} من {{total}} فرعاً',
+    billing_plan_branches_paid: 'الفروع غير مشمولة في خطتك. كل فرع يكلف {{price}}$/شهر.',
+    billing_using_branches: 'استخدام {{used}} من {{total}} مكان فرع مدفوع',
     billing_extra_branches_cost: '+{{price}}$/شهر لـ {{count}} فرع إضافي',
+    billing_paid_branch_slots: '{{price}}$/شهر لـ {{count}} مكان فرع مدفوع',
+    billing_no_branches_paid_desc: 'اشترِ مكان فرع ({{price}}$/شهر) قبل إضافة موقعك الأول.',
+    billing_buy_first_branch_slot: 'شراء أول مكان فرع — {{price}}$/شهر',
     billing_no_branches: 'لا توجد فروع بعد',
     billing_add_first_branch_desc: 'أضف فرعك الأول لتنظيم الطاولات والمبيعات حسب الموقع.',
     billing_add_first_branch: 'أضف فرعك الأول',
@@ -1970,6 +1989,7 @@ const arFusha: TranslationStrings = {
     sub_renews_on: 'يتجدد في {{date}}',
     sub_extra_branches_addon: '+ {{count}} فرع إضافي · ${{price}}/شهر لكل فرع',
     sub_included_branch: 'فرع واحد مشمول في خطتك',
+    sub_branches_not_included: 'الفروع غير مشمولة — {{price}}$/شهر لكل فرع',
     sub_manage_subscription: 'إدارة الاشتراك',
     sub_portal_description: 'تحديث طريقة الدفع، عرض الفواتير، أو الإلغاء — في بوابة Stripe الآمنة.',
     sub_choose_plan: 'اختر خطتك',

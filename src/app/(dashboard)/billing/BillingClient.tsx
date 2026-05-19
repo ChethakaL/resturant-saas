@@ -61,6 +61,9 @@ export default function BillingClient({
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [paymentDialogMode, setPaymentDialogMode] = useState<'subscribe' | 'upgrade'>('subscribe')
   const [branchSlotConfirmOpen, setBranchSlotConfirmOpen] = useState(false)
+  const [deleteBranchTarget, setDeleteBranchTarget] = useState<{ id: string; name: string } | null>(null)
+  const [releaseSlotModalOpen, setReleaseSlotModalOpen] = useState(false)
+  const [deletingBranch, setDeletingBranch] = useState(false)
   const [openAddBranchAfterSlotPurchase, setOpenAddBranchAfterSlotPurchase] = useState(false)
   const [redirectingToStripe, setRedirectingToStripe] = useState<'monthly' | 'annual' | 'branch' | null>(null)
   const upgradeCardRef = useRef<HTMLDivElement>(null)
@@ -225,9 +228,7 @@ export default function BillingClient({
 
       toast({
         title: 'Branch added',
-        description: stripePriceBranchConfigured && isActive && branches.length >= 1
-          ? `"${data.name}" added. You'll be charged $${priceBranch}/month for this branch on your next invoice.`
-          : `"${data.name}" has been created.`,
+        description: `"${data.name}" has been created.`,
       })
       setShowAddBranch(false)
       fetchBranches()
@@ -240,35 +241,66 @@ export default function BillingClient({
     }
   }
 
-  const handleDeleteBranch = async (id: string, name: string) => {
-    if (!confirm(`Remove branch "${name}"? Tables and sales will be unassigned. Your subscription will be updated and the $${priceBranch}/month charge for this branch will stop at the end of the billing period.`)) return
+  const confirmDeleteBranch = async () => {
+    if (!deleteBranchTarget) return
+    const { id, name } = deleteBranchTarget
+    setDeletingBranch(true)
     try {
-      if (stripePriceBranchConfigured && isActive && branches.length > 1) {
-        const res = await fetch('/api/billing/cancel-branch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ branchId: id }),
+      const res = await fetch(`/api/branches/${id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast({
+          title: 'Cannot remove branch',
+          description: (data as { error?: string }).error || 'Failed to remove branch',
+          variant: 'destructive',
         })
-        const data = await res.json()
-        if (!res.ok) {
-          toast({ title: 'Cannot remove branch', description: data.error, variant: 'destructive' })
-          return
-        }
-        toast({ title: 'Branch removed', description: data.message || `"${name}" has been removed.` })
-      } else {
-        const res = await fetch(`/api/branches/${id}`, { method: 'DELETE' })
-        if (!res.ok) throw new Error()
-        toast({ title: 'Branch deleted', description: `"${name}" has been removed.` })
+        return
       }
+      setDeleteBranchTarget(null)
+      toast({
+        title: 'Branch removed',
+        description: `"${name}" removed. Your paid slot is still available to add another branch.`,
+      })
       fetchBranches()
       router.refresh()
     } catch {
       toast({ title: 'Error', description: 'Failed to remove branch', variant: 'destructive' })
+    } finally {
+      setDeletingBranch(false)
     }
   }
 
+  const confirmReleaseUnusedBranchSlot = async () => {
+    setRedirectingToStripe('branch')
+    try {
+      const res = await fetch('/api/billing/release-branch-slot', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to release slot')
+      setReleaseSlotModalOpen(false)
+      toast({
+        title: 'Branch slot released',
+        description:
+          typeof data.message === 'string'
+            ? data.message
+            : `You are no longer charged $${priceBranch}/month for that slot.`,
+      })
+      fetchBranches()
+      router.refresh()
+    } catch (error) {
+      toast({
+        title: 'Could not release slot',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setRedirectingToStripe(null)
+    }
+  }
+
+  const unusedBranchSlots = Math.max(0, maxBranches - branches.length)
+
   const additionalBranchCost = Number(priceBranch) || 10
-  const extraBranches = Math.max(0, maxBranches - 1)
+  const paidBranchSlots = extraBranchSlots
 
   const { t } = useI18n()
 
@@ -298,16 +330,16 @@ export default function BillingClient({
               {t.billing_branches}
             </h2>
             <p className="text-sm text-slate-500 mt-0.5">
-              {t.billing_plan_includes.replace('{{count}}', String(1)).replace('{{price}}', String(additionalBranchCost))}
+              {t.billing_plan_branches_paid.replace('{{price}}', String(additionalBranchCost))}
             </p>
           </div>
           <div className="text-right">
             <p className="text-sm text-slate-500">
               {t.billing_using_branches.replace('{{used}}', String(branches.length)).replace('{{total}}', String(maxBranches))}
             </p>
-            {extraBranches > 0 && (
+            {paidBranchSlots > 0 && (
               <p className="text-xs text-blue-600">
-                {t.billing_extra_branches_cost.replace('{{price}}', String(extraBranches * additionalBranchCost)).replace('{{count}}', String(extraBranches))}
+                {t.billing_paid_branch_slots.replace('{{price}}', String(paidBranchSlots * additionalBranchCost)).replace('{{count}}', String(paidBranchSlots))}
               </p>
             )}
           </div>
@@ -323,11 +355,29 @@ export default function BillingClient({
             <CardContent className="flex flex-col items-center justify-center py-10 text-slate-500">
               <Building2 className="h-10 w-10 mb-3 text-slate-300" />
               <p className="text-base font-medium">{t.billing_no_branches}</p>
-              <p className="text-sm mt-1">{t.billing_add_first_branch_desc}</p>
-              <Button className="mt-4" onClick={() => (isActive ? setShowAddBranch(true) : openPaymentDialog('subscribe'))}>
-                <Plus className="h-4 w-4 mr-2" />
-                {t.billing_add_first_branch}
-              </Button>
+              <p className="text-sm mt-1 text-center max-w-md">
+                {!isActive
+                  ? t.billing_add_first_branch_desc
+                  : maxBranches > 0
+                    ? t.billing_add_first_branch_desc
+                    : t.billing_no_branches_paid_desc.replace('{{price}}', String(additionalBranchCost))}
+              </p>
+              {!isActive ? (
+                <Button className="mt-4" onClick={() => openPaymentDialog('subscribe')}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t.billing_add_first_branch}
+                </Button>
+              ) : maxBranches > 0 ? (
+                <Button className="mt-4" onClick={() => setShowAddBranch(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t.billing_add_branch}
+                </Button>
+              ) : (
+                <Button className="mt-4" onClick={() => openBranchSlotConfirm(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t.billing_buy_first_branch_slot.replace('{{price}}', String(additionalBranchCost))}
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -355,7 +405,7 @@ export default function BillingClient({
                       variant="ghost"
                       size="sm"
                       className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => handleDeleteBranch(branch.id, branch.name)}
+                      onClick={() => setDeleteBranchTarget({ id: branch.id, name: branch.name })}
                       title={branches.length > 1 ? t.billing_remove_branch : t.billing_delete_branch}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -381,8 +431,33 @@ export default function BillingClient({
           </Button>
         )}
 
+        {isActive && maxBranches > branches.length && !showAddBranch && (
+          <Card className="mt-4 border-amber-200 bg-amber-50/50">
+            <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <p className="font-semibold text-slate-800">Unused paid branch slot</p>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  You have {maxBranches - branches.length} paid slot(s) not tied to a branch. Add a branch
+                  without paying again, or release the slot to stop ${priceBranch}/mo.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="shrink-0 border-amber-300"
+                onClick={() => setReleaseSlotModalOpen(true)}
+                disabled={redirectingToStripe !== null}
+              >
+                {redirectingToStripe === 'branch' ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : null}
+                Release unused slot
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Request More Branches CTA — at limit: show Upgrade or Contact us; otherwise Add Branch */}
-        {branches.length >= maxBranches && !showAddBranch && (
+        {branches.length >= maxBranches && maxBranches > 0 && !showAddBranch && (
           <Card ref={upgradeCardRef} id="upgrade-for-branch" className="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 ring-2 ring-blue-200">
             <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
@@ -459,6 +534,95 @@ export default function BillingClient({
               </Button>
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteBranchTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletingBranch) setDeleteBranchTarget(null)
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove branch &ldquo;{deleteBranchTarget?.name}&rdquo;?</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-slate-600 pt-1">
+                <p>
+                  Tables and sales linked to this branch will be <strong>unassigned</strong>, not deleted.
+                </p>
+                <p>
+                  Your <strong>paid branch slot stays active</strong> — you can add a different branch
+                  without paying again.
+                </p>
+                <p className="text-slate-500">
+                  To stop the ${priceBranch}/month charge for an unused slot, use{' '}
+                  <strong>Release unused slot</strong> on this page after removing the branch.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteBranchTarget(null)}
+              disabled={deletingBranch}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmDeleteBranch()}
+              disabled={deletingBranch}
+            >
+              {deletingBranch ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Remove branch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={releaseSlotModalOpen} onOpenChange={setReleaseSlotModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Release {unusedBranchSlots} unused branch slot{unusedBranchSlots === 1 ? '' : 's'}?
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 text-sm text-slate-600 pt-1">
+                <p>
+                  You will <strong>stop paying ${priceBranch}/month</strong> for each released slot.
+                  Stripe may apply a small credit on your next invoice.
+                </p>
+                <p>
+                  This does <strong>not</strong> delete any branch still listed above. Only release slots
+                  you no longer need.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setReleaseSlotModalOpen(false)}
+              disabled={redirectingToStripe === 'branch'}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void confirmReleaseUnusedBranchSlot()}
+              disabled={redirectingToStripe === 'branch'}
+            >
+              {redirectingToStripe === 'branch' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Release slot{unusedBranchSlots === 1 ? '' : 's'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

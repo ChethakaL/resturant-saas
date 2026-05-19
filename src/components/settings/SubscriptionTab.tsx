@@ -206,7 +206,7 @@ export default function SubscriptionTab({
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
-                    {t.sub_included_branch}
+                    {t.sub_branches_not_included.replace('{{price}}', priceBranch)}
                   </li>
                   {extraBranchSlots > 0 && (
                     <li className="flex items-center gap-2">

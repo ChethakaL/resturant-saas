@@ -3,14 +3,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getBranchBillingConfig } from '@/lib/branch-billing'
-import {
-  getBranchCapacityForRestaurant,
-  incrementPaidBranchSlots,
-} from '@/lib/billing-branches'
+import { getBranchCapacityForRestaurant } from '@/lib/billing-branches'
 
 /**
  * POST /api/billing/add-branch
- * Creates a branch; adds the Platform Settings branch price to Stripe when needed.
+ * Creates a branch only when a paid branch slot exists (purchase via purchase-branch-slot first).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -58,30 +55,21 @@ export async function POST(request: NextRequest) {
     })
     const maxBranches = capacity.maxBranches
 
-    if (currentBranchCount >= maxBranches) {
+    if (maxBranches <= 0) {
       return NextResponse.json(
         {
-          error: `Branch limit reached (${maxBranches}). Each extra branch is $${branchBilling.branchPriceUsd}/month — add a branch slot first.`,
+          error: `Each branch costs $${branchBilling.branchPriceUsd}/month. Purchase a branch slot on the Billing page first.`,
         },
         { status: 403 }
       )
     }
 
-    const requiredPaidForNewBranch = currentBranchCount
-    const delta = requiredPaidForNewBranch - capacity.extraBranchSlots
-
-    if (delta > 0) {
-      if (!restaurant.stripeSubscriptionId) {
-        return NextResponse.json(
-          { error: 'Branch payment is required before you can add this branch.' },
-          { status: 403 }
-        )
-      }
-
-      await incrementPaidBranchSlots(
-        restaurant.stripeSubscriptionId,
-        delta,
-        branchBilling
+    if (currentBranchCount >= maxBranches) {
+      return NextResponse.json(
+        {
+          error: `Branch limit reached (${maxBranches}). Each branch is $${branchBilling.branchPriceUsd}/month — purchase another branch slot first.`,
+        },
+        { status: 403 }
       )
     }
 

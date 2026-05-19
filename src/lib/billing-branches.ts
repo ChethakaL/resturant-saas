@@ -64,12 +64,12 @@ export async function getBranchCapacityForRestaurant(params: {
 }) {
   const { stripeCustomerId, stripeSubscriptionId, settings } = params
   const settingsRecord = (settings as Record<string, unknown>) || {}
-  const fallbackMaxBranches = (settingsRecord.maxBranches as number) || 1
+  const fallbackPaidSlots = Math.max(0, (settingsRecord.maxBranches as number) || 0)
 
   if (!stripeCustomerId && !stripeSubscriptionId) {
     return {
-      maxBranches: fallbackMaxBranches,
-      extraBranchSlots: Math.max(0, fallbackMaxBranches - 1),
+      maxBranches: fallbackPaidSlots,
+      extraBranchSlots: fallbackPaidSlots,
       subscriptions: [] as Stripe.Subscription[],
     }
   }
@@ -98,7 +98,7 @@ export async function getBranchCapacityForRestaurant(params: {
   const extraBranchSlots = await countExtraBranchSlots(activeSubscriptions, stripeSubscriptionId)
 
   return {
-    maxBranches: 1 + extraBranchSlots,
+    maxBranches: extraBranchSlots,
     extraBranchSlots,
     subscriptions: activeSubscriptions,
   }
