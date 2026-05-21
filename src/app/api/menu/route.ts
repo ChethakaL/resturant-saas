@@ -56,6 +56,21 @@ function normalizeMenuIngredients(ingredients: any[] = []) {
   return Array.from(mergedByIngredient.values())
 }
 
+function normalizeDuplicateText(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+function duplicateImportKey(item: { name?: unknown; price?: unknown }) {
+  const price = Number(item.price)
+  return [
+    normalizeDuplicateText(item.name),
+    Number.isFinite(price) ? price.toFixed(2) : '0.00',
+  ].join('|')
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -102,6 +117,19 @@ export async function POST(request: Request) {
         descriptionTone,
       })
       if (generated) data.description = generated
+    }
+
+    if (data.dedupeExisting === true) {
+      const existingItems = await prisma.menuItem.findMany({
+        where: { restaurantId: session.user.restaurantId },
+        select: { id: true, name: true, categoryId: true, price: true },
+      })
+      const requestedKey = duplicateImportKey(data)
+      const duplicate = existingItems.find((item) => duplicateImportKey(item) === requestedKey)
+
+      if (duplicate) {
+        return NextResponse.json({ ...duplicate, duplicate: true, skipped: true })
+      }
     }
 
     // Create menu item with ingredients in a transaction

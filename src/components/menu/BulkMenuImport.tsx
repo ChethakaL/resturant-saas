@@ -146,6 +146,22 @@ function normalizeCategoryName(value?: string | null): string {
   return (value ?? '').replace(/\s+/g, ' ').trim()
 }
 
+function duplicateImportKey(item: Pick<ExtractedMenuItem, 'name' | 'price'>): string {
+  const normalizedName = normalizeText(item.name).replace(/\s+/g, ' ')
+  const price = Number(item.price)
+  return `${normalizedName}|${Number.isFinite(price) ? price.toFixed(2) : '0.00'}`
+}
+
+function dedupeExtractedItems(items: ExtractedMenuItem[]): ExtractedMenuItem[] {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = duplicateImportKey(item)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function matchCategoryId(categories: Category[], categoryName?: string): string | undefined {
   const normalized = normalizeText(categoryName)
   if (!normalized) return undefined
@@ -444,7 +460,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
         ...item,
         verified: true,
       }))
-      const items = await ensureCategoriesAndAssign(extracted)
+      const items = dedupeExtractedItems(await ensureCategoriesAndAssign(extracted))
 
       setExtractedItems(items)
       setExpandedIndex(null)
@@ -550,7 +566,10 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
         currentIngredients.map(ing => [ing.name.toLowerCase().trim(), ing])
       )
 
-      for (const item of items) {
+      const uniqueItems = dedupeExtractedItems(items)
+      let skippedDuplicates = items.length - uniqueItems.length
+
+      for (const item of uniqueItems) {
         if (!item.categoryId) {
           errors.push(`${item.name}: Missing category`)
           continue
@@ -588,26 +607,31 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
             recipeTips: item.recipeTips || [],
             prepTime: item.prepTime || null,
             cookTime: item.cookTime || null,
+            dedupeExisting: true,
           }),
         })
 
+        const data = await response.json().catch(() => ({}))
         if (!response.ok) {
-          const data = await response.json()
           errors.push(`${item.name}: ${data.error || 'Failed to create'}`)
+        } else if (data.duplicate || data.skipped) {
+          skippedDuplicates += 1
         }
       }
+
+      const createdCount = items.length - errors.length - skippedDuplicates
 
       if (errors.length > 0) {
         console.error('Errors creating items:', errors)
         toast({
           title: 'Partial Success',
-          description: `Created ${items.length - errors.length} of ${items.length} items. Some items failed.`,
+          description: `Created ${createdCount} of ${items.length} items. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? '' : 's'}. Some items failed.`,
           variant: 'destructive',
         })
       } else {
         toast({
           title: 'Success',
-          description: `Created ${items.length} menu items successfully with recipes!`,
+          description: `Created ${createdCount} menu item${createdCount === 1 ? '' : 's'} successfully with recipes.${skippedDuplicates > 0 ? ` Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? '' : 's'}.` : ''}`,
         })
       }
 
