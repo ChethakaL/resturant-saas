@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
 import { MenuItemCard } from './MenuItemCard'
+import { CategoryImageFallback } from './CategoryImageFallback'
 import { MoodSelector } from './MoodSelector'
 import { getOrCreateGuestId, getStoredLastOrder, setStoredLastOrder } from './MenuPersonalizationWrapper'
 import { TableQrScanner } from './TableQrScanner'
@@ -3335,9 +3336,11 @@ export default function SmartMenu({
                     onClick={() => setSelectedItemForDetail(item)}
                     className="relative h-[152px] w-[31vw] min-w-[112px] max-w-[140px] flex-shrink-0 overflow-hidden rounded-[18px] text-left shadow-[0_18px_46px_rgba(26,10,6,0.24)] sm:h-[188px] sm:w-[33vw] sm:min-w-0 sm:max-w-none lg:h-[220px] lg:w-[calc((100%-1.5rem)/3)]"
                   >
-                    <img
-                      src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                    <CategoryImageFallback
+                      src={item.imageUrl}
                       alt={item.name}
+                      categoryName={item.category?.name}
+                      description={item.description}
                       loading="lazy"
                       decoding="async"
                       className="h-full w-full object-cover"
@@ -3498,9 +3501,9 @@ export default function SmartMenu({
                   >
                     <div className="flex items-center gap-2">
                       {bundle.itemIds.slice(0, 2).map((itemId) => (
-                        <img
+                        <CategoryImageFallback
                           key={itemId}
-                          src={bundleItemImageMap[itemId] || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                          src={bundleItemImageMap[itemId]}
                           alt={bundleItemNameMap[itemId] || ''}
                           loading="lazy"
                           decoding="async"
@@ -3573,9 +3576,11 @@ export default function SmartMenu({
                     className="flex items-center gap-3 rounded-[22px] border p-3 text-left shadow-[0_4px_18px_rgba(26,10,6,0.06)]"
                     style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}
                   >
-                    <img
-                      src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                    <CategoryImageFallback
+                      src={item.imageUrl}
                       alt={item.name}
+                      categoryName={item.category?.name}
+                      description={item.description}
                       loading="lazy"
                       decoding="async"
                       className="h-20 w-20 rounded-2xl object-cover"
@@ -3750,9 +3755,11 @@ export default function SmartMenu({
                         style={index !== visibleItems.length - 1 ? { borderBottom: `1px solid ${dividerColor}` } : undefined}
                       >
                         <div className="relative overflow-hidden">
-                          <img
-                            src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                          <CategoryImageFallback
+                            src={item.imageUrl}
                             alt={item.name}
+                            categoryName={item.category?.name}
+                            description={item.description}
                             loading="lazy"
                             decoding="async"
                             className="h-full w-full object-cover"
@@ -3962,9 +3969,11 @@ export default function SmartMenu({
                   )}
                   {cartItems.map((line) => (
                     <div key={line.item.id} className="flex items-center gap-3 pb-4" style={{ borderBottom: `1px solid ${dividerColor}` }}>
-                      <img
-                        src={line.item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                      <CategoryImageFallback
+                        src={line.item.imageUrl}
                         alt={line.item.name}
+                        categoryName={line.item.category?.name}
+                        description={line.item.description}
                         loading="lazy"
                         decoding="async"
                         className="h-12 w-12 rounded-xl object-cover"
@@ -3999,9 +4008,11 @@ export default function SmartMenu({
                         {checkoutNudge.message}
                       </div>
                       <div className="mt-3 flex items-center gap-3">
-                        <img
-                          src={checkoutNudge.item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                        <CategoryImageFallback
+                          src={checkoutNudge.item.imageUrl}
                           alt={checkoutNudge.item.name}
+                          categoryName={checkoutNudge.item.category?.name}
+                          description={checkoutNudge.item.description}
                           loading="lazy"
                           decoding="async"
                           className="h-11 w-11 rounded-xl object-cover"
@@ -4200,9 +4211,11 @@ export default function SmartMenu({
             <div className="space-y-3 overflow-y-auto px-5 py-4 sm:px-6">
               {currentUpsellSuggestions.map(({ suggestion, item }) => (
                 <div key={suggestion.itemId} className="flex items-center gap-3 rounded-2xl border p-3" style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}>
-                  <img
-                    src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                  <CategoryImageFallback
+                    src={item.imageUrl}
                     alt={item.name}
+                    categoryName={item.category?.name}
+                    description={item.description}
                     loading="lazy"
                     decoding="async"
                     className="h-14 w-14 rounded-xl object-cover"
@@ -4245,9 +4258,11 @@ export default function SmartMenu({
         {selectedItemForDetail && (
           <div className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[90vh] max-w-4xl flex-col overflow-hidden rounded-t-[28px]" style={{ backgroundColor: pageBg }}>
             <div className="mx-auto mt-3 h-1 w-10 rounded-full" style={{ backgroundColor: dividerColor }} />
-            <img
-              src={selectedItemForDetail.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+            <CategoryImageFallback
+              src={selectedItemForDetail.imageUrl}
               alt={selectedItemForDetail.name}
+              categoryName={selectedItemForDetail.category?.name}
+              description={selectedItemForDetail.description}
               loading="lazy"
               decoding="async"
               className="h-[270px] w-full object-cover sm:h-[320px]"
@@ -4357,9 +4372,11 @@ export default function SmartMenu({
                 <div className="grid gap-3 sm:grid-cols-2">
                   {pairingSuggestions.map((item) => (
                     <div key={item.id} className="flex items-center gap-3 rounded-2xl border p-3" style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}>
-                      <img
-                        src={item.imageUrl || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=80'}
+                      <CategoryImageFallback
+                        src={item.imageUrl}
                         alt={item.name}
+                        categoryName={item.category?.name}
+                        description={item.description}
                         loading="lazy"
                         decoding="async"
                         className="h-16 w-16 rounded-xl object-cover"
@@ -5104,12 +5121,11 @@ export default function SmartMenu({
                           className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-2xl transition hover:-translate-y-0.5 hover:shadow-2xl backdrop-blur-2xl"
                         >
                           <div className="relative h-32 overflow-hidden rounded-t-3xl">
-                            <img
-                              src={
-                                item.imageUrl ||
-                                'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
-                              }
+                            <CategoryImageFallback
+                              src={item.imageUrl}
                               alt={item.name}
+                              categoryName={item.category?.name}
+                              description={item.description}
                               loading="lazy"
                               decoding="async"
                               className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
@@ -5193,15 +5209,15 @@ export default function SmartMenu({
 
                 return (
                   <Card key={item.id} className="overflow-hidden">
-                    {item.imageUrl && (
-                      <img
-                        src={item.imageUrl}
-                        alt={suggestionName}
-                        loading="lazy"
-                        decoding="async"
-                        className="h-32 w-full object-cover"
-                      />
-                    )}
+                    <CategoryImageFallback
+                      src={item.imageUrl}
+                      alt={suggestionName}
+                      categoryName={item.category?.name}
+                      description={item.description}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-32 w-full object-cover"
+                    />
                     <CardContent className="space-y-2 pt-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -5270,17 +5286,17 @@ export default function SmartMenu({
                   ))}
                 </div>
               )}
-              {selectedItemForDetail.imageUrl && (
-                <div className="rounded-md border border-slate-200 overflow-hidden bg-slate-50 h-64 flex items-center justify-center">
-                  <img
-                    src={selectedItemForDetail.imageUrl}
-                    alt={selectedItemForDetail.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="max-w-full max-h-64 object-contain"
-                  />
-                </div>
-              )}
+              <div className="rounded-md border border-slate-200 overflow-hidden bg-slate-50 h-64 flex items-center justify-center">
+                <CategoryImageFallback
+                  src={selectedItemForDetail.imageUrl}
+                  alt={selectedItemForDetail.name}
+                  categoryName={selectedItemForDetail.category?.name}
+                  description={selectedItemForDetail.description}
+                  loading="lazy"
+                  decoding="async"
+                  className="max-w-full max-h-64 object-contain"
+                />
+              </div>
               {selectedItemForDetail.addOns && selectedItemForDetail.addOns.length > 0 && (
                 <div className="space-y-3 pt-2 border-t border-slate-200">
                   <div>

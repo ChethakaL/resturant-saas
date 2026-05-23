@@ -3,6 +3,7 @@
 import { Card } from '@/components/ui/card'
 import { Star, Loader2 } from 'lucide-react'
 import type { ItemDisplayHints } from '@/types/menu-engine'
+import { CategoryImageFallback } from './CategoryImageFallback'
 
 export interface MenuItemCardItem {
   id: string
@@ -52,9 +53,6 @@ interface MenuItemCardProps {
   forceHideImage?: boolean
   layout?: 'list' | 'grid'
 }
-
-const defaultPlaceholderImage =
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
 
 function getBadgeLabel(
   tier: ItemDisplayHints['displayTier'],
@@ -125,9 +123,11 @@ export function MenuItemCard({
       >
         {showImage && !isMinimal && (
           <div className="relative aspect-[4/3] w-full overflow-hidden">
-            <img
-              src={item.imageUrl || defaultPlaceholderImage}
+            <CategoryImageFallback
+              src={item.imageUrl}
               alt={item.name}
+              categoryName={item.category?.name}
+              description={item.description}
               className="h-full w-full object-cover"
             />
             {badgeLabel && (
@@ -228,9 +228,11 @@ export function MenuItemCard({
           <div
             className="relative flex-shrink-0 flex items-center justify-center p-2 order-first sm:order-none w-24 sm:w-28 aspect-square rounded-xl overflow-hidden"
           >
-            <img
-              src={item.imageUrl || defaultPlaceholderImage}
+            <CategoryImageFallback
+              src={item.imageUrl}
               alt={item.name}
+              categoryName={item.category?.name}
+              description={item.description}
               className="w-full h-full object-cover rounded-xl"
             />
             {badgeLabel && (

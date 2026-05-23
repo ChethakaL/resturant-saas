@@ -44,6 +44,7 @@ function RegisterForm() {
   })
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const isSlugValid = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)
 
   const generateSlug = (name: string) => {
     return name
@@ -91,6 +92,10 @@ function RegisterForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    if (!isSlugValid) {
+      setError('Restaurant page link can only use lowercase letters, numbers, and single hyphens. Spaces are not allowed.')
+      return
+    }
     setShowPaymentModal(true)
   }
 
@@ -232,11 +237,12 @@ function RegisterForm() {
                     disabled={isLoading}
                     className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none h-11 lowercase font-medium text-slate-700"
                     placeholder="restaurant-name"
+                    pattern="[a-z0-9]+(-[a-z0-9]+)*"
                   />
                 </div>
                 <p className="text-[10px] text-slate-500 flex items-center gap-1.5 px-1">
                   <span className="flex h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  Your customers will visit this URL to view your menu.
+                  Use lowercase letters, numbers, and hyphens only. Spaces are not allowed.
                 </p>
               </div>
               {referralCode && (

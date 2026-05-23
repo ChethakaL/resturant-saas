@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import useEmblaCarousel from 'embla-carousel-react'
 import Autoplay from 'embla-carousel-autoplay'
 import { formatMenuPrice } from '@/lib/utils'
+import { CategoryImageFallback } from './CategoryImageFallback'
 
 interface CarouselItem {
   id: string
@@ -45,9 +46,6 @@ interface MenuCarouselProps {
    */
   seasonalItemImages?: Record<string, string>
 }
-
-const defaultImage =
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=60'
 
 export function MenuCarousel({
   title,
@@ -139,7 +137,7 @@ export function MenuCarousel({
             {items.map((item) => {
               const displayName = getDisplayName?.(item.id) || item.name
               const categoryName = getCategoryName?.(item.category?.name ?? null) || item.category?.name || ''
-              const photo = seasonalItemImages?.[item.id] || item.imageUrl || defaultImage
+              const photo = seasonalItemImages?.[item.id] || item.imageUrl
               return (
                 <button
                   type="button"
@@ -148,9 +146,11 @@ export function MenuCarousel({
                   onClick={() => onItemClick?.(item as CarouselItem)}
                 >
                   <div className={`aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
-                    <img
+                    <CategoryImageFallback
                       src={photo}
                       alt={item.name}
+                      categoryName={item.category?.name}
+                      description={item.description}
                       loading="lazy"
                       decoding="async"
                       className="h-full w-full object-cover"
@@ -199,9 +199,11 @@ export function MenuCarousel({
                 className="flex-[0_0_100%] min-w-0 w-full h-full relative text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                 onClick={() => onItemClick?.(item as CarouselItem)}
               >
-                <img
-                  src={item.imageUrl || defaultImage}
+                <CategoryImageFallback
+                  src={seasonalItemImages?.[item.id] || item.imageUrl}
                   alt={item.name}
+                  categoryName={item.category?.name}
+                  description={item.description}
                   loading="lazy"
                   decoding="async"
                   className="absolute inset-0 h-full w-full object-cover"
@@ -299,7 +301,7 @@ export function MenuCarousel({
           <div className="flex touch-pan-x gap-4 -mx-4 sm:-mx-6 px-4 sm:px-6">
           {items.map((item) => {
             const displayName = getDisplayName?.(item.id) || item.name
-            const photo = seasonalItemImages?.[item.id] || item.imageUrl || defaultImage
+            const photo = seasonalItemImages?.[item.id] || item.imageUrl
             return (
               <button
                 type="button"
@@ -308,9 +310,11 @@ export function MenuCarousel({
                 onClick={() => onItemClick?.(item as CarouselItem)}
               >
                 <div className={`relative aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
-                  <img
+                  <CategoryImageFallback
                     src={photo}
                     alt={item.name}
+                    categoryName={item.category?.name}
+                    description={item.description}
                     loading="lazy"
                     decoding="async"
                     className="h-full w-full object-cover transition duration-300 hover:scale-105"

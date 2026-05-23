@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
-import type { UpsellSuggestion } from '@/types/menu-engine'
+import { CategoryImageFallback } from './CategoryImageFallback'
 
 export interface BundledUpsellItem {
   itemId: string
@@ -19,9 +19,6 @@ interface BundledUpsellProps {
   onAddItem: (itemId: string) => void
   onClose: () => void
 }
-
-const defaultImage =
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
 
 export function BundledUpsell({
   items,
@@ -54,8 +51,8 @@ export function BundledUpsell({
               className="flex gap-3 items-center rounded-xl bg-white/5 border border-white/10 p-3"
             >
               <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-white/10">
-                <img
-                  src={item.itemImageUrl || defaultImage}
+                <CategoryImageFallback
+                  src={item.itemImageUrl}
                   alt={item.itemName}
                   className="w-full h-full object-cover"
                 />

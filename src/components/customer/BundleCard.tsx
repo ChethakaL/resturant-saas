@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { formatMenuPrice } from '@/lib/utils'
 import type { BundleHint } from '@/types/menu-engine'
+import { CategoryImageFallback } from './CategoryImageFallback'
 
 interface BundleCardProps {
   bundle: BundleHint
@@ -15,9 +16,6 @@ interface BundleCardProps {
   /** Localize savings text (e.g. "Save 500" → "وفر 500"). */
   getLocalizedSavingsText?: (savingsText: string) => string
 }
-
-const defaultImage =
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
 
 export function BundleCard({
   bundle,
@@ -40,8 +38,8 @@ export function BundleCard({
             key={id}
             className="flex-1 min-w-0 aspect-square rounded-lg overflow-hidden bg-slate-100"
           >
-            <img
-              src={itemImageUrls[id] || defaultImage}
+            <CategoryImageFallback
+              src={itemImageUrls[id]}
               alt={itemNames[id] ?? ''}
               className="w-full h-full object-cover"
             />

@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
 import type { UpsellSuggestion } from '@/types/menu-engine'
+import { CategoryImageFallback } from './CategoryImageFallback'
 
 interface SequentialUpsellProps {
   suggestions: UpsellSuggestion[]
@@ -16,9 +17,6 @@ interface SequentialUpsellProps {
   addLabel: string
   skipLabel: string
 }
-
-const defaultImage =
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'
 
 export function SequentialUpsell({
   suggestions,
@@ -52,8 +50,8 @@ export function SequentialUpsell({
         </div>
         <div className="flex gap-4">
           <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-white/10">
-            <img
-              src={itemImageUrl || defaultImage}
+            <CategoryImageFallback
+              src={itemImageUrl}
               alt={itemName}
               className="w-full h-full object-cover"
             />

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils'
+import { CategoryImageFallback } from './CategoryImageFallback'
 
 interface MenuItem {
   id: string
@@ -126,13 +127,13 @@ export default function CustomerMenu({
               <div className="grid gap-4 sm:grid-cols-2">
                 {filteredItems.map((item) => (
                   <Card key={item.id} className="overflow-hidden bg-white text-slate-900">
-                    {item.imageUrl && (
-                      <img
-                        src={item.imageUrl}
-                        alt={item.name}
-                        className="h-40 w-full object-cover"
-                      />
-                    )}
+                    <CategoryImageFallback
+                      src={item.imageUrl}
+                      alt={item.name}
+                      categoryName={item.category?.name}
+                      description={item.description}
+                      className="h-40 w-full object-cover"
+                    />
                     <CardContent className="space-y-2 pt-4">
                       <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold">{item.name}</h3>

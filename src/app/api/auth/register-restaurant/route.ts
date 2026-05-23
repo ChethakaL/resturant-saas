@@ -7,6 +7,7 @@ import { getPlatformConfig } from '@/lib/platform-config'
 import { mergeRestaurantWhatsAppSettings, normalizeWhatsAppNumber } from '@/lib/restaurant-whatsapp'
 
 const BILLING_CURRENCY = (process.env.STRIPE_BILLING_CURRENCY || 'usd').toLowerCase()
+const VALID_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 function buildSignupLineItem(
   configuredPrice: string,
@@ -111,6 +112,12 @@ export async function POST(request: Request) {
     if (!slug) {
       return NextResponse.json(
         { error: 'Could not generate a valid slug from restaurant name' },
+        { status: 400 }
+      )
+    }
+    if (!VALID_SLUG_PATTERN.test(slug)) {
+      return NextResponse.json(
+        { error: 'Restaurant page link can only use lowercase letters, numbers, and single hyphens. Spaces are not allowed.' },
         { status: 400 }
       )
     }
