@@ -275,6 +275,7 @@ export const authOptions: NextAuthOptions = {
           type: 'waiter' as const,
           restaurantId: employee.restaurantId,
           restaurantName: employee.restaurant.name,
+          branchId: employee.branchId ?? undefined,
           employeeId: employee.id,
         }
       },
@@ -313,6 +314,7 @@ export const authOptions: NextAuthOptions = {
         token.type = user.type
         token.restaurantId = user.restaurantId
         token.restaurantName = user.restaurantName
+        token.branchId = user.branchId
         token.supplierId = user.supplierId
         token.supplierName = user.supplierName
         token.employeeId = user.employeeId
@@ -326,6 +328,7 @@ export const authOptions: NextAuthOptions = {
         session.user.type = (token.type as 'restaurant' | 'supplier' | 'customer' | 'superadmin' | 'waiter') ?? 'restaurant'
         session.user.restaurantId = token.restaurantId as string | undefined
         session.user.restaurantName = token.restaurantName as string | undefined
+        session.user.branchId = token.branchId as string | undefined
         session.user.supplierId = token.supplierId as string | undefined
         session.user.supplierName = token.supplierName as string | undefined
         session.user.employeeId = token.employeeId as string | undefined

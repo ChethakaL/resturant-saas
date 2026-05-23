@@ -18,6 +18,12 @@ export async function GET(request: Request) {
         const where: any = {
             restaurantId: session.user.restaurantId,
         }
+        if (session.user.branchId) {
+            where.OR = [
+                { branchId: session.user.branchId },
+                { table: { branchId: session.user.branchId } },
+            ]
+        }
 
         if (unassignedOnly) {
             where.tableId = { not: null }
@@ -122,10 +128,20 @@ export async function POST(request: Request) {
             // Update table status if table is assigned and get branchId
             let tableBranchId: string | null = null
             if (data.tableId) {
-                const tableData = await tx.table.update({
+                const tableData = await tx.table.findFirst({
+                    where: {
+                        id: data.tableId,
+                        restaurantId: session.user.restaurantId!,
+                        ...(session.user.branchId ? { branchId: session.user.branchId } : {}),
+                    },
+                    select: { branchId: true },
+                })
+                if (!tableData) {
+                    throw new Error('Table not found for this branch')
+                }
+                await tx.table.update({
                     where: { id: data.tableId },
                     data: { status: 'OCCUPIED' },
-                    select: { branchId: true },
                 })
                 tableBranchId = tableData.branchId
             }

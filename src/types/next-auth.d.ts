@@ -12,6 +12,7 @@ declare module 'next-auth' {
       type: AuthUserType
       restaurantId?: string
       restaurantName?: string
+      branchId?: string
       supplierId?: string
       supplierName?: string
       employeeId?: string
@@ -26,6 +27,7 @@ declare module 'next-auth' {
     type: AuthUserType
     restaurantId?: string
     restaurantName?: string
+    branchId?: string
     supplierId?: string
     supplierName?: string
     employeeId?: string
@@ -39,6 +41,7 @@ declare module 'next-auth/jwt' {
     type: AuthUserType
     restaurantId?: string
     restaurantName?: string
+    branchId?: string
     supplierId?: string
     supplierName?: string
     employeeId?: string

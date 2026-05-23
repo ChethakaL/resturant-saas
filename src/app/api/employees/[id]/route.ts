@@ -75,7 +75,7 @@ export async function PATCH(
 
     const data = await request.json()
 
-    const updateData: { name?: string; position?: string; phone?: string; email?: string; salary?: number; salaryType?: string; isActive?: boolean; password?: string } = {}
+    const updateData: { name?: string; position?: string; phone?: string; email?: string; salary?: number; salaryType?: string; isActive?: boolean; password?: string; branchId?: string | null } = {}
     if (data.name !== undefined) updateData.name = data.name
     if (data.position !== undefined) updateData.position = data.position
     if (data.phone !== undefined) updateData.phone = data.phone
@@ -83,6 +83,23 @@ export async function PATCH(
     if (data.salary !== undefined) updateData.salary = data.salary
     if (data.salaryType !== undefined) updateData.salaryType = data.salaryType
     if (data.isActive !== undefined) updateData.isActive = data.isActive
+    if (data.branchId !== undefined) {
+      const branchId = typeof data.branchId === 'string' && data.branchId.trim() ? data.branchId.trim() : null
+      if (branchId) {
+        const branch = await prisma.branch.findFirst({
+          where: {
+            id: branchId,
+            restaurantId: session.user.restaurantId,
+            isActive: true,
+          },
+          select: { id: true },
+        })
+        if (!branch) {
+          return NextResponse.json({ error: 'Branch not found' }, { status: 400 })
+        }
+      }
+      updateData.branchId = branchId
+    }
 
     if (data.password) {
       updateData.password = await bcrypt.hash(data.password, 10)

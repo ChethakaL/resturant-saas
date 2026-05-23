@@ -737,6 +737,7 @@ model Branch {
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   sales        Sale[]
   tables       Table[]
+  employees    Employee[]
 
   @@index([restaurantId])
   @@map("branches")
@@ -754,14 +755,17 @@ model Employee {
   salaryType   SalaryType       @default(MONTHLY)
   isActive     Boolean          @default(true)
   restaurantId String
+  branchId     String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
+  branch       Branch?          @relation(fields: [branchId], references: [id])
   restaurant   Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   payrolls     Payroll[]
   sales        Sale[]           @relation("WaiterSales")
   shifts       Shift[]
 
   @@index([restaurantId])
+  @@index([branchId])
   @@index([position])
   @@index([isActive])
   @@map("employees")

@@ -20,12 +20,21 @@ interface Waiter {
   name: string
   email: string | null
   isActive: boolean
+  branchId?: string | null
+  branch?: { id: string; name: string } | null
+}
+
+interface BranchOption {
+  id: string
+  name: string
+  address?: string | null
 }
 
 interface ManageWaitersModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   waiters: Waiter[]
+  branches?: BranchOption[]
   onRefresh: () => void
 }
 
@@ -33,6 +42,7 @@ export default function ManageWaitersModal({
   open,
   onOpenChange,
   waiters,
+  branches = [],
   onRefresh,
 }: ManageWaitersModalProps) {
   const { t } = useI18n()
@@ -41,6 +51,7 @@ export default function ManageWaitersModal({
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editPassword, setEditPassword] = useState('')
+  const [editBranchId, setEditBranchId] = useState('')
   const [addingWaiter, setAddingWaiter] = useState(false)
   const [waiterError, setWaiterError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -63,6 +74,7 @@ export default function ManageWaitersModal({
           name: formData.name,
           email: formData.email,
           password: formData.password,
+          branchId: formData.branchId,
           position: 'WAITER',
           salary: 0,
           salaryType: 'MONTHLY',
@@ -89,9 +101,10 @@ export default function ManageWaitersModal({
     e.preventDefault()
     setWaiterError('')
     try {
-      const body: { name: string; email: string; password?: string } = {
+      const body: { name: string; email: string; branchId?: string; password?: string } = {
         name: editName.trim(),
         email: editEmail.trim().toLowerCase(),
+        branchId: editBranchId,
       }
       if (editPassword.trim()) {
         body.password = editPassword.trim()
@@ -141,6 +154,7 @@ export default function ManageWaitersModal({
     setEditName(w.name)
     setEditEmail(w.email || '')
     setEditPassword('')
+    setEditBranchId(w.branchId || branches[0]?.id || '')
     setWaiterError('')
   }
 
@@ -182,6 +196,23 @@ export default function ManageWaitersModal({
                     placeholder="Leave blank to keep current"
                   />
                 </div>
+                {branches.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Branch</Label>
+                    <select
+                      value={editBranchId}
+                      onChange={(e) => setEditBranchId(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      required
+                    >
+                      {branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.name}{branch.address ? ` (${branch.address})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {waiterError && <p className="text-sm text-red-600">{waiterError}</p>}
                 <div className="flex gap-2">
                   <Button type="submit" size="sm">Save</Button>
@@ -208,6 +239,7 @@ export default function ManageWaitersModal({
                     <div>
                       <p className="font-medium text-slate-900">{w.name}</p>
                       <p className="text-xs text-slate-500">{w.email || (t.tables_no_email ?? 'No email')}</p>
+                      <p className="text-xs text-slate-500">{w.branch?.name || 'No branch assigned'}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`text-xs px-2 py-1 rounded-full ${w.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
@@ -245,6 +277,7 @@ export default function ManageWaitersModal({
         open={showAddWaiter}
         onOpenChange={(o) => { setShowAddWaiter(o); setWaiterError('') }}
         onSubmit={handleAddWaiter}
+        branches={branches}
         loading={addingWaiter}
         error={waiterError || null}
       />

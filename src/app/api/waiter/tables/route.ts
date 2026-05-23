@@ -12,10 +12,15 @@ export async function GET() {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
+        const where: { restaurantId: string; branchId?: string } = {
+            restaurantId: session.user.restaurantId,
+        }
+        if (session.user.branchId) {
+            where.branchId = session.user.branchId
+        }
+
         const tables = await prisma.table.findMany({
-            where: {
-                restaurantId: session.user.restaurantId,
-            },
+            where,
             include: {
                 sales: {
                     where: {

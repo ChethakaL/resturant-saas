@@ -18,12 +18,20 @@ export interface AddWaiterFormData {
   name: string
   email: string
   password: string
+  branchId: string
+}
+
+interface BranchOption {
+  id: string
+  name: string
+  address?: string | null
 }
 
 interface AddWaiterModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (data: AddWaiterFormData) => Promise<void>
+  branches?: BranchOption[]
   loading?: boolean
   error?: string | null
 }
@@ -32,20 +40,23 @@ export default function AddWaiterModal({
   open,
   onOpenChange,
   onSubmit,
+  branches = [],
   loading = false,
   error = null,
 }: AddWaiterModalProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [branchId, setBranchId] = useState('')
 
   useEffect(() => {
     if (open) {
       setName('')
       setEmail('')
       setPassword('')
+      setBranchId(branches[0]?.id ?? '')
     }
-  }, [open])
+  }, [branches, open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,6 +65,7 @@ export default function AddWaiterModal({
       name: name.trim(),
       email: email.trim().toLowerCase(),
       password: password.trim(),
+      branchId,
     })
     onOpenChange(false)
   }
@@ -106,6 +118,25 @@ export default function AddWaiterModal({
             />
             <p className="text-xs text-slate-500">At least 6 characters. Share this securely with the waiter.</p>
           </div>
+          {branches.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="waiter-branch">Branch *</Label>
+              <select
+                id="waiter-branch"
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                required
+              >
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}{branch.address ? ` (${branch.address})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">Waiter will only see tables from this branch.</p>
+            </div>
+          )}
           {error && (
             <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>
           )}
@@ -113,7 +144,7 @@ export default function AddWaiterModal({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || !name.trim() || !email.trim() || !password.trim()}>
+            <Button type="submit" disabled={loading || !name.trim() || !email.trim() || !password.trim() || (branches.length > 0 && !branchId)}>
               {loading ? 'Creating...' : 'Add Waiter'}
             </Button>
           </DialogFooter>

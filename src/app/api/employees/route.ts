@@ -30,6 +30,7 @@ export async function GET(request: Request) {
     const employees = await prisma.employee.findMany({
       where,
       include: {
+        branch: true,
         _count: {
           select: {
             sales: true,
@@ -63,6 +64,21 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json()
+    const branchId = typeof data.branchId === 'string' && data.branchId.trim() ? data.branchId.trim() : null
+
+    if (branchId) {
+      const branch = await prisma.branch.findFirst({
+        where: {
+          id: branchId,
+          restaurantId: session.user.restaurantId,
+          isActive: true,
+        },
+        select: { id: true },
+      })
+      if (!branch) {
+        return NextResponse.json({ error: 'Branch not found' }, { status: 400 })
+      }
+    }
 
     let hashedPassword = undefined
     if (data.password) {
@@ -80,6 +96,7 @@ export async function POST(request: Request) {
         salaryType: data.salaryType,
         hireDate: data.hireDate ? new Date(data.hireDate) : new Date(),
         restaurantId: session.user.restaurantId,
+        branchId,
       },
     })
 

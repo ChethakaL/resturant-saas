@@ -4,6 +4,14 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog'
 import { Plus, Building2, Users, QrCode, Trash2, Loader2 } from 'lucide-react'
 import { TableQRModal } from '@/components/tables/TableQRModal'
 import { formatCurrency } from '@/lib/utils'
@@ -23,6 +31,8 @@ interface Waiter {
     name: string
     email: string | null
     isActive: boolean
+    branchId?: string | null
+    branch?: { id: string; name: string } | null
 }
 
 interface TableData {
@@ -72,6 +82,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
     const [qrModalOpen, setQrModalOpen] = useState(false)
     const [qrTableNumber, setQrTableNumber] = useState<string | null>(null)
     const [deletingTableId, setDeletingTableId] = useState<string | null>(null)
+    const [deleteTableTarget, setDeleteTableTarget] = useState<TableData | null>(null)
     const [clearingTableId, setClearingTableId] = useState<string | null>(null)
     const { toast } = useToast()
 
@@ -132,8 +143,6 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
     const { t } = useI18n()
 
     const handleDeleteTable = async (table: TableData) => {
-        if (!confirm(`Delete table "${table.number}"? This cannot be undone.`)) return
-
         setDeletingTableId(table.id)
         try {
             const res = await fetch(`/api/tables/${table.id}`, { method: 'DELETE' })
@@ -160,6 +169,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
             })
         } finally {
             setDeletingTableId(null)
+            setDeleteTableTarget(null)
         }
     }
 
@@ -239,6 +249,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                 open={showManageWaiters}
                 onOpenChange={setShowManageWaiters}
                 waiters={waiters}
+                branches={branches}
                 onRefresh={fetchWaiters}
             />
 
@@ -369,7 +380,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                                                             onClick={(e) => {
                                                                 e.preventDefault()
                                                                 e.stopPropagation()
-                                                                void handleDeleteTable(table)
+                                                                setDeleteTableTarget(table)
                                                             }}
                                                         >
                                                             {deletingTableId === table.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -440,6 +451,30 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                     )}
                 </>
             )}
+            <Dialog open={Boolean(deleteTableTarget)} onOpenChange={(open) => !open && setDeleteTableTarget(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Delete table {deleteTableTarget?.number}?</DialogTitle>
+                        <DialogDescription>
+                            This cannot be undone. If this table has printed QR codes, those QR codes will stop working and must be recreated for a new table.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setDeleteTableTarget(null)} disabled={Boolean(deletingTableId)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={() => deleteTableTarget && void handleDeleteTable(deleteTableTarget)}
+                            disabled={Boolean(deletingTableId)}
+                        >
+                            {deletingTableId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Delete table
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
