@@ -112,7 +112,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
 
     const fetchWaiters = useCallback(async () => {
         try {
-            const res = await fetch('/api/employees?position=WAITER', { credentials: 'include' })
+            const res = await fetch('/api/employees?position=WAITER&isActive=true', { credentials: 'include' })
             if (res.ok) {
                 const data = await res.json()
                 setWaiters(data)

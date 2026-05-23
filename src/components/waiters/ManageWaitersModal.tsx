@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -55,6 +56,7 @@ export default function ManageWaitersModal({
   const [addingWaiter, setAddingWaiter] = useState(false)
   const [waiterError, setWaiterError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Waiter | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -131,7 +133,6 @@ export default function ManageWaitersModal({
   }
 
   const handleDeleteWaiter = async (waiter: Waiter) => {
-    if (!confirm(`Remove waiter "${waiter.name}"? They will no longer be able to sign in.`)) return
     setDeletingId(waiter.id)
     try {
       const res = await fetch(`/api/employees/${waiter.id}`, { method: 'DELETE', credentials: 'include' })
@@ -141,6 +142,7 @@ export default function ManageWaitersModal({
         return
       }
       onRefresh()
+      setDeleteTarget(null)
       if (editingWaiter?.id === waiter.id) setEditingWaiter(null)
     } catch {
       setWaiterError('Failed to remove waiter')
@@ -258,7 +260,7 @@ export default function ManageWaitersModal({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => handleDeleteWaiter(w)}
+                        onClick={() => setDeleteTarget(w)}
                         disabled={deletingId === w.id}
                         title={t.tables_delete_waiter ?? 'Remove'}
                       >
@@ -270,6 +272,31 @@ export default function ManageWaitersModal({
               )}
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove waiter {deleteTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              This waiter will no longer be able to sign in. Existing orders will stay saved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)} disabled={Boolean(deletingId)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => deleteTarget && void handleDeleteWaiter(deleteTarget)}
+              disabled={Boolean(deletingId)}
+            >
+              {deletingId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Remove waiter
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
