@@ -130,9 +130,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [importProgress, setImportProgress] = useState<{ phase: string; message: string } | null>(
-    null
-  )
+  const [importStatus, setImportStatus] = useState<string | null>(null)
   const [editingItem, setEditingItem] = useState<ExtractedMenuItem | null>(null)
   const [activeDetailTab, setActiveDetailTab] = useState<ImportDraftTab>('basic')
   const [smartChefInstruction, setSmartChefInstruction] = useState('')
@@ -336,7 +334,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
     }
 
     setIsProcessing(true)
-    setImportProgress({ phase: 'start', message: 'Starting…' })
+    setImportStatus('Getting started…')
     setStep('extracting')
 
     try {
@@ -385,10 +383,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
             }
 
             if (payload.type === 'progress' && payload.message) {
-              setImportProgress({
-                phase: payload.phase ?? 'progress',
-                message: payload.message,
-              })
+              setImportStatus(payload.message)
             } else if (payload.type === 'complete') {
               data = { items: payload.items ?? [] }
             } else if (payload.type === 'error') {
@@ -465,12 +460,12 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
         typeof error === 'object' && error !== null && 'code' in error
           ? (error as { code?: string }).code
           : undefined
-      const isAiBusy = status === 503 || code === 'AI_OVERLOADED'
+      const isBusy = status === 503 || code === 'AI_OVERLOADED'
       const isTimeout = status === 504
       toast({
-        title: isAiBusy ? 'AI is busy' : isTimeout ? 'Import timed out' : 'Import failed',
-        description: isAiBusy
-          ? "We're experiencing high AI usage. Please wait at least one minute before trying your menu link again — retrying immediately may fail again."
+        title: isBusy ? 'Please try again shortly' : isTimeout ? 'Import timed out' : 'Import failed',
+        description: isBusy
+          ? 'Please wait at least one minute, then try your menu link again.'
           : isTimeout
             ? 'The server took too long. Try again, or use Import from image for large menus.'
             : error instanceof Error
@@ -481,7 +476,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       setStep('url')
     } finally {
       setIsProcessing(false)
-      setImportProgress(null)
+      setImportStatus(null)
     }
   }
 
@@ -846,23 +841,14 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
           )}
 
           {step === 'extracting' && (
-            <div className="flex flex-col items-center justify-center py-12 space-y-4 px-4">
+            <div className="flex flex-col items-center justify-center py-12 space-y-3 px-4">
               <Loader2 className="h-16 w-16 animate-spin text-emerald-500" />
-              <p className="text-lg font-medium text-center">
-                {importProgress?.message ?? 'Opening link and extracting menu…'}
+              <p className="text-lg font-medium text-center text-slate-800">
+                {importStatus ?? 'Reading your menu…'}
               </p>
               <p className="text-sm text-slate-500 text-center max-w-sm">
-                Large digital menus may take 1–2 minutes. You can keep this window open — progress
-                updates below.
+                This usually takes 1–2 minutes. Please keep this window open.
               </p>
-              {importProgress && (
-                <div className="w-full max-w-md rounded-lg border border-emerald-100 bg-emerald-50/80 px-4 py-3 text-left text-sm text-emerald-900">
-                  <p className="font-medium capitalize">
-                    {importProgress.phase.replace(/-/g, ' ')}
-                  </p>
-                  <p className="mt-1 text-emerald-800">{importProgress.message}</p>
-                </div>
-              )}
             </div>
           )}
 

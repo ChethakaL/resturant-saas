@@ -1,34 +1,39 @@
 /**
  * Sanitize error messages before sending to clients.
- * Never expose AI model names (Gemini, OpenAI, Claude, etc.) — use generic "AI" wording.
+ * Strip provider, model, and internal service names — plain language only.
  */
 export function sanitizeErrorForClient(message: string): string {
   if (!message || typeof message !== 'string') return 'An error occurred'
   if (/503|Service Unavailable|high demand|try again later|overload/i.test(message)) {
-    return "We're experiencing high AI usage. Please try again in a minute."
+    return 'Please wait a minute and try again.'
   }
   let out = message
-  // Replace model/provider names with generic AI wording
   const replacements: [RegExp | string, string][] = [
-    [/\bGemini\b/gi, 'AI'],
-    [/\bOpenAI\b/gi, 'AI'],
-    [/\bClaude\b/gi, 'AI'],
-    [/\bAnthropic\b/gi, 'AI'],
-    [/\bGoogle AI\b/gi, 'AI'],
-    [/\bGoogleGenerativeAI\b/gi, 'AI'],
-    [/generativelanguage\.googleapis\.com[^\s]*/gi, 'AI service'],
-    [/models\/gemini[^\s]*/gi, 'AI model'],
-    [/\bgemini[\d.-]*\w*/gi, 'AI'],
-    [/issue with (?:the )?AI/gi, 'error with AI mode'],
-    [/AI (?:API )?error/gi, 'AI service error'],
-    [/error with (?:the )?AI/gi, 'error with AI mode'],
+    [/\bTavily\b/gi, ''],
+    [/TAVILY_API_KEY/gi, ''],
+    [/\bGemini\b/gi, ''],
+    [/\bOpenAI\b/gi, ''],
+    [/\bClaude\b/gi, ''],
+    [/\bAnthropic\b/gi, ''],
+    [/\bGoogle AI\b/gi, ''],
+    [/\bGoogleGenerativeAI\b/gi, ''],
+    [/URL [Cc]ontext/g, 'menu link'],
+    [/fast pass/gi, ''],
+    [/web search/gi, 'menu import'],
+    [/generativelanguage\.googleapis\.com[^\s]*/gi, ''],
+    [/models\/gemini[^\s]*/gi, ''],
+    [/\bgemini[\d.-]*\w*/gi, ''],
+    [/\bAI (?:API )?key\b/gi, 'service'],
+    [/\bAPI key\b/gi, 'service'],
+    [/\bAI\b/gi, ''],
+    [/\s{2,}/g, ' '],
   ]
   for (const [pattern, replacement] of replacements) {
     out = out.replace(pattern, replacement)
   }
-  // If the message still looks like it's about a specific model, genericize further
-  if (/\b(gemini|openai|claude|anthropic)\b/i.test(out)) {
-    return 'An error occurred with AI mode. Please try again.'
+  out = out.trim()
+  if (!out || /\b(gemini|openai|claude|anthropic|tavily)\b/i.test(out)) {
+    return 'Something went wrong. Please try again.'
   }
   return out
 }

@@ -179,13 +179,13 @@ export async function fetchMenuPageText(
     tavilyConfigured: !!tavilyApiKey,
   })
 
-  progress('fetch', 'Opening menu link…')
+  progress('fetch', 'Opening your menu link…')
 
   try {
     const directText = await fetchWithNode(url)
     if (directText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
       logImportFromUrl('Using direct fetch (enough text)', { textChars: directText.length })
-      progress('fetch', 'Menu page loaded')
+      progress('fetch', 'Menu found')
       return { pageText: directText, fetchError: null, fetchMethod: 'direct' }
     }
     if (directText.length > 0) {
@@ -210,7 +210,7 @@ export async function fetchMenuPageText(
   }
 
   if (tavilyApiKey) {
-    progress('tavily', 'Reading menu with advanced link extraction…')
+    progress('fetch', 'Reading your digital menu…')
     const jsMenu = isJsRenderedMenuSite(url)
     const tavilyAttempts: Array<{ name: MenuPageFetchMethod; run: () => Promise<string> }> = jsMenu
       ? [
@@ -224,7 +224,7 @@ export async function fetchMenuPageText(
 
     for (let i = 0; i < tavilyAttempts.length; i++) {
       const attempt = tavilyAttempts[i]
-      progress('tavily', `Loading menu content (${i + 1}/${tavilyAttempts.length})…`)
+      progress('fetch', 'Still reading your menu…')
       logImportFromUrl(`Trying Tavily ${attempt.name}`, {
         step: `${i + 1}/${tavilyAttempts.length}`,
       })
@@ -232,7 +232,7 @@ export async function fetchMenuPageText(
         const tavilyText = await attempt.run()
         if (tavilyText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
           logImportFromUrl(`Using Tavily ${attempt.name}`, { textChars: tavilyText.length })
-          progress('tavily', `Menu loaded (${Math.round(tavilyText.length / 1000)}k characters)`)
+          progress('extract', 'Organizing dishes and prices…')
           return { pageText: tavilyText, fetchError: null, fetchMethod: attempt.name }
         }
         if (tavilyText.length > (pageText?.length ?? 0)) {

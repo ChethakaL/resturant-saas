@@ -438,7 +438,7 @@ async function tryClaudeMenuExtraction(
       return { items, source: 'url-context' }
     }
     throw new Error(
-      'This digital menu loads with JavaScript. Configure TAVILY_API_KEY in production so we can read the full menu, or upload menu screenshots.'
+      'We could not read this digital menu from the link. Try uploading photos of your menu instead.'
     )
   }
 
@@ -751,19 +751,19 @@ function importErrorResponse(
     const jsMenuSite = isJsRenderedMenuSite(menuUrl)
     const friendlyMessage =
       jsMenuSite && !tavilyApiKey
-        ? 'This digital menu loads with JavaScript (e.g. mynu.app). Add TAVILY_API_KEY to read the full menu from the link, or upload menu screenshots instead.'
+        ? 'We could not read this digital menu from the link. Try uploading photos of your menu instead.'
         : error instanceof Error && error.message
-          ? error.message.replace(/Gemini URL Context/gi, 'AI')
-          : 'This menu website blocked server access. Try uploading menu screenshots instead.'
+          ? sanitizeErrorForClient(error.message)
+          : 'We could not open this menu link. Try uploading photos of your menu instead.'
     return { body: { error: friendlyMessage }, status: 403 }
   }
 
   if (isAiModelUnavailable(error)) {
     return {
       body: {
-        error: 'AI is busy right now',
+        error: 'Import is busy right now',
         details:
-          "We're experiencing high AI usage. Please wait at least one minute before trying your menu link again — retrying immediately may fail again.",
+          'Please wait at least one minute, then try your menu link again.',
         code: 'AI_OVERLOADED',
       },
       status: 503,
@@ -773,9 +773,9 @@ function importErrorResponse(
   if (isClaudeModelNotFound(error)) {
     return {
       body: {
-        error: 'AI web search is temporarily unavailable',
+        error: 'Import is temporarily unavailable',
         details:
-          'Menu link import could not use web search right now. Please try again in a minute, or upload menu screenshots instead.',
+          'Please try again in a minute, or upload photos of your menu instead.',
         code: 'AI_WEB_SEARCH_UNAVAILABLE',
       },
       status: 503,
@@ -788,7 +788,7 @@ function importErrorResponse(
       body: {
         error: 'Could not build menu items from this link',
         details:
-          'We read the page but AI could not list the dishes. Try again in a minute, or import menu screenshots instead.',
+          'We read the page but could not list the dishes. Try again in a minute, or upload photos of your menu instead.',
         code: 'PARSE_FAILED',
       },
       status: 400,
@@ -817,7 +817,7 @@ async function executeMenuImport(params: {
   const progress = onProgress ?? (() => {})
 
   logImportFromUrl('Import started', { url: menuUrl })
-  progress('start', 'Starting menu import…')
+  progress('start', 'Getting started…')
 
   const config = await getPlatformConfig()
   const rawDb = await getRawPlatformConfig()
@@ -837,7 +837,7 @@ async function executeMenuImport(params: {
   })
 
   if (!hasGemini && !hasOpenAI) {
-    throw new Error('No AI API key configured (need GOOGLE_AI_KEY or OPENAI_API_KEY)')
+    throw new Error('Menu import is not available right now. Please try again later or contact support.')
   }
 
   const { pageText, fetchError, fetchMethod } = await fetchMenuPageText(
@@ -859,26 +859,26 @@ async function executeMenuImport(params: {
   let source = 'page-text'
 
   if (pageText && pageText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
-    progress('extract', 'Building menu items from page (fast pass)…')
+    progress('extract', 'Finding dishes and prices…')
     logImportFromUrl('Fast menu extraction', { textChars: pageText.length, usedTavily })
 
     items = await extractMenuFromPageTextFast(pageText, categoryNames, { hasGemini, hasOpenAI })
     logImportFromUrl('Fast extraction finished', { itemCount: items.length })
 
     if (items.length > 0) {
-      progress('extract', `Found ${items.length} items — finishing up…`)
+      progress('extract', 'Almost done…')
     } else if (usedTavily) {
       throw new Error(
         'We read the menu page but could not list dishes. Try again in a minute, or use Import from image for this menu.'
       )
     } else if (hasGemini) {
-      progress('extract', 'Trying alternate extraction…')
+      progress('extract', 'Trying another way to read your menu…')
       warnImportFromUrl('Fast extraction empty without Tavily — trying URL context once')
       items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
       source = 'url-context'
     }
   } else if (hasGemini && !usedTavily) {
-    progress('extract', 'Reading menu link directly with AI…')
+    progress('extract', 'Reading your menu link…')
     warnImportFromUrl('No page text — single URL context attempt (no Tavily)')
     items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
     source = 'url-context'
@@ -891,7 +891,7 @@ async function executeMenuImport(params: {
   if (items.length === 0) {
     const jsMenuSite = isJsRenderedMenuSite(menuUrl)
     const blockedMessage = jsMenuSite && !tavilyApiKey
-      ? 'This digital menu loads with JavaScript (e.g. mynu.app). Add TAVILY_API_KEY in production, or upload menu screenshots.'
+      ? 'We could not read this digital menu from the link. Try uploading photos of your menu instead.'
       : 'No menu items found on this page. Make sure the URL is a public menu or food list.'
     throw new Error(blockedMessage)
   }
@@ -904,7 +904,7 @@ async function executeMenuImport(params: {
     fetchMethod: fetchMethod ?? 'n/a',
   })
 
-  progress('done', `Ready — ${processedItems.length} items`)
+  progress('done', 'Done!')
 
   return { items: processedItems, source, fetchMethod }
 }
@@ -956,7 +956,7 @@ export async function POST(request: NextRequest) {
             const result = await executeMenuImport({
               menuUrl,
               categoryNames,
-              onProgress: (phase, message) => send({ type: 'progress', phase, message }),
+              onProgress: (_phase, message) => send({ type: 'progress', message }),
             })
 
             send({
