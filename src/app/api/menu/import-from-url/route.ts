@@ -11,7 +11,7 @@ import {
   isJsRenderedMenuSite,
   MIN_MENU_PAGE_TEXT_LENGTH,
 } from '@/lib/menu-url-fetch'
-import { extractMenuTextWithClaudeWebSearch } from '@/lib/menu-url-claude-search'
+import { extractMenuTextWithClaudeWebSearch, isClaudeModelNotFound } from '@/lib/menu-url-claude-search'
 
 const MAX_TEXT_LENGTH = 80_000
 const AI_RETRY_DELAYS_MS = [2000, 5000, 10000]
@@ -304,20 +304,60 @@ async function extractWithClaudeWebSearch(url: string, categoryNames: string[]):
   const apiKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('Anthropic API key not configured')
 
-  const rawText = await extractMenuTextWithClaudeWebSearch(url, {
-    apiKey,
-    categoryNames,
-    extractJsonSchema: EXTRACT_JSON_SCHEMA,
-  })
+  try {
+    const rawText = await extractMenuTextWithClaudeWebSearch(url, {
+      apiKey,
+      categoryNames,
+      extractJsonSchema: EXTRACT_JSON_SCHEMA,
+    })
 
-  let items = parseExtractedItems(rawText)
-  if (items.length === 0) {
-    items = await reparseMenuItemsFromRawText(rawText, categoryNames)
+    let items = parseExtractedItems(rawText)
+    if (items.length === 0) {
+      items = await reparseMenuItemsFromRawText(rawText, categoryNames)
+    }
+    if (items.length === 0) {
+      throw new Error('AI web search read the page but returned no menu items.')
+    }
+    return items
+  } catch (error) {
+    if (isClaudeModelNotFound(error)) {
+      throw Object.assign(new Error('Claude web search model unavailable'), {
+        code: 'CLAUDE_MODEL_UNAVAILABLE',
+        cause: error,
+      })
+    }
+    throw error
   }
-  if (items.length === 0) {
-    throw new Error('AI web search read the page but returned no menu items.')
+}
+
+async function tryClaudeWebSearchOrThrow(
+  url: string,
+  categoryNames: string[],
+  hasGemini: boolean
+): Promise<{ items: ExtractedItem[]; source: 'claude-web-search' | 'url-context' }> {
+  try {
+    const items = await extractWithClaudeWebSearch(url, categoryNames)
+    return { items, source: 'claude-web-search' }
+  } catch (claudeError) {
+    const skipToGemini =
+      hasGemini &&
+      (isClaudeModelNotFound(claudeError) ||
+        (claudeError instanceof Error &&
+          (claudeError as Error & { code?: string }).code === 'CLAUDE_MODEL_UNAVAILABLE') ||
+        /web search read the page but returned no menu items/i.test(
+          claudeError instanceof Error ? claudeError.message : ''
+        ))
+
+    if (skipToGemini) {
+      console.warn(
+        '[import-from-url] Claude web search unavailable or empty, falling back to URL context:',
+        claudeError instanceof Error ? claudeError.message : claudeError
+      )
+      const items = await extractWithGeminiUrlContext(url, categoryNames)
+      return { items, source: 'url-context' }
+    }
+    throw claudeError
   }
-  return items
 }
 
 async function extractWithGemini(pageText: string, categoryNames: string[]): Promise<ExtractedItem[]> {
@@ -542,8 +582,9 @@ export async function POST(request: NextRequest) {
         items = await extractWithOpenAI(pageText, categoryNames)
       }
     } else if (hasAnthropic) {
-      source = 'claude-web-search'
-      items = await extractWithClaudeWebSearch(menuUrl, categoryNames)
+      const result = await tryClaudeWebSearchOrThrow(menuUrl, categoryNames, hasGemini)
+      items = result.items
+      source = result.source
     } else if (hasGemini) {
       source = 'url-context'
       items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
@@ -558,8 +599,9 @@ export async function POST(request: NextRequest) {
 
     if (items.length === 0 && hasAnthropic && source === 'page-text') {
       try {
-        items = await extractWithClaudeWebSearch(menuUrl, categoryNames)
-        source = 'claude-web-search'
+        const result = await tryClaudeWebSearchOrThrow(menuUrl, categoryNames, hasGemini)
+        items = result.items
+        source = result.source
       } catch (claudeSearchError) {
         console.warn('Claude web search fallback failed:', claudeSearchError)
       }
@@ -639,6 +681,18 @@ export async function POST(request: NextRequest) {
           details:
             "We're experiencing high AI usage. Please wait at least one minute before trying your menu link again — retrying immediately may fail again.",
           code: 'AI_OVERLOADED',
+        },
+        { status: 503 }
+      )
+    }
+
+    if (isClaudeModelNotFound(error)) {
+      return NextResponse.json(
+        {
+          error: 'AI web search is temporarily unavailable',
+          details:
+            'Menu link import could not use web search right now. Please try again in a minute, or upload menu screenshots instead.',
+          code: 'AI_WEB_SEARCH_UNAVAILABLE',
         },
         { status: 503 }
       )
