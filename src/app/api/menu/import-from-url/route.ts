@@ -25,12 +25,51 @@ import {
   isClaudeModelNotFound,
 } from '@/lib/menu-url-claude-search'
 
+export const maxDuration = 300
+
 const MAX_TEXT_LENGTH = 80_000
+const GEMINI_INPUT_MAX = 45_000
 const AI_RETRY_DELAYS_MS = [2000, 5000, 10000]
+const AI_RETRY_FAST_MS = [1500]
 const URL_CONTEXT_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'] as const
+
+export type ImportProgressFn = (phase: string, message: string) => void
+
+const SIMPLIFIED_JSON_SCHEMA = `
+Return ONLY a valid JSON array. No markdown. Extract ALL menu items from the page.
+[
+  {
+    "name": "Dish name",
+    "description": "Short description or empty string",
+    "price": 0,
+    "categoryName": "Breakfast"
+  }
+]
+RULES:
+- price: number only (IQD as shown on page).
+- categoryName: section label (Breakfast, Soups, Main Courses, Drinks, etc.).
+- Include every dish/drink with a price on the page.
+- Do not include recipe, ingredients, or nutrition fields.
+`
 
 async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function withAiRetryFast<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= AI_RETRY_FAST_MS.length; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error
+      if (!isAiModelUnavailable(error) || attempt >= AI_RETRY_FAST_MS.length) {
+        throw error
+      }
+      await sleep(AI_RETRY_FAST_MS[attempt])
+    }
+  }
+  throw lastError
 }
 
 async function withAiRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
@@ -419,13 +458,115 @@ async function tryClaudeMenuExtraction(
   }
 }
 
+function trimPageTextForModel(pageText: string): string {
+  if (pageText.length <= GEMINI_INPUT_MAX) return pageText
+  return pageText.slice(0, GEMINI_INPUT_MAX)
+}
+
+async function extractWithGeminiSimplified(
+  pageText: string,
+  categoryNames: string[]
+): Promise<ExtractedItem[]> {
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+  if (!apiKey) throw new Error('Google AI API key not configured')
+
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: { maxOutputTokens: 8192, temperature: 0 },
+  })
+
+  const categoryHint =
+    categoryNames.length > 0
+      ? `Map to closest category when possible: ${categoryNames.join(', ')}.`
+      : ''
+
+  const prompt = `Extract every restaurant menu item from this page text.
+${categoryHint}
+${SIMPLIFIED_JSON_SCHEMA}
+
+Page content:
+"""
+${trimPageTextForModel(pageText)}
+"""
+`
+
+  const result = await withAiRetryFast('Import simplified', () => model.generateContent(prompt))
+  const raw = result.response.text()
+  return parseExtractedItems(raw)
+}
+
+async function extractWithOpenAISimplified(
+  pageText: string,
+  categoryNames: string[]
+): Promise<ExtractedItem[]> {
+  const config = await getPlatformConfig()
+  const apiKey = config.openaiApiKey ?? process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OpenAI API key not configured')
+
+  const openai = new OpenAI({ apiKey })
+  const categoryHint =
+    categoryNames.length > 0 ? `Categories: ${categoryNames.join(', ')}.` : ''
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    temperature: 0,
+    max_tokens: 8192,
+    messages: [
+      {
+        role: 'user',
+        content: `Extract all menu items. ${categoryHint}\n${SIMPLIFIED_JSON_SCHEMA}\n\n"""\n${trimPageTextForModel(pageText)}\n"""`,
+      },
+    ],
+  })
+
+  const raw = completion.choices[0]?.message?.content
+  if (!raw) return []
+  return parseExtractedItems(raw)
+}
+
+async function extractMenuFromPageTextFast(
+  pageText: string,
+  categoryNames: string[],
+  options: { hasGemini: boolean; hasOpenAI: boolean }
+): Promise<ExtractedItem[]> {
+  if (options.hasGemini) {
+    try {
+      const items = await extractWithGeminiSimplified(pageText, categoryNames)
+      if (items.length > 0) return items
+      logImportFromUrl('Simplified Gemini returned 0 items, retrying OpenAI if available')
+    } catch (err) {
+      warnImportFromUrl('Simplified Gemini failed', {
+        reason: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  if (options.hasOpenAI) {
+    try {
+      const items = await extractWithOpenAISimplified(pageText, categoryNames)
+      if (items.length > 0) return items
+    } catch (err) {
+      warnImportFromUrl('Simplified OpenAI failed', {
+        reason: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  return []
+}
+
 async function extractWithGemini(pageText: string, categoryNames: string[]): Promise<ExtractedItem[]> {
   const config = await getPlatformConfig()
   const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey) throw new Error('Google AI API key not configured')
 
   const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: { maxOutputTokens: 8192, temperature: 0 },
+  })
 
   const categoryHint =
     categoryNames.length > 0
@@ -441,11 +582,11 @@ ${EXTRACT_JSON_SCHEMA}
 
 Page content:
 """
-${pageText}
+${trimPageTextForModel(pageText)}
 """
 `
 
-  const result = await withAiRetry('Import page text', () => model.generateContent(prompt))
+  const result = await withAiRetryFast('Import page text', () => model.generateContent(prompt))
   const raw = result.response.text()
   return parseExtractedItems(raw)
 }
@@ -581,9 +722,197 @@ function normalizeExtractedItems(arr: any[]): ExtractedItem[] {
     .filter((item) => item.name && item.name !== 'Unnamed Item')
 }
 
+function mapProcessedItems(items: ExtractedItem[]) {
+  return items.map((item) => ({
+    name: item.name,
+    description: item.description,
+    price: item.price,
+    calories: item.calories ?? null,
+    protein: item.protein ?? null,
+    carbs: item.carbs ?? null,
+    tags: item.tags,
+    categoryName: item.categoryName,
+    prepTime: item.prepTime ?? null,
+    cookTime: item.cookTime ?? null,
+    recipeYield: item.recipeYield ?? null,
+    ingredients: item.ingredients || [],
+    recipeSteps: item.recipeSteps || [],
+    recipeTips: item.recipeTips || [],
+    verified: false,
+  }))
+}
+
+function importErrorResponse(
+  error: unknown,
+  menuUrl: string,
+  tavilyApiKey: string | undefined
+): { body: Record<string, unknown>; status: number } {
+  if (isForbiddenUrlFetch(error) || isUrlContextFailure(error)) {
+    const jsMenuSite = isJsRenderedMenuSite(menuUrl)
+    const friendlyMessage =
+      jsMenuSite && !tavilyApiKey
+        ? 'This digital menu loads with JavaScript (e.g. mynu.app). Add TAVILY_API_KEY to read the full menu from the link, or upload menu screenshots instead.'
+        : error instanceof Error && error.message
+          ? error.message.replace(/Gemini URL Context/gi, 'AI')
+          : 'This menu website blocked server access. Try uploading menu screenshots instead.'
+    return { body: { error: friendlyMessage }, status: 403 }
+  }
+
+  if (isAiModelUnavailable(error)) {
+    return {
+      body: {
+        error: 'AI is busy right now',
+        details:
+          "We're experiencing high AI usage. Please wait at least one minute before trying your menu link again — retrying immediately may fail again.",
+        code: 'AI_OVERLOADED',
+      },
+      status: 503,
+    }
+  }
+
+  if (isClaudeModelNotFound(error)) {
+    return {
+      body: {
+        error: 'AI web search is temporarily unavailable',
+        details:
+          'Menu link import could not use web search right now. Please try again in a minute, or upload menu screenshots instead.',
+        code: 'AI_WEB_SEARCH_UNAVAILABLE',
+      },
+      status: 503,
+    }
+  }
+
+  const message = error instanceof Error ? error.message : 'Unknown error'
+  if (/could not parse|no menu items/i.test(message)) {
+    return {
+      body: {
+        error: 'Could not build menu items from this link',
+        details:
+          'We read the page but AI could not list the dishes. Try again in a minute, or import menu screenshots instead.',
+        code: 'PARSE_FAILED',
+      },
+      status: 400,
+    }
+  }
+
+  return {
+    body: {
+      error: 'Failed to import menu from URL',
+      details: sanitizeErrorForClient(message),
+    },
+    status: 500,
+  }
+}
+
+async function executeMenuImport(params: {
+  menuUrl: string
+  categoryNames: string[]
+  onProgress?: ImportProgressFn
+}): Promise<{
+  items: ReturnType<typeof mapProcessedItems>
+  source: string
+  fetchMethod: string | null
+}> {
+  const { menuUrl, categoryNames, onProgress } = params
+  const progress = onProgress ?? (() => {})
+
+  logImportFromUrl('Import started', { url: menuUrl })
+  progress('start', 'Starting menu import…')
+
+  const config = await getPlatformConfig()
+  const rawDb = await getRawPlatformConfig()
+  const dbTavilyKey =
+    typeof rawDb.tavilyApiKey === 'string' ? rawDb.tavilyApiKey.trim() : undefined
+  const tavilyApiKey = config.tavilyApiKey
+  const tavilyDiag = getTavilyKeyDiagnostics(dbTavilyKey, tavilyApiKey)
+
+  const hasGemini = !!(config.geminiApiKey || process.env.GOOGLE_AI_KEY)
+  const hasOpenAI = !!(config.openaiApiKey || process.env.OPENAI_API_KEY)
+
+  describeAiKeys({
+    tavily: tavilyDiag,
+    gemini: hasGemini,
+    openai: hasOpenAI,
+    anthropic: !!(config.anthropicApiKey || process.env.ANTHROPIC_API_KEY),
+  })
+
+  if (!hasGemini && !hasOpenAI) {
+    throw new Error('No AI API key configured (need GOOGLE_AI_KEY or OPENAI_API_KEY)')
+  }
+
+  const { pageText, fetchError, fetchMethod } = await fetchMenuPageText(
+    menuUrl,
+    tavilyApiKey,
+    (phase, message) => progress(phase, message)
+  )
+
+  const usedTavily = fetchMethod === 'tavily-extract' || fetchMethod === 'tavily-search'
+
+  if (fetchMethod && pageText) {
+    logImportFromUrl('Page text ready for AI extraction', {
+      method: fetchMethod,
+      textChars: pageText.length,
+    })
+  }
+
+  let items: ExtractedItem[] = []
+  let source = 'page-text'
+
+  if (pageText && pageText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
+    progress('extract', 'Building menu items from page (fast pass)…')
+    logImportFromUrl('Fast menu extraction', { textChars: pageText.length, usedTavily })
+
+    items = await extractMenuFromPageTextFast(pageText, categoryNames, { hasGemini, hasOpenAI })
+    logImportFromUrl('Fast extraction finished', { itemCount: items.length })
+
+    if (items.length > 0) {
+      progress('extract', `Found ${items.length} items — finishing up…`)
+    } else if (usedTavily) {
+      throw new Error(
+        'We read the menu page but could not list dishes. Try again in a minute, or use Import from image for this menu.'
+      )
+    } else if (hasGemini) {
+      progress('extract', 'Trying alternate extraction…')
+      warnImportFromUrl('Fast extraction empty without Tavily — trying URL context once')
+      items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
+      source = 'url-context'
+    }
+  } else if (hasGemini && !usedTavily) {
+    progress('extract', 'Reading menu link directly with AI…')
+    warnImportFromUrl('No page text — single URL context attempt (no Tavily)')
+    items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
+    source = 'url-context'
+  } else if (fetchError) {
+    throw fetchError
+  } else {
+    throw new Error('Could not extract enough text from this URL. Try a direct menu page or image import.')
+  }
+
+  if (items.length === 0) {
+    const jsMenuSite = isJsRenderedMenuSite(menuUrl)
+    const blockedMessage = jsMenuSite && !tavilyApiKey
+      ? 'This digital menu loads with JavaScript (e.g. mynu.app). Add TAVILY_API_KEY in production, or upload menu screenshots.'
+      : 'No menu items found on this page. Make sure the URL is a public menu or food list.'
+    throw new Error(blockedMessage)
+  }
+
+  const processedItems = mapProcessedItems(items)
+
+  logImportFromUrl('Import succeeded', {
+    itemCount: processedItems.length,
+    source,
+    fetchMethod: fetchMethod ?? 'n/a',
+  })
+
+  progress('done', `Ready — ${processedItems.length} items`)
+
+  return { items: processedItems, source, fetchMethod }
+}
+
 export async function POST(request: NextRequest) {
   let menuUrl = ''
   let tavilyApiKey: string | undefined
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.restaurantId) {
@@ -592,11 +921,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     menuUrl = typeof body.url === 'string' ? body.url.trim() : ''
+    const useStream = body.stream === true
+
     if (!menuUrl) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
     }
 
-    // Basic URL validation
     try {
       new URL(menuUrl)
     } catch {
@@ -607,228 +937,65 @@ export async function POST(request: NextRequest) {
       ? body.categoryNames.filter((c: unknown): c is string => typeof c === 'string')
       : []
 
-    logImportFromUrl('Import started', { url: menuUrl })
-
-    const config = await getPlatformConfig()
-    const rawDb = await getRawPlatformConfig()
-    const dbTavilyKey =
-      typeof rawDb.tavilyApiKey === 'string' ? rawDb.tavilyApiKey.trim() : undefined
-    tavilyApiKey = config.tavilyApiKey
-    const tavilyDiag = getTavilyKeyDiagnostics(dbTavilyKey, tavilyApiKey)
-
-    const hasGemini = !!(config.geminiApiKey || process.env.GOOGLE_AI_KEY)
-    const hasOpenAI = !!(config.openaiApiKey || process.env.OPENAI_API_KEY)
-    const hasAnthropic = !!(config.anthropicApiKey || process.env.ANTHROPIC_API_KEY)
-
-    describeAiKeys({
-      tavily: tavilyDiag,
-      gemini: hasGemini,
-      openai: hasOpenAI,
-      anthropic: hasAnthropic,
-    })
-
-    if (tavilyDiag.configured) {
-      logImportFromUrl('Tavily key loaded', {
-        source:
-          tavilyDiag.source === 'env'
-            ? 'process.env.TAVILY_API_KEY (Docker env_file .env on server)'
-            : 'platform database (overrides env)',
-        preview: tavilyDiag.preview,
-      })
-    }
-
-    const { pageText, fetchError, fetchMethod } = await fetchMenuPageText(menuUrl, tavilyApiKey)
-    if (fetchMethod && pageText) {
-      logImportFromUrl('Page text ready for AI extraction', {
-        method: fetchMethod,
-        textChars: pageText.length,
-      })
-    } else if (!pageText || pageText.length < MIN_MENU_PAGE_TEXT_LENGTH) {
-      warnImportFromUrl('Insufficient page text after fetch', {
-        method: fetchMethod ?? 'none',
-        textChars: pageText?.length ?? 0,
-        lastFetchError:
-          fetchError instanceof Error ? fetchError.message : fetchError ? String(fetchError) : undefined,
-      })
-    }
-    if (!hasGemini && !hasOpenAI && !hasAnthropic) {
-      return NextResponse.json(
-        { error: 'No AI API key configured' },
-        { status: 500 }
-      )
-    }
-
-    let items: ExtractedItem[]
-    let source: 'page-text' | 'claude-page-text' | 'claude-web-search' | 'url-context' = 'page-text'
-    if (pageText && pageText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
-      logImportFromUrl('Extracting menu items from page text', {
-        textChars: pageText.length,
-        via: hasGemini ? 'Gemini' : hasAnthropic ? 'Claude' : 'OpenAI',
-      })
-      if (hasGemini) {
-        try {
-          items = await extractWithGemini(pageText, categoryNames)
-          logImportFromUrl('Gemini extraction finished', { itemCount: items.length })
-        } catch (err) {
-          warnImportFromUrl('Gemini extraction failed', {
-            reason: err instanceof Error ? err.message : String(err),
-          })
-          if (hasAnthropic) {
+    if (useStream) {
+      const encoder = new TextEncoder()
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (event: Record<string, unknown>) => {
             try {
-              items = await extractWithClaudeFromPageText(pageText, categoryNames)
-              source = 'claude-page-text'
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
             } catch {
-              if (hasOpenAI) {
-                items = await extractWithOpenAI(pageText, categoryNames)
-              } else {
-                throw err
-              }
+              // client disconnected
             }
-          } else if (hasOpenAI) {
-            items = await extractWithOpenAI(pageText, categoryNames)
-          } else {
-            throw err
           }
-        }
-      } else if (hasAnthropic) {
-        items = await extractWithClaudeFromPageText(pageText, categoryNames)
-        source = 'claude-page-text'
-      } else {
-        items = await extractWithOpenAI(pageText, categoryNames)
-      }
-    } else if (hasAnthropic) {
-      warnImportFromUrl('No page text — using Claude/Gemini URL fallbacks (slow; may fail on JS menus)')
-      const result = await tryClaudeMenuExtraction(menuUrl, categoryNames, pageText, hasGemini)
-      items = result.items
-      source = result.source
-    } else if (hasGemini) {
-      warnImportFromUrl('No page text — using Gemini URL context only')
-      source = 'url-context'
-      items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
-    } else if (fetchError) {
-      throw fetchError
-    } else {
-      return NextResponse.json(
-        { error: 'Could not extract enough text from this URL. Try a direct menu page.' },
-        { status: 400 }
-      )
+
+          try {
+            const config = await getPlatformConfig()
+            tavilyApiKey = config.tavilyApiKey
+
+            const result = await executeMenuImport({
+              menuUrl,
+              categoryNames,
+              onProgress: (phase, message) => send({ type: 'progress', phase, message }),
+            })
+
+            send({
+              type: 'complete',
+              success: true,
+              items: result.items,
+              source: result.source,
+            })
+          } catch (error) {
+            errorImportFromUrl('Import failed', error)
+            const { body: errBody, status } = importErrorResponse(error, menuUrl, tavilyApiKey)
+            send({ type: 'error', ...errBody, status })
+          } finally {
+            controller.close()
+          }
+        },
+      })
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        },
+      })
     }
 
-    if (items.length === 0 && hasAnthropic && source === 'page-text') {
-      try {
-        const result = await tryClaudeMenuExtraction(menuUrl, categoryNames, pageText, hasGemini)
-        items = result.items
-        source = result.source
-      } catch (claudeSearchError) {
-        console.warn('Claude menu extraction fallback failed:', claudeSearchError)
-      }
-    }
-
-    if (items.length === 0 && hasGemini && source === 'page-text') {
-      try {
-        items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
-        source = 'url-context'
-      } catch (urlContextError) {
-        console.warn('Gemini URL Context fallback failed:', urlContextError)
-      }
-    }
-
-    if (items.length === 0) {
-      const jsMenuSite = isJsRenderedMenuSite(menuUrl)
-      const blockedMessage =
-        jsMenuSite && !tavilyApiKey
-          ? 'This digital menu loads with JavaScript (e.g. mynu.app). Add TAVILY_API_KEY in production to read the full menu from the link, or upload menu screenshots instead.'
-          : source === 'url-context' && jsMenuSite && !tavilyApiKey
-            ? 'This digital menu loads with JavaScript (e.g. mynu.app). Our server could not read the full menu from the link. Try again after enabling advanced link extraction, or upload menu screenshots instead.'
-            : source === 'claude-page-text' ||
-                source === 'claude-web-search' ||
-                source === 'url-context'
-              ? fetchError && isForbiddenUrlFetch(fetchError)
-                ? 'This menu website blocked server access, and AI could not extract menu items from the link. Try uploading menu screenshots instead.'
-                : 'AI could not extract menu items from this link. The page may be private, bot-protected, or a JavaScript-only menu. Try uploading menu screenshots instead.'
-              : fetchError && isForbiddenUrlFetch(fetchError)
-                ? 'This menu website blocked server access, and AI could not extract menu items from the link. Try uploading menu screenshots instead.'
-                : 'No menu items found on this page. Make sure the URL is a public menu or food list.'
-      return NextResponse.json(
-        { error: blockedMessage },
-        { status: 400 }
-      )
-    }
-
-    // Map to same shape as extract-from-image (categoryId filled by frontend)
-    const processedItems = items.map((item) => ({
-      name: item.name,
-      description: item.description,
-      price: item.price,
-      calories: item.calories ?? null,
-      protein: item.protein ?? null,
-      carbs: item.carbs ?? null,
-      tags: item.tags,
-      categoryName: item.categoryName,
-      prepTime: item.prepTime ?? null,
-      cookTime: item.cookTime ?? null,
-      recipeYield: item.recipeYield ?? null,
-      ingredients: item.ingredients || [],
-      recipeSteps: item.recipeSteps || [],
-      recipeTips: item.recipeTips || [],
-      verified: false,
-    }))
-
-    logImportFromUrl('Import succeeded', {
-      itemCount: processedItems.length,
-      source,
-      fetchMethod: fetchMethod ?? 'n/a',
-    })
+    const result = await executeMenuImport({ menuUrl, categoryNames })
+    tavilyApiKey = (await getPlatformConfig()).tavilyApiKey
 
     return NextResponse.json({
       success: true,
-      items: processedItems,
-      source,
+      items: result.items,
+      source: result.source,
     })
   } catch (error) {
     errorImportFromUrl('Import failed', error)
-    if (isForbiddenUrlFetch(error) || isUrlContextFailure(error)) {
-      const jsMenuSite = isJsRenderedMenuSite(menuUrl)
-      const friendlyMessage =
-        jsMenuSite && !tavilyApiKey
-          ? 'This digital menu loads with JavaScript (e.g. mynu.app). Our server could not read the full menu from the link. Try uploading menu screenshots instead.'
-          : error instanceof Error && error.message
-            ? error.message.replace(/Gemini URL Context/gi, 'AI')
-            : 'This menu website blocked server access. Try uploading menu screenshots instead.'
-
-      return NextResponse.json({ error: friendlyMessage }, { status: 403 })
-    }
-
-    if (isAiModelUnavailable(error)) {
-      return NextResponse.json(
-        {
-          error: 'AI is busy right now',
-          details:
-            "We're experiencing high AI usage. Please wait at least one minute before trying your menu link again — retrying immediately may fail again.",
-          code: 'AI_OVERLOADED',
-        },
-        { status: 503 }
-      )
-    }
-
-    if (isClaudeModelNotFound(error)) {
-      return NextResponse.json(
-        {
-          error: 'AI web search is temporarily unavailable',
-          details:
-            'Menu link import could not use web search right now. Please try again in a minute, or upload menu screenshots instead.',
-          code: 'AI_WEB_SEARCH_UNAVAILABLE',
-        },
-        { status: 503 }
-      )
-    }
-
-    return NextResponse.json(
-      {
-        error: 'Failed to import menu from URL',
-        details: sanitizeErrorForClient(error instanceof Error ? error.message : 'Unknown error'),
-      },
-      { status: 500 }
-    )
+    const { body: errBody, status } = importErrorResponse(error, menuUrl, tavilyApiKey)
+    return NextResponse.json(errBody, { status })
   }
 }

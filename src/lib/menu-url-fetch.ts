@@ -16,6 +16,8 @@ export type MenuPageFetchResult = {
   fetchMethod: MenuPageFetchMethod
 }
 
+export type MenuFetchProgressFn = (phase: string, message: string) => void
+
 function stripHtmlToText(html: string): string {
   const withoutScriptStyle = html.replace(
     /<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi,
@@ -156,8 +158,10 @@ async function fetchWithTavilySearch(url: string, apiKey: string): Promise<strin
 
 export async function fetchMenuPageText(
   url: string,
-  tavilyApiKey?: string
+  tavilyApiKey?: string,
+  onProgress?: MenuFetchProgressFn
 ): Promise<MenuPageFetchResult> {
+  const progress = onProgress ?? (() => {})
   let pageText: string | null = null
   let fetchError: unknown = null
   let fetchMethod: MenuPageFetchMethod = null
@@ -175,10 +179,13 @@ export async function fetchMenuPageText(
     tavilyConfigured: !!tavilyApiKey,
   })
 
+  progress('fetch', 'Opening menu link…')
+
   try {
     const directText = await fetchWithNode(url)
     if (directText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
       logImportFromUrl('Using direct fetch (enough text)', { textChars: directText.length })
+      progress('fetch', 'Menu page loaded')
       return { pageText: directText, fetchError: null, fetchMethod: 'direct' }
     }
     if (directText.length > 0) {
@@ -203,6 +210,7 @@ export async function fetchMenuPageText(
   }
 
   if (tavilyApiKey) {
+    progress('tavily', 'Reading menu with advanced link extraction…')
     const jsMenu = isJsRenderedMenuSite(url)
     const tavilyAttempts: Array<{ name: MenuPageFetchMethod; run: () => Promise<string> }> = jsMenu
       ? [
@@ -216,6 +224,7 @@ export async function fetchMenuPageText(
 
     for (let i = 0; i < tavilyAttempts.length; i++) {
       const attempt = tavilyAttempts[i]
+      progress('tavily', `Loading menu content (${i + 1}/${tavilyAttempts.length})…`)
       logImportFromUrl(`Trying Tavily ${attempt.name}`, {
         step: `${i + 1}/${tavilyAttempts.length}`,
       })
@@ -223,6 +232,7 @@ export async function fetchMenuPageText(
         const tavilyText = await attempt.run()
         if (tavilyText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
           logImportFromUrl(`Using Tavily ${attempt.name}`, { textChars: tavilyText.length })
+          progress('tavily', `Menu loaded (${Math.round(tavilyText.length / 1000)}k characters)`)
           return { pageText: tavilyText, fetchError: null, fetchMethod: attempt.name }
         }
         if (tavilyText.length > (pageText?.length ?? 0)) {

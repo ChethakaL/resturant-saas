@@ -130,6 +130,9 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [importProgress, setImportProgress] = useState<{ phase: string; message: string } | null>(
+    null
+  )
   const [editingItem, setEditingItem] = useState<ExtractedMenuItem | null>(null)
   const [activeDetailTab, setActiveDetailTab] = useState<ImportDraftTab>('basic')
   const [smartChefInstruction, setSmartChefInstruction] = useState('')
@@ -333,6 +336,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
     }
 
     setIsProcessing(true)
+    setImportProgress({ phase: 'start', message: 'Starting…' })
     setStep('extracting')
 
     try {
@@ -341,18 +345,87 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url,
+          stream: true,
           categoryNames: availableCategories.map((c) => c.name),
         }),
       })
 
-      const data = await response.json()
+      const contentType = response.headers.get('content-type') ?? ''
+      let data: {
+        items?: ExtractedMenuItem[]
+        error?: string
+        details?: string
+        code?: string
+        status?: number
+      }
 
-      if (!response.ok) {
-        const message = data.details || data.error || 'Failed to import from URL'
-        const error = new Error(message) as Error & { code?: string; status?: number }
-        error.code = data.code
-        error.status = response.status
-        throw error
+      if (contentType.includes('text/event-stream') && response.body) {
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const payload = JSON.parse(line.slice(6)) as {
+              type: string
+              phase?: string
+              message?: string
+              items?: ExtractedMenuItem[]
+              error?: string
+              details?: string
+              code?: string
+              status?: number
+            }
+
+            if (payload.type === 'progress' && payload.message) {
+              setImportProgress({
+                phase: payload.phase ?? 'progress',
+                message: payload.message,
+              })
+            } else if (payload.type === 'complete') {
+              data = { items: payload.items ?? [] }
+            } else if (payload.type === 'error') {
+              const error = new Error(payload.details || payload.error || 'Import failed') as Error & {
+                code?: string
+                status?: number
+              }
+              error.code = payload.code
+              error.status = payload.status ?? 500
+              throw error
+            }
+          }
+        }
+
+        if (!data) {
+          throw new Error('Import ended without a result. Please try again.')
+        }
+      } else {
+        const text = await response.text()
+        try {
+          data = JSON.parse(text)
+        } catch {
+          if (response.status === 504) {
+            throw new Error(
+              'Import timed out. Large menus can take a few minutes — try again or use Import from image.'
+            )
+          }
+          throw new Error('Server returned an unexpected response. Please try again.')
+        }
+
+        if (!response.ok) {
+          const message = data.details || data.error || 'Failed to import from URL'
+          const error = new Error(message) as Error & { code?: string; status?: number }
+          error.code = data.code
+          error.status = response.status
+          throw error
+        }
       }
 
       const extracted: ExtractedMenuItem[] = (data.items || []).map((item: any) => ({
@@ -393,18 +466,22 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
           ? (error as { code?: string }).code
           : undefined
       const isAiBusy = status === 503 || code === 'AI_OVERLOADED'
+      const isTimeout = status === 504
       toast({
-        title: isAiBusy ? 'AI is busy' : 'Import failed',
+        title: isAiBusy ? 'AI is busy' : isTimeout ? 'Import timed out' : 'Import failed',
         description: isAiBusy
           ? "We're experiencing high AI usage. Please wait at least one minute before trying your menu link again — retrying immediately may fail again."
-          : error instanceof Error
-            ? error.message
-            : 'Failed to import menu from URL',
+          : isTimeout
+            ? 'The server took too long. Try again, or use Import from image for large menus.'
+            : error instanceof Error
+              ? error.message
+              : 'Failed to import menu from URL',
         variant: 'destructive',
       })
       setStep('url')
     } finally {
       setIsProcessing(false)
+      setImportProgress(null)
     }
   }
 
@@ -769,10 +846,23 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
           )}
 
           {step === 'extracting' && (
-            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <div className="flex flex-col items-center justify-center py-12 space-y-4 px-4">
               <Loader2 className="h-16 w-16 animate-spin text-emerald-500" />
-              <p className="text-lg font-medium">Opening link and extracting menu...</p>
-              <p className="text-sm text-slate-500">This may take a moment</p>
+              <p className="text-lg font-medium text-center">
+                {importProgress?.message ?? 'Opening link and extracting menu…'}
+              </p>
+              <p className="text-sm text-slate-500 text-center max-w-sm">
+                Large digital menus may take 1–2 minutes. You can keep this window open — progress
+                updates below.
+              </p>
+              {importProgress && (
+                <div className="w-full max-w-md rounded-lg border border-emerald-100 bg-emerald-50/80 px-4 py-3 text-left text-sm text-emerald-900">
+                  <p className="font-medium capitalize">
+                    {importProgress.phase.replace(/-/g, ' ')}
+                  </p>
+                  <p className="mt-1 text-emerald-800">{importProgress.message}</p>
+                </div>
+              )}
             </div>
           )}
 
