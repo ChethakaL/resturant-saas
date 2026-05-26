@@ -348,7 +348,11 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || data.details || 'Failed to import from URL')
+        const message = data.details || data.error || 'Failed to import from URL'
+        const error = new Error(message) as Error & { code?: string; status?: number }
+        error.code = data.code
+        error.status = response.status
+        throw error
       }
 
       const extracted: ExtractedMenuItem[] = (data.items || []).map((item: any) => ({
@@ -380,9 +384,22 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       }
     } catch (error) {
       console.error('Import from URL error:', error)
+      const status =
+        typeof error === 'object' && error !== null && 'status' in error
+          ? (error as { status?: number }).status
+          : undefined
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? (error as { code?: string }).code
+          : undefined
+      const isAiBusy = status === 503 || code === 'AI_OVERLOADED'
       toast({
-        title: 'Import Failed',
-        description: error instanceof Error ? error.message : 'Failed to import menu from URL',
+        title: isAiBusy ? 'AI is busy' : 'Import failed',
+        description: isAiBusy
+          ? "We're experiencing high AI usage. Please wait at least one minute before trying your menu link again — retrying immediately may fail again."
+          : error instanceof Error
+            ? error.message
+            : 'Failed to import menu from URL',
         variant: 'destructive',
       })
       setStep('url')

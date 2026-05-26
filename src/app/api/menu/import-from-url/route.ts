@@ -6,10 +6,37 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { GoogleGenAI } from '@google/genai'
 import OpenAI from 'openai'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
+import {
+  fetchMenuPageText,
+  isJsRenderedMenuSite,
+  MIN_MENU_PAGE_TEXT_LENGTH,
+} from '@/lib/menu-url-fetch'
+import { extractMenuTextWithClaudeWebSearch } from '@/lib/menu-url-claude-search'
 
 const MAX_TEXT_LENGTH = 80_000
-const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+const AI_RETRY_DELAYS_MS = [2000, 5000, 10000]
+const URL_CONTEXT_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'] as const
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function withAiRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= AI_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error
+      if (!isAiModelUnavailable(error) || attempt >= AI_RETRY_DELAYS_MS.length) {
+        throw error
+      }
+      console.warn(`${label}: AI busy (attempt ${attempt + 1}), retrying...`)
+      await sleep(AI_RETRY_DELAYS_MS[attempt])
+    }
+  }
+  throw lastError
+}
 
 function isForbiddenUrlFetch(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
@@ -22,72 +49,6 @@ function isAiModelUnavailable(error: unknown) {
     ? (error as { status?: unknown }).status
     : undefined
   return status === 503 || /503|Service Unavailable|high demand|try again later|overloaded/i.test(message)
-}
-
-function stripHtmlToText(html: string): string {
-  const withoutScriptStyle = html.replace(
-    /<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi,
-    ''
-  )
-  const text = withoutScriptStyle
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return text.length > MAX_TEXT_LENGTH ? text.slice(0, MAX_TEXT_LENGTH) : text
-}
-
-async function fetchWithTavily(url: string): Promise<string> {
-  const apiKey = process.env.TAVILY_API_KEY
-  if (!apiKey) throw new Error('TAVILY_API_KEY not set')
-
-  const res = await fetch('https://api.tavily.com/extract', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      urls: [url],
-      extract_depth: 'advanced',
-      format: 'text',
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Tavily extract failed: ${res.status} ${err}`)
-  }
-
-  const data = (await res.json()) as {
-    results?: Array<{ raw_content?: string }>
-    failed_results?: unknown[]
-  }
-
-  if (data.failed_results?.length) {
-    throw new Error('Tavily could not extract this URL')
-  }
-
-  const raw = data.results?.[0]?.raw_content
-  if (!raw || typeof raw !== 'string') {
-    throw new Error('No content extracted from URL')
-  }
-
-  const text = raw.length > MAX_TEXT_LENGTH ? raw.slice(0, MAX_TEXT_LENGTH) : raw
-  return text
-}
-
-async function fetchWithNode(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
-    signal: AbortSignal.timeout(15_000),
-  })
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch URL: ${res.status} ${res.statusText}`)
-  }
-
-  const html = await res.text()
-  return stripHtmlToText(html)
 }
 
 const EXTRACT_JSON_SCHEMA = `
@@ -134,7 +95,9 @@ type GeminiGenerateResponse = {
 
 function isUrlContextFailure(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
-  return /URL Context|url context|Gemini.*URL|retrieval failed|no menu items for this URL/i.test(message)
+  return /URL Context|url context|could not access this menu URL|retrieval failed|no menu items|returned no menu items/i.test(
+    message
+  )
 }
 
 function getGeminiResponseText(response: GeminiGenerateResponse): string {
@@ -185,14 +148,19 @@ function getUrlContextRetrievalSummary(response: {
       .join(', ')
     return {
       ok: false,
-      message: `Gemini URL Context could not access this menu URL (${statuses}).`,
+      message: `AI could not access this menu URL (${statuses}). Try uploading menu screenshots instead.`,
     }
   }
 
   return { ok: true, message: '' }
 }
 
-async function extractWithGeminiUrlContext(url: string, categoryNames: string[]): Promise<ExtractedItem[]> {
+async function extractWithGeminiUrlContextOnce(
+  url: string,
+  categoryNames: string[],
+  model: (typeof URL_CONTEXT_MODELS)[number],
+  options?: { simplified?: boolean }
+): Promise<ExtractedItem[]> {
   const config = await getPlatformConfig()
   const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
   if (!apiKey) throw new Error('Google AI API key not configured')
@@ -203,11 +171,22 @@ async function extractWithGeminiUrlContext(url: string, categoryNames: string[])
       ? `Available categories (map to closest when possible): ${categoryNames.join(', ')}.`
       : ''
 
+  const simplifiedRules = options?.simplified
+    ? `
+This is likely a JavaScript digital menu (e.g. mynu.app). Browse ALL category tabs/sections on the page.
+Extract EVERY dish/drink with name, price, and categoryName. Prices are usually IQD — keep the number shown on the page.
+Return ONLY a JSON array. Each item must include at minimum: name, description (short or empty string), price, categoryName.
+You may omit ingredients/recipeSteps for this pass if needed to fit all items, but include them when easy.
+Do not return prose, markdown, or an empty array if items are visible on the menu.
+`
+    : ''
+
   const prompt = `You are extracting a restaurant menu from a public URL.
 
 ${categoryHint}
+${simplifiedRules}
 
-Use Gemini URL Context to read this exact URL:
+Use URL Context to read this exact URL:
 ${url}
 
 Extract every menu item from the page. Include full menu-item form data: item name, short description, price in IQD, categoryName, nutrition, tags, prep/cook time, recipe yield, ingredients, recipe steps, and chef tips.
@@ -215,10 +194,11 @@ ${EXTRACT_JSON_SCHEMA}
 `
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model,
     contents: [prompt],
     config: {
       tools: [{ urlContext: {} }],
+      maxOutputTokens: 16384,
     },
   })
 
@@ -228,20 +208,115 @@ ${EXTRACT_JSON_SCHEMA}
   if (!rawText) {
     throw new Error(
       retrieval.ok
-        ? 'Gemini URL Context returned an empty response for this menu URL.'
+        ? 'AI returned an empty response for this menu URL.'
         : retrieval.message
     )
   }
 
-  const items = parseExtractedItems(rawText)
+  let items = parseExtractedItems(rawText)
   if (items.length === 0) {
+    items = await reparseMenuItemsFromRawText(rawText, categoryNames)
+  }
+
+  if (items.length === 0) {
+    console.warn(
+      'URL context returned no parseable menu items',
+      JSON.stringify({ url, model, simplified: !!options?.simplified, rawPreview: rawText.slice(0, 400) })
+    )
     throw new Error(
       retrieval.ok
-        ? 'Gemini URL Context read the page but returned no menu items. The link may not be a public menu page.'
+        ? 'AI read the page but returned no menu items. The link may not be a public menu page.'
         : retrieval.message
     )
   }
 
+  return items
+}
+
+async function reparseMenuItemsFromRawText(
+  rawText: string,
+  categoryNames: string[]
+): Promise<ExtractedItem[]> {
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+  if (!apiKey) return []
+
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: { maxOutputTokens: 16384, temperature: 0 },
+  })
+
+  const categoryHint =
+    categoryNames.length > 0
+      ? `Available categories (map to closest when possible): ${categoryNames.join(', ')}.`
+      : ''
+
+  const prompt = `Convert the following AI output into a valid JSON array of restaurant menu items.
+${categoryHint}
+${EXTRACT_JSON_SCHEMA}
+
+AI output to convert:
+"""
+${rawText.slice(0, MAX_TEXT_LENGTH)}
+"""
+`
+
+  try {
+    const result = await model.generateContent(prompt)
+    return parseExtractedItems(result.response.text())
+  } catch {
+    return []
+  }
+}
+
+async function extractWithGeminiUrlContext(url: string, categoryNames: string[]): Promise<ExtractedItem[]> {
+  let lastError: unknown
+  const attempts: Array<{ model: (typeof URL_CONTEXT_MODELS)[number]; simplified: boolean }> = [
+    { model: URL_CONTEXT_MODELS[0], simplified: false },
+    { model: URL_CONTEXT_MODELS[0], simplified: true },
+    { model: URL_CONTEXT_MODELS[1], simplified: true },
+  ]
+
+  for (const { model, simplified } of attempts) {
+    try {
+      return await withAiRetry(`Import URL context (${model}${simplified ? ', simplified' : ''})`, () =>
+        extractWithGeminiUrlContextOnce(url, categoryNames, model, { simplified })
+      )
+    } catch (error) {
+      lastError = error
+      if (isAiModelUnavailable(error)) {
+        console.warn(`Import URL context (${model}) unavailable, trying next option...`)
+        continue
+      }
+      if (/returned no menu items/i.test(error instanceof Error ? error.message : '')) {
+        console.warn(`Import URL context (${model}) found no items, trying next option...`)
+        continue
+      }
+      throw error
+    }
+  }
+  throw lastError
+}
+
+async function extractWithClaudeWebSearch(url: string, categoryNames: string[]): Promise<ExtractedItem[]> {
+  const config = await getPlatformConfig()
+  const apiKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('Anthropic API key not configured')
+
+  const rawText = await extractMenuTextWithClaudeWebSearch(url, {
+    apiKey,
+    categoryNames,
+    extractJsonSchema: EXTRACT_JSON_SCHEMA,
+  })
+
+  let items = parseExtractedItems(rawText)
+  if (items.length === 0) {
+    items = await reparseMenuItemsFromRawText(rawText, categoryNames)
+  }
+  if (items.length === 0) {
+    throw new Error('AI web search read the page but returned no menu items.')
+  }
   return items
 }
 
@@ -271,7 +346,7 @@ ${pageText}
 """
 `
 
-  const result = await model.generateContent(prompt)
+  const result = await withAiRetry('Import page text', () => model.generateContent(prompt))
   const raw = result.response.text()
   return parseExtractedItems(raw)
 }
@@ -408,6 +483,8 @@ function normalizeExtractedItems(arr: any[]): ExtractedItem[] {
 }
 
 export async function POST(request: NextRequest) {
+  let menuUrl = ''
+  let tavilyApiKey: string | undefined
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.restaurantId) {
@@ -415,14 +492,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const url = typeof body.url === 'string' ? body.url.trim() : ''
-    if (!url) {
+    menuUrl = typeof body.url === 'string' ? body.url.trim() : ''
+    if (!menuUrl) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
     }
 
     // Basic URL validation
     try {
-      new URL(url)
+      new URL(menuUrl)
     } catch {
       return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
     }
@@ -431,32 +508,17 @@ export async function POST(request: NextRequest) {
       ? body.categoryNames.filter((c: unknown): c is string => typeof c === 'string')
       : []
 
-    let pageText: string | null = null
-    let fetchError: unknown = null
-    if (process.env.TAVILY_API_KEY) {
-      try {
-        pageText = await fetchWithTavily(url)
-      } catch (error) {
-        fetchError = error
-        // Fallback to direct fetch when Tavily fails (e.g. URL not extractable, timeout)
-        try {
-          pageText = await fetchWithNode(url)
-        } catch (nodeError) {
-          fetchError = nodeError
-        }
-      }
-    } else {
-      try {
-        pageText = await fetchWithNode(url)
-      } catch (error) {
-        fetchError = error
-      }
+    const config = await getPlatformConfig()
+    tavilyApiKey = config.tavilyApiKey
+    const { pageText, fetchError, fetchMethod } = await fetchMenuPageText(menuUrl, tavilyApiKey)
+    if (fetchMethod) {
+      console.log(`[import-from-url] Page content via ${fetchMethod} (${pageText?.length ?? 0} chars)`)
     }
 
-    const config = await getPlatformConfig()
     const hasGemini = !!(config.geminiApiKey || process.env.GOOGLE_AI_KEY)
     const hasOpenAI = !!(config.openaiApiKey || process.env.OPENAI_API_KEY)
-    if (!hasGemini && !hasOpenAI) {
+    const hasAnthropic = !!(config.anthropicApiKey || process.env.ANTHROPIC_API_KEY)
+    if (!hasGemini && !hasOpenAI && !hasAnthropic) {
       return NextResponse.json(
         { error: 'No AI API key configured' },
         { status: 500 }
@@ -464,8 +526,8 @@ export async function POST(request: NextRequest) {
     }
 
     let items: ExtractedItem[]
-    let source: 'page-text' | 'url-context' = 'page-text'
-    if (pageText && pageText.length >= 50) {
+    let source: 'page-text' | 'claude-web-search' | 'url-context' = 'page-text'
+    if (pageText && pageText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
       if (hasGemini) {
         try {
           items = await extractWithGemini(pageText, categoryNames)
@@ -479,9 +541,12 @@ export async function POST(request: NextRequest) {
       } else {
         items = await extractWithOpenAI(pageText, categoryNames)
       }
+    } else if (hasAnthropic) {
+      source = 'claude-web-search'
+      items = await extractWithClaudeWebSearch(menuUrl, categoryNames)
     } else if (hasGemini) {
       source = 'url-context'
-      items = await extractWithGeminiUrlContext(url, categoryNames)
+      items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
     } else if (fetchError) {
       throw fetchError
     } else {
@@ -491,9 +556,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (items.length === 0 && hasAnthropic && source === 'page-text') {
+      try {
+        items = await extractWithClaudeWebSearch(menuUrl, categoryNames)
+        source = 'claude-web-search'
+      } catch (claudeSearchError) {
+        console.warn('Claude web search fallback failed:', claudeSearchError)
+      }
+    }
+
     if (items.length === 0 && hasGemini && source === 'page-text') {
       try {
-        items = await extractWithGeminiUrlContext(url, categoryNames)
+        items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
         source = 'url-context'
       } catch (urlContextError) {
         console.warn('Gemini URL Context fallback failed:', urlContextError)
@@ -501,14 +575,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (items.length === 0) {
+      const jsMenuSite = isJsRenderedMenuSite(menuUrl)
       const blockedMessage =
-        source === 'url-context' && fetchError && isForbiddenUrlFetch(fetchError)
-          ? 'This menu website blocked server access, and Gemini URL Context could not extract menu items. Try uploading menu screenshots instead.'
-          : source === 'url-context'
-            ? 'Gemini URL Context could not extract menu items from this link. The page may be private, bot-protected, or not a public menu. Try uploading menu screenshots instead.'
-            : fetchError && isForbiddenUrlFetch(fetchError)
-              ? 'This menu website blocked server access, and Gemini URL Context could not extract menu items. Try uploading menu screenshots instead.'
-              : 'No menu items found on this page. Make sure the URL is a public menu or food list.'
+        jsMenuSite && !tavilyApiKey && !hasAnthropic
+          ? 'This digital menu loads with JavaScript (e.g. mynu.app). Configure advanced link extraction or AI web search, or upload menu screenshots instead.'
+          : source === 'url-context' && jsMenuSite && !tavilyApiKey
+            ? 'This digital menu loads with JavaScript (e.g. mynu.app). Our server could not read the full menu from the link. Try again after enabling advanced link extraction, or upload menu screenshots instead.'
+            : source === 'claude-web-search' || source === 'url-context'
+              ? fetchError && isForbiddenUrlFetch(fetchError)
+                ? 'This menu website blocked server access, and AI could not extract menu items from the link. Try uploading menu screenshots instead.'
+                : 'AI could not extract menu items from this link. The page may be private, bot-protected, or a JavaScript-only menu. Try uploading menu screenshots instead.'
+              : fetchError && isForbiddenUrlFetch(fetchError)
+                ? 'This menu website blocked server access, and AI could not extract menu items from the link. Try uploading menu screenshots instead.'
+                : 'No menu items found on this page. Make sure the URL is a public menu or food list.'
       return NextResponse.json(
         { error: blockedMessage },
         { status: 400 }
@@ -542,20 +621,25 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Import from URL error:', error)
     if (isForbiddenUrlFetch(error) || isUrlContextFailure(error)) {
-      return NextResponse.json(
-        {
-          error:
-            error instanceof Error && error.message
-              ? error.message
-              : 'This menu website blocked server access. Try uploading menu screenshots instead.',
-        },
-        { status: 403 }
-      )
+      const jsMenuSite = isJsRenderedMenuSite(menuUrl)
+      const friendlyMessage =
+        jsMenuSite && !tavilyApiKey
+          ? 'This digital menu loads with JavaScript (e.g. mynu.app). Our server could not read the full menu from the link. Try uploading menu screenshots instead.'
+          : error instanceof Error && error.message
+            ? error.message.replace(/Gemini URL Context/gi, 'AI')
+            : 'This menu website blocked server access. Try uploading menu screenshots instead.'
+
+      return NextResponse.json({ error: friendlyMessage }, { status: 403 })
     }
 
     if (isAiModelUnavailable(error)) {
       return NextResponse.json(
-        { error: 'AI model is not available, Please Try Again Later' },
+        {
+          error: 'AI is busy right now',
+          details:
+            "We're experiencing high AI usage. Please wait at least one minute before trying your menu link again — retrying immediately may fail again.",
+          code: 'AI_OVERLOADED',
+        },
         { status: 503 }
       )
     }
