@@ -6,6 +6,8 @@ export const MIN_MENU_PAGE_TEXT_LENGTH = 50
 
 export type MenuPageFetchMethod = 'direct' | 'tavily-extract' | 'tavily-search' | null
 
+const TAVILY_HEADERS = { 'Content-Type': 'application/json' }
+
 export type MenuPageFetchResult = {
   pageText: string | null
   fetchError: unknown
@@ -44,7 +46,7 @@ async function fetchWithNode(url: string): Promise<string> {
 async function fetchWithTavilyExtract(url: string, apiKey: string): Promise<string> {
   const res = await fetch('https://api.tavily.com/extract', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: TAVILY_HEADERS,
     body: JSON.stringify({
       api_key: apiKey,
       urls: [url],
@@ -86,7 +88,7 @@ async function fetchWithTavilySearch(url: string, apiKey: string): Promise<strin
 
   const res = await fetch('https://api.tavily.com/search', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: TAVILY_HEADERS,
     body: JSON.stringify({
       api_key: apiKey,
       query: `restaurant menu items and prices ${url}`,
@@ -146,32 +148,34 @@ export async function fetchMenuPageText(
   }
 
   if (tavilyApiKey) {
-    try {
-      const tavilyText = await fetchWithTavilyExtract(url, tavilyApiKey)
-      if (tavilyText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
-        return { pageText: tavilyText, fetchError: null, fetchMethod: 'tavily-extract' }
-      }
-      if (tavilyText.length > (pageText?.length ?? 0)) {
-        pageText = tavilyText
-        fetchMethod = 'tavily-extract'
-      }
-    } catch (error) {
-      fetchError = error
-      console.warn('[import-from-url] Tavily extract failed:', error instanceof Error ? error.message : error)
-    }
+    const jsMenu = isJsRenderedMenuSite(url)
+    const tavilyAttempts: Array<{ name: MenuPageFetchMethod; run: () => Promise<string> }> = jsMenu
+      ? [
+          { name: 'tavily-search', run: () => fetchWithTavilySearch(url, tavilyApiKey) },
+          { name: 'tavily-extract', run: () => fetchWithTavilyExtract(url, tavilyApiKey) },
+        ]
+      : [
+          { name: 'tavily-extract', run: () => fetchWithTavilyExtract(url, tavilyApiKey) },
+          { name: 'tavily-search', run: () => fetchWithTavilySearch(url, tavilyApiKey) },
+        ]
 
-    try {
-      const searchText = await fetchWithTavilySearch(url, tavilyApiKey)
-      if (searchText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
-        return { pageText: searchText, fetchError: null, fetchMethod: 'tavily-search' }
+    for (const attempt of tavilyAttempts) {
+      try {
+        const tavilyText = await attempt.run()
+        if (tavilyText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
+          return { pageText: tavilyText, fetchError: null, fetchMethod: attempt.name }
+        }
+        if (tavilyText.length > (pageText?.length ?? 0)) {
+          pageText = tavilyText
+          fetchMethod = attempt.name
+        }
+      } catch (error) {
+        fetchError = error
+        console.warn(
+          `[import-from-url] Tavily ${attempt.name} failed:`,
+          error instanceof Error ? error.message : error
+        )
       }
-      if (searchText.length > (pageText?.length ?? 0)) {
-        pageText = searchText
-        fetchMethod = 'tavily-search'
-      }
-    } catch (error) {
-      fetchError = error
-      console.warn('[import-from-url] Tavily search failed:', error instanceof Error ? error.message : error)
     }
   }
 

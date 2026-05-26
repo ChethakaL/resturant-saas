@@ -11,7 +11,11 @@ import {
   isJsRenderedMenuSite,
   MIN_MENU_PAGE_TEXT_LENGTH,
 } from '@/lib/menu-url-fetch'
-import { extractMenuTextWithClaudeWebSearch, isClaudeModelNotFound } from '@/lib/menu-url-claude-search'
+import {
+  extractMenuTextWithClaudeFromPageText,
+  extractMenuTextWithClaudeWebSearch,
+  isClaudeModelNotFound,
+} from '@/lib/menu-url-claude-search'
 
 const MAX_TEXT_LENGTH = 80_000
 const AI_RETRY_DELAYS_MS = [2000, 5000, 10000]
@@ -299,6 +303,38 @@ async function extractWithGeminiUrlContext(url: string, categoryNames: string[])
   throw lastError
 }
 
+async function extractWithClaudeFromRawText(
+  rawText: string,
+  categoryNames: string[],
+  sourceLabel: 'claude-page-text' | 'claude-web-search'
+): Promise<ExtractedItem[]> {
+  let items = parseExtractedItems(rawText)
+  if (items.length === 0) {
+    items = await reparseMenuItemsFromRawText(rawText, categoryNames)
+  }
+  items = items.filter((item) => item.name !== '__INACCESSIBLE__')
+  if (items.length === 0) {
+    throw new Error(`AI ${sourceLabel} returned no parseable menu items.`)
+  }
+  return items
+}
+
+async function extractWithClaudeFromPageText(
+  pageText: string,
+  categoryNames: string[]
+): Promise<ExtractedItem[]> {
+  const config = await getPlatformConfig()
+  const apiKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('Anthropic API key not configured')
+
+  const rawText = await extractMenuTextWithClaudeFromPageText(pageText, {
+    apiKey,
+    categoryNames,
+    extractJsonSchema: EXTRACT_JSON_SCHEMA,
+  })
+  return extractWithClaudeFromRawText(rawText, categoryNames, 'claude-page-text')
+}
+
 async function extractWithClaudeWebSearch(url: string, categoryNames: string[]): Promise<ExtractedItem[]> {
   const config = await getPlatformConfig()
   const apiKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY
@@ -310,15 +346,7 @@ async function extractWithClaudeWebSearch(url: string, categoryNames: string[]):
       categoryNames,
       extractJsonSchema: EXTRACT_JSON_SCHEMA,
     })
-
-    let items = parseExtractedItems(rawText)
-    if (items.length === 0) {
-      items = await reparseMenuItemsFromRawText(rawText, categoryNames)
-    }
-    if (items.length === 0) {
-      throw new Error('AI web search read the page but returned no menu items.')
-    }
-    return items
+    return extractWithClaudeFromRawText(rawText, categoryNames, 'claude-web-search')
   } catch (error) {
     if (isClaudeModelNotFound(error)) {
       throw Object.assign(new Error('Claude web search model unavailable'), {
@@ -330,27 +358,50 @@ async function extractWithClaudeWebSearch(url: string, categoryNames: string[]):
   }
 }
 
-async function tryClaudeWebSearchOrThrow(
+async function tryClaudeMenuExtraction(
   url: string,
   categoryNames: string[],
+  pageText: string | null,
   hasGemini: boolean
-): Promise<{ items: ExtractedItem[]; source: 'claude-web-search' | 'url-context' }> {
+): Promise<{ items: ExtractedItem[]; source: 'claude-page-text' | 'claude-web-search' | 'url-context' }> {
+  const jsMenu = isJsRenderedMenuSite(url)
+
+  if (pageText && pageText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
+    try {
+      const items = await extractWithClaudeFromPageText(pageText, categoryNames)
+      return { items, source: 'claude-page-text' }
+    } catch (claudeParseError) {
+      console.warn(
+        '[import-from-url] Claude page-text parse failed, trying Gemini on same text:',
+        claudeParseError instanceof Error ? claudeParseError.message : claudeParseError
+      )
+      if (hasGemini) {
+        const items = await extractWithGemini(pageText, categoryNames)
+        if (items.length > 0) return { items, source: 'claude-page-text' }
+      }
+    }
+  }
+
+  if (jsMenu) {
+    console.warn(
+      '[import-from-url] Skipping Claude web_search for JS menu host — web_search cannot render mynu-style menus.'
+    )
+    if (hasGemini) {
+      const items = await extractWithGeminiUrlContext(url, categoryNames)
+      return { items, source: 'url-context' }
+    }
+    throw new Error(
+      'This digital menu loads with JavaScript. Configure TAVILY_API_KEY in production so we can read the full menu, or upload menu screenshots.'
+    )
+  }
+
   try {
     const items = await extractWithClaudeWebSearch(url, categoryNames)
     return { items, source: 'claude-web-search' }
   } catch (claudeError) {
-    const skipToGemini =
-      hasGemini &&
-      (isClaudeModelNotFound(claudeError) ||
-        (claudeError instanceof Error &&
-          (claudeError as Error & { code?: string }).code === 'CLAUDE_MODEL_UNAVAILABLE') ||
-        /web search read the page but returned no menu items/i.test(
-          claudeError instanceof Error ? claudeError.message : ''
-        ))
-
-    if (skipToGemini) {
+    if (hasGemini) {
       console.warn(
-        '[import-from-url] Claude web search unavailable or empty, falling back to URL context:',
+        '[import-from-url] Claude web search failed, falling back to URL context:',
         claudeError instanceof Error ? claudeError.message : claudeError
       )
       const items = await extractWithGeminiUrlContext(url, categoryNames)
@@ -566,23 +617,37 @@ export async function POST(request: NextRequest) {
     }
 
     let items: ExtractedItem[]
-    let source: 'page-text' | 'claude-web-search' | 'url-context' = 'page-text'
+    let source: 'page-text' | 'claude-page-text' | 'claude-web-search' | 'url-context' = 'page-text'
     if (pageText && pageText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
       if (hasGemini) {
         try {
           items = await extractWithGemini(pageText, categoryNames)
         } catch (err) {
-          if (hasOpenAI) {
+          if (hasAnthropic) {
+            try {
+              items = await extractWithClaudeFromPageText(pageText, categoryNames)
+              source = 'claude-page-text'
+            } catch {
+              if (hasOpenAI) {
+                items = await extractWithOpenAI(pageText, categoryNames)
+              } else {
+                throw err
+              }
+            }
+          } else if (hasOpenAI) {
             items = await extractWithOpenAI(pageText, categoryNames)
           } else {
             throw err
           }
         }
+      } else if (hasAnthropic) {
+        items = await extractWithClaudeFromPageText(pageText, categoryNames)
+        source = 'claude-page-text'
       } else {
         items = await extractWithOpenAI(pageText, categoryNames)
       }
     } else if (hasAnthropic) {
-      const result = await tryClaudeWebSearchOrThrow(menuUrl, categoryNames, hasGemini)
+      const result = await tryClaudeMenuExtraction(menuUrl, categoryNames, pageText, hasGemini)
       items = result.items
       source = result.source
     } else if (hasGemini) {
@@ -599,11 +664,11 @@ export async function POST(request: NextRequest) {
 
     if (items.length === 0 && hasAnthropic && source === 'page-text') {
       try {
-        const result = await tryClaudeWebSearchOrThrow(menuUrl, categoryNames, hasGemini)
+        const result = await tryClaudeMenuExtraction(menuUrl, categoryNames, pageText, hasGemini)
         items = result.items
         source = result.source
       } catch (claudeSearchError) {
-        console.warn('Claude web search fallback failed:', claudeSearchError)
+        console.warn('Claude menu extraction fallback failed:', claudeSearchError)
       }
     }
 
@@ -619,11 +684,13 @@ export async function POST(request: NextRequest) {
     if (items.length === 0) {
       const jsMenuSite = isJsRenderedMenuSite(menuUrl)
       const blockedMessage =
-        jsMenuSite && !tavilyApiKey && !hasAnthropic
-          ? 'This digital menu loads with JavaScript (e.g. mynu.app). Configure advanced link extraction or AI web search, or upload menu screenshots instead.'
+        jsMenuSite && !tavilyApiKey
+          ? 'This digital menu loads with JavaScript (e.g. mynu.app). Add TAVILY_API_KEY in production to read the full menu from the link, or upload menu screenshots instead.'
           : source === 'url-context' && jsMenuSite && !tavilyApiKey
             ? 'This digital menu loads with JavaScript (e.g. mynu.app). Our server could not read the full menu from the link. Try again after enabling advanced link extraction, or upload menu screenshots instead.'
-            : source === 'claude-web-search' || source === 'url-context'
+            : source === 'claude-page-text' ||
+                source === 'claude-web-search' ||
+                source === 'url-context'
               ? fetchError && isForbiddenUrlFetch(fetchError)
                 ? 'This menu website blocked server access, and AI could not extract menu items from the link. Try uploading menu screenshots instead.'
                 : 'AI could not extract menu items from this link. The page may be private, bot-protected, or a JavaScript-only menu. Try uploading menu screenshots instead.'
