@@ -4,6 +4,9 @@
  */
 export function sanitizeErrorForClient(message: string): string {
   if (!message || typeof message !== 'string') return 'An error occurred'
+  if (/503|Service Unavailable|high demand|try again later|overload/i.test(message)) {
+    return "We're experiencing high AI usage. Please try again in a minute."
+  }
   let out = message
   // Replace model/provider names with generic AI wording
   const replacements: [RegExp | string, string][] = [
@@ -12,6 +15,10 @@ export function sanitizeErrorForClient(message: string): string {
     [/\bClaude\b/gi, 'AI'],
     [/\bAnthropic\b/gi, 'AI'],
     [/\bGoogle AI\b/gi, 'AI'],
+    [/\bGoogleGenerativeAI\b/gi, 'AI'],
+    [/generativelanguage\.googleapis\.com[^\s]*/gi, 'AI service'],
+    [/models\/gemini[^\s]*/gi, 'AI model'],
+    [/\bgemini[\d.-]*\w*/gi, 'AI'],
     [/issue with (?:the )?AI/gi, 'error with AI mode'],
     [/AI (?:API )?error/gi, 'AI service error'],
     [/error with (?:the )?AI/gi, 'error with AI mode'],

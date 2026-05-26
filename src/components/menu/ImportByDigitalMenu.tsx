@@ -478,7 +478,13 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
         }),
       })
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Smart Chef failed to edit this item')
+      if (!response.ok) {
+        const message = data.details || data.error || 'Smart Chef failed to edit this item'
+        const error = new Error(message) as Error & { code?: string; status?: number }
+        error.code = data.code
+        error.status = response.status
+        throw error
+      }
 
       const proposal: SmartChefDraftProposal = {
         summary: data.summary || 'Smart Chef proposed an edit.',
@@ -489,9 +495,22 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       setSmartChefProposal(proposal)
       setActiveDetailTab(proposal.targetTab)
     } catch (error) {
+      const status =
+        typeof error === 'object' && error !== null && 'status' in error
+          ? (error as { status?: number }).status
+          : undefined
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? (error as { code?: string }).code
+          : undefined
+      const isAiBusy = status === 503 || code === 'AI_OVERLOADED'
       toast({
-        title: 'Smart Chef edit failed',
-        description: error instanceof Error ? error.message : 'Could not edit this draft',
+        title: isAiBusy ? 'AI is busy' : 'Smart Chef edit failed',
+        description: isAiBusy
+          ? "We're experiencing high AI usage. Please try again in a minute."
+          : error instanceof Error
+            ? error.message
+            : 'Could not edit this draft',
         variant: 'destructive',
       })
     } finally {

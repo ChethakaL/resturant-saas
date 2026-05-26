@@ -123,6 +123,75 @@ RULES:
 - tags: dietary/style tags like vegetarian, vegan, spicy, halal, gluten-free when evident.
 `
 
+type GeminiGenerateResponse = {
+  text?: string
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>
+    }
+  }>
+}
+
+function isUrlContextFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /URL Context|url context|Gemini.*URL|retrieval failed|no menu items for this URL/i.test(message)
+}
+
+function getGeminiResponseText(response: GeminiGenerateResponse): string {
+  const direct = response.text?.trim()
+  if (direct) return direct
+
+  const parts = response.candidates?.[0]?.content?.parts ?? []
+  return parts
+    .map((part) => (typeof part.text === 'string' ? part.text : ''))
+    .join('\n')
+    .trim()
+}
+
+function readUrlContextMetadata(response: {
+  candidates?: Array<Record<string, unknown>>
+}) {
+  const candidate = response.candidates?.[0]
+  if (!candidate) return []
+
+  const metadata =
+    (candidate.urlContextMetadata as { urlMetadata?: unknown[]; url_metadata?: unknown[] } | undefined) ??
+    (candidate.url_context_metadata as { urlMetadata?: unknown[]; url_metadata?: unknown[] } | undefined)
+
+  const list = metadata?.urlMetadata ?? metadata?.url_metadata ?? []
+  return Array.isArray(list) ? list : []
+}
+
+function getUrlContextRetrievalSummary(response: {
+  candidates?: Array<Record<string, unknown>>
+}): { ok: boolean; message: string } {
+  const urlMetadata = readUrlContextMetadata(response)
+  if (urlMetadata.length === 0) {
+    // Metadata is not always present even when retrieval succeeds.
+    return { ok: true, message: '' }
+  }
+
+  const successes = urlMetadata.filter((entry) => {
+    const record = entry as { urlRetrievalStatus?: string; url_retrieval_status?: string }
+    const status = record.urlRetrievalStatus ?? record.url_retrieval_status ?? ''
+    return status === 'URL_RETRIEVAL_STATUS_SUCCESS'
+  })
+  if (successes.length === 0) {
+    const statuses = urlMetadata
+      .map((entry) => {
+        const record = entry as { urlRetrievalStatus?: string; url_retrieval_status?: string }
+        return record.urlRetrievalStatus ?? record.url_retrieval_status ?? 'UNKNOWN'
+      })
+      .join(', ')
+    return {
+      ok: false,
+      message: `Gemini URL Context could not access this menu URL (${statuses}).`,
+    }
+  }
+
+  return { ok: true, message: '' }
+}
+
 async function extractWithGeminiUrlContext(url: string, categoryNames: string[]): Promise<ExtractedItem[]> {
   const config = await getPlatformConfig()
   const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
@@ -153,7 +222,27 @@ ${EXTRACT_JSON_SCHEMA}
     },
   })
 
-  return parseExtractedItems(response.text ?? '')
+  const retrieval = getUrlContextRetrievalSummary(response)
+  const rawText = getGeminiResponseText(response)
+
+  if (!rawText) {
+    throw new Error(
+      retrieval.ok
+        ? 'Gemini URL Context returned an empty response for this menu URL.'
+        : retrieval.message
+    )
+  }
+
+  const items = parseExtractedItems(rawText)
+  if (items.length === 0) {
+    throw new Error(
+      retrieval.ok
+        ? 'Gemini URL Context read the page but returned no menu items. The link may not be a public menu page.'
+        : retrieval.message
+    )
+  }
+
+  return items
 }
 
 async function extractWithGemini(pageText: string, categoryNames: string[]): Promise<ExtractedItem[]> {
@@ -253,12 +342,39 @@ interface ExtractedItem {
 }
 
 function parseExtractedItems(raw: string): ExtractedItem[] {
-  let jsonText = raw.trim()
-  jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+  const trimmed = raw.trim()
+  if (!trimmed) return []
+
+  let jsonText = trimmed.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim()
   const arrayMatch = jsonText.match(/\[[\s\S]*\]/)
   if (arrayMatch) jsonText = arrayMatch[0]
-  const arr = JSON.parse(jsonText)
-  return normalizeExtractedItems(Array.isArray(arr) ? arr : [])
+
+  if (jsonText) {
+    try {
+      const parsed = JSON.parse(jsonText)
+      if (Array.isArray(parsed)) return normalizeExtractedItems(parsed)
+      if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown[] }).items)) {
+        return normalizeExtractedItems((parsed as { items: unknown[] }).items)
+      }
+    } catch {
+      // Fall through to object scan below.
+    }
+  }
+
+  const objectMatch = trimmed.match(/\{[\s\S]*\}/)
+  if (objectMatch) {
+    try {
+      const parsed = JSON.parse(objectMatch[0])
+      if (Array.isArray(parsed)) return normalizeExtractedItems(parsed)
+      if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown[] }).items)) {
+        return normalizeExtractedItems((parsed as { items: unknown[] }).items)
+      }
+    } catch {
+      return []
+    }
+  }
+
+  return []
 }
 
 function normalizeExtractedItems(arr: any[]): ExtractedItem[] {
@@ -379,15 +495,20 @@ export async function POST(request: NextRequest) {
       try {
         items = await extractWithGeminiUrlContext(url, categoryNames)
         source = 'url-context'
-      } catch {
-        // Keep the original empty extraction response below.
+      } catch (urlContextError) {
+        console.warn('Gemini URL Context fallback failed:', urlContextError)
       }
     }
 
     if (items.length === 0) {
-      const blockedMessage = fetchError && isForbiddenUrlFetch(fetchError)
-        ? 'This menu website blocked server access, and Gemini URL Context could not extract menu items. Try uploading menu screenshots instead.'
-        : 'No menu items found on this page. Make sure the URL is a public menu or food list.'
+      const blockedMessage =
+        source === 'url-context' && fetchError && isForbiddenUrlFetch(fetchError)
+          ? 'This menu website blocked server access, and Gemini URL Context could not extract menu items. Try uploading menu screenshots instead.'
+          : source === 'url-context'
+            ? 'Gemini URL Context could not extract menu items from this link. The page may be private, bot-protected, or not a public menu. Try uploading menu screenshots instead.'
+            : fetchError && isForbiddenUrlFetch(fetchError)
+              ? 'This menu website blocked server access, and Gemini URL Context could not extract menu items. Try uploading menu screenshots instead.'
+              : 'No menu items found on this page. Make sure the URL is a public menu or food list.'
       return NextResponse.json(
         { error: blockedMessage },
         { status: 400 }
@@ -420,9 +541,14 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Import from URL error:', error)
-    if (isForbiddenUrlFetch(error)) {
+    if (isForbiddenUrlFetch(error) || isUrlContextFailure(error)) {
       return NextResponse.json(
-        { error: 'This menu website blocked access. Please try again, or upload menu screenshots if it keeps failing.' },
+        {
+          error:
+            error instanceof Error && error.message
+              ? error.message
+              : 'This menu website blocked server access. Try uploading menu screenshots instead.',
+        },
         { status: 403 }
       )
     }

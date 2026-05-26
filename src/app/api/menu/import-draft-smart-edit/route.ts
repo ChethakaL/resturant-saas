@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { callGemini, parseGeminiJson } from '@/lib/generative'
-import { sanitizeErrorForClient } from '@/lib/sanitize-error'
-
 type DraftIngredient = {
   name: string
   quantity: number
@@ -50,6 +48,15 @@ const ALLOWED_FIELDS = [
   'ingredients',
   'addOnIds',
 ] as const
+
+function isAiModelUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  const status =
+    typeof error === 'object' && error !== null && 'status' in error
+      ? (error as { status?: unknown }).status
+      : undefined
+  return status === 503 || /503|Service Unavailable|overload|overloaded|high demand|try again later/i.test(message)
+}
 
 function pickDraft(value: unknown): ImportDraft {
   const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
@@ -178,10 +185,22 @@ Rules:
     })
   } catch (error) {
     console.error('Import draft Smart Chef edit failed:', error)
+    if (isAiModelUnavailable(error)) {
+      return NextResponse.json(
+        {
+          error: 'AI is busy right now',
+          details: "We're experiencing high AI usage. Please try again in a minute.",
+          code: 'AI_OVERLOADED',
+        },
+        { status: 503 }
+      )
+    }
+
     return NextResponse.json(
       {
-        error: 'Failed to edit imported item draft',
-        details: sanitizeErrorForClient(error instanceof Error ? error.message : 'Unknown error'),
+        error: 'Smart Chef edit failed',
+        details: 'Could not apply your edit. Please try again.',
+        code: 'EDIT_FAILED',
       },
       { status: 500 }
     )
