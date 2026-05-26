@@ -7,10 +7,18 @@ import { GoogleGenAI } from '@google/genai'
 import OpenAI from 'openai'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 import {
+  describeAiKeys,
+  errorImportFromUrl,
+  getTavilyKeyDiagnostics,
+  logImportFromUrl,
+  warnImportFromUrl,
+} from '@/lib/import-from-url-log'
+import {
   fetchMenuPageText,
   isJsRenderedMenuSite,
   MIN_MENU_PAGE_TEXT_LENGTH,
 } from '@/lib/menu-url-fetch'
+import { getRawPlatformConfig } from '@/lib/platform-config'
 import {
   extractMenuTextWithClaudeFromPageText,
   extractMenuTextWithClaudeWebSearch,
@@ -599,16 +607,50 @@ export async function POST(request: NextRequest) {
       ? body.categoryNames.filter((c: unknown): c is string => typeof c === 'string')
       : []
 
+    logImportFromUrl('Import started', { url: menuUrl })
+
     const config = await getPlatformConfig()
+    const rawDb = await getRawPlatformConfig()
+    const dbTavilyKey =
+      typeof rawDb.tavilyApiKey === 'string' ? rawDb.tavilyApiKey.trim() : undefined
     tavilyApiKey = config.tavilyApiKey
-    const { pageText, fetchError, fetchMethod } = await fetchMenuPageText(menuUrl, tavilyApiKey)
-    if (fetchMethod) {
-      console.log(`[import-from-url] Page content via ${fetchMethod} (${pageText?.length ?? 0} chars)`)
-    }
+    const tavilyDiag = getTavilyKeyDiagnostics(dbTavilyKey, tavilyApiKey)
 
     const hasGemini = !!(config.geminiApiKey || process.env.GOOGLE_AI_KEY)
     const hasOpenAI = !!(config.openaiApiKey || process.env.OPENAI_API_KEY)
     const hasAnthropic = !!(config.anthropicApiKey || process.env.ANTHROPIC_API_KEY)
+
+    describeAiKeys({
+      tavily: tavilyDiag,
+      gemini: hasGemini,
+      openai: hasOpenAI,
+      anthropic: hasAnthropic,
+    })
+
+    if (tavilyDiag.configured) {
+      logImportFromUrl('Tavily key loaded', {
+        source:
+          tavilyDiag.source === 'env'
+            ? 'process.env.TAVILY_API_KEY (Docker env_file .env on server)'
+            : 'platform database (overrides env)',
+        preview: tavilyDiag.preview,
+      })
+    }
+
+    const { pageText, fetchError, fetchMethod } = await fetchMenuPageText(menuUrl, tavilyApiKey)
+    if (fetchMethod && pageText) {
+      logImportFromUrl('Page text ready for AI extraction', {
+        method: fetchMethod,
+        textChars: pageText.length,
+      })
+    } else if (!pageText || pageText.length < MIN_MENU_PAGE_TEXT_LENGTH) {
+      warnImportFromUrl('Insufficient page text after fetch', {
+        method: fetchMethod ?? 'none',
+        textChars: pageText?.length ?? 0,
+        lastFetchError:
+          fetchError instanceof Error ? fetchError.message : fetchError ? String(fetchError) : undefined,
+      })
+    }
     if (!hasGemini && !hasOpenAI && !hasAnthropic) {
       return NextResponse.json(
         { error: 'No AI API key configured' },
@@ -619,10 +661,18 @@ export async function POST(request: NextRequest) {
     let items: ExtractedItem[]
     let source: 'page-text' | 'claude-page-text' | 'claude-web-search' | 'url-context' = 'page-text'
     if (pageText && pageText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
+      logImportFromUrl('Extracting menu items from page text', {
+        textChars: pageText.length,
+        via: hasGemini ? 'Gemini' : hasAnthropic ? 'Claude' : 'OpenAI',
+      })
       if (hasGemini) {
         try {
           items = await extractWithGemini(pageText, categoryNames)
+          logImportFromUrl('Gemini extraction finished', { itemCount: items.length })
         } catch (err) {
+          warnImportFromUrl('Gemini extraction failed', {
+            reason: err instanceof Error ? err.message : String(err),
+          })
           if (hasAnthropic) {
             try {
               items = await extractWithClaudeFromPageText(pageText, categoryNames)
@@ -647,10 +697,12 @@ export async function POST(request: NextRequest) {
         items = await extractWithOpenAI(pageText, categoryNames)
       }
     } else if (hasAnthropic) {
+      warnImportFromUrl('No page text — using Claude/Gemini URL fallbacks (slow; may fail on JS menus)')
       const result = await tryClaudeMenuExtraction(menuUrl, categoryNames, pageText, hasGemini)
       items = result.items
       source = result.source
     } else if (hasGemini) {
+      warnImportFromUrl('No page text — using Gemini URL context only')
       source = 'url-context'
       items = await extractWithGeminiUrlContext(menuUrl, categoryNames)
     } else if (fetchError) {
@@ -722,13 +774,19 @@ export async function POST(request: NextRequest) {
       verified: false,
     }))
 
+    logImportFromUrl('Import succeeded', {
+      itemCount: processedItems.length,
+      source,
+      fetchMethod: fetchMethod ?? 'n/a',
+    })
+
     return NextResponse.json({
       success: true,
       items: processedItems,
       source,
     })
   } catch (error) {
-    console.error('Import from URL error:', error)
+    errorImportFromUrl('Import failed', error)
     if (isForbiddenUrlFetch(error) || isUrlContextFailure(error)) {
       const jsMenuSite = isJsRenderedMenuSite(menuUrl)
       const friendlyMessage =

@@ -1,3 +1,5 @@
+import { logImportFromUrl, warnImportFromUrl } from '@/lib/import-from-url-log'
+
 const MAX_TEXT_LENGTH = 80_000
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -36,11 +38,23 @@ async function fetchWithNode(url: string): Promise<string> {
     signal: AbortSignal.timeout(20_000),
   })
 
+  const html = await res.text()
+
   if (!res.ok) {
-    throw new Error(`Failed to fetch URL: ${res.status} ${res.statusText}`)
+    const hint =
+      res.status === 403
+        ? ' (menu site blocked server IP — normal for some hosts; Tavily may still work)'
+        : ''
+    throw new Error(`Direct fetch HTTP ${res.status} ${res.statusText}${hint}`)
   }
 
-  return stripHtmlToText(await res.text())
+  const text = stripHtmlToText(html)
+  logImportFromUrl('Direct fetch completed', {
+    httpStatus: res.status,
+    htmlChars: html.length,
+    textChars: text.length,
+  })
+  return text
 }
 
 async function fetchWithTavilyExtract(url: string, apiKey: string): Promise<string> {
@@ -56,25 +70,30 @@ async function fetchWithTavilyExtract(url: string, apiKey: string): Promise<stri
     signal: AbortSignal.timeout(45_000),
   })
 
+  const bodyText = await res.text()
+
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Tavily extract failed: ${res.status} ${err}`)
+    const authHint = res.status === 401 || res.status === 403 ? ' — check TAVILY_API_KEY' : ''
+    throw new Error(`Tavily extract HTTP ${res.status}${authHint}: ${bodyText.slice(0, 200)}`)
   }
 
-  const data = (await res.json()) as {
+  const data = JSON.parse(bodyText) as {
     results?: Array<{ raw_content?: string; content?: string }>
     failed_results?: unknown[]
   }
 
   if (data.failed_results?.length) {
-    throw new Error('Tavily could not extract this URL')
+    throw new Error(
+      `Tavily extract rejected URL (failed_results): ${JSON.stringify(data.failed_results).slice(0, 200)}`
+    )
   }
 
   const raw = data.results?.[0]?.raw_content ?? data.results?.[0]?.content
   if (!raw || typeof raw !== 'string') {
-    throw new Error('No content extracted from URL')
+    throw new Error('Tavily extract HTTP 200 but no text in results')
   }
 
+  logImportFromUrl('Tavily extract succeeded', { textChars: raw.length })
   return raw.length > MAX_TEXT_LENGTH ? raw.slice(0, MAX_TEXT_LENGTH) : raw
 }
 
@@ -100,15 +119,18 @@ async function fetchWithTavilySearch(url: string, apiKey: string): Promise<strin
     signal: AbortSignal.timeout(45_000),
   })
 
+  const bodyText = await res.text()
+
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Tavily search failed: ${res.status} ${err}`)
+    const authHint = res.status === 401 || res.status === 403 ? ' — check TAVILY_API_KEY' : ''
+    throw new Error(`Tavily search HTTP ${res.status}${authHint}: ${bodyText.slice(0, 200)}`)
   }
 
-  const data = (await res.json()) as {
+  const data = JSON.parse(bodyText) as {
     results?: Array<{ title?: string; url?: string; content?: string; raw_content?: string }>
   }
 
+  const resultCount = data.results?.length ?? 0
   const chunks: string[] = []
   for (const result of data.results ?? []) {
     const content = (result.raw_content || result.content || '').trim()
@@ -120,9 +142,15 @@ async function fetchWithTavilySearch(url: string, apiKey: string): Promise<strin
 
   const combined = chunks.join('\n\n').trim()
   if (!combined) {
-    throw new Error('Tavily search returned no menu content')
+    throw new Error(
+      `Tavily search HTTP 200 but ${resultCount} result(s) had no text (extract will be tried next)`
+    )
   }
 
+  logImportFromUrl('Tavily search succeeded', {
+    resultsWithText: chunks.length,
+    textChars: combined.length,
+  })
   return combined.length > MAX_TEXT_LENGTH ? combined.slice(0, MAX_TEXT_LENGTH) : combined
 }
 
@@ -134,17 +162,44 @@ export async function fetchMenuPageText(
   let fetchError: unknown = null
   let fetchMethod: MenuPageFetchMethod = null
 
+  let host = url
+  try {
+    host = new URL(url).hostname
+  } catch {
+    // validated by caller
+  }
+
+  logImportFromUrl('Fetching page content', {
+    host,
+    jsMenu: isJsRenderedMenuSite(url),
+    tavilyConfigured: !!tavilyApiKey,
+  })
+
   try {
     const directText = await fetchWithNode(url)
     if (directText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
+      logImportFromUrl('Using direct fetch (enough text)', { textChars: directText.length })
       return { pageText: directText, fetchError: null, fetchMethod: 'direct' }
     }
     if (directText.length > 0) {
       pageText = directText
+    } else {
+      logImportFromUrl(
+        'Direct fetch returned empty text (common for JavaScript menus like mynu.app)',
+        { next: tavilyApiKey ? 'trying Tavily' : 'need TAVILY_API_KEY' }
+      )
     }
   } catch (error) {
     fetchError = error
-    console.warn('[import-from-url] Direct fetch failed:', error instanceof Error ? error.message : error)
+    const msg = error instanceof Error ? error.message : String(error)
+    if (/403|Forbidden/i.test(msg)) {
+      warnImportFromUrl('Direct fetch blocked by menu website (not a missing API key)', {
+        detail: msg,
+        next: tavilyApiKey ? 'trying Tavily' : 'set TAVILY_API_KEY in Docker .env',
+      })
+    } else {
+      warnImportFromUrl('Direct fetch failed', { detail: msg })
+    }
   }
 
   if (tavilyApiKey) {
@@ -159,24 +214,51 @@ export async function fetchMenuPageText(
           { name: 'tavily-search', run: () => fetchWithTavilySearch(url, tavilyApiKey) },
         ]
 
-    for (const attempt of tavilyAttempts) {
+    for (let i = 0; i < tavilyAttempts.length; i++) {
+      const attempt = tavilyAttempts[i]
+      logImportFromUrl(`Trying Tavily ${attempt.name}`, {
+        step: `${i + 1}/${tavilyAttempts.length}`,
+      })
       try {
         const tavilyText = await attempt.run()
         if (tavilyText.length >= MIN_MENU_PAGE_TEXT_LENGTH) {
+          logImportFromUrl(`Using Tavily ${attempt.name}`, { textChars: tavilyText.length })
           return { pageText: tavilyText, fetchError: null, fetchMethod: attempt.name }
         }
         if (tavilyText.length > (pageText?.length ?? 0)) {
           pageText = tavilyText
           fetchMethod = attempt.name
         }
+        warnImportFromUrl(`Tavily ${attempt.name} returned too little text`, {
+          textChars: tavilyText.length,
+          need: MIN_MENU_PAGE_TEXT_LENGTH,
+        })
       } catch (error) {
         fetchError = error
-        console.warn(
-          `[import-from-url] Tavily ${attempt.name} failed:`,
-          error instanceof Error ? error.message : error
-        )
+        const msg = error instanceof Error ? error.message : String(error)
+        const isSoftFail = /will be tried next|too little/i.test(msg)
+        if (isSoftFail) {
+          logImportFromUrl(`Tavily ${attempt.name} skipped`, { reason: msg })
+        } else {
+          warnImportFromUrl(`Tavily ${attempt.name} failed`, { reason: msg })
+        }
       }
     }
+  } else {
+    warnImportFromUrl(
+      'TAVILY_API_KEY not loaded — Docker must use env_file: .env or set TAVILY_API_KEY in container environment',
+      {
+        hint: 'process.env.TAVILY_API_KEY is empty and no database tavilyApiKey',
+      }
+    )
+  }
+
+  if (pageText && pageText.length > 0 && fetchMethod) {
+    logImportFromUrl(`Using partial Tavily ${fetchMethod}`, { textChars: pageText.length })
+  } else if (!tavilyApiKey) {
+    warnImportFromUrl('No page text from direct fetch or Tavily', {
+      directFetchError: fetchError instanceof Error ? fetchError.message : undefined,
+    })
   }
 
   return {
