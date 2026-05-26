@@ -793,14 +793,93 @@ function normalizeExtractedItems(arr: any[]): ExtractedItem[] {
 
 function itemHasFullForm(item: ExtractedItem) {
   return Boolean(
-    item.prepTime ||
-      item.cookTime ||
-      (item.ingredients && item.ingredients.length > 0) ||
-      (item.recipeSteps && item.recipeSteps.length > 0) ||
-      item.calories ||
-      item.protein ||
-      item.carbs
+    item.description?.trim() &&
+      item.prepTime &&
+      item.cookTime &&
+      (item.ingredients && item.ingredients.length > 0) &&
+      (item.recipeSteps && item.recipeSteps.length > 0) &&
+      item.calories &&
+      item.protein != null &&
+      item.carbs != null
   )
+}
+
+function buildFallbackFullForm(item: ExtractedItem): ExtractedItem {
+  const text = `${item.name} ${item.categoryName} ${(item.tags || []).join(' ')}`.toLowerCase()
+  const isDrink = /drink|juice|tea|coffee|latte|mocha|soda|cola|water|smoothie|shake|mocktail/.test(text)
+  const isDessert = /dessert|cake|sweet|ice cream|baklava|kunafa|pudding|pastry|brownie/.test(text)
+  const isSoup = /soup|broth|shorba|bisque/.test(text)
+  const isSalad = /salad|fattoush|tabbouleh/.test(text)
+
+  const description =
+    item.description?.trim() ||
+    (isDrink
+      ? `Refreshing ${item.name.toLowerCase()} prepared to order.`
+      : isDessert
+        ? `${item.name} served as a sweet finish with balanced texture and flavor.`
+        : `${item.name} prepared fresh with balanced seasoning and consistent restaurant presentation.`)
+
+  const ingredients = item.ingredients?.length
+    ? item.ingredients
+    : isDrink
+      ? [
+          { name: item.name, quantity: 1, unit: 'portion', pieceCount: null },
+          { name: 'Ice', quantity: 80, unit: 'g', pieceCount: null },
+          { name: 'Garnish', quantity: 1, unit: 'piece', pieceCount: null },
+        ]
+      : isSoup
+        ? [
+            { name: 'Soup base', quantity: 250, unit: 'ml', pieceCount: null },
+            { name: item.name.replace(/soup/i, '').trim() || 'Main ingredient', quantity: 120, unit: 'g', pieceCount: null },
+            { name: 'Seasoning', quantity: 5, unit: 'g', pieceCount: null },
+          ]
+        : isSalad
+          ? [
+              { name: 'Fresh vegetables', quantity: 180, unit: 'g', pieceCount: null },
+              { name: 'Dressing', quantity: 35, unit: 'ml', pieceCount: null },
+              { name: 'Garnish', quantity: 15, unit: 'g', pieceCount: null },
+            ]
+          : isDessert
+            ? [
+                { name: item.name, quantity: 1, unit: 'portion', pieceCount: null },
+                { name: 'Sauce or garnish', quantity: 20, unit: 'g', pieceCount: null },
+              ]
+            : [
+                { name: item.name, quantity: 1, unit: 'portion', pieceCount: null },
+                { name: 'Seasoning', quantity: 5, unit: 'g', pieceCount: null },
+                { name: 'Garnish', quantity: 15, unit: 'g', pieceCount: null },
+              ]
+
+  const recipeSteps = item.recipeSteps?.length
+    ? item.recipeSteps
+    : isDrink
+      ? [
+          `Prepare the glass and required ingredients for ${item.name}.`,
+          'Combine ingredients, chill or blend as appropriate.',
+          'Garnish and serve immediately.',
+        ]
+      : [
+          `Prepare ingredients for ${item.name} according to the recipe portion.`,
+          'Cook or assemble the item using standard kitchen procedure and seasoning.',
+          'Plate consistently, garnish, and send to service while fresh.',
+        ]
+
+  return {
+    ...item,
+    description,
+    calories: item.calories ?? (isDrink ? 140 : isDessert ? 420 : isSalad ? 260 : 520),
+    protein: item.protein ?? (isDrink ? 2 : isDessert ? 6 : isSalad ? 8 : 28),
+    carbs: item.carbs ?? (isDrink ? 28 : isDessert ? 58 : isSalad ? 18 : 45),
+    tags: item.tags?.length ? item.tags : [isDrink ? 'drink' : isDessert ? 'dessert' : 'popular'],
+    prepTime: item.prepTime || (isDrink || isSalad ? '5 minutes' : '10 minutes'),
+    cookTime: item.cookTime || (isDrink || isSalad ? '0 minutes' : isSoup ? '20 minutes' : '15 minutes'),
+    recipeYield: item.recipeYield ?? 1,
+    ingredients,
+    recipeSteps,
+    recipeTips: item.recipeTips?.length
+      ? item.recipeTips
+      : ['Keep portion size consistent.', 'Taste and adjust seasoning before service.'],
+  }
 }
 
 function mergeEnrichedItem(base: ExtractedItem, enriched?: ExtractedItem): ExtractedItem {
@@ -934,7 +1013,7 @@ async function enrichMenuItemsFullForm(
     }
   }
 
-  return next
+  return next.map((item) => (itemHasFullForm(item) ? item : buildFallbackFullForm(item)))
 }
 
 function mapProcessedItems(items: ExtractedItem[]) {

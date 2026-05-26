@@ -690,110 +690,32 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   const createAllItems = async (items: ExtractedMenuItem[]) => {
     setIsProcessing(true)
     try {
-      const errors: string[] = []
-      const ingredientsResponse = await fetch('/api/ingredients')
-      let currentIngredients = availableIngredients
-      if (ingredientsResponse.ok) {
-        currentIngredients = await ingredientsResponse.json()
-        setAvailableIngredients(currentIngredients)
-      }
+      const response = await fetch('/api/menu/bulk-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Failed to create menu items')
 
-      let ingredientMap = new Map(
-        currentIngredients.map((ing) => [ing.name.toLowerCase().trim(), ing])
-      )
-
-      const uniqueItems = dedupeExtractedItems(items)
-      let skippedDuplicates = items.length - uniqueItems.length
-
-      for (const item of uniqueItems) {
-        if (!item.categoryId) {
-          errors.push(`${item.name}: Missing category`)
-          continue
-        }
-
-        const ingredientData = []
-        for (const ing of item.ingredients || []) {
-          let existingIng = ing.ingredientId
-            ? currentIngredients.find((ingredient) => ingredient.id === ing.ingredientId)
-            : ingredientMap.get(ing.name.toLowerCase().trim())
-          if (!existingIng) {
-            const createIngredientResponse = await fetch('/api/ingredients', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                name: ing.name,
-                unit: ing.unit || 'g',
-                costPerUnit: 0,
-                stockQuantity: 0,
-                minStockLevel: 0,
-              }),
-            })
-            if (createIngredientResponse.ok) {
-              existingIng = await createIngredientResponse.json()
-              currentIngredients = [...currentIngredients, existingIng]
-              ingredientMap = new Map(currentIngredients.map((ingredient) => [ingredient.name.toLowerCase().trim(), ingredient]))
-            }
-          }
-          if (!existingIng) continue
-          ingredientData.push({
-            ingredientId: existingIng.id,
-            quantity: ing.quantity,
-            unit: existingIng.unit || ing.unit,
-            pieceCount: ing.pieceCount,
-          })
-        }
-
-        const response = await fetch('/api/menu', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: item.name,
-            description: item.description || '',
-            price: Number(item.price) || 0,
-            categoryId: item.categoryId,
-            imageUrl: item.imageUrl || '',
-            calories: item.calories ? Number(item.calories) : null,
-            protein: item.protein ? Number(item.protein) : null,
-            carbs: item.carbs ? Number(item.carbs) : null,
-            tags: item.tags || [],
-            available: item.available ?? true,
-            status: item.status || 'ACTIVE',
-            ingredients: ingredientData,
-            recipeSteps: item.recipeSteps || [],
-            recipeTips: item.recipeTips || [],
-            prepTime: item.prepTime || null,
-            cookTime: item.cookTime || null,
-            addOnIds: item.addOnIds || [],
-            dedupeExisting: true,
-          }),
-        })
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok) {
-          errors.push(`${item.name}: ${data.error || 'Failed to create'}`)
-        } else if (data.duplicate || data.skipped) {
-          skippedDuplicates += 1
-        }
-      }
-
-      const createdCount = items.length - errors.length - skippedDuplicates
-
-      if (errors.length > 0) {
+      if ((data.failedCount || 0) > 0) {
         toast({
           title: 'Partial Success',
-          description: `Created ${createdCount} of ${items.length} items. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? '' : 's'}. Some failed.`,
+          description: `Created ${data.createdCount || 0} of ${items.length} items. Skipped ${data.skippedDuplicates || 0} duplicate${data.skippedDuplicates === 1 ? '' : 's'}. ${data.failedCount || 0} failed.`,
           variant: 'destructive',
         })
       } else {
         toast({
           title: 'Success',
-          description: `Created ${createdCount} menu item${createdCount === 1 ? '' : 's'} successfully.${skippedDuplicates > 0 ? ` Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? '' : 's'}.` : ''}`,
+          description: `Created ${data.createdCount} menu item${data.createdCount === 1 ? '' : 's'} successfully.${data.skippedDuplicates > 0 ? ` Skipped ${data.skippedDuplicates} duplicate${data.skippedDuplicates === 1 ? '' : 's'}.` : ''}${data.ingredientsCreated > 0 ? ` Created ${data.ingredientsCreated} ingredient${data.ingredientsCreated === 1 ? '' : 's'}.` : ''}`,
         })
       }
+
       setStep('complete')
       setTimeout(() => {
         setIsOpen(false)
         window.location.reload()
-      }, 2000)
+      }, 1200)
     } catch (error) {
       toast({
         title: 'Error',
@@ -862,7 +784,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                 {importStatus ?? 'Reading your menu…'}
               </p>
               <p className="text-sm text-slate-500 text-center max-w-sm">
-                This usually takes 1–2 minutes. Please keep this window open.
+                This usually takes 5–10 minutes depending on the menu items. Please keep this window open.
               </p>
             </div>
           )}
