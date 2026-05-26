@@ -21,6 +21,7 @@ import DailyRevenueMarginChart from '@/components/dashboard/DailyRevenueMarginCh
 import MenuItemAnalytics from '@/components/dashboard/MenuItemAnalytics'
 import MonthlySalesPdfUploadCard from '@/components/dashboard/MonthlySalesPdfUploadCard'
 import DashboardSalesDataManager from '@/components/dashboard/DashboardSalesDataManager'
+import DashboardTourButton from '@/components/dashboard/DashboardTourButton'
 import type { ManagementLocale } from '@/lib/i18n'
 import { formatSalesPdfPeriod, getCurrentSalesPdfPeriod } from '@/lib/monthly-sales-pdf'
 import { 
@@ -927,11 +928,16 @@ export default async function DashboardPage({
 
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">{t.dashboard_title}</h1>
-          <p className="text-slate-500 mt-1">{lockedSubtitle}</p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">{t.dashboard_title}</h1>
+            <p className="text-slate-500 mt-1">{lockedSubtitle}</p>
+          </div>
+          <DashboardTourButton />
         </div>
-        <MonthlySalesPdfUploadCard compact />
+        <div data-tour="dashboard-sales-upload">
+          <MonthlySalesPdfUploadCard compact />
+        </div>
       </div>
     )
   }
@@ -1053,11 +1059,15 @@ export default async function DashboardPage({
           <h1 className="text-3xl font-bold text-slate-900">{t.dashboard_title}</h1>
           <p className="text-slate-500 mt-1">{t.dashboard_welcome}, {session!.user.name}</p>
         </div>
-        <DashboardSalesDataManager
-          currentPeriodLabel={displayPeriodLabel}
-        />
+        <div className="flex items-center gap-2 shrink-0">
+          <DashboardTourButton />
+          <DashboardSalesDataManager
+            currentPeriodLabel={displayPeriodLabel}
+          />
+        </div>
       </div>
 
+      <div data-tour="dashboard-overview">
       {/* TODAY Metrics */}
       <div>
         <h2 className="text-xl font-bold text-slate-900 mb-4">{t.dashboard_today}</h2>
@@ -1191,8 +1201,10 @@ export default async function DashboardPage({
           </Card>
         </div>
       </div>
+      </div>
 
       {/* Menu Item Analytics */}
+      <div data-tour="dashboard-analytics">
       <MenuItemAnalytics
         topSellingItems={analyticsData.topSellingItems}
         worstSellingItems={analyticsData.worstSellingItems}
@@ -1200,6 +1212,7 @@ export default async function DashboardPage({
         lowestMarginItems={analyticsData.lowestMarginItems}
         topCombos={analyticsData.topCombos}
       />
+      </div>
 
       {/* Daily Revenue and Margin Chart */}
       <Card>

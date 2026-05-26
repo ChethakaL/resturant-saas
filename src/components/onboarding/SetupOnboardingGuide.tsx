@@ -27,6 +27,7 @@ interface TourStep {
   title: string
   body: string
   bullets?: string[]
+  hiddenHint?: string
   enterAction?: string
   leaveAction?: string
 }
@@ -208,18 +209,86 @@ const pageTours: Array<{ match: (pathname: string | null, tab: string | null) =>
   {
     match: (pathname) => pathname === '/dashboard',
     steps: [
-      { selector: '[data-tour="nav-menu"]', title: 'Start with menu setup', body: 'Most restaurants should begin here: import menu items from image or URL, then review the full forms.' },
-      { selector: '[data-tour="nav-restaurant-dna"]', title: 'Then set Restaurant DNA', body: 'Restaurant DNA controls the brand and AI tone used across the digital menu.' },
-      { selector: '[data-tour="nav-inventory"]', title: 'Then add inventory', body: 'Inventory lets recipe costing calculate profit and margin correctly.' },
-      { selector: '[data-tour="nav-tables"]', title: 'Finally create tables', body: 'Tables and QR links complete the guest ordering setup.' },
+      {
+        selector: '[data-tour="dashboard-overview"], [data-tour="dashboard-sales-upload"]',
+        title: 'Dashboard overview',
+        body: 'Your home base for revenue, orders, tables in use, and year-to-date profit. If this is your first visit, upload a monthly sales PDF first — until then only the upload card shows here. After import, stats appear and Manage Sales Data lets you add later months.',
+      },
+      {
+        selector: '[data-tour="dashboard-analytics"]',
+        title: 'Menu performance',
+        body: 'See top and worst sellers, highest and lowest margin items, and popular combos. This section appears once monthly sales data is uploaded — use it to decide what to promote, fix, or remove.',
+        hiddenHint: 'Menu performance charts appear after you upload your first monthly sales PDF. Continue with the sidebar steps — menu setup does not require sales data.',
+      },
+      {
+        selector: '[data-tour="nav-menu"]',
+        title: 'Add menu items',
+        body: 'Start here for most setups: import from a menu image or URL, add items manually, and review prices, categories, and costing.',
+      },
+      {
+        selector: '[data-tour="nav-media"]',
+        title: 'Media library',
+        body: 'Upload dish photos once and reuse them when editing menu items or generating AI images.',
+      },
+      {
+        selector: '[data-tour="nav-optimization"]',
+        title: 'Optimize menu sales',
+        body: 'Choose Classic, Profit, or Smart Profit mode, manage featured sections, and use the menu engineering quadrant to improve margins.',
+      },
+      {
+        selector: '[data-tour="nav-restaurant-dna"]',
+        title: 'Restaurant DNA',
+        body: 'Set brand colors, fonts, logo, contact info, AI tone, and guest menu layout. This defines how your digital menu looks and sounds.',
+      },
+      {
+        selector: '[data-tour="nav-inventory"]',
+        title: 'Inventory',
+        body: 'Add ingredients and costs so recipes calculate food cost, margin, and profit on each menu item.',
+      },
+      {
+        selector: '[data-tour="nav-tables"]',
+        title: 'Tables',
+        body: 'Create tables, manage waiters, and generate QR codes so guests can order from their table.',
+      },
+      {
+        selector: '[data-tour="nav-sales-reports"]',
+        title: 'Sales reports',
+        body: 'Open Profit & Loss for full financial reports: sales, COGS, labor, expenses, and monthly P&L. Upload sales data here to unlock Smart Profit and dashboard trends.',
+      },
+      {
+        selector: '[data-tour="nav-billing"]',
+        title: 'Subscription & billing',
+        body: 'Manage your iServe+ plan, payment method, and branches. Extra branches are billed here — the same place you add branch slots for multi-location restaurants.',
+      },
     ],
   },
 ]
 
 function getRect(selector: string) {
-  const element = document.querySelector(selector)
-  if (!element) return null
-  return element.getBoundingClientRect()
+  const selectors = selector.split(',').map((s) => s.trim())
+  for (const sel of selectors) {
+    const element = document.querySelector(sel)
+    if (!element) continue
+    const rect = element.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) return rect
+  }
+  return null
+}
+
+function getMissingTargetHint(pathname: string | null, step: TourStep | null): string | null {
+  if (!step) return null
+  if (step.hiddenHint) return step.hiddenHint
+
+  if (pathname === '/dashboard') {
+    if (step.selector.includes('dashboard-analytics')) {
+      return 'Menu performance charts (top sellers, margins, combos) appear here after you upload your first monthly sales PDF. Continue with the sidebar steps — menu setup does not require sales data.'
+    }
+    if (step.selector.includes('dashboard-overview') || step.selector.includes('dashboard-sales-upload')) {
+      return 'Dashboard stats are hidden until you upload a monthly sales PDF. Use the upload card on this page, then refresh to see revenue, orders, and YTD profit.'
+    }
+  }
+
+  return 'This item is not visible on the page yet. Use the sidebar or page controls to reach it.'
 }
 
 export default function SetupOnboardingGuide({
@@ -345,7 +414,9 @@ export default function SetupOnboardingGuide({
 
   if (steps.length === 0) return null
 
-  const tourOverlay = open && current && mounted ? (
+  const tourOverlay = open && current && mounted ? (() => {
+    const missingTargetHint = !rect ? getMissingTargetHint(pathname, current) : null
+    return (
     <div className="fixed inset-0 z-[200] pointer-events-none">
       <div className="absolute inset-0 bg-slate-950/65" aria-hidden="true" />
       {highlightStyle && (
@@ -381,9 +452,9 @@ export default function SetupOnboardingGuide({
             ))}
           </ul>
         )}
-        {!rect && (
+        {!rect && missingTargetHint && (
           <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            This item is not visible on the page yet. Use the sidebar or page controls to reach it.
+            {missingTargetHint}
           </p>
         )}
         <div className="mt-4 flex items-center justify-between gap-2">
@@ -409,7 +480,8 @@ export default function SetupOnboardingGuide({
         </div>
       </div>
     </div>
-  ) : null
+    )
+  })() : null
 
   return (
     <>
