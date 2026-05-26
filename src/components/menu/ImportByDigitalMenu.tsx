@@ -382,6 +382,9 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
               status?: number
             }
 
+            if (payload.type === 'heartbeat') {
+              continue
+            }
             if (payload.type === 'progress' && payload.message) {
               setImportStatus(payload.message)
             } else if (payload.type === 'complete') {
@@ -399,7 +402,9 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
         }
 
         if (!data) {
-          throw new Error('Import ended without a result. Please try again.')
+          throw new Error(
+            'The connection closed before the import finished. Please try again — large menus can take a few minutes.'
+          )
         }
       } else {
         const text = await response.text()
@@ -462,15 +467,25 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
           : undefined
       const isBusy = status === 503 || code === 'AI_OVERLOADED'
       const isTimeout = status === 504
+      const isNetworkDrop =
+        error instanceof TypeError ||
+        (error instanceof Error &&
+          /connection closed|network error|failed to fetch|load failed/i.test(error.message))
       toast({
-        title: isBusy ? 'Please try again shortly' : isTimeout ? 'Import timed out' : 'Import failed',
+        title: isBusy
+          ? 'Please try again shortly'
+          : isTimeout || isNetworkDrop
+            ? 'Import interrupted'
+            : 'Import failed',
         description: isBusy
           ? 'Please wait at least one minute, then try your menu link again.'
           : isTimeout
             ? 'The server took too long. Try again, or use Import from image for large menus.'
-            : error instanceof Error
-              ? error.message
-              : 'Failed to import menu from URL',
+            : isNetworkDrop
+              ? 'The connection dropped while reading your menu. Try again and keep this window open.'
+              : error instanceof Error
+                ? error.message
+                : 'Failed to import menu from URL',
         variant: 'destructive',
       })
       setStep('url')

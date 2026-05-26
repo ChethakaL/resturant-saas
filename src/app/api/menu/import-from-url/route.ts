@@ -492,9 +492,22 @@ ${trimPageTextForModel(pageText)}
 """
 `
 
-  const result = await withAiRetryFast('Import simplified', () => model.generateContent(prompt))
-  const raw = result.response.text()
-  return parseExtractedItems(raw)
+  const result = await withAiRetryFast('Import simplified Gemini', () => model.generateContent(prompt))
+  const raw = result.response.text()?.trim() ?? ''
+  if (!raw) {
+    warnImportFromUrl('Simplified Gemini returned empty response', {
+      finishReason: result.response.candidates?.[0]?.finishReason ?? 'unknown',
+    })
+    return []
+  }
+  const items = parseExtractedItems(raw)
+  if (items.length === 0) {
+    warnImportFromUrl('Simplified Gemini returned 0 parseable items', {
+      rawChars: raw.length,
+      rawPreview: raw.slice(0, 120).replace(/\s+/g, ' '),
+    })
+  }
+  return items
 }
 
 async function extractWithOpenAISimplified(
@@ -509,52 +522,108 @@ async function extractWithOpenAISimplified(
   const categoryHint =
     categoryNames.length > 0 ? `Categories: ${categoryNames.join(', ')}.` : ''
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0,
-    max_tokens: 8192,
-    messages: [
-      {
-        role: 'user',
-        content: `Extract all menu items. ${categoryHint}\n${SIMPLIFIED_JSON_SCHEMA}\n\n"""\n${trimPageTextForModel(pageText)}\n"""`,
-      },
-    ],
-  })
+  const completion = await withAiRetryFast('Import simplified OpenAI', () =>
+    openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      max_tokens: 8192,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'user',
+          content: `Extract every menu item into JSON with one key "items" (array of dishes).\n${categoryHint}\n${SIMPLIFIED_JSON_SCHEMA}\n\nPage text:\n"""\n${trimPageTextForModel(pageText)}\n"""`,
+        },
+      ],
+    })
+  )
 
-  const raw = completion.choices[0]?.message?.content
-  if (!raw) return []
-  return parseExtractedItems(raw)
+  const raw = completion.choices[0]?.message?.content?.trim() ?? ''
+  if (!raw) {
+    warnImportFromUrl('Simplified OpenAI returned empty response', {})
+    return []
+  }
+  const items = parseExtractedItems(raw)
+  if (items.length === 0) {
+    warnImportFromUrl('Simplified OpenAI returned 0 parseable items', {
+      rawChars: raw.length,
+      rawPreview: raw.slice(0, 120).replace(/\s+/g, ' '),
+    })
+  }
+  return items
 }
+
+async function extractWithClaudeSimplified(
+  pageText: string,
+  categoryNames: string[]
+): Promise<ExtractedItem[]> {
+  const config = await getPlatformConfig()
+  const apiKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('Anthropic API key not configured')
+
+  const rawText = await extractMenuTextWithClaudeFromPageText(trimPageTextForModel(pageText), {
+    apiKey,
+    categoryNames,
+    extractJsonSchema: SIMPLIFIED_JSON_SCHEMA,
+  })
+  const items = parseExtractedItems(rawText)
+  if (items.length === 0) {
+    warnImportFromUrl('Simplified Claude returned 0 parseable items', {
+      rawChars: rawText.length,
+      rawPreview: rawText.slice(0, 120).replace(/\s+/g, ' '),
+    })
+  }
+  return items
+}
+
+type FastExtractProvider = 'openai' | 'gemini' | 'claude'
 
 async function extractMenuFromPageTextFast(
   pageText: string,
   categoryNames: string[],
-  options: { hasGemini: boolean; hasOpenAI: boolean }
-): Promise<ExtractedItem[]> {
-  if (options.hasGemini) {
+  options: { hasOpenAI: boolean; hasGemini: boolean; hasAnthropic: boolean }
+): Promise<{ items: ExtractedItem[]; provider?: FastExtractProvider; sawOverload: boolean }> {
+  const attempts: Array<{
+    provider: FastExtractProvider
+    enabled: boolean
+    run: () => Promise<ExtractedItem[]>
+  }> = [
+    { provider: 'openai', enabled: options.hasOpenAI, run: () => extractWithOpenAISimplified(pageText, categoryNames) },
+    { provider: 'gemini', enabled: options.hasGemini, run: () => extractWithGeminiSimplified(pageText, categoryNames) },
+    { provider: 'claude', enabled: options.hasAnthropic, run: () => extractWithClaudeSimplified(pageText, categoryNames) },
+  ]
+
+  let sawOverload = false
+
+  for (const attempt of attempts) {
+    if (!attempt.enabled) {
+      logImportFromUrl('Skipping simplified extraction (not configured)', { provider: attempt.provider })
+      continue
+    }
+
+    logImportFromUrl('Trying simplified extraction', { provider: attempt.provider })
+
     try {
-      const items = await extractWithGeminiSimplified(pageText, categoryNames)
-      if (items.length > 0) return items
-      logImportFromUrl('Simplified Gemini returned 0 items, retrying OpenAI if available')
+      const items = await attempt.run()
+      if (items.length > 0) {
+        logImportFromUrl('Simplified extraction succeeded', {
+          provider: attempt.provider,
+          itemCount: items.length,
+        })
+        return { items, provider: attempt.provider, sawOverload }
+      }
+      warnImportFromUrl('Simplified extraction returned 0 items', { provider: attempt.provider })
     } catch (err) {
-      warnImportFromUrl('Simplified Gemini failed', {
-        reason: err instanceof Error ? err.message : String(err),
+      if (isAiModelUnavailable(err)) sawOverload = true
+      warnImportFromUrl('Simplified extraction failed', {
+        provider: attempt.provider,
+        overloaded: isAiModelUnavailable(err),
+        reason: err instanceof Error ? err.message.slice(0, 240) : String(err),
       })
     }
   }
 
-  if (options.hasOpenAI) {
-    try {
-      const items = await extractWithOpenAISimplified(pageText, categoryNames)
-      if (items.length > 0) return items
-    } catch (err) {
-      warnImportFromUrl('Simplified OpenAI failed', {
-        reason: err instanceof Error ? err.message : String(err),
-      })
-    }
-  }
-
-  return []
+  logImportFromUrl('All simplified extraction providers exhausted', { sawOverload })
+  return { items: [], sawOverload }
 }
 
 async function extractWithGemini(pageText: string, categoryNames: string[]): Promise<ExtractedItem[]> {
@@ -722,6 +791,152 @@ function normalizeExtractedItems(arr: any[]): ExtractedItem[] {
     .filter((item) => item.name && item.name !== 'Unnamed Item')
 }
 
+function itemHasFullForm(item: ExtractedItem) {
+  return Boolean(
+    item.prepTime ||
+      item.cookTime ||
+      (item.ingredients && item.ingredients.length > 0) ||
+      (item.recipeSteps && item.recipeSteps.length > 0) ||
+      item.calories ||
+      item.protein ||
+      item.carbs
+  )
+}
+
+function mergeEnrichedItem(base: ExtractedItem, enriched?: ExtractedItem): ExtractedItem {
+  if (!enriched) return base
+  return {
+    ...base,
+    description: enriched.description || base.description,
+    calories: enriched.calories ?? base.calories ?? null,
+    protein: enriched.protein ?? base.protein ?? null,
+    carbs: enriched.carbs ?? base.carbs ?? null,
+    tags: enriched.tags?.length ? enriched.tags : base.tags,
+    prepTime: enriched.prepTime ?? base.prepTime ?? null,
+    cookTime: enriched.cookTime ?? base.cookTime ?? null,
+    recipeYield: enriched.recipeYield ?? base.recipeYield ?? 1,
+    ingredients: enriched.ingredients?.length ? enriched.ingredients : base.ingredients || [],
+    recipeSteps: enriched.recipeSteps?.length ? enriched.recipeSteps : base.recipeSteps || [],
+    recipeTips: enriched.recipeTips?.length ? enriched.recipeTips : base.recipeTips || [],
+  }
+}
+
+async function enrichWithGemini(batch: ExtractedItem[]): Promise<ExtractedItem[]> {
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+  if (!apiKey) throw new Error('Google AI API key not configured')
+
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: { maxOutputTokens: 16384, temperature: 0.2 },
+  })
+
+  const prompt = `You are Smart Chef. Fill full restaurant menu item forms for these imported items.
+Return ONLY a JSON array with the same item order and same names.
+For every item, generate:
+- description
+- calories, protein, carbs for one portion
+- tags
+- prepTime, cookTime, recipeYield
+- ingredients with practical quantity and unit
+- recipeSteps
+- recipeTips
+
+Use common restaurant knowledge when recipe data is not visible in the imported URL.
+Keep drinks/simple add-ons short but still usable.
+
+${EXTRACT_JSON_SCHEMA}
+
+Items to enrich:
+${JSON.stringify(batch.map((item) => ({
+  name: item.name,
+  description: item.description,
+  price: item.price,
+  categoryName: item.categoryName,
+  tags: item.tags,
+})))}
+`
+
+  const result = await withAiRetryFast('Import URL full-form enrichment', () => model.generateContent(prompt))
+  return parseExtractedItems(result.response.text())
+}
+
+async function enrichWithOpenAI(batch: ExtractedItem[]): Promise<ExtractedItem[]> {
+  const config = await getPlatformConfig()
+  const apiKey = config.openaiApiKey ?? process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OpenAI API key not configured')
+
+  const openai = new OpenAI({ apiKey })
+  const completion = await withAiRetryFast('Import URL OpenAI full-form enrichment', () =>
+    openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      max_tokens: 12000,
+      messages: [
+        {
+          role: 'user',
+          content: `Fill full restaurant menu item forms for these imported items. Return ONLY a JSON array with same order and same names.
+Generate description, calories, protein, carbs, tags, prepTime, cookTime, recipeYield, ingredients, recipeSteps, recipeTips.
+Use common restaurant knowledge when recipe data is not visible.
+
+${EXTRACT_JSON_SCHEMA}
+
+Items:
+${JSON.stringify(batch.map((item) => ({
+  name: item.name,
+  description: item.description,
+  price: item.price,
+  categoryName: item.categoryName,
+  tags: item.tags,
+})))}`,
+        },
+      ],
+    })
+  )
+
+  return parseExtractedItems(completion.choices[0]?.message?.content ?? '')
+}
+
+async function enrichMenuItemsFullForm(
+  items: ExtractedItem[],
+  options: { hasGemini: boolean; hasOpenAI: boolean; onProgress?: ImportProgressFn }
+): Promise<ExtractedItem[]> {
+  const missingIndexes = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => !itemHasFullForm(item))
+
+  if (missingIndexes.length === 0) return items
+  if (!options.hasGemini && !options.hasOpenAI) return items
+
+  const next = [...items]
+  const batchSize = 20
+  for (let start = 0; start < missingIndexes.length; start += batchSize) {
+    const chunk = missingIndexes.slice(start, start + batchSize)
+    options.onProgress?.(
+      'enrich',
+      `Filling recipes and nutrition ${Math.min(start + batchSize, missingIndexes.length)} of ${missingIndexes.length}…`
+    )
+    const batch = chunk.map(({ item }) => item)
+    try {
+      const enriched = options.hasGemini
+        ? await enrichWithGemini(batch)
+        : await enrichWithOpenAI(batch)
+      chunk.forEach(({ index }, batchIndex) => {
+        next[index] = mergeEnrichedItem(next[index], enriched[batchIndex])
+      })
+    } catch (error) {
+      warnImportFromUrl('Full-form enrichment batch failed', {
+        start,
+        count: batch.length,
+        reason: error instanceof Error ? error.message.slice(0, 240) : String(error),
+      })
+    }
+  }
+
+  return next
+}
+
 function mapProcessedItems(items: ExtractedItem[]) {
   return items.map((item) => ({
     name: item.name,
@@ -758,7 +973,11 @@ function importErrorResponse(
     return { body: { error: friendlyMessage }, status: 403 }
   }
 
-  if (isAiModelUnavailable(error)) {
+  const overloadCode =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? (error as { code?: string }).code
+      : undefined
+  if (isAiModelUnavailable(error) || overloadCode === 'AI_OVERLOADED') {
     return {
       body: {
         error: 'Import is busy right now',
@@ -828,12 +1047,13 @@ async function executeMenuImport(params: {
 
   const hasGemini = !!(config.geminiApiKey || process.env.GOOGLE_AI_KEY)
   const hasOpenAI = !!(config.openaiApiKey || process.env.OPENAI_API_KEY)
+  const hasAnthropic = !!(config.anthropicApiKey || process.env.ANTHROPIC_API_KEY)
 
   describeAiKeys({
     tavily: tavilyDiag,
     gemini: hasGemini,
     openai: hasOpenAI,
-    anthropic: !!(config.anthropicApiKey || process.env.ANTHROPIC_API_KEY),
+    anthropic: hasAnthropic,
   })
 
   if (!hasGemini && !hasOpenAI) {
@@ -862,11 +1082,26 @@ async function executeMenuImport(params: {
     progress('extract', 'Finding dishes and prices…')
     logImportFromUrl('Fast menu extraction', { textChars: pageText.length, usedTavily })
 
-    items = await extractMenuFromPageTextFast(pageText, categoryNames, { hasGemini, hasOpenAI })
-    logImportFromUrl('Fast extraction finished', { itemCount: items.length })
+    const fastResult = await extractMenuFromPageTextFast(pageText, categoryNames, {
+      hasOpenAI,
+      hasGemini,
+      hasAnthropic,
+    })
+    items = fastResult.items
+    if (fastResult.provider) source = `page-text-${fastResult.provider}`
+    logImportFromUrl('Fast extraction finished', {
+      itemCount: items.length,
+      provider: fastResult.provider ?? 'none',
+      sawOverload: fastResult.sawOverload,
+    })
 
     if (items.length > 0) {
       progress('extract', 'Almost done…')
+    } else if (fastResult.sawOverload) {
+      throw Object.assign(
+        new Error('Menu import is busy right now. Please wait a minute and try again.'),
+        { code: 'AI_OVERLOADED' }
+      )
     } else if (usedTavily) {
       throw new Error(
         'We read the menu page but could not list dishes. Try again in a minute, or use Import from image for this menu.'
@@ -895,6 +1130,13 @@ async function executeMenuImport(params: {
       : 'No menu items found on this page. Make sure the URL is a public menu or food list.'
     throw new Error(blockedMessage)
   }
+
+  progress('enrich', 'Filling recipes, ingredients, and nutrition…')
+  items = await enrichMenuItemsFullForm(items, {
+    hasGemini,
+    hasOpenAI,
+    onProgress: progress,
+  })
 
   const processedItems = mapProcessedItems(items)
 
@@ -939,6 +1181,7 @@ export async function POST(request: NextRequest) {
 
     if (useStream) {
       const encoder = new TextEncoder()
+      const SSE_HEARTBEAT_MS = 10_000
       const stream = new ReadableStream({
         async start(controller) {
           const send = (event: Record<string, unknown>) => {
@@ -948,6 +1191,21 @@ export async function POST(request: NextRequest) {
               // client disconnected
             }
           }
+
+          let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+          const startHeartbeat = () => {
+            heartbeatTimer = setInterval(() => {
+              send({ type: 'heartbeat' })
+            }, SSE_HEARTBEAT_MS)
+          }
+          const stopHeartbeat = () => {
+            if (heartbeatTimer) {
+              clearInterval(heartbeatTimer)
+              heartbeatTimer = null
+            }
+          }
+
+          startHeartbeat()
 
           try {
             const config = await getPlatformConfig()
@@ -970,6 +1228,7 @@ export async function POST(request: NextRequest) {
             const { body: errBody, status } = importErrorResponse(error, menuUrl, tavilyApiKey)
             send({ type: 'error', ...errBody, status })
           } finally {
+            stopHeartbeat()
             controller.close()
           }
         },
