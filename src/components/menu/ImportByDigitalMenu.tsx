@@ -10,7 +10,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Link2, Loader2, CheckCircle, Sparkles, ImagePlus, Check, Trash2, ChevronDown, ChevronUp, X, AlertCircle } from 'lucide-react'
+import { Link2, Loader2, CheckCircle, Sparkles, ImagePlus, Check, Trash2, ChevronDown, ChevronUp, X, AlertCircle, ArrowLeft } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -27,21 +27,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Category, Ingredient } from '@prisma/client'
+import { AddOn, Category, Ingredient } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/lib/i18n'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+
+interface ParsedIngredient {
+  name: string
+  quantity: number
+  unit: string
+  pieceCount?: number | null
+  ingredientId?: string | null
+}
 
 interface ExtractedMenuItem {
   name: string
   description: string
   price: number
   calories?: number | null
+  protein?: number | null
+  carbs?: number | null
   tags: string[]
   verified: boolean
+  available?: boolean
+  status?: 'DRAFT' | 'ACTIVE'
   imageUrl?: string
   categoryId?: string
   categoryName?: string
+  recipeSteps?: string[]
+  recipeTips?: string[]
+  prepTime?: string | null
+  cookTime?: string | null
+  recipeYield?: number | null
+  ingredients?: ParsedIngredient[]
+  addOnIds?: string[]
 }
 
 interface ImportByDigitalMenuProps {
@@ -49,6 +69,17 @@ interface ImportByDigitalMenuProps {
   ingredients: Ingredient[]
   defaultBackgroundPrompt?: string | null
 }
+
+type ImportDraftTab = 'basic' | 'recipe' | 'details'
+
+interface SmartChefDraftProposal {
+  summary: string
+  targetTab: ImportDraftTab
+  changedFields: string[]
+  draft: ExtractedMenuItem
+}
+
+const ITEMS_PER_PAGE = 50
 
 function matchCategoryId(categories: Category[], categoryName?: string): string | undefined {
   if (!categoryName) return undefined
@@ -90,13 +121,20 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   const { toast } = useToast()
   const { t } = useI18n()
   const [availableCategories, setAvailableCategories] = useState<Category[]>(categories)
+  const [availableIngredients, setAvailableIngredients] = useState<Ingredient[]>(ingredients)
+  const [availableAddOns, setAvailableAddOns] = useState<AddOn[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<'url' | 'extracting' | 'verifying' | 'complete'>('url')
   const [menuUrl, setMenuUrl] = useState('')
   const [extractedItems, setExtractedItems] = useState<ExtractedMenuItem[]>([])
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
   const [isProcessing, setIsProcessing] = useState(false)
   const [editingItem, setEditingItem] = useState<ExtractedMenuItem | null>(null)
+  const [activeDetailTab, setActiveDetailTab] = useState<ImportDraftTab>('basic')
+  const [smartChefInstruction, setSmartChefInstruction] = useState('')
+  const [isSmartChefEditing, setIsSmartChefEditing] = useState(false)
+  const [smartChefProposal, setSmartChefProposal] = useState<SmartChefDraftProposal | null>(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
@@ -110,6 +148,20 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
   useEffect(() => {
     setAvailableCategories(categories)
   }, [categories])
+
+  useEffect(() => {
+    setAvailableIngredients(ingredients)
+  }, [ingredients])
+
+  useEffect(() => {
+    if (!isOpen) return
+    fetch('/api/addons')
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) setAvailableAddOns(data)
+      })
+      .catch(() => setAvailableAddOns([]))
+  }, [isOpen])
 
   const ensureCategoriesAndAssign = async (items: ExtractedMenuItem[]): Promise<ExtractedMenuItem[]> => {
     let nextCategories = [...availableCategories]
@@ -180,6 +232,33 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
     setExtractedItems(prev => prev.map((item, i) => i === index ? { ...item, ...updates } : item))
   }
 
+  const updateEditingItem = (updates: Partial<ExtractedMenuItem>) => {
+    setSmartChefProposal(null)
+    setEditingItem((current) => (current ? { ...current, ...updates } : current))
+  }
+
+  const openItemDetail = (index: number, tab: ImportDraftTab = 'basic') => {
+    if (expandedIndex !== null && editingItem) {
+      setExtractedItems((prev) => prev.map((item, i) => (i === expandedIndex ? { ...editingItem } : item)))
+    }
+    setExpandedIndex(index)
+    setEditingItem({ ...extractedItems[index] })
+    setActiveDetailTab(tab)
+    setSmartChefInstruction('')
+    setSmartChefProposal(null)
+  }
+
+  const closeItemDetail = () => {
+    if (expandedIndex !== null && editingItem) {
+      setExtractedItems((prev) => prev.map((item, i) => (i === expandedIndex ? { ...editingItem } : item)))
+    }
+    setExpandedIndex(null)
+    setEditingItem(null)
+    setSmartChefInstruction('')
+    setSmartChefProposal(null)
+    setActiveDetailTab('basic')
+  }
+
   const deleteItem = (index: number) => {
     setExtractedItems(prev => prev.filter((_, i) => i !== index))
     if (expandedIndex === index) {
@@ -187,24 +266,6 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
       setEditingItem(null)
     } else if (expandedIndex !== null && expandedIndex > index) {
       setExpandedIndex(expandedIndex - 1)
-    }
-  }
-
-  const toggleExpand = (index: number) => {
-    if (expandedIndex === index) {
-      // Collapse — sync editingItem back
-      if (editingItem) {
-        setExtractedItems(prev => prev.map((item, i) => i === expandedIndex ? { ...editingItem } : item))
-      }
-      setExpandedIndex(null)
-      setEditingItem(null)
-    } else {
-      // Collapse previous if open, then expand new
-      if (expandedIndex !== null && editingItem) {
-        setExtractedItems(prev => prev.map((item, i) => i === expandedIndex ? { ...editingItem } : item))
-      }
-      setExpandedIndex(index)
-      setEditingItem({ ...extractedItems[index] })
     }
   }
 
@@ -225,6 +286,10 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
 
   const itemsWithoutCategory = extractedItems.filter(i => !i.categoryId).length
   const itemsWithIssues = extractedItems.filter(i => !i.categoryId || !i.name.trim() || !i.price || i.price <= 0).length
+  const totalPages = Math.max(1, Math.ceil(extractedItems.length / ITEMS_PER_PAGE))
+  const pageStart = (currentPage - 1) * ITEMS_PER_PAGE
+  const pageItems = extractedItems.slice(pageStart, pageStart + ITEMS_PER_PAGE)
+  const visibleEditingItem = smartChefProposal?.draft ?? editingItem
 
   // --- Image dialog helpers (unchanged) ---
 
@@ -288,11 +353,28 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
 
       const extracted: ExtractedMenuItem[] = (data.items || []).map((item: any) => ({
         ...item,
+        protein: item.protein ?? null,
+        carbs: item.carbs ?? null,
+        status: item.status || 'ACTIVE',
+        available: item.available ?? true,
+        ingredients: (item.ingredients || []).map((ingredient: ParsedIngredient) => {
+          const existing = availableIngredients.find(
+            (available) => normalizeText(available.name) === normalizeText(ingredient.name)
+          )
+          return {
+            ...ingredient,
+            ingredientId: existing?.id || ingredient.ingredientId || null,
+            unit: existing?.unit || ingredient.unit || 'g',
+          }
+        }),
         categoryId: item.categoryId || matchCategoryId(availableCategories, item.categoryName),
       }))
       const items = dedupeExtractedItems(await ensureCategoriesAndAssign(extracted))
 
       setExtractedItems(items)
+      setExpandedIndex(null)
+      setEditingItem(null)
+      setCurrentPage(1)
       if (items.length > 0) {
         setStep('verifying')
       }
@@ -360,6 +442,89 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
     }
   }
 
+  const normalizeProposedDraft = (draft: ExtractedMenuItem): ExtractedMenuItem => {
+    const categoryId =
+      draft.categoryId ||
+      matchCategoryId(availableCategories, draft.categoryName) ||
+      editingItem?.categoryId
+
+    return {
+      ...(editingItem ?? {}),
+      ...draft,
+      categoryId,
+      verified: true,
+      tags: Array.isArray(draft.tags) ? draft.tags.filter(Boolean) : [],
+      recipeSteps: Array.isArray(draft.recipeSteps) ? draft.recipeSteps.filter(Boolean) : [],
+      recipeTips: Array.isArray(draft.recipeTips) ? draft.recipeTips.filter(Boolean) : [],
+      ingredients: Array.isArray(draft.ingredients)
+        ? draft.ingredients.filter((ingredient) => ingredient.name.trim())
+        : [],
+    }
+  }
+
+  const requestSmartChefDraftEdit = async () => {
+    if (!editingItem || !smartChefInstruction.trim()) return
+
+    setIsSmartChefEditing(true)
+    setSmartChefProposal(null)
+    try {
+      const response = await fetch('/api/menu/import-draft-smart-edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draft: editingItem,
+          instruction: smartChefInstruction.trim(),
+          categories: availableCategories.map((category) => category.name),
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Smart Chef failed to edit this item')
+
+      const proposal: SmartChefDraftProposal = {
+        summary: data.summary || 'Smart Chef proposed an edit.',
+        targetTab: data.targetTab || 'basic',
+        changedFields: Array.isArray(data.changedFields) ? data.changedFields : [],
+        draft: normalizeProposedDraft(data.draft || editingItem),
+      }
+      setSmartChefProposal(proposal)
+      setActiveDetailTab(proposal.targetTab)
+    } catch (error) {
+      toast({
+        title: 'Smart Chef edit failed',
+        description: error instanceof Error ? error.message : 'Could not edit this draft',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSmartChefEditing(false)
+    }
+  }
+
+  const approveSmartChefProposal = () => {
+    if (!smartChefProposal) return
+    setEditingItem(smartChefProposal.draft)
+    setSmartChefProposal(null)
+    setSmartChefInstruction('')
+    toast({ title: 'Smart Chef edit applied', description: smartChefProposal.summary })
+  }
+
+  const discardSmartChefProposal = () => {
+    setSmartChefProposal(null)
+    toast({ title: 'Smart Chef edit discarded' })
+  }
+
+  const proposalTouches = (fields: string[]) =>
+    smartChefProposal?.changedFields.some((field) => fields.includes(field)) ?? false
+
+  const selectedIngredientCost = (ingredient: ParsedIngredient) => {
+    const existing = availableIngredients.find((item) => item.id === ingredient.ingredientId || normalizeText(item.name) === normalizeText(ingredient.name))
+    if (!existing) return null
+    return {
+      unit: existing.unit,
+      costPerUnit: existing.costPerUnit,
+      directCost: (Number(ingredient.quantity) || 0) * existing.costPerUnit,
+    }
+  }
+
   const trimmedSavedBackgroundPrompt = (defaultBackgroundPrompt ?? '').trim()
   const currentOrientationOption =
     imageOrientationOptions.find((o) => o.value === imageOrientation) ?? imageOrientationOptions[0]
@@ -403,6 +568,17 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
     setIsProcessing(true)
     try {
       const errors: string[] = []
+      const ingredientsResponse = await fetch('/api/ingredients')
+      let currentIngredients = availableIngredients
+      if (ingredientsResponse.ok) {
+        currentIngredients = await ingredientsResponse.json()
+        setAvailableIngredients(currentIngredients)
+      }
+
+      let ingredientMap = new Map(
+        currentIngredients.map((ing) => [ing.name.toLowerCase().trim(), ing])
+      )
+
       const uniqueItems = dedupeExtractedItems(items)
       let skippedDuplicates = items.length - uniqueItems.length
 
@@ -411,6 +587,39 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
           errors.push(`${item.name}: Missing category`)
           continue
         }
+
+        const ingredientData = []
+        for (const ing of item.ingredients || []) {
+          let existingIng = ing.ingredientId
+            ? currentIngredients.find((ingredient) => ingredient.id === ing.ingredientId)
+            : ingredientMap.get(ing.name.toLowerCase().trim())
+          if (!existingIng) {
+            const createIngredientResponse = await fetch('/api/ingredients', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: ing.name,
+                unit: ing.unit || 'g',
+                costPerUnit: 0,
+                stockQuantity: 0,
+                minStockLevel: 0,
+              }),
+            })
+            if (createIngredientResponse.ok) {
+              existingIng = await createIngredientResponse.json()
+              currentIngredients = [...currentIngredients, existingIng]
+              ingredientMap = new Map(currentIngredients.map((ingredient) => [ingredient.name.toLowerCase().trim(), ingredient]))
+            }
+          }
+          if (!existingIng) continue
+          ingredientData.push({
+            ingredientId: existingIng.id,
+            quantity: ing.quantity,
+            unit: existingIng.unit || ing.unit,
+            pieceCount: ing.pieceCount,
+          })
+        }
+
         const response = await fetch('/api/menu', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -421,9 +630,17 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
             categoryId: item.categoryId,
             imageUrl: item.imageUrl || '',
             calories: item.calories ? Number(item.calories) : null,
+            protein: item.protein ? Number(item.protein) : null,
+            carbs: item.carbs ? Number(item.carbs) : null,
             tags: item.tags || [],
-            available: true,
-            ingredients: [],
+            available: item.available ?? true,
+            status: item.status || 'ACTIVE',
+            ingredients: ingredientData,
+            recipeSteps: item.recipeSteps || [],
+            recipeTips: item.recipeTips || [],
+            prepTime: item.prepTime || null,
+            cookTime: item.cookTime || null,
+            addOnIds: item.addOnIds || [],
             dedupeExisting: true,
           }),
         })
@@ -471,6 +688,13 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
     setExtractedItems([])
     setExpandedIndex(null)
     setEditingItem(null)
+    setCurrentPage(1)
+    setActiveDetailTab('basic')
+    setSmartChefInstruction('')
+    setSmartChefProposal(null)
+    setUploadedPhoto(null)
+    setPreviewImageUrl(null)
+    setCustomPrompt('')
   }
 
   return (
@@ -547,256 +771,330 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
                 </div>
               </div>
 
-              {/* Scrollable item list */}
-              <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
-                {extractedItems.map((item, index) => {
-                  const isExpanded = expandedIndex === index
-                  const hasIssues = !item.categoryId || !item.name.trim() || !item.price || item.price <= 0
-                  const categoryName = availableCategories.find(c => c.id === item.categoryId)?.name
+              {expandedIndex === null || !editingItem ? (
+                <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
+                  {pageItems.map((item, relativeIndex) => {
+                    const index = pageStart + relativeIndex
+                    const hasIssues = !item.categoryId || !item.name.trim() || !item.price || item.price <= 0
+                    const categoryName = availableCategories.find(c => c.id === item.categoryId)?.name
 
-                  return (
-                    <div
-                      key={index}
-                      className={`border rounded-lg transition-all ${hasIssues
-                          ? 'border-amber-300 bg-amber-50/30'
-                          : 'border-slate-200 bg-white'
-                        }`}
-                    >
-                      {/* Compact row */}
-                      <div className="flex items-start gap-3 p-3">
-                        {/* Item number */}
-                        <span className="text-xs font-medium text-slate-400 mt-1 w-6 text-right shrink-0">
-                          {index + 1}
-                        </span>
-
-                        {/* Item info */}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">
-                            {item.name || <span className="text-red-400 italic">Unnamed item</span>}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                            <span className="text-xs font-medium text-slate-600">
-                              IQD {(item.price || 0).toLocaleString()}
-                            </span>
-                            {categoryName ? (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
-                                {categoryName}
-                              </Badge>
-                            ) : (
-                              <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
-                                <AlertCircle className="h-2.5 w-2.5" />
-                                No category
+                    return (
+                      <div
+                        key={`${index}-${item.name}`}
+                        className={`border rounded-lg transition-all ${hasIssues ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200 bg-white'}`}
+                      >
+                        <div className="flex items-start gap-3 p-3">
+                          <span className="text-xs font-medium text-slate-400 mt-1 w-6 text-right shrink-0">
+                            {index + 1}
+                          </span>
+                          <button type="button" className="flex-1 min-w-0 text-left" onClick={() => openItemDetail(index)}>
+                            <p className="font-medium text-sm truncate">
+                              {item.name || <span className="text-red-400 italic">Unnamed item</span>}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                              <span className="text-xs font-medium text-slate-600">
+                                IQD {(item.price || 0).toLocaleString()}
                               </span>
-                            )}
-                            {item.tags?.length > 0 && (
-                              <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
-                                {item.tags.slice(0, 3).join(', ')}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Inline category select (quick fix) */}
-                        <Select
-                          value={item.categoryId || ''}
-                          onValueChange={(v) => updateItem(index, { categoryId: v })}
-                        >
-                          <SelectTrigger className="h-8 w-[130px] text-xs shrink-0 bg-white hidden sm:flex">
-                            <SelectValue placeholder="Category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableCategories.map((cat) => (
-                              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => toggleExpand(index)}
-                          >
-                            {isExpanded ? (
-                              <ChevronUp className="h-4 w-4 text-slate-500" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-slate-500" />
-                            )}
+                              {categoryName ? (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                                  {categoryName}
+                                </Badge>
+                              ) : (
+                                <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
+                                  <AlertCircle className="h-2.5 w-2.5" />
+                                  No category
+                                </span>
+                              )}
+                              {(item.recipeSteps?.length || 0) > 0 && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">Recipe</Badge>
+                              )}
+                            </div>
+                          </button>
+                          <Select value={item.categoryId || ''} onValueChange={(v) => updateItem(index, { categoryId: v })}>
+                            <SelectTrigger className="h-8 w-[130px] text-xs shrink-0 bg-white hidden sm:flex">
+                              <SelectValue placeholder="Category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableCategories.map((cat) => (
+                                <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => openItemDetail(index)}>
+                            <ChevronDown className="h-4 w-4 text-slate-500" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 hover:bg-red-50"
-                            onClick={() => deleteItem(index)}
-                          >
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-50" onClick={() => deleteItem(index)}>
                             <X className="h-4 w-4 text-slate-400 hover:text-red-500" />
                           </Button>
                         </div>
                       </div>
+                    )
+                  })}
+                  {totalPages > 1 && (
+                    <div className="sticky bottom-0 bg-white border rounded-lg p-2 flex items-center justify-between gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                        Previous
+                      </Button>
+                      <span className="text-xs text-slate-500">
+                        Page {currentPage} of {totalPages} · showing {pageStart + 1}-{Math.min(pageStart + ITEMS_PER_PAGE, extractedItems.length)} of {extractedItems.length}
+                      </span>
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                        Next
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-y-auto flex-1 min-h-0 pr-1 space-y-4">
+                  <div className="border rounded-lg bg-white p-4 space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Button variant="ghost" size="sm" className="px-0" onClick={closeItemDetail}>
+                          <ArrowLeft className="h-4 w-4 mr-2" />
+                          Back to full list
+                        </Button>
+                        <h3 className="font-semibold text-slate-900 mt-2">{visibleEditingItem?.name || 'Unnamed item'}</h3>
+                        <p className="text-xs text-slate-500">Edit this imported item before creating it.</p>
+                      </div>
+                      <Badge variant="secondary">#{expandedIndex + 1}</Badge>
+                    </div>
 
-                      {/* Expanded edit form */}
-                      {isExpanded && editingItem && (
-                        <div className="border-t border-slate-200 p-4 space-y-4 bg-slate-50/50">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label className="text-xs">Item Name</Label>
-                              <Input
-                                value={editingItem.name}
-                                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                                className="bg-white"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="text-xs">Price (IQD)</Label>
-                              <Input
-                                type="number"
-                                value={editingItem.price}
-                                onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) })}
-                                className="bg-white"
-                              />
-                            </div>
-                          </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        value={smartChefInstruction}
+                        onChange={(e) => setSmartChefInstruction(e.target.value)}
+                        placeholder="Ask Smart Chef to edit this item, e.g. add lemon to the fattoush recipe"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') requestSmartChefDraftEdit()
+                        }}
+                      />
+                      <Button onClick={requestSmartChefDraftEdit} disabled={!smartChefInstruction.trim() || isSmartChefEditing}>
+                        {isSmartChefEditing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                        Apply with Smart Chef
+                      </Button>
+                    </div>
 
-                          <div className="space-y-2">
-                            <Label className="text-xs">Description</Label>
-                            <Textarea
-                              value={editingItem.description}
-                              onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-                              rows={2}
-                              className="bg-white"
-                            />
-                          </div>
+                    {smartChefProposal && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-900">{smartChefProposal.summary}</p>
+                          <p className="text-xs text-emerald-700">Changed fields: {smartChefProposal.changedFields.join(', ') || 'draft'}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={approveSmartChefProposal}><Check className="h-4 w-4 mr-1" />Approve</Button>
+                          <Button size="sm" variant="outline" onClick={discardSmartChefProposal}>Discard</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                              <Label className="text-xs">Category</Label>
-                              <Select
-                                value={editingItem.categoryId}
-                                onValueChange={(value) => setEditingItem({ ...editingItem, categoryId: value })}
-                              >
-                                <SelectTrigger className="bg-white">
-                                  <SelectValue placeholder="Select category" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {availableCategories.map((category) => (
-                                    <SelectItem key={category.id} value={category.id}>
-                                      {category.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="text-xs">Calories (optional)</Label>
-                              <Input
-                                type="number"
-                                value={editingItem.calories ?? ''}
-                                onChange={(e) => setEditingItem({ ...editingItem, calories: parseInt(e.target.value) || undefined })}
-                                className="bg-white"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="text-xs">Tags (comma-separated)</Label>
-                              <Input
-                                value={(editingItem.tags || []).join(', ')}
-                                onChange={(e) => setEditingItem({ ...editingItem, tags: e.target.value.split(',').map((t) => t.trim()) })}
-                                placeholder="halal, spicy"
-                                className="bg-white"
-                              />
-                            </div>
-                          </div>
+                  <Tabs value={activeDetailTab} onValueChange={(value) => setActiveDetailTab(value as ImportDraftTab)}>
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="basic">Basic</TabsTrigger>
+                      <TabsTrigger value="recipe">Recipe</TabsTrigger>
+                      <TabsTrigger value="details">Details</TabsTrigger>
+                    </TabsList>
 
-                          {/* Image section */}
-                          <div className="space-y-2">
-                            <Label className="text-xs">Image (optional)</Label>
-                            <div className="flex gap-2 flex-wrap">
-                              <Input
-                                value={editingItem.imageUrl?.startsWith('http') ? editingItem.imageUrl : ''}
-                                onChange={(e) => {
-                                  const v = e.target.value.trim()
-                                  setEditingItem({ ...editingItem, imageUrl: v || undefined })
-                                }}
-                                placeholder="https://example.com/image.jpg"
-                                className="flex-1 min-w-[180px] bg-white"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => formUploadRef.current?.click()}
-                              >
-                                <ImagePlus className="h-4 w-4 mr-1" />
-                                Upload
-                              </Button>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                ref={formUploadRef}
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0]
-                                  if (!file) return
-                                  const reader = new FileReader()
-                                  reader.onloadend = () => {
-                                    setEditingItem({ ...editingItem, imageUrl: reader.result as string })
-                                  }
-                                  reader.readAsDataURL(file)
-                                  e.target.value = ''
-                                }}
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={openImageDialog}
-                                disabled={isGeneratingImage}
-                              >
-                                <Sparkles className="h-4 w-4 mr-1" />
-                                AI Generate
-                              </Button>
-                            </div>
-                            {editingItem.imageUrl && (
-                              <div className="border rounded-lg overflow-auto bg-white flex items-start justify-center min-h-[80px] max-h-[200px]">
-                                <img
-                                  src={editingItem.imageUrl}
-                                  alt={editingItem.name}
-                                  className="max-w-full w-auto max-h-[190px] object-contain"
-                                  onError={(e) => {
-                                    e.currentTarget.src = ''
-                                    setEditingItem({ ...editingItem, imageUrl: undefined })
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </div>
+                    <TabsContent value="basic" className="border rounded-lg bg-white p-4 space-y-4">
+                      {proposalTouches(['name', 'description', 'price', 'categoryName', 'status', 'available']) && (
+                        <div className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-800">Smart Chef has proposed basic changes. Approve or discard above.</div>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Item Name</Label>
+                          <Input value={visibleEditingItem?.name || ''} onChange={(e) => updateEditingItem({ name: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Price (IQD)</Label>
+                          <Input type="number" value={visibleEditingItem?.price ?? ''} onChange={(e) => updateEditingItem({ price: parseFloat(e.target.value) || 0 })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Category</Label>
+                          <Select value={visibleEditingItem?.categoryId || ''} onValueChange={(value) => updateEditingItem({ categoryId: value })}>
+                            <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                            <SelectContent>
+                              {availableCategories.map((category) => (
+                                <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Status</Label>
+                          <Select value={visibleEditingItem?.status || 'ACTIVE'} onValueChange={(value) => updateEditingItem({ status: value as 'DRAFT' | 'ACTIVE' })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ACTIVE">Available</SelectItem>
+                              <SelectItem value="DRAFT">Draft</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Description</Label>
+                        <Textarea value={visibleEditingItem?.description || ''} onChange={(e) => updateEditingItem({ description: e.target.value })} rows={3} />
+                      </div>
+                    </TabsContent>
 
-                          <div className="flex justify-end pt-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => toggleExpand(index)}
-                            >
-                              <Check className="h-4 w-4 mr-1" />
-                              Done Editing
-                            </Button>
+                    <TabsContent value="recipe" className="space-y-4">
+                      <div className="border rounded-lg bg-white p-4 space-y-4">
+                        {proposalTouches(['prepTime', 'cookTime', 'recipeYield', 'recipeSteps', 'recipeTips', 'ingredients']) && (
+                          <div className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-800">Smart Chef has proposed recipe changes. Approve or discard above.</div>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="space-y-2"><Label className="text-xs">Prep time</Label><Input value={visibleEditingItem?.prepTime ?? ''} onChange={(e) => updateEditingItem({ prepTime: e.target.value })} /></div>
+                          <div className="space-y-2"><Label className="text-xs">Cook time</Label><Input value={visibleEditingItem?.cookTime ?? ''} onChange={(e) => updateEditingItem({ cookTime: e.target.value })} /></div>
+                          <div className="space-y-2"><Label className="text-xs">Recipe yield</Label><Input type="number" value={visibleEditingItem?.recipeYield ?? ''} onChange={(e) => updateEditingItem({ recipeYield: parseInt(e.target.value) || null })} /></div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div><h4 className="font-semibold">SOP</h4><p className="text-xs text-slate-500">Steps and chef tips for kitchen consistency.</p></div>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => updateEditingItem({ recipeSteps: [...(visibleEditingItem?.recipeSteps || []), ''] })}>Add Step</Button>
+                            <Button variant="outline" size="sm" onClick={() => updateEditingItem({ recipeTips: [...(visibleEditingItem?.recipeTips || []), ''] })}>Add Tip</Button>
                           </div>
                         </div>
+                        {(visibleEditingItem?.recipeSteps || []).map((step, stepIndex) => (
+                          <Textarea
+                            key={stepIndex}
+                            value={step}
+                            placeholder={`Step ${stepIndex + 1}`}
+                            onChange={(e) => {
+                              const next = [...(visibleEditingItem?.recipeSteps || [])]
+                              next[stepIndex] = e.target.value
+                              updateEditingItem({ recipeSteps: next })
+                            }}
+                          />
+                        ))}
+                        {(visibleEditingItem?.recipeTips || []).map((tip, tipIndex) => (
+                          <Input
+                            key={tipIndex}
+                            value={tip}
+                            placeholder={`Tip ${tipIndex + 1}`}
+                            onChange={(e) => {
+                              const next = [...(visibleEditingItem?.recipeTips || [])]
+                              next[tipIndex] = e.target.value
+                              updateEditingItem({ recipeTips: next })
+                            }}
+                          />
+                        ))}
+                      </div>
+
+                      <div className="border rounded-lg bg-white p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div><h4 className="font-semibold">Recipe Builder</h4><p className="text-xs text-slate-500">Select inventory ingredients so costing can be calculated.</p></div>
+                          <Button variant="outline" size="sm" onClick={() => updateEditingItem({ ingredients: [...(visibleEditingItem?.ingredients || []), { name: '', quantity: 0, unit: 'g', pieceCount: null }] })}>Add ingredient</Button>
+                        </div>
+                        {(visibleEditingItem?.ingredients || []).length === 0 && (
+                          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-slate-500">No ingredients yet. Add manually or ask Smart Chef above.</div>
+                        )}
+                        {(visibleEditingItem?.ingredients || []).map((ingredient, ingredientIndex) => {
+                          const cost = selectedIngredientCost(ingredient)
+                          return (
+                            <div key={ingredientIndex} className="grid grid-cols-1 sm:grid-cols-[1.5fr_1fr_.8fr_.8fr_auto] gap-2 rounded-lg border p-3">
+                              <Select
+                                value={ingredient.ingredientId || ''}
+                                onValueChange={(value) => {
+                                  const selected = availableIngredients.find((ing) => ing.id === value)
+                                  const next = [...(visibleEditingItem?.ingredients || [])]
+                                  next[ingredientIndex] = { ...next[ingredientIndex], ingredientId: value, name: selected?.name || next[ingredientIndex].name, unit: selected?.unit || next[ingredientIndex].unit }
+                                  updateEditingItem({ ingredients: next })
+                                }}
+                              >
+                                <SelectTrigger><SelectValue placeholder="Search ingredient..." /></SelectTrigger>
+                                <SelectContent>
+                                  {availableIngredients.map((ing) => <SelectItem key={ing.id} value={ing.id}>{ing.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <Input value={ingredient.name} placeholder="Ingredient" onChange={(e) => {
+                                const next = [...(visibleEditingItem?.ingredients || [])]
+                                next[ingredientIndex] = { ...next[ingredientIndex], name: e.target.value }
+                                updateEditingItem({ ingredients: next })
+                              }} />
+                              <Input type="number" value={ingredient.quantity} onChange={(e) => {
+                                const next = [...(visibleEditingItem?.ingredients || [])]
+                                next[ingredientIndex] = { ...next[ingredientIndex], quantity: parseFloat(e.target.value) || 0 }
+                                updateEditingItem({ ingredients: next })
+                              }} />
+                              <Input value={ingredient.unit} onChange={(e) => {
+                                const next = [...(visibleEditingItem?.ingredients || [])]
+                                next[ingredientIndex] = { ...next[ingredientIndex], unit: e.target.value }
+                                updateEditingItem({ ingredients: next })
+                              }} />
+                              <Button variant="ghost" size="sm" onClick={() => updateEditingItem({ ingredients: (visibleEditingItem?.ingredients || []).filter((_, i) => i !== ingredientIndex) })}><X className="h-4 w-4" /></Button>
+                              <p className="sm:col-span-5 text-xs text-slate-500">Cost per unit: {cost ? `${cost.costPerUnit} / ${cost.unit}` : 'Select inventory ingredient'} · Direct cost: {cost ? cost.directCost.toLocaleString() : '-'}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div className="border rounded-lg bg-white p-4 space-y-3">
+                        <h4 className="font-semibold">Available Add-ons</h4>
+                        {availableAddOns.length === 0 ? <p className="text-xs text-slate-500">No add-ons available yet.</p> : (
+                          <div className="flex flex-wrap gap-2">
+                            {availableAddOns.map((addOn) => {
+                              const selected = (visibleEditingItem?.addOnIds || []).includes(addOn.id)
+                              return (
+                                <Button key={addOn.id} type="button" variant={selected ? 'default' : 'outline'} size="sm" onClick={() => {
+                                  const current = visibleEditingItem?.addOnIds || []
+                                  updateEditingItem({ addOnIds: selected ? current.filter((id) => id !== addOn.id) : [...current, addOn.id] })
+                                }}>
+                                  {addOn.name}
+                                </Button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="details" className="border rounded-lg bg-white p-4 space-y-4">
+                      {proposalTouches(['calories', 'protein', 'carbs', 'tags', 'imageUrl']) && (
+                        <div className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-800">Smart Chef has proposed detail changes. Approve or discard above.</div>
                       )}
-                    </div>
-                  )
-                })}
-              </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="space-y-2"><Label className="text-xs">Calories</Label><Input type="number" value={visibleEditingItem?.calories ?? ''} onChange={(e) => updateEditingItem({ calories: parseInt(e.target.value) || null })} /></div>
+                        <div className="space-y-2"><Label className="text-xs">Protein (g)</Label><Input type="number" value={visibleEditingItem?.protein ?? ''} onChange={(e) => updateEditingItem({ protein: parseInt(e.target.value) || null })} /></div>
+                        <div className="space-y-2"><Label className="text-xs">Carbs (g)</Label><Input type="number" value={visibleEditingItem?.carbs ?? ''} onChange={(e) => updateEditingItem({ carbs: parseInt(e.target.value) || null })} /></div>
+                      </div>
+                      <div className="space-y-2"><Label className="text-xs">Tags (comma-separated)</Label><Input value={(visibleEditingItem?.tags || []).join(', ')} onChange={(e) => updateEditingItem({ tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} /></div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Image (optional)</Label>
+                        <div className="flex gap-2 flex-wrap">
+                          <Input value={visibleEditingItem?.imageUrl?.startsWith('http') ? visibleEditingItem.imageUrl : ''} onChange={(e) => updateEditingItem({ imageUrl: e.target.value.trim() || undefined })} placeholder="https://example.com/image.jpg" className="flex-1 min-w-[180px]" />
+                          <Button type="button" variant="outline" size="sm" onClick={() => formUploadRef.current?.click()}><ImagePlus className="h-4 w-4 mr-1" />Upload</Button>
+                          <input type="file" accept="image/*" className="hidden" ref={formUploadRef} onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            const reader = new FileReader()
+                            reader.onloadend = () => updateEditingItem({ imageUrl: reader.result as string })
+                            reader.readAsDataURL(file)
+                            e.target.value = ''
+                          }} />
+                          <Button type="button" variant="outline" size="sm" onClick={openImageDialog} disabled={isGeneratingImage}><Sparkles className="h-4 w-4 mr-1" />AI Generate</Button>
+                        </div>
+                        {visibleEditingItem?.imageUrl && <img src={visibleEditingItem.imageUrl} alt={visibleEditingItem.name} className="max-h-[180px] rounded-lg border object-contain" />}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              )}
 
               {/* Sticky footer */}
               <div className="shrink-0 border-t border-slate-200 pt-4 mt-4 flex flex-col sm:flex-row gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => { setStep('url'); setExpandedIndex(null); setEditingItem(null); }}
+                  onClick={() => {
+                    if (expandedIndex !== null) {
+                      closeItemDetail()
+                    } else {
+                      setStep('url')
+                      setExpandedIndex(null)
+                      setEditingItem(null)
+                    }
+                  }}
                   className="sm:w-auto"
                 >
-                  Back
+                  {expandedIndex !== null ? 'Back to full list' : 'Back'}
                 </Button>
                 <Button
                   onClick={handleCreateAll}

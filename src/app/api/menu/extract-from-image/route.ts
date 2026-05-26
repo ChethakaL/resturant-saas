@@ -19,6 +19,8 @@ interface ExtractedMenuItem {
   categoryName: string
   price: number
   calories?: number | null
+  protein?: number | null
+  carbs?: number | null
   tags: string[]
   recipeSteps?: string[]
   recipeTips?: string[]
@@ -33,7 +35,12 @@ function isAiModelUnavailable(error: unknown) {
   const status = typeof error === 'object' && error !== null && 'status' in error
     ? (error as { status?: unknown }).status
     : undefined
-  return status === 503 || /503|Service Unavailable|high demand|try again later/i.test(message)
+  return status === 503 || /503|Service Unavailable|overload|overloaded|high demand|try again later/i.test(message)
+}
+
+function isAiTimeout(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /timeout|timed out|deadline|aborted|ECONNRESET|fetch failed/i.test(message)
 }
 
 export async function POST(request: NextRequest) {
@@ -71,17 +78,25 @@ export async function POST(request: NextRequest) {
       model: 'gemini-2.5-flash',
     })
 
-    const prompt = `You are analyzing a restaurant menu image. Extract every menu item visible in this image.
+    const prompt = `You are analyzing a restaurant menu image for a restaurant SaaS onboarding flow. Extract every menu item visible in this image and pre-fill the full menu item form.
 
 Return ONLY a valid JSON array. No markdown. No comments. No trailing text.
 
-For each item include only these fields:
+For each item include these fields:
 - name: exact dish/drink name
-- description: visible description if present; otherwise short plain description from name
+- description: visible description if present; otherwise generate a short sensory menu description, max 18 words
 - categoryName: visible category or best-fit category
 - price: visible price as a number only. Do not convert currency. If no price is visible, use 0
-- calories: visible calories as a number, otherwise null
-- tags: short dietary/category tags only when obvious, otherwise []
+- calories: visible calories as a number, otherwise estimate per serving
+- protein: estimate grams protein per serving, otherwise null for unclear drinks/desserts
+- carbs: estimate grams carbs per serving, otherwise null if unclear
+- tags: useful dietary/category tags, e.g. halal, spicy, vegetarian, protein-rich, fried
+- prepTime: estimated prep time, e.g. "15 minutes"
+- cookTime: estimated cook time, e.g. "20 minutes"
+- recipeYield: estimated servings for this recipe; use 1 for individual restaurant portions
+- ingredients: realistic recipe ingredients for one serving or one prep batch. Each ingredient must have name, quantity, unit, pieceCount.
+- recipeSteps: concise SOP cooking/service steps for kitchen staff
+- recipeTips: concise chef notes for quality/consistency
 
 Use this exact format:
 [
@@ -91,15 +106,29 @@ Use this exact format:
     "categoryName": "Main Dishes",
     "price": 2500,
     "calories": 350,
-    "tags": ["protein-rich", "halal"]
+    "protein": 32,
+    "carbs": 8,
+    "tags": ["protein-rich", "halal"],
+    "prepTime": "15 minutes",
+    "cookTime": "18 minutes",
+    "recipeYield": 1,
+    "ingredients": [
+      {"name": "Chicken breast", "quantity": 0.22, "unit": "kg", "pieceCount": 1},
+      {"name": "Olive oil", "quantity": 0.015, "unit": "L", "pieceCount": null},
+      {"name": "Salt", "quantity": 3, "unit": "g", "pieceCount": null}
+    ],
+    "recipeSteps": ["Season chicken evenly.", "Grill until cooked through.", "Rest briefly and serve hot."],
+    "recipeTips": ["Keep grill hot before adding chicken."]
   }
 ]
 
 IMPORTANT:
 - Extract ALL items from the menu, not just a few
 - Preserve menu prices exactly as numbers
-- Do not invent recipes, ingredients, prep times, or cooking tips
-- If image is dense, prioritize complete names and prices over descriptions`
+- For recipes, use standard restaurant knowledge when the menu image does not show recipe details
+- Use practical units: kg, g, L, ml, tsp, tbsp, cup, pcs
+- Keep ingredient quantities realistic for the recipeYield
+- If image is dense, prioritize complete names/prices/categories, but still include best-effort generated form fields`
 
     const result = await model.generateContent([
       {
@@ -170,6 +199,8 @@ IMPORTANT:
         categoryName: typeof item.categoryName === 'string' ? item.categoryName : '',
         price: parseFloat(item.price) || 2000,
         calories: parseInt(item.calories) || null,
+        protein: parseInt(item.protein) || null,
+        carbs: parseInt(item.carbs) || null,
         tags: Array.isArray(item.tags) ? item.tags : [],
         recipeSteps: Array.isArray(item.recipeSteps) ? item.recipeSteps : [],
         recipeTips: Array.isArray(item.recipeTips) ? item.recipeTips : [],
@@ -182,16 +213,8 @@ IMPORTANT:
       }
     })
 
-    // If there are missing ingredients and user hasn't confirmed yet, return them for confirmation
-    if (allMissingIngredients.size > 0 && !confirmMissingIngredients) {
-      return NextResponse.json({
-        success: false,
-        requiresConfirmation: true,
-        missingIngredients: Array.from(allMissingIngredients),
-        items: processedItems,
-        message: `Found ${allMissingIngredients.size} missing ingredients. Please confirm to add them to inventory.`
-      })
-    }
+    // Show generated draft recipes immediately. Missing ingredients stay flagged on each draft item
+    // and can be added later when the user creates/finishes costing.
 
     // If user confirmed, create missing ingredients with 0 cost (to be filled manually)
     if (confirmMissingIngredients && allMissingIngredients.size > 0) {
@@ -233,8 +256,23 @@ IMPORTANT:
     console.error('Error extracting menu items:', error)
     if (isAiModelUnavailable(error)) {
       return NextResponse.json(
-        { error: 'AI model is not available, Please Try Again Later' },
+        {
+          error: 'AI is busy right now',
+          details: 'The menu import AI service is overloaded. Please wait a minute and try importing the same image again.',
+          code: 'AI_OVERLOADED',
+        },
         { status: 503 }
+      )
+    }
+
+    if (isAiTimeout(error)) {
+      return NextResponse.json(
+        {
+          error: 'Menu import took too long',
+          details: 'The image may be large or the AI service may be slow. Please try again, or upload a clearer/smaller menu image.',
+          code: 'AI_TIMEOUT',
+        },
+        { status: 504 }
       )
     }
 
@@ -242,6 +280,7 @@ IMPORTANT:
       {
         error: 'Failed to extract menu items',
         details: sanitizeErrorForClient(error instanceof Error ? error.message : 'Unknown error'),
+        code: 'EXTRACTION_FAILED',
       },
       { status: 500 }
     )

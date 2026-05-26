@@ -3,6 +3,7 @@ import { getPlatformConfig } from '@/lib/platform-config'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 import OpenAI from 'openai'
 import { sanitizeErrorForClient } from '@/lib/sanitize-error'
 
@@ -20,7 +21,7 @@ function isAiModelUnavailable(error: unknown) {
   const status = typeof error === 'object' && error !== null && 'status' in error
     ? (error as { status?: unknown }).status
     : undefined
-  return status === 503 || /503|Service Unavailable|high demand|try again later/i.test(message)
+  return status === 503 || /503|Service Unavailable|high demand|try again later|overloaded/i.test(message)
 }
 
 function stripHtmlToText(html: string): string {
@@ -98,7 +99,17 @@ Return ONLY a valid JSON array of menu items. No markdown, no extra text.
     "price": 0,
     "categoryName": "e.g. Main Course, Appetizer, Dessert, Drinks",
     "calories": 0,
-    "tags": ["halal", "spicy"]
+    "protein": 0,
+    "carbs": 0,
+    "tags": ["halal", "spicy"],
+    "prepTime": "15 minutes",
+    "cookTime": "20 minutes",
+    "recipeYield": 1,
+    "ingredients": [
+      { "name": "Ingredient name", "quantity": 100, "unit": "g", "pieceCount": null }
+    ],
+    "recipeSteps": ["Step 1", "Step 2"],
+    "recipeTips": ["Chef tip"]
   }
 ]
 RULES:
@@ -106,8 +117,44 @@ RULES:
 - price: use numbers only; if currency is not IQD, convert to IQD (e.g. 1 USD ≈ 1310 IQD).
 - categoryName: one short label per item (Main Course, Appetizer, Dessert, Drinks, Sides, etc.).
 - If price or description is missing, estimate reasonably.
+- calories, protein, carbs: estimate one-portion values when not shown.
+- Generate practical recipe form data for each food item: prepTime, cookTime, recipeYield, ingredients, recipeSteps, recipeTips.
+- For drinks or packaged/simple items, keep ingredients and steps short but still usable.
 - tags: dietary/style tags like vegetarian, vegan, spicy, halal, gluten-free when evident.
 `
+
+async function extractWithGeminiUrlContext(url: string, categoryNames: string[]): Promise<ExtractedItem[]> {
+  const config = await getPlatformConfig()
+  const apiKey = config.geminiApiKey ?? process.env.GOOGLE_AI_KEY
+  if (!apiKey) throw new Error('Google AI API key not configured')
+
+  const ai = new GoogleGenAI({ apiKey })
+  const categoryHint =
+    categoryNames.length > 0
+      ? `Available categories (map to closest when possible): ${categoryNames.join(', ')}.`
+      : ''
+
+  const prompt = `You are extracting a restaurant menu from a public URL.
+
+${categoryHint}
+
+Use Gemini URL Context to read this exact URL:
+${url}
+
+Extract every menu item from the page. Include full menu-item form data: item name, short description, price in IQD, categoryName, nutrition, tags, prep/cook time, recipe yield, ingredients, recipe steps, and chef tips.
+${EXTRACT_JSON_SCHEMA}
+`
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: [prompt],
+    config: {
+      tools: [{ urlContext: {} }],
+    },
+  })
+
+  return parseExtractedItems(response.text ?? '')
+}
 
 async function extractWithGemini(pageText: string, categoryNames: string[]): Promise<ExtractedItem[]> {
   const config = await getPlatformConfig()
@@ -126,7 +173,7 @@ async function extractWithGemini(pageText: string, categoryNames: string[]): Pro
 
 ${categoryHint}
 
-Extract every menu item (name, description, price in IQD, categoryName, calories if visible, tags).
+Extract every menu item with full menu-item form data (name, description, price in IQD, categoryName, calories, protein, carbs, tags, prep/cook time, recipe yield, ingredients, recipe steps, chef tips).
 ${EXTRACT_JSON_SCHEMA}
 
 Page content:
@@ -189,7 +236,20 @@ interface ExtractedItem {
   price: number
   categoryName: string
   calories?: number | null
+  protein?: number | null
+  carbs?: number | null
   tags: string[]
+  prepTime?: string | null
+  cookTime?: string | null
+  recipeYield?: number | null
+  ingredients?: Array<{
+    name: string
+    quantity: number
+    unit: string
+    pieceCount?: number | null
+  }>
+  recipeSteps?: string[]
+  recipeTips?: string[]
 }
 
 function parseExtractedItems(raw: string): ExtractedItem[] {
@@ -209,7 +269,24 @@ function normalizeExtractedItems(arr: any[]): ExtractedItem[] {
       price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 2000,
       categoryName: typeof item.categoryName === 'string' ? item.categoryName : 'Main Course',
       calories: typeof item.calories === 'number' ? item.calories : null,
+      protein: typeof item.protein === 'number' ? item.protein : null,
+      carbs: typeof item.carbs === 'number' ? item.carbs : null,
       tags: Array.isArray(item.tags) ? item.tags.filter((t: any) => typeof t === 'string') : [],
+      prepTime: typeof item.prepTime === 'string' ? item.prepTime : null,
+      cookTime: typeof item.cookTime === 'string' ? item.cookTime : null,
+      recipeYield: typeof item.recipeYield === 'number' ? item.recipeYield : null,
+      ingredients: Array.isArray(item.ingredients)
+        ? item.ingredients
+            .map((ingredient: any) => ({
+              name: typeof ingredient.name === 'string' ? ingredient.name.trim() : '',
+              quantity: typeof ingredient.quantity === 'number' ? ingredient.quantity : parseFloat(ingredient.quantity) || 0,
+              unit: typeof ingredient.unit === 'string' ? ingredient.unit : 'g',
+              pieceCount: typeof ingredient.pieceCount === 'number' ? ingredient.pieceCount : null,
+            }))
+            .filter((ingredient: any) => ingredient.name)
+        : [],
+      recipeSteps: Array.isArray(item.recipeSteps) ? item.recipeSteps.filter((step: any) => typeof step === 'string' && step.trim()) : [],
+      recipeTips: Array.isArray(item.recipeTips) ? item.recipeTips.filter((tip: any) => typeof tip === 'string' && tip.trim()) : [],
     }))
     .filter((item) => item.name && item.name !== 'Unnamed Item')
 }
@@ -238,23 +315,26 @@ export async function POST(request: NextRequest) {
       ? body.categoryNames.filter((c: unknown): c is string => typeof c === 'string')
       : []
 
-    let pageText: string
+    let pageText: string | null = null
+    let fetchError: unknown = null
     if (process.env.TAVILY_API_KEY) {
       try {
         pageText = await fetchWithTavily(url)
-      } catch {
+      } catch (error) {
+        fetchError = error
         // Fallback to direct fetch when Tavily fails (e.g. URL not extractable, timeout)
-        pageText = await fetchWithNode(url)
+        try {
+          pageText = await fetchWithNode(url)
+        } catch (nodeError) {
+          fetchError = nodeError
+        }
       }
     } else {
-      pageText = await fetchWithNode(url)
-    }
-
-    if (!pageText || pageText.length < 50) {
-      return NextResponse.json(
-        { error: 'Could not extract enough text from this URL. Try a direct menu page.' },
-        { status: 400 }
-      )
+      try {
+        pageText = await fetchWithNode(url)
+      } catch (error) {
+        fetchError = error
+      }
     }
 
     const config = await getPlatformConfig()
@@ -268,23 +348,48 @@ export async function POST(request: NextRequest) {
     }
 
     let items: ExtractedItem[]
-    if (hasGemini) {
-      try {
-        items = await extractWithGemini(pageText, categoryNames)
-      } catch (err) {
-        if (hasOpenAI) {
-          items = await extractWithOpenAI(pageText, categoryNames)
-        } else {
-          throw err
+    let source: 'page-text' | 'url-context' = 'page-text'
+    if (pageText && pageText.length >= 50) {
+      if (hasGemini) {
+        try {
+          items = await extractWithGemini(pageText, categoryNames)
+        } catch (err) {
+          if (hasOpenAI) {
+            items = await extractWithOpenAI(pageText, categoryNames)
+          } else {
+            throw err
+          }
         }
+      } else {
+        items = await extractWithOpenAI(pageText, categoryNames)
       }
+    } else if (hasGemini) {
+      source = 'url-context'
+      items = await extractWithGeminiUrlContext(url, categoryNames)
+    } else if (fetchError) {
+      throw fetchError
     } else {
-      items = await extractWithOpenAI(pageText, categoryNames)
+      return NextResponse.json(
+        { error: 'Could not extract enough text from this URL. Try a direct menu page.' },
+        { status: 400 }
+      )
+    }
+
+    if (items.length === 0 && hasGemini && source === 'page-text') {
+      try {
+        items = await extractWithGeminiUrlContext(url, categoryNames)
+        source = 'url-context'
+      } catch {
+        // Keep the original empty extraction response below.
+      }
     }
 
     if (items.length === 0) {
+      const blockedMessage = fetchError && isForbiddenUrlFetch(fetchError)
+        ? 'This menu website blocked server access, and Gemini URL Context could not extract menu items. Try uploading menu screenshots instead.'
+        : 'No menu items found on this page. Make sure the URL is a public menu or food list.'
       return NextResponse.json(
-        { error: 'No menu items found on this page. Make sure the URL is a menu or food list.' },
+        { error: blockedMessage },
         { status: 400 }
       )
     }
@@ -295,20 +400,29 @@ export async function POST(request: NextRequest) {
       description: item.description,
       price: item.price,
       calories: item.calories ?? null,
+      protein: item.protein ?? null,
+      carbs: item.carbs ?? null,
       tags: item.tags,
       categoryName: item.categoryName,
+      prepTime: item.prepTime ?? null,
+      cookTime: item.cookTime ?? null,
+      recipeYield: item.recipeYield ?? null,
+      ingredients: item.ingredients || [],
+      recipeSteps: item.recipeSteps || [],
+      recipeTips: item.recipeTips || [],
       verified: false,
     }))
 
     return NextResponse.json({
       success: true,
       items: processedItems,
+      source,
     })
   } catch (error) {
     console.error('Import from URL error:', error)
     if (isForbiddenUrlFetch(error)) {
       return NextResponse.json(
-        { error: 'AI is forbidden to access this URL' },
+        { error: 'This menu website blocked access. Please try again, or upload menu screenshots if it keeps failing.' },
         { status: 403 }
       )
     }

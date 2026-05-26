@@ -18,10 +18,9 @@ import {
   Sparkles,
   Check,
   Trash2,
-  ChevronDown,
-  ChevronUp,
   X,
   AlertCircle,
+  ArrowLeft,
 } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -39,17 +38,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Category, Ingredient } from '@prisma/client'
+import { AddOn, Category, Ingredient } from '@prisma/client'
 import { useToast } from '@/components/ui/use-toast'
 import { Badge } from '@/components/ui/badge'
 import { classifyItemType, type DefaultCategoryKey } from '@/lib/category-suggest'
 import { useDynamicTranslate, useI18n } from '@/lib/i18n'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface ParsedIngredient {
   name: string
   quantity: number
   unit: string
   pieceCount?: number | null
+  ingredientId?: string | null
 }
 
 interface ExtractedMenuItem {
@@ -57,8 +58,12 @@ interface ExtractedMenuItem {
   description: string
   price: number
   calories?: number | null
+  protein?: number | null
+  carbs?: number | null
   tags: string[]
   verified: boolean
+  available?: boolean
+  status?: 'DRAFT' | 'ACTIVE'
   imageUrl?: string
   categoryId?: string
   categoryName?: string
@@ -69,12 +74,22 @@ interface ExtractedMenuItem {
   recipeYield?: number | null
   ingredients?: ParsedIngredient[]
   missingIngredients?: string[]
+  addOnIds?: string[]
 }
 
 interface BulkMenuImportProps {
   categories: Category[]
   ingredients: Ingredient[]
   defaultBackgroundPrompt?: string | null
+}
+
+type ImportDraftTab = 'basic' | 'recipe' | 'details'
+
+interface SmartChefDraftProposal {
+  summary: string
+  targetTab: ImportDraftTab
+  changedFields: string[]
+  draft: ExtractedMenuItem
 }
 
 const POPUP_COPY = {
@@ -243,13 +258,19 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
   const popupCopy = POPUP_COPY[locale] ?? POPUP_COPY.en
   const [availableCategories, setAvailableCategories] = useState<Category[]>(categories)
   const [availableIngredients, setAvailableIngredients] = useState<Ingredient[]>(ingredients)
+  const [availableAddOns, setAvailableAddOns] = useState<AddOn[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<'upload' | 'extracting' | 'verifying' | 'complete'>('upload')
   const [menuImage, setMenuImage] = useState<string | null>(null)
   const [extractedItems, setExtractedItems] = useState<ExtractedMenuItem[]>([])
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [importProgressMessage, setImportProgressMessage] = useState('')
   const [editingItem, setEditingItem] = useState<ExtractedMenuItem | null>(null)
+  const [activeDetailTab, setActiveDetailTab] = useState<ImportDraftTab>('basic')
+  const [smartChefInstruction, setSmartChefInstruction] = useState('')
+  const [isSmartChefEditing, setIsSmartChefEditing] = useState(false)
+  const [smartChefProposal, setSmartChefProposal] = useState<SmartChefDraftProposal | null>(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null)
@@ -270,6 +291,16 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
   useEffect(() => {
     setAvailableIngredients(ingredients)
   }, [ingredients])
+
+  useEffect(() => {
+    if (!isOpen) return
+    fetch('/api/addons')
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) setAvailableAddOns(data)
+      })
+      .catch(() => setAvailableAddOns([]))
+  }, [isOpen])
 
   const ensureCategoriesAndAssign = async (items: ExtractedMenuItem[]): Promise<ExtractedMenuItem[]> => {
     let nextCategories = [...availableCategories]
@@ -341,6 +372,33 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     setExtractedItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...updates } : item)))
   }
 
+  const updateEditingItem = (updates: Partial<ExtractedMenuItem>) => {
+    setSmartChefProposal(null)
+    setEditingItem((current) => (current ? { ...current, ...updates } : current))
+  }
+
+  const openItemDetail = (index: number, tab: ImportDraftTab = 'basic') => {
+    if (expandedIndex !== null && editingItem) {
+      setExtractedItems((prev) => prev.map((item, i) => (i === expandedIndex ? { ...editingItem } : item)))
+    }
+    setExpandedIndex(index)
+    setEditingItem({ ...extractedItems[index] })
+    setActiveDetailTab(tab)
+    setSmartChefInstruction('')
+    setSmartChefProposal(null)
+  }
+
+  const closeItemDetail = () => {
+    if (expandedIndex !== null && editingItem) {
+      setExtractedItems((prev) => prev.map((item, i) => (i === expandedIndex ? { ...editingItem } : item)))
+    }
+    setExpandedIndex(null)
+    setEditingItem(null)
+    setSmartChefInstruction('')
+    setSmartChefProposal(null)
+    setActiveDetailTab('basic')
+  }
+
   const deleteItem = (index: number) => {
     setExtractedItems((prev) => prev.filter((_, i) => i !== index))
     if (expandedIndex === index) {
@@ -349,24 +407,6 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     } else if (expandedIndex !== null && expandedIndex > index) {
       setExpandedIndex(expandedIndex - 1)
     }
-  }
-
-  const toggleExpand = (index: number) => {
-    if (expandedIndex === index) {
-      if (editingItem) {
-        setExtractedItems((prev) => prev.map((item, i) => (i === expandedIndex ? { ...editingItem } : item)))
-      }
-      setExpandedIndex(null)
-      setEditingItem(null)
-      return
-    }
-
-    if (expandedIndex !== null && editingItem) {
-      setExtractedItems((prev) => prev.map((item, i) => (i === expandedIndex ? { ...editingItem } : item)))
-    }
-
-    setExpandedIndex(index)
-    setEditingItem({ ...extractedItems[index] })
   }
 
   const assignCategoryToUncategorized = (categoryId: string) => {
@@ -392,6 +432,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
   const itemsWithoutCategory = extractedItems.filter((i) => !i.categoryId).length
   const itemsWithIssues = extractedItems.filter((i) => !i.categoryId || !i.name.trim() || !i.price || i.price <= 0).length
+  const visibleEditingItem = smartChefProposal?.draft ?? editingItem
 
   const openImageDialog = () => {
     setPreviewImageUrl(null)
@@ -429,21 +470,41 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
     setIsProcessing(true)
     setStep('extracting')
+    setImportProgressMessage('Uploading image to AI...')
 
     try {
-      const response = await fetch('/api/menu/extract-from-image', {
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), 120000)
+      const progressTimers = [
+        window.setTimeout(() => setImportProgressMessage('Reading menu text and prices...'), 5000),
+        window.setTimeout(() => setImportProgressMessage('Generating categories, recipes, and form details...'), 15000),
+        window.setTimeout(() => setImportProgressMessage('Still working. Large menus can take up to two minutes.'), 35000),
+        window.setTimeout(() => setImportProgressMessage('This is taking longer than usual. Please keep this window open.'), 70000),
+      ]
+      let response: Response
+      try {
+        response = await fetch('/api/menu/extract-from-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           imageData: menuImage,
           confirmMissingIngredients: confirmMissing
         }),
-      })
+        })
+      } finally {
+        window.clearTimeout(timeoutId)
+        progressTimers.forEach((timer) => window.clearTimeout(timer))
+      }
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to extract menu items')
+        const message = data.details || data.error || 'Failed to extract menu items'
+        const error = new Error(message) as Error & { code?: string; status?: number }
+        error.code = data.code
+        error.status = response.status
+        throw error
       }
 
       // Check if we need to confirm missing ingredients
@@ -458,6 +519,20 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
       const extracted: ExtractedMenuItem[] = (data.items || []).map((item: ExtractedMenuItem) => ({
         ...item,
+        protein: item.protein ?? null,
+        carbs: item.carbs ?? null,
+        status: item.status || 'ACTIVE',
+        available: item.available ?? true,
+        ingredients: (item.ingredients || []).map((ingredient) => {
+          const existing = availableIngredients.find(
+            (available) => normalizeText(available.name) === normalizeText(ingredient.name)
+          )
+          return {
+            ...ingredient,
+            ingredientId: existing?.id || ingredient.ingredientId || null,
+            unit: existing?.unit || ingredient.unit || 'g',
+          }
+        }),
         verified: true,
       }))
       const items = dedupeExtractedItems(await ensureCategoriesAndAssign(extracted))
@@ -477,14 +552,31 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
       }
     } catch (error) {
       console.error('Error extracting menu items:', error)
+      const isAbort = error instanceof DOMException && error.name === 'AbortError'
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: number }).status
+        : undefined
+      const code = typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: string }).code
+        : undefined
+      const description = isAbort
+        ? 'Menu import timed out. Please try importing the same image again, or upload a clearer/smaller image.'
+        : status === 503 || code === 'AI_OVERLOADED'
+          ? 'AI is overloaded right now. Please wait a minute and try importing the same image again.'
+          : status === 504 || code === 'AI_TIMEOUT'
+            ? 'The import took too long. Please try again, or upload a clearer/smaller menu image.'
+            : error instanceof Error
+              ? error.message
+              : 'Failed to extract menu items. Please try importing again.'
       toast({
-        title: 'Extraction Failed',
-        description: error instanceof Error ? error.message : 'Failed to extract menu items',
+        title: status === 503 || code === 'AI_OVERLOADED' ? 'AI is busy' : 'Import failed',
+        description,
         variant: 'destructive',
       })
       setStep('upload')
     } finally {
       setIsProcessing(false)
+      setImportProgressMessage('')
     }
   }
 
@@ -519,9 +611,9 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            itemName: editingItem.name,
-            description: editingItem.description,
-            category: availableCategories.find((c) => c.id === editingItem.categoryId)?.name,
+            itemName: visibleEditingItem?.name,
+            description: visibleEditingItem?.description,
+            category: availableCategories.find((c) => c.id === visibleEditingItem?.categoryId)?.name,
             orientation: imageOrientation,
             sizePreset: imageSizePreset,
             prompt: customPrompt.trim() || defaultBackgroundPrompt?.trim() || null,
@@ -539,6 +631,97 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
       })
     } finally {
       setIsGeneratingImage(false)
+    }
+  }
+
+  const normalizeProposedDraft = (draft: ExtractedMenuItem): ExtractedMenuItem => {
+    const categoryId =
+      draft.categoryId ||
+      matchCategoryId(availableCategories, draft.categoryName) ||
+      editingItem?.categoryId
+
+    return {
+      ...(editingItem ?? {}),
+      ...draft,
+      categoryId,
+      verified: true,
+      tags: Array.isArray(draft.tags) ? draft.tags.filter(Boolean) : [],
+      recipeSteps: Array.isArray(draft.recipeSteps) ? draft.recipeSteps.filter(Boolean) : [],
+      recipeTips: Array.isArray(draft.recipeTips) ? draft.recipeTips.filter(Boolean) : [],
+      ingredients: Array.isArray(draft.ingredients)
+        ? draft.ingredients.filter((ingredient) => ingredient.name.trim())
+        : [],
+    }
+  }
+
+  const requestSmartChefDraftEdit = async () => {
+    if (!editingItem || !smartChefInstruction.trim()) return
+
+    setIsSmartChefEditing(true)
+    setSmartChefProposal(null)
+    try {
+      const response = await fetch('/api/menu/import-draft-smart-edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draft: editingItem,
+          instruction: smartChefInstruction.trim(),
+          categories: availableCategories.map((category) => category.name),
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Smart Chef failed to edit this item')
+
+      const proposal: SmartChefDraftProposal = {
+        summary: data.summary || 'Smart Chef proposed an edit.',
+        targetTab: data.targetTab || 'basic',
+        changedFields: Array.isArray(data.changedFields) ? data.changedFields : [],
+        draft: normalizeProposedDraft(data.draft || editingItem),
+      }
+      setSmartChefProposal(proposal)
+      setActiveDetailTab(proposal.targetTab)
+    } catch (error) {
+      toast({
+        title: 'Smart Chef edit failed',
+        description: error instanceof Error ? error.message : 'Could not edit this draft',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSmartChefEditing(false)
+    }
+  }
+
+  const approveSmartChefProposal = () => {
+    if (!smartChefProposal) return
+    setEditingItem(smartChefProposal.draft)
+    setSmartChefProposal(null)
+    setSmartChefInstruction('')
+    toast({ title: 'Smart Chef edit applied', description: smartChefProposal.summary })
+  }
+
+  const discardSmartChefProposal = () => {
+    setSmartChefProposal(null)
+    toast({ title: 'Smart Chef edit discarded' })
+  }
+
+  const proposalTouches = (fields: string[]) =>
+    smartChefProposal?.changedFields.some((field) => fields.includes(field)) ?? false
+
+  const addRecipeStep = () => {
+    updateEditingItem({ recipeSteps: [...(editingItem?.recipeSteps || []), ''] })
+  }
+
+  const addRecipeTip = () => {
+    updateEditingItem({ recipeTips: [...(editingItem?.recipeTips || []), ''] })
+  }
+
+  const selectedIngredientCost = (ingredient: ParsedIngredient) => {
+    const existing = availableIngredients.find((item) => item.id === ingredient.ingredientId || normalizeText(item.name) === normalizeText(ingredient.name))
+    if (!existing) return null
+    return {
+      unit: existing.unit,
+      costPerUnit: existing.costPerUnit,
+      directCost: (Number(ingredient.quantity) || 0) * existing.costPerUnit,
     }
   }
 
@@ -562,7 +745,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
         setAvailableIngredients(currentIngredients)
       }
 
-      const ingredientMap = new Map(
+      let ingredientMap = new Map(
         currentIngredients.map(ing => [ing.name.toLowerCase().trim(), ing])
       )
 
@@ -575,20 +758,40 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
           continue
         }
 
-        // Map ingredients to their IDs and prepare the ingredient data
-        const ingredientData = (item.ingredients || []).map(ing => {
-          const existingIng = ingredientMap.get(ing.name.toLowerCase().trim())
+        const ingredientData = []
+        for (const ing of item.ingredients || []) {
+          let existingIng = ing.ingredientId
+            ? currentIngredients.find((ingredient) => ingredient.id === ing.ingredientId)
+            : ingredientMap.get(ing.name.toLowerCase().trim())
+          if (!existingIng) {
+            const createIngredientResponse = await fetch('/api/ingredients', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: ing.name,
+                unit: ing.unit || 'g',
+                costPerUnit: 0,
+                stockQuantity: 0,
+                minStockLevel: 0,
+              }),
+            })
+            if (createIngredientResponse.ok) {
+              existingIng = await createIngredientResponse.json()
+              currentIngredients = [...currentIngredients, existingIng]
+              ingredientMap = new Map(currentIngredients.map((ingredient) => [ingredient.name.toLowerCase().trim(), ingredient]))
+            }
+          }
           if (!existingIng) {
             console.warn(`Ingredient not found: ${ing.name}`)
-            return null
+            continue
           }
-          return {
+          ingredientData.push({
             ingredientId: existingIng.id,
             quantity: ing.quantity,
-            unit: ing.unit,
-            pieceCount: ing.pieceCount
-          }
-        }).filter(Boolean)
+            unit: existingIng.unit || ing.unit,
+            pieceCount: ing.pieceCount,
+          })
+        }
 
         const response = await fetch('/api/menu', {
           method: 'POST',
@@ -600,13 +803,17 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
             categoryId: item.categoryId,
             imageUrl: item.imageUrl || '',
             calories: item.calories ? Number(item.calories) : null,
+            protein: item.protein ? Number(item.protein) : null,
+            carbs: item.carbs ? Number(item.carbs) : null,
             tags: item.tags || [],
-            available: true,
+            available: item.available ?? true,
+            status: item.status || 'ACTIVE',
             ingredients: ingredientData,
             recipeSteps: item.recipeSteps || [],
             recipeTips: item.recipeTips || [],
             prepTime: item.prepTime || null,
             cookTime: item.cookTime || null,
+            addOnIds: item.addOnIds || [],
             dedupeExisting: true,
           }),
         })
@@ -687,9 +894,13 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
     setExpandedIndex(null)
     setEditingItem(null)
     setIsProcessing(false)
+    setImportProgressMessage('')
     setUploadedPhoto(null)
     setPreviewImageUrl(null)
     setCustomPrompt('')
+    setSmartChefInstruction('')
+    setSmartChefProposal(null)
+    setActiveDetailTab('basic')
   }
 
   return (
@@ -750,7 +961,17 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="h-16 w-16 animate-spin text-emerald-500" />
               <p className="text-lg font-medium">{td('Analyzing your menu...')}</p>
-              <p className="text-sm text-slate-500">{td('This may take a few moments')}</p>
+              <div className="w-full max-w-sm space-y-3 px-6">
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full w-2/3 animate-pulse rounded-full bg-emerald-500" />
+                </div>
+                <p className="text-center text-sm text-slate-500">
+                  {td(importProgressMessage || 'This may take a few moments')}
+                </p>
+                <p className="text-center text-xs text-slate-400">
+                  {td('If the AI is overloaded, we will tell you to try again instead of failing silently.')}
+                </p>
+              </div>
             </div>
           )}
 
@@ -784,251 +1005,584 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
                 </div>
               </div>
 
-              <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
-                {extractedItems.map((item, index) => {
-                  const isExpanded = expandedIndex === index
-                  const hasIssues = !item.categoryId || !item.name.trim() || !item.price || item.price <= 0
-                  const categoryName = availableCategories.find((c) => c.id === item.categoryId)?.name
+              <div className="overflow-y-auto flex-1 min-h-0 pr-1">
+                {expandedIndex === null || !editingItem ? (
+                  <div className="space-y-2">
+                    {extractedItems.map((item, index) => {
+                      const hasIssues = !item.categoryId || !item.name.trim() || !item.price || item.price <= 0
+                      const categoryName = availableCategories.find((c) => c.id === item.categoryId)?.name
 
-                  return (
-                    <div
-                      key={index}
-                      className={`border rounded-lg transition-all ${hasIssues
-                        ? 'border-amber-300 bg-amber-50/30'
-                        : 'border-slate-200 bg-white'
-                        }`}
-                    >
-                      <div className="flex items-start gap-3 p-3">
-                        <span className="text-xs font-medium text-slate-400 mt-1 w-6 text-right shrink-0">
-                          {index + 1}
-                        </span>
-
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">
-                            {item.name || <span className="text-red-400 italic">{td('Unnamed item')}</span>}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                            <span className="text-xs font-medium text-slate-600">
-                              IQD {(item.price || 0).toLocaleString('en-US')}
+                      return (
+                        <div
+                          key={index}
+                          className={`border rounded-lg transition-all ${hasIssues
+                            ? 'border-amber-300 bg-amber-50/30'
+                            : 'border-slate-200 bg-white'
+                            }`}
+                        >
+                          <button
+                            type="button"
+                            className="flex w-full items-start gap-3 p-3 text-left"
+                            onClick={() => openItemDetail(index)}
+                          >
+                            <span className="text-xs font-medium text-slate-400 mt-1 w-6 text-right shrink-0">
+                              {index + 1}
                             </span>
-                            {categoryName ? (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
-                                {categoryName}
-                              </Badge>
-                            ) : (
-                              <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
-                                <AlertCircle className="h-2.5 w-2.5" />
-                                {td('No category')}
-                              </span>
-                            )}
-                            {item.tags?.length > 0 && (
-                              <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
-                                {item.tags.slice(0, 3).join(', ')}
-                              </span>
-                            )}
+
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">
+                                {item.name || <span className="text-red-400 italic">{td('Unnamed item')}</span>}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                                <span className="text-xs font-medium text-slate-600">
+                                  IQD {(item.price || 0).toLocaleString('en-US')}
+                                </span>
+                                {categoryName ? (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                                    {categoryName}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
+                                    <AlertCircle className="h-2.5 w-2.5" />
+                                    {td('No category')}
+                                  </span>
+                                )}
+                                {(item.ingredients?.length ?? 0) > 0 && (
+                                  <span className="text-[10px] text-emerald-700">
+                                    {item.ingredients?.length} {td('ingredients')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+
+                          <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
+                            <Select
+                              value={item.categoryId || ''}
+                              onValueChange={(value) => updateItem(index, { categoryId: value })}
+                            >
+                              <SelectTrigger className="h-8 w-[160px] text-xs shrink-0 bg-white">
+                                <SelectValue placeholder="Category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableCategories.map((cat) => (
+                                  <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-red-50"
+                              onClick={() => deleteItem(index)}
+                            >
+                              <X className="h-4 w-4 text-slate-400 hover:text-red-500" />
+                            </Button>
                           </div>
                         </div>
-
-                        <Select
-                          value={item.categoryId || ''}
-                          onValueChange={(value) => updateItem(index, { categoryId: value })}
-                        >
-                          <SelectTrigger className="h-8 w-[130px] text-xs shrink-0 bg-white hidden sm:flex">
-                            <SelectValue placeholder="Category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableCategories.map((cat) => (
-                              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => toggleExpand(index)}
-                          >
-                            {isExpanded ? (
-                              <ChevronUp className="h-4 w-4 text-slate-500" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-slate-500" />
-                            )}
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <Button variant="ghost" size="sm" className="-ml-2 mb-2" onClick={closeItemDetail}>
+                            <ArrowLeft className="h-4 w-4 mr-1" />
+                            {td('Back to full list')}
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 hover:bg-red-50"
-                            onClick={() => deleteItem(index)}
-                          >
-                            <X className="h-4 w-4 text-slate-400 hover:text-red-500" />
-                          </Button>
+                          <h3 className="truncate text-base font-semibold text-slate-900">
+                            {visibleEditingItem?.name || td('Unnamed item')}
+                          </h3>
+                          <p className="text-xs text-slate-500">
+                            {td('Edit this imported item before creating it.')}
+                          </p>
                         </div>
+                        <Badge variant="secondary">#{expandedIndex + 1}</Badge>
                       </div>
 
-                      {isExpanded && editingItem && (
-                        <div className="border-t border-slate-200 p-4 space-y-4 bg-slate-50/50">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label className="text-xs">{t.common_name}</Label>
-                              <Input
-                                value={editingItem.name}
-                                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                                className="bg-white"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="text-xs">{t.common_price} (IQD)</Label>
-                              <Input
-                                type="number"
-                                value={editingItem.price}
-                                onChange={(e) => setEditingItem({ ...editingItem, price: parseFloat(e.target.value) })}
-                                className="bg-white"
-                              />
-                            </div>
-                          </div>
+                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <Input
+                          value={smartChefInstruction}
+                          onChange={(event) => setSmartChefInstruction(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                              event.preventDefault()
+                              requestSmartChefDraftEdit()
+                            }
+                          }}
+                          placeholder={td('Ask Smart Chef to edit this item, e.g. add lemon to the fattoush recipe')}
+                          disabled={isSmartChefEditing}
+                        />
+                        <Button onClick={requestSmartChefDraftEdit} disabled={isSmartChefEditing || !smartChefInstruction.trim()}>
+                          {isSmartChefEditing ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-4 w-4 mr-2" />
+                          )}
+                          {td('Apply with Smart Chef')}
+                        </Button>
+                      </div>
 
-                          <div className="space-y-2">
-                            <Label className="text-xs">{t.common_description}</Label>
-                            <Textarea
-                              value={editingItem.description}
-                              onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-                              rows={2}
-                              className="bg-white"
-                            />
+                      {smartChefProposal && (
+                        <div className="flex flex-col gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-900">{smartChefProposal.summary}</p>
+                            <p className="text-xs text-emerald-700">
+                              {td('Changed fields')}: {smartChefProposal.changedFields.join(', ') || td('draft')}
+                            </p>
                           </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                              <Label className="text-xs">{t.common_category}</Label>
-                              <Select
-                                value={editingItem.categoryId || ''}
-                                onValueChange={(value) => setEditingItem({ ...editingItem, categoryId: value })}
-                              >
-                                <SelectTrigger className="bg-white">
-                                  <SelectValue placeholder={td('Select category')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {availableCategories.map((category) => (
-                                    <SelectItem key={category.id} value={category.id}>
-                                      {category.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="text-xs">{td('Calories (optional)')}</Label>
-                              <Input
-                                type="number"
-                                value={editingItem.calories ?? ''}
-                                onChange={(e) => setEditingItem({ ...editingItem, calories: parseInt(e.target.value) || undefined })}
-                                className="bg-white"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="text-xs">{td('Tags (comma-separated)')}</Label>
-                              <Input
-                                value={(editingItem.tags || []).join(', ')}
-                                onChange={(e) => setEditingItem({ ...editingItem, tags: e.target.value.split(',').map((t) => t.trim()) })}
-                                placeholder="halal, spicy"
-                                className="bg-white"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label className="text-xs">{td('Image (optional)')}</Label>
-                            <div className="flex gap-2 flex-wrap">
-                              <Input
-                                value={editingItem.imageUrl?.startsWith('http') ? editingItem.imageUrl : ''}
-                                onChange={(e) => {
-                                  const value = e.target.value.trim()
-                                  setEditingItem({ ...editingItem, imageUrl: value || undefined })
-                                }}
-                                placeholder="https://example.com/image.jpg"
-                                className="flex-1 min-w-[180px] bg-white"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => formUploadRef.current?.click()}
-                              >
-                                <ImagePlus className="h-4 w-4 mr-1" />
-                                {t.common_upload}
-                              </Button>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                ref={formUploadRef}
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0]
-                                  if (!file) return
-                                  const reader = new FileReader()
-                                  reader.onloadend = () => {
-                                    setEditingItem({ ...editingItem, imageUrl: reader.result as string })
-                                  }
-                                  reader.readAsDataURL(file)
-                                  e.target.value = ''
-                                }}
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={openImageDialog}
-                                disabled={isGeneratingImage}
-                              >
-                                <Sparkles className="h-4 w-4 mr-1" />
-                                {t.common_ai_generate}
-                              </Button>
-                            </div>
-                            {editingItem.imageUrl && (
-                              <div className="border rounded-lg overflow-auto bg-white flex items-start justify-center min-h-[80px] max-h-[200px]">
-                                <img
-                                  src={editingItem.imageUrl}
-                                  alt={editingItem.name}
-                                  className="max-w-full w-auto max-h-[190px] object-contain"
-                                  onError={(e) => {
-                                    e.currentTarget.src = ''
-                                    setEditingItem({ ...editingItem, imageUrl: undefined })
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex justify-end pt-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => toggleExpand(index)}
-                            >
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={approveSmartChefProposal}>
                               <Check className="h-4 w-4 mr-1" />
-                              {t.common_done_editing}
+                              {td('Approve')}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={discardSmartChefProposal}>
+                              {td('Discard')}
                             </Button>
                           </div>
                         </div>
                       )}
                     </div>
-                  )
-                })}
+
+                    <Tabs value={activeDetailTab} onValueChange={(value) => setActiveDetailTab(value as ImportDraftTab)}>
+                      <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="basic">{td('Basic')}</TabsTrigger>
+                        <TabsTrigger value="recipe">{td('Recipe')}</TabsTrigger>
+                        <TabsTrigger value="details">{td('Details')}</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="basic" className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+                        {proposalTouches(['name', 'description', 'price', 'categoryName']) && (
+                          <p className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                            {td('Smart Chef has proposed changes on this tab. Approve or discard above.')}
+                          </p>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs">{t.common_name}</Label>
+                            <Input value={visibleEditingItem?.name} onChange={(e) => updateEditingItem({ name: e.target.value })} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">{t.common_price} (IQD)</Label>
+                            <Input
+                              type="number"
+                              value={visibleEditingItem?.price}
+                              onChange={(e) => updateEditingItem({ price: parseFloat(e.target.value) || 0 })}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs">{t.common_category}</Label>
+                            <Select value={visibleEditingItem?.categoryId || ''} onValueChange={(value) => updateEditingItem({ categoryId: value })}>
+                              <SelectTrigger>
+                                <SelectValue placeholder={td('Select category')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableCategories.map((category) => (
+                                  <SelectItem key={category.id} value={category.id}>
+                                    {category.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Status')}</Label>
+                            <Select
+                              value={visibleEditingItem?.status || 'ACTIVE'}
+                              onValueChange={(value) => updateEditingItem({
+                                status: value as 'DRAFT' | 'ACTIVE',
+                                available: value === 'ACTIVE',
+                              })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ACTIVE">{td('Available')}</SelectItem>
+                                <SelectItem value="DRAFT">{td('Draft')}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">{t.common_description}</Label>
+                          <Textarea
+                            value={visibleEditingItem?.description}
+                            onChange={(e) => updateEditingItem({ description: e.target.value })}
+                            rows={3}
+                          />
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="recipe" className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+                        {proposalTouches(['ingredients', 'recipeSteps', 'recipeTips', 'recipeYield', 'prepTime', 'cookTime']) && (
+                          <p className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                            {td('Smart Chef has proposed recipe changes. Approve or discard above.')}
+                          </p>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Prep time')}</Label>
+                            <Input value={visibleEditingItem?.prepTime ?? ''} onChange={(e) => updateEditingItem({ prepTime: e.target.value })} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Cook time')}</Label>
+                            <Input value={visibleEditingItem?.cookTime ?? ''} onChange={(e) => updateEditingItem({ cookTime: e.target.value })} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Recipe yield')}</Label>
+                            <Input
+                              type="number"
+                              value={visibleEditingItem?.recipeYield ?? ''}
+                              onChange={(e) => updateEditingItem({ recipeYield: parseFloat(e.target.value) || null })}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{td('SOP')}</p>
+                              <p className="text-xs text-slate-500">{td('Steps and chef tips for kitchen consistency.')}</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button type="button" variant="outline" size="sm" onClick={addRecipeStep}>
+                                {td('Add Step')}
+                              </Button>
+                              <Button type="button" variant="outline" size="sm" onClick={addRecipeTip}>
+                                {td('Add Tip')}
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Steps')}</Label>
+                            {(visibleEditingItem?.recipeSteps || []).length === 0 ? (
+                              <p className="rounded-md border border-dashed border-slate-200 py-4 text-center text-xs text-slate-500">
+                                {td('No steps yet. Add manually or ask Smart Chef above.')}
+                              </p>
+                            ) : (
+                              (visibleEditingItem?.recipeSteps || []).map((step, stepIndex) => (
+                                <div key={stepIndex} className="space-y-2 rounded-md border border-slate-100 p-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-medium text-slate-500">{td('Step')} {stepIndex + 1}</span>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-red-500 hover:text-red-700"
+                                      onClick={() => updateEditingItem({ recipeSteps: (visibleEditingItem?.recipeSteps || []).filter((_, i) => i !== stepIndex) })}
+                                    >
+                                      {td('Remove')}
+                                    </Button>
+                                  </div>
+                                  <Textarea
+                                    value={step}
+                                    onChange={(e) => {
+                                      const next = [...(visibleEditingItem?.recipeSteps || [])]
+                                      next[stepIndex] = e.target.value
+                                      updateEditingItem({ recipeSteps: next })
+                                    }}
+                                    rows={2}
+                                    placeholder={td('e.g., Sweat onions until translucent...')}
+                                  />
+                                </div>
+                              ))
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Tips')}</Label>
+                            {(visibleEditingItem?.recipeTips || []).length === 0 ? (
+                              <p className="text-xs text-slate-500">{td('Add a few tips to help the team serve the dish consistently.')}</p>
+                            ) : (
+                              (visibleEditingItem?.recipeTips || []).map((tip, tipIndex) => (
+                                <div key={tipIndex} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                                  <Textarea
+                                    value={tip}
+                                    onChange={(e) => {
+                                      const next = [...(visibleEditingItem?.recipeTips || [])]
+                                      next[tipIndex] = e.target.value
+                                      updateEditingItem({ recipeTips: next })
+                                    }}
+                                    rows={2}
+                                    placeholder={td('e.g., Garnish with parsley...')}
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500 hover:text-red-700"
+                                    onClick={() => updateEditingItem({ recipeTips: (visibleEditingItem?.recipeTips || []).filter((_, i) => i !== tipIndex) })}
+                                  >
+                                    {td('Remove')}
+                                  </Button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{td('Recipe Builder')}</p>
+                              <p className="text-xs text-slate-500">{td('Select inventory ingredients so costing can be calculated.')}</p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                updateEditingItem({
+                                  ingredients: [...(visibleEditingItem?.ingredients || []), { name: '', quantity: 0, unit: 'g', pieceCount: null }],
+                                })
+                              }
+                            >
+                              {td('Add ingredient')}
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {(visibleEditingItem?.ingredients || []).map((ingredient, ingredientIndex) => {
+                              const cost = selectedIngredientCost(ingredient)
+                              return (
+                                <div key={ingredientIndex} className="space-y-3 rounded-md border border-slate-100 p-3">
+                                  <div className="grid gap-2 sm:grid-cols-[1fr_120px_100px_100px_90px_32px]">
+                                    <Select
+                                      value={ingredient.ingredientId || ''}
+                                      onValueChange={(value) => {
+                                        const selected = availableIngredients.find((item) => item.id === value)
+                                        const next = [...(visibleEditingItem?.ingredients || [])]
+                                        next[ingredientIndex] = {
+                                          ...ingredient,
+                                          ingredientId: selected?.id || null,
+                                          name: selected?.name || ingredient.name,
+                                          unit: selected?.unit || ingredient.unit,
+                                        }
+                                        updateEditingItem({ ingredients: next })
+                                      }}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder={td('Search ingredient...')} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {availableIngredients.map((item) => (
+                                          <SelectItem key={item.id} value={item.id}>
+                                            {item.name} ({item.unit})
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Input
+                                      value={ingredient.name}
+                                      placeholder={td('Ingredient')}
+                                      onChange={(e) => {
+                                        const next = [...(visibleEditingItem?.ingredients || [])]
+                                        next[ingredientIndex] = { ...ingredient, name: e.target.value, ingredientId: null }
+                                        updateEditingItem({ ingredients: next })
+                                      }}
+                                    />
+                                    <Input
+                                      type="number"
+                                      value={ingredient.pieceCount ?? ''}
+                                      placeholder={td('Count')}
+                                      onChange={(e) => {
+                                        const next = [...(visibleEditingItem?.ingredients || [])]
+                                        next[ingredientIndex] = { ...ingredient, pieceCount: parseFloat(e.target.value) || null }
+                                        updateEditingItem({ ingredients: next })
+                                      }}
+                                    />
+                                    <Input
+                                      type="number"
+                                      value={ingredient.quantity}
+                                      placeholder={td('Qty')}
+                                      onChange={(e) => {
+                                        const next = [...(visibleEditingItem?.ingredients || [])]
+                                        next[ingredientIndex] = { ...ingredient, quantity: parseFloat(e.target.value) || 0 }
+                                        updateEditingItem({ ingredients: next })
+                                      }}
+                                    />
+                                    <Input
+                                      value={ingredient.unit}
+                                      placeholder={td('Unit')}
+                                      onChange={(e) => {
+                                        const next = [...(visibleEditingItem?.ingredients || [])]
+                                        next[ingredientIndex] = { ...ingredient, unit: e.target.value }
+                                        updateEditingItem({ ingredients: next })
+                                      }}
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-9 w-9 p-0 hover:bg-red-50"
+                                      onClick={() => updateEditingItem({ ingredients: (visibleEditingItem?.ingredients || []).filter((_, i) => i !== ingredientIndex) })}
+                                    >
+                                      <X className="h-4 w-4 text-slate-400 hover:text-red-500" />
+                                    </Button>
+                                  </div>
+                                  <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+                                    <span>{td('Cost per unit')}: {cost ? `IQD ${cost.costPerUnit.toLocaleString('en-US')} / ${cost.unit}` : td('Select inventory ingredient')}</span>
+                                    <span>{td('Direct cost')}: {cost ? `IQD ${Math.round(cost.directCost).toLocaleString('en-US')}` : '-'}</span>
+                                    <span>{td('Recipe unit')}: {ingredient.quantity || 0} {ingredient.unit}</span>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            {(visibleEditingItem?.ingredients || []).length === 0 && (
+                              <p className="rounded-md border border-dashed border-slate-200 py-4 text-center text-xs text-slate-500">
+                                {td('No ingredients yet. Add manually or ask Smart Chef above.')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+                          <p className="text-sm font-semibold text-slate-900">{td('Available Add-ons')}</p>
+                          {availableAddOns.length === 0 ? (
+                            <p className="text-xs text-slate-500">{td('No add-ons available yet.')}</p>
+                          ) : (
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {availableAddOns.map((addOn) => {
+                                const selected = (visibleEditingItem?.addOnIds || []).includes(addOn.id)
+                                return (
+                                  <button
+                                    key={addOn.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const current = visibleEditingItem?.addOnIds || []
+                                      updateEditingItem({
+                                        addOnIds: selected
+                                          ? current.filter((id) => id !== addOn.id)
+                                          : [...current, addOn.id],
+                                      })
+                                    }}
+                                    className={`rounded-md border p-3 text-left text-sm transition ${selected ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
+                                  >
+                                    <span className="block font-medium text-slate-900">{addOn.name}</span>
+                                    <span className="text-xs text-slate-500">IQD {addOn.price.toLocaleString('en-US')}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="details" className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+                        {proposalTouches(['calories', 'tags']) && (
+                          <p className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                            {td('Smart Chef has proposed detail changes. Approve or discard above.')}
+                          </p>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Calories (optional)')}</Label>
+                            <Input
+                              type="number"
+                              value={visibleEditingItem?.calories ?? ''}
+                              onChange={(e) => updateEditingItem({ calories: parseInt(e.target.value) || undefined })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Protein (g)')}</Label>
+                            <Input
+                              type="number"
+                              value={visibleEditingItem?.protein ?? ''}
+                              onChange={(e) => updateEditingItem({ protein: parseInt(e.target.value) || undefined })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Carbs (g)')}</Label>
+                            <Input
+                              type="number"
+                              value={visibleEditingItem?.carbs ?? ''}
+                              onChange={(e) => updateEditingItem({ carbs: parseInt(e.target.value) || undefined })}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs">{td('Tags (comma-separated)')}</Label>
+                            <Input
+                              value={(visibleEditingItem?.tags || []).join(', ')}
+                              onChange={(e) => updateEditingItem({ tags: e.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) })}
+	                              placeholder="halal, spicy"
+	                            />
+	                          </div>
+	                        </div>
+
+	                        <div className="space-y-2">
+                          <Label className="text-xs">{td('Image (optional)')}</Label>
+                          <div className="flex gap-2 flex-wrap">
+                            <Input
+                              value={visibleEditingItem?.imageUrl?.startsWith('http') ? visibleEditingItem?.imageUrl : ''}
+                              onChange={(e) => updateEditingItem({ imageUrl: e.target.value.trim() || undefined })}
+                              placeholder="https://example.com/image.jpg"
+                              className="flex-1 min-w-[180px]"
+                            />
+                            <Button type="button" variant="outline" size="sm" onClick={() => formUploadRef.current?.click()}>
+                              <ImagePlus className="h-4 w-4 mr-1" />
+                              {t.common_upload}
+                            </Button>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              ref={formUploadRef}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                const reader = new FileReader()
+                                reader.onloadend = () => updateEditingItem({ imageUrl: reader.result as string })
+                                reader.readAsDataURL(file)
+                                e.target.value = ''
+                              }}
+                            />
+                            <Button type="button" variant="outline" size="sm" onClick={openImageDialog} disabled={isGeneratingImage}>
+                              <Sparkles className="h-4 w-4 mr-1" />
+                              {t.common_ai_generate}
+                            </Button>
+                          </div>
+                          {visibleEditingItem?.imageUrl && (
+                            <div className="border rounded-lg overflow-auto bg-white flex items-start justify-center min-h-[80px] max-h-[220px]">
+                              <img
+                                src={visibleEditingItem?.imageUrl}
+                                alt={visibleEditingItem?.name}
+                                className="max-w-full w-auto max-h-[210px] object-contain"
+                                onError={(e) => {
+                                  e.currentTarget.src = ''
+                                  updateEditingItem({ imageUrl: undefined })
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                )}
               </div>
 
               <div className="shrink-0 border-t border-slate-200 pt-4 mt-4 flex flex-col sm:flex-row gap-2">
                 <Button
                   variant="outline"
                   onClick={() => {
+                    if (expandedIndex !== null) {
+                      closeItemDetail()
+                      return
+                    }
                     setStep('upload')
                     setExpandedIndex(null)
                     setEditingItem(null)
                   }}
                   className="sm:w-auto"
                 >
-                  {t.common_back}
+                  {expandedIndex !== null ? td('Back to full list') : t.common_back}
                 </Button>
                 <Button
                   onClick={handleCreateAll}
