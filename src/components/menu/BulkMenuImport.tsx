@@ -905,7 +905,7 @@ export default function BulkMenuImport({ categories, ingredients, defaultBackgro
 
   return (
     <>
-      <Button variant="outline" onClick={() => { setIsOpen(true); resetModal() }}>
+      <Button variant="outline" data-tour="menu-import-image" onClick={() => { setIsOpen(true); resetModal() }}>
         <ImagePlus className="h-4 w-4 mr-2" />
         {t.menu_add_by_image}
       </Button>

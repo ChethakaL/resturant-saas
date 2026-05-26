@@ -26,6 +26,7 @@ import {
   LayoutGrid,
   Sparkles,
   Settings2,
+  HelpCircle,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { useDynamicTranslate, useI18n } from '@/lib/i18n'
@@ -326,6 +327,21 @@ export default function MenuOptimizationContent({
     })
     setSettingsDialogOpen(true)
   }
+
+  useEffect(() => {
+    const onTourStep = (event: Event) => {
+      const action = (event as CustomEvent<{ action?: string }>).detail?.action
+      if (action === 'open-showcase-settings-tour') {
+        const first = showcases[0]
+        if (first) openShowcaseSettings(first)
+      } else if (action === 'close-showcase-settings-tour') {
+        setSettingsDialogOpen(false)
+        setSettingsShowcaseId(null)
+      }
+    }
+    window.addEventListener('page-tour-step', onTourStep)
+    return () => window.removeEventListener('page-tour-step', onTourStep)
+  }, [showcases])
 
   // When switching to Profit or Smart Profit, default the five suggestion toggles to on (preset).
   useEffect(() => {
@@ -876,7 +892,21 @@ export default function MenuOptimizationContent({
 
   return (
     <div className="space-y-6">
-      <Card>
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => window.dispatchEvent(new Event('open-page-tour'))}
+          aria-label="Start interactive tour"
+        >
+          <HelpCircle className="h-4 w-4" />
+          Tour this page
+        </Button>
+      </div>
+
+      <Card data-tour="menu-optimization-settings">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
@@ -1010,13 +1040,22 @@ export default function MenuOptimizationContent({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card data-tour="menu-optimization-quadrant">
         <CardHeader>
           <CardTitle>{td('Menu Engineering Quadrant')}</CardTitle>
           <p className="text-sm text-slate-500">{td('See how items compare by profit margin and popularity. Load the view to see the matrix and which items sit in each quadrant. Only you see this; guests do not.')}</p>
         </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={fetchQuadrants} disabled={loadingQuadrants} className="mb-4 gap-2">{loadingQuadrants && <Loader2 className="h-4 w-4 animate-spin" />}{td('Load performance view')}</Button>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 space-y-2">
+            <p className="font-medium text-slate-800">{td('What each group means')}</p>
+            <ul className="space-y-1.5">
+              <li><span className="font-semibold text-emerald-800">{td('Stars')}</span> — {td('High margin, high sales. Your winners — keep promoting them.')}</li>
+              <li><span className="font-semibold text-amber-800">{td('Puzzles')}</span> — {td('High margin, low sales. Profitable but overlooked — market them harder or move them up the menu.')}</li>
+              <li><span className="font-semibold text-blue-800">{td('Workhorses')}</span> — {td('Low margin, high sales. Popular but thin profit — raise price, cut cost, or upsell add-ons.')}</li>
+              <li><span className="font-semibold text-slate-700">{td('Dogs')}</span> — {td('Low margin, low sales. Underperformers — reprice, rework, or remove.')}</li>
+            </ul>
+          </div>
+          <Button variant="outline" onClick={fetchQuadrants} disabled={loadingQuadrants} className="gap-2">{loadingQuadrants && <Loader2 className="h-4 w-4 animate-spin" />}{td('Load performance view')}</Button>
           {quadrantData && (
             <div className="space-y-4">
               {/* 2x2 matrix: rows = Margin (High top, Low bottom), cols = Popularity (Low left, High right) */}
@@ -1031,17 +1070,17 @@ export default function MenuOptimizationContent({
                 <div className="grid grid-cols-2 gap-0">
                   {/* Row 1: High margin */}
                   {[
-                    { key: 'PUZZLE', label: 'High Margin, Low Sales', sub: 'High margin, fewer sales', colorLabel: 'text-amber-800', colorCount: 'text-amber-900', colorSub: 'text-amber-700', bg: 'bg-amber-50/80', border: 'border-b border-r' },
-                    { key: 'STAR', label: 'High Margin, High Sales', sub: 'High margin, high sales', colorLabel: 'text-emerald-800', colorCount: 'text-emerald-900', colorSub: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-b' },
-                    { key: 'DOG', label: 'Low Margin, Low Sales', sub: 'Lower margin, fewer sales', colorLabel: 'text-slate-600', colorCount: 'text-slate-700', colorSub: 'text-slate-600', bg: 'bg-slate-100', border: 'border-r' },
-                    { key: 'WORKHORSE', label: 'Low Margin, High Sales', sub: 'High sales, lower margin', colorLabel: 'text-blue-800', colorCount: 'text-blue-900', colorSub: 'text-blue-700', bg: 'bg-blue-50/80', border: '' },
+                    { key: 'PUZZLE', shortName: 'Puzzles', label: 'High Margin, Low Sales', sub: 'High margin, fewer sales', colorLabel: 'text-amber-800', colorCount: 'text-amber-900', colorSub: 'text-amber-700', bg: 'bg-amber-50/80', border: 'border-b border-r' },
+                    { key: 'STAR', shortName: 'Stars', label: 'High Margin, High Sales', sub: 'High margin, high sales', colorLabel: 'text-emerald-800', colorCount: 'text-emerald-900', colorSub: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-b' },
+                    { key: 'DOG', shortName: 'Dogs', label: 'Low Margin, Low Sales', sub: 'Lower margin, fewer sales', colorLabel: 'text-slate-600', colorCount: 'text-slate-700', colorSub: 'text-slate-600', bg: 'bg-slate-100', border: 'border-r' },
+                    { key: 'WORKHORSE', shortName: 'Workhorses', label: 'Low Margin, High Sales', sub: 'High sales, lower margin', colorLabel: 'text-blue-800', colorCount: 'text-blue-900', colorSub: 'text-blue-700', bg: 'bg-blue-50/80', border: '' },
                   ].map((q) => {
                     const qItems = quadrantData.items.filter((i) => i.quadrant === q.key)
                     const isExpanded = expandedQuadrants.has(q.key)
                     const displayItems = isExpanded ? qItems : qItems.slice(0, 4)
                     return (
                       <div key={q.key} className={`min-h-[100px] p-3 border-slate-200 ${q.border} ${q.bg}`}>
-                        <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${q.colorLabel}`}>{td(q.label)}</p>
+                        <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${q.colorLabel}`}>{td(q.shortName)} · {td(q.label)}</p>
                         <p className={`text-2xl font-bold ${q.colorCount}`}>{(quadrantData.counts[q.key] ?? 0)} {((quadrantData.counts[q.key] ?? 0) === 1 ? td('dish') : td('dishes'))}</p>
                         <p className={`text-[10px] mt-0.5 ${q.colorSub}`}>{td(q.sub)}</p>
                         <ul className="mt-2 space-y-0.5 text-xs text-slate-600">
@@ -1092,7 +1131,7 @@ export default function MenuOptimizationContent({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card data-tour="menu-optimization-featured">
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
@@ -1187,6 +1226,7 @@ export default function MenuOptimizationContent({
                             variant="outline"
                             size="sm"
                             onClick={() => openShowcaseSettings(showcase)}
+                            data-tour={showcases[0]?.id === showcase.id ? 'menu-optimization-edit-layout' : undefined}
                           >
                             <Settings2 className="h-4 w-4 mr-1" />
                             {td('Edit layout and timing')}
@@ -1220,7 +1260,7 @@ export default function MenuOptimizationContent({
       </Card>
 
       <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl" data-tour="menu-optimization-layout-dialog">
           <DialogHeader>
             <DialogTitle>{td('Edit section layout and timing')}</DialogTitle>
             <DialogDescription>

@@ -35,13 +35,13 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
   const { locale, t } = useI18n()
 
   const navigation = [
-    { name: t.sidebar_dashboard, href: '/dashboard', icon: Home, disabled: false },
-    { name: t.sidebar_add_menu_items, href: '/menu', icon: UtensilsCrossed, disabled: false },
-    { name: t.sidebar_media_library, href: '/media-library', icon: Images, disabled: false },
-    { name: t.sidebar_optimize_menu, href: '/menu?tab=optimization', icon: Zap, disabled: false },
-    { name: t.sidebar_restaurant_dna, href: '/settings', icon: Dna, disabled: false },
-    { name: t.sidebar_inventory, href: '/inventory', icon: Package, disabled: false },
-    { name: t.sidebar_tables, href: '/tables', icon: Square, disabled: false },
+    { name: t.sidebar_dashboard, href: '/dashboard', icon: Home, disabled: false, tour: 'nav-dashboard' },
+    { name: t.sidebar_add_menu_items, href: '/menu', icon: UtensilsCrossed, disabled: false, tour: 'nav-menu' },
+    { name: t.sidebar_media_library, href: '/media-library', icon: Images, disabled: false, tour: 'nav-media' },
+    { name: t.sidebar_optimize_menu, href: '/menu?tab=optimization', icon: Zap, disabled: false, tour: 'nav-optimization' },
+    { name: t.sidebar_restaurant_dna, href: '/settings', icon: Dna, disabled: false, tour: 'nav-restaurant-dna' },
+    { name: t.sidebar_inventory, href: '/inventory', icon: Package, disabled: false, tour: 'nav-inventory' },
+    { name: t.sidebar_tables, href: '/tables', icon: Square, disabled: false, tour: 'nav-tables' },
     { name: t.sidebar_sales_reports, href: '/profit-loss', icon: BarChart3, disabled: false },
     { name: t.sidebar_sales_pos, href: '/orders/new', icon: ShoppingCart, disabled: true, comingSoon: true },
     { name: t.sidebar_hr, href: '/hr/employees', icon: Users, disabled: true, comingSoon: true },
@@ -105,6 +105,7 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
             <Link
               key={item.name}
               href={item.href}
+              data-tour={item.tour}
               className={cn(
                 'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
                 isActive

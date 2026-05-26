@@ -266,6 +266,7 @@ export default function MediaLibraryClient() {
               </select>
               <Button
                 type="button"
+                data-tour="media-upload"
                 variant={showUploadPanel || !hasAssets ? 'default' : 'outline'}
                 disabled={uploading}
                 onClick={() => {
@@ -315,7 +316,7 @@ export default function MediaLibraryClient() {
           <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-tour="media-grid">
           {visibleAssets.map((asset) => (
             <Card key={asset.id} className="overflow-hidden">
               <div className="relative h-48 w-full overflow-hidden bg-slate-100">

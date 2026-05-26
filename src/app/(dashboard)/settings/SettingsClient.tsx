@@ -29,6 +29,7 @@ import {
   Copy,
   ExternalLink,
   ShieldCheck,
+  HelpCircle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useI18n, useDynamicTranslate, type ManagementLocale } from '@/lib/i18n'
@@ -645,20 +646,36 @@ export default function SettingsClient({
         <div className="absolute top-0 right-0 w-72 h-72 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
         <div className="relative">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-              <Dna className="w-5 h-5" />
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                  <Dna className="w-5 h-5" />
+                </div>
+                <h1 className="text-3xl font-bold tracking-tight">{i18n.settings_title}</h1>
+              </div>
+              <p className="text-white/80 ml-[52px]">
+                {i18n.settings_subtitle}
+              </p>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">{i18n.settings_title}</h1>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="shrink-0 gap-2 bg-white/15 text-white hover:bg-white/25 border-0"
+              onClick={() => window.dispatchEvent(new Event('open-page-tour'))}
+              aria-label="Start interactive tour"
+            >
+              <HelpCircle className="h-4 w-4" />
+              Tour this page
+            </Button>
           </div>
-          <p className="text-white/80 ml-[52px]">
-            {i18n.settings_subtitle}
-          </p>
         </div>
       </div>
 
       {/* Smart Designer Button */}
       <Card
+        data-tour="settings-smart-designer"
         className="border-2 border-dashed border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100 hover:border-slate-300 hover:shadow-lg transition-all cursor-pointer group"
         onClick={() => setDesignerOpen(true)}
       >
@@ -676,6 +693,7 @@ export default function SettingsClient({
         </CardContent>
       </Card>
 
+      <div className="space-y-6" data-tour="settings-languages">
       {/* Management Language */}
       <Card>
         <CardHeader>
@@ -748,9 +766,10 @@ export default function SettingsClient({
           </div>
         </CardContent>
       </Card>
+      </div>
 
       {/* Quick Style Presets */}
-      <Card>
+      <Card data-tour="settings-style-presets">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Palette className="h-5 w-5 text-slate-900" />
@@ -838,7 +857,7 @@ export default function SettingsClient({
       </Card>
 
       {/* Colors — Just color pickers, no hex codes */}
-      <Card>
+      <Card data-tour="settings-brand-colors">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Palette className="h-5 w-5 text-slate-600" />
@@ -881,7 +900,7 @@ export default function SettingsClient({
       </Card>
 
       {/* Menu Background */}
-      <Card>
+      <Card data-tour="settings-menu-background">
         <CardHeader>
           <CardTitle>{td('Menu Background')}</CardTitle>
         </CardHeader>
@@ -911,7 +930,7 @@ export default function SettingsClient({
       </Card>
 
       {/* Font Family Dropdown */}
-      <Card className="overflow-visible">
+      <Card className="overflow-visible" data-tour="settings-typography">
         <CardHeader>
           <CardTitle>{td('Typography')}</CardTitle>
           <p className="text-sm text-slate-500">{td('Choose how text appears on your menu.')}</p>
@@ -1177,7 +1196,7 @@ export default function SettingsClient({
       </Card>
 
       {/* Restaurant Name */}
-      <Card>
+      <Card data-tour="settings-restaurant-name">
         <CardHeader>
           <CardTitle>{td('Restaurant Name')}</CardTitle>
           <p className="text-sm text-slate-500">{td('Displayed at the top of your guest-facing menu.')}</p>
@@ -1193,7 +1212,7 @@ export default function SettingsClient({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card data-tour="settings-social-links">
         <CardHeader>
           <CardTitle>{td('Guest Menu Social Links')}</CardTitle>
           <p className="text-sm text-slate-500">
@@ -1234,7 +1253,7 @@ export default function SettingsClient({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card data-tour="settings-contact-location">
         <CardHeader>
           <CardTitle>{td('Restaurant Contact & Location')}</CardTitle>
           <p className="text-sm text-slate-500">
@@ -1393,7 +1412,7 @@ export default function SettingsClient({
       </Card>
 
       {/* Table ordering toggle */}
-      <Card>
+      <Card data-tour="settings-table-ordering">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <span>📋</span>
@@ -1428,7 +1447,7 @@ export default function SettingsClient({
       </Card>
 
       {/* Restaurant photo for vibe (display only; no AI) */}
-      <Card>
+      <Card data-tour="settings-restaurant-photo">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5 text-slate-600" />
@@ -1497,7 +1516,7 @@ export default function SettingsClient({
       </Card>
 
       {/* AI menu description tone */}
-      <Card>
+      <Card data-tour="settings-ai-content">
         <CardHeader>
           <CardTitle>{td('AI Menu Description Tone')}</CardTitle>
           <p className="text-sm text-slate-500">{td('Set how AI writes dish descriptions (e.g. fast casual vs fine dining). Used when generating or auto-filling menu item descriptions.')}</p>
@@ -1554,7 +1573,7 @@ export default function SettingsClient({
       </Card>
 
       {/* Dish Photo Background */}
-      <Card>
+      <Card data-tour="settings-dish-photo-background">
         <CardHeader>
           <CardTitle>{td('Dish Photo Background')}</CardTitle>
           <p className="text-sm text-slate-500">{td('Set the background style for all your menu item photos.')}</p>
@@ -1790,7 +1809,7 @@ export default function SettingsClient({
       </Card>
 
       {/* Logo */}
-      <Card>
+      <Card data-tour="settings-logo">
         <CardHeader>
           <CardTitle>{td('Restaurant Logo')}</CardTitle>
           <p className="text-sm text-slate-500">{td('Upload or paste a logo URL. Appears at the top of your digital menu.')}</p>
@@ -1824,7 +1843,7 @@ export default function SettingsClient({
       </Card>
 
       {/* Live Preview */}
-      <Card>
+      <Card data-tour="settings-live-preview">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Eye className="w-5 h-5 text-slate-900" />
@@ -1896,8 +1915,8 @@ export default function SettingsClient({
       </Card>
 
       {/* Save Button */}
-      <div className="sticky bottom-6 z-10">
-        <Button onClick={saveTheme} disabled={savingTheme}
+      <div className="sticky bottom-6 z-10" data-tour="settings-save">
+        <Button data-tour="restaurant-dna-save" onClick={saveTheme} disabled={savingTheme}
           className="w-full h-12 bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white rounded-xl shadow-lg shadow-slate-900/10 text-base font-semibold"
         >
           {savingTheme ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Check className="h-5 w-5 mr-2" />}

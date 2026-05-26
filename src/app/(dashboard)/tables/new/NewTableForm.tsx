@@ -123,6 +123,7 @@ export default function NewTableForm({ branches }: NewTableFormProps) {
               />
             </div>
 
+            {branches.length > 0 && (
             <div className="space-y-2">
               <Label htmlFor="table-branch">Branch</Label>
               <select
@@ -139,6 +140,7 @@ export default function NewTableForm({ branches }: NewTableFormProps) {
                 ))}
               </select>
             </div>
+            )}
 
             <div className="flex items-center justify-end gap-3">
               <Button type="button" variant="outline" asChild>

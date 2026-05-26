@@ -279,11 +279,13 @@ export default async function InventoryPage({
         <div className="flex items-center gap-3">
           <InventorySearch />
 
-          <UploadReceiptButton />
+          <span data-tour="inventory-receipt">
+            <UploadReceiptButton />
+          </span>
 
           <SupplierDirectoryButton />
 
-          <Link href="/inventory/new">
+          <Link href="/inventory/new" data-tour="inventory-add">
             <Button className="shrink-0">
               <Plus className="h-4 w-4 mr-2" />
               {t.inventory_add_ingredient}
@@ -296,7 +298,7 @@ export default async function InventoryPage({
       {badUnitCount > 0 && <FixUnitsButton badUnitCount={badUnitCount} />}
 
       {/* Ingredients Table */}
-      <Card>
+      <Card data-tour="inventory-table">
         <CardHeader>
           <CardTitle>{t.inventory_all_ingredients}</CardTitle>
           <p className="text-sm text-slate-500 font-normal mt-1">

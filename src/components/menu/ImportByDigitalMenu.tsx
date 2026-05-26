@@ -699,7 +699,7 @@ export default function ImportByDigitalMenu({ categories, ingredients, defaultBa
 
   return (
     <>
-      <Button variant="outline" onClick={() => { setIsOpen(true); resetModal(); }}>
+      <Button variant="outline" data-tour="menu-import-url" onClick={() => { setIsOpen(true); resetModal(); }}>
         <Link2 className="h-4 w-4 mr-2" />
         {t.menu_import_digital}
       </Button>

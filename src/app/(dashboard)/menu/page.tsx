@@ -267,7 +267,7 @@ export default async function MenuPage({
               <CategoriesButtonWithHelp />
               <BulkMenuImport categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
               <ImportByDigitalMenu categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
-              <Link href="/menu/new">
+              <Link href="/menu/new" data-tour="menu-add-manual">
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   {t.menu_add_item}
@@ -307,7 +307,7 @@ export default async function MenuPage({
             </Card>
           </div>
 
-          <Card>
+          <Card data-tour="menu-items-table">
             <CardHeader>
               <CardTitle>{t.menu_all_items}</CardTitle>
             </CardHeader>

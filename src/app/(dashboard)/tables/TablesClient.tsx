@@ -12,7 +12,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Building2, Users, QrCode, Trash2, Loader2 } from 'lucide-react'
+import { Plus, Building2, Users, QrCode, Trash2, Loader2, HelpCircle } from 'lucide-react'
 import { TableQRModal } from '@/components/tables/TableQRModal'
 import { formatCurrency } from '@/lib/utils'
 import ManageWaitersModal from '@/components/waiters/ManageWaitersModal'
@@ -210,15 +210,27 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-start gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900">{t.tables_title}</h1>
                     <p className="text-slate-500 mt-1">{t.tables_subtitle}</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => window.dispatchEvent(new Event('open-page-tour'))}
+                        aria-label="Start interactive tour"
+                    >
+                        <HelpCircle className="h-4 w-4" />
+                        Tour this page
+                    </Button>
+                    <div className="flex items-center gap-3" data-tour="tables-header-actions">
                     {/* Branch Dropdown */}
                     {branches.length > 0 && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2" data-tour="tables-branch-filter">
                             <Building2 className="h-4 w-4 text-slate-400" />
                             <select
                                 value={selectedBranch}
@@ -236,11 +248,12 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                         </div>
                     )}
                     <Button asChild>
-                        <Link href="/tables/new">
+                        <Link href="/tables/new" data-tour="tables-add">
                             <Plus className="mr-2 h-4 w-4" />
                             {t.tables_add_table}
                         </Link>
                     </Button>
+                    </div>
                 </div>
             </div>
 
@@ -254,7 +267,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
             />
 
             {/* Manage Waiters card */}
-            <Card>
+            <Card data-tour="tables-waiters">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <div className="flex items-center gap-2">
                         <Users className="h-5 w-5 text-emerald-500" />
@@ -325,7 +338,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                         tableNumber={qrTableNumber ?? ''}
                         menuUrl={qrTableNumber ? `${menuBaseUrl}?table=${encodeURIComponent(qrTableNumber)}` : ''}
                     />
-                    <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+                    <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4" data-tour="tables-grid">
                         {tables.map((table) => {
                             const activeOrder = table.sales[0]
                             const orderTotal = activeOrder?.total || 0
@@ -441,7 +454,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                                         : t.tables_no_tables}
                                 </p>
                                 <Button asChild>
-                                    <Link href="/tables/new">
+                                    <Link href="/tables/new" data-tour="tables-add">
                                         <Plus className="mr-2 h-4 w-4" />
                                         {t.tables_add_table}
                                     </Link>

@@ -9,6 +9,7 @@ import { ManagementLanguageProvider } from '@/components/layout/ManagementLangua
 import { SubscriptionGate } from '@/components/SubscriptionGate'
 import ChatbotWidget from '@/components/chatbot/ChatbotWidget'
 import RestaurantDNAGate from '@/components/settings/RestaurantDNAGate'
+import SetupOnboardingGuide from '@/components/onboarding/SetupOnboardingGuide'
 import { getServerTranslations } from '@/lib/i18n/server'
 import { getPlatformConfig } from '@/lib/platform-config'
 import { reconcileRestaurantMainSubscriptions } from '@/lib/billing-subscription-sync'
@@ -51,7 +52,17 @@ export default async function DashboardLayout({
     pricesConfigured: false,
   }
   let onboardingComplete = true
+  let setupOnboardingSeen = true
   let restaurantName = ''
+  let setupProgress = {
+    restaurantName: '',
+    hasRestaurantDna: false,
+    menuItemsCount: 0,
+    categoriesCount: 0,
+    mediaAssetsCount: 0,
+    ingredientsCount: 0,
+    tablesCount: 0,
+  }
 
   if (session.user.restaurantId) {
     const restaurant = await prisma.restaurant.findUnique({
@@ -96,7 +107,30 @@ export default async function DashboardLayout({
     }
     const settings = (restaurant?.settings as Record<string, unknown>) || {}
     onboardingComplete = !!settings.onboardingComplete
+    setupOnboardingSeen = !!settings.setupOnboardingSeen
     restaurantName = restaurant?.name ?? ''
+    const [
+      menuItemsCount,
+      categoriesCount,
+      mediaAssetsCount,
+      ingredientsCount,
+      tablesCount,
+    ] = await Promise.all([
+      prisma.menuItem.count({ where: { restaurantId: session.user.restaurantId } }),
+      prisma.category.count({ where: { restaurantId: session.user.restaurantId } }),
+      prisma.mediaAsset.count({ where: { restaurantId: session.user.restaurantId } }),
+      prisma.ingredient.count({ where: { restaurantId: session.user.restaurantId } }),
+      prisma.table.count({ where: { restaurantId: session.user.restaurantId } }),
+    ])
+    setupProgress = {
+      restaurantName,
+      hasRestaurantDna: onboardingComplete || !!settings.primaryColor || !!settings.descriptionTone || !!settings.restaurantVibeImageKey,
+      menuItemsCount,
+      categoriesCount,
+      mediaAssetsCount,
+      ingredientsCount,
+      tablesCount,
+    }
   }
 
   return (
@@ -127,6 +161,11 @@ export default async function DashboardLayout({
           <RestaurantDNAGate
             onboardingComplete={onboardingComplete}
             restaurantName={restaurantName}
+            hasActiveSubscription={!!hasActiveSubscription}
+          />
+          <SetupOnboardingGuide
+            autoOpen={!setupOnboardingSeen && onboardingComplete}
+            progress={setupProgress}
             hasActiveSubscription={!!hasActiveSubscription}
           />
         </div>
