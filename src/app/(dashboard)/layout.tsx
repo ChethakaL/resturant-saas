@@ -4,10 +4,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isSubscriptionAccessActive } from '@/lib/subscription-status'
-import { Sidebar } from '@/components/layout/Sidebar'
+import { DashboardShell } from '@/components/layout/DashboardShell'
 import { ManagementLanguageProvider } from '@/components/layout/ManagementLanguageProvider'
 import { SubscriptionGate } from '@/components/SubscriptionGate'
-import ChatbotWidget from '@/components/chatbot/ChatbotWidget'
 import RestaurantDNAGate from '@/components/settings/RestaurantDNAGate'
 import SetupOnboardingGuide from '@/components/onboarding/SetupOnboardingGuide'
 import { getServerTranslations } from '@/lib/i18n/server'
@@ -140,23 +139,7 @@ export default async function DashboardLayout({
           hasActiveSubscription={!!hasActiveSubscription}
           subscription={subscriptionData}
         >
-        <div className="flex h-screen h-[100dvh] overflow-hidden">
-          {/* Sidebar */}
-          <Sidebar
-            userName={session.user.name}
-            userRole={session.user.role}
-          />
-
-          {/* Main Content - min-h-0 lets flex child shrink so scroll height = content only (no extra white space) */}
-          <div className="flex-1 min-h-0 overflow-auto bg-slate-50">
-            <div className="p-8">
-              {children}
-            </div>
-          </div>
-
-          {/* AI Chatbot Widget */}
-          <ChatbotWidget />
-
+        <DashboardShell userName={session.user.name} userRole={session.user.role}>
           {/* Restaurant DNA Onboarding (first login) */}
           <RestaurantDNAGate
             onboardingComplete={onboardingComplete}
@@ -168,7 +151,8 @@ export default async function DashboardLayout({
             progress={setupProgress}
             hasActiveSubscription={!!hasActiveSubscription}
           />
-        </div>
+          {children}
+        </DashboardShell>
         </SubscriptionGate>
       </Suspense>
     </ManagementLanguageProvider>

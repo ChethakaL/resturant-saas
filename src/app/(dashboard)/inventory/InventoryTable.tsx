@@ -315,7 +315,82 @@ export function InventoryTable({
         </div>
       )}
 
-      <table className="w-full">
+      <div className="space-y-3 md:hidden">
+        {ingredients.map((ingredient) => (
+          <div key={ingredient.id} className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
+                checked={selectedIds.has(ingredient.id)}
+                onChange={() => toggleRowSelected(ingredient.id)}
+                aria-label={td('Select row')}
+              />
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="min-w-0">
+                  <div className="break-words font-medium text-slate-900">{td(ingredient.name)}</div>
+                  <Badge variant="secondary" className="mt-1">{td(getInventoryCategoryLabel(ingredient.category))}</Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t.inventory_col_unit}</p>
+                    <p className="mt-1 break-words text-slate-700">{td(ingredient.unit)}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t.inventory_col_supplier}</p>
+                    <p className="mt-1 break-words text-slate-700">
+                      {supplierName(ingredient) === '—' ? '—' : td(supplierName(ingredient))}
+                    </p>
+                  </div>
+                  <div className="min-w-0 col-span-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t.inventory_col_cost_unit}</p>
+                    <div className="mt-1 font-mono text-slate-900">{formatCurrency(ingredient.costPerUnit)}</div>
+                    <div className="[&>div]:justify-start">{renderTrend(ingredient)}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() =>
+                      ingredient.preferredSupplier
+                        ? openRequestModal(ingredient)
+                        : toast({
+                          title: td('Set supplier first'),
+                          description: td('Edit this ingredient and set a preferred supplier to request stock.'),
+                          variant: 'destructive',
+                        })
+                    }
+                  >
+                    {t.inventory_request_more}
+                  </Button>
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <Link href={`/inventory/${ingredient.id}`} className="min-w-0">
+                      <Button variant="outline" size="sm" className="w-full">
+                        {t.inventory_edit_btn}
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openDeleteDialog(ingredient)}
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                      aria-label={td('Delete ingredient')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <table className="hidden w-full md:table">
         <thead>
           <tr className="border-b border-slate-200">
             <th className="w-10 py-3 px-2 text-left align-middle">

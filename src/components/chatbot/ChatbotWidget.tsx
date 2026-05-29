@@ -288,7 +288,7 @@ export default function ChatbotWidget() {
       {!isOpen && (
         <Button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg bg-emerald-500 hover:bg-emerald-600 z-50"
+          className="fixed bottom-4 right-4 z-50 h-12 w-12 rounded-full bg-emerald-500 shadow-lg hover:bg-emerald-600 sm:bottom-6 sm:right-6 sm:h-14 sm:w-14"
           size="icon"
         >
           <MessageCircle className="h-6 w-6" />
@@ -297,7 +297,7 @@ export default function ChatbotWidget() {
 
       {/* Chat Window */}
       {isOpen && (
-        <Card className="fixed bottom-6 right-6 w-[400px] h-[600px] shadow-2xl z-50 flex flex-col">
+        <Card className="fixed inset-x-3 bottom-3 z-50 flex h-[calc(100dvh-1.5rem)] max-h-[600px] flex-col shadow-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[600px] sm:w-[400px]">
           <CardHeader className="bg-slate-900 text-white rounded-t-lg p-4 flex flex-row items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-slate-300" />

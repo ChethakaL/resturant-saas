@@ -54,8 +54,8 @@ export function InventorySearch() {
   }, [category, router, sort, value])
 
   return (
-    <div className="flex w-full max-w-3xl flex-col gap-3 md:flex-row">
-      <div className="relative flex-1">
+    <div className="flex w-full min-w-0 max-w-3xl flex-col gap-3 md:w-auto md:flex-row">
+      <div className="relative min-w-0 flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
         <Input
           placeholder={t.inventory_search_placeholder}
@@ -71,7 +71,7 @@ export function InventorySearch() {
       </div>
 
       <select
-        className="flex h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+        className="flex h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
         value={category}
         onChange={(e) => setCategory(e.target.value)}
       >
@@ -84,7 +84,7 @@ export function InventorySearch() {
       </select>
 
       <select
-        className="flex h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+        className="flex h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
         value={sort}
         onChange={(e) => setSort(e.target.value)}
       >

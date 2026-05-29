@@ -488,7 +488,7 @@ export default function SetupOnboardingGuide({
       <Button
         type="button"
         size="icon"
-        className="fixed bottom-6 left-72 z-40 h-11 w-11 rounded-full shadow-lg"
+        className="fixed bottom-4 left-4 z-40 h-11 w-11 rounded-full shadow-lg lg:bottom-6 lg:left-72"
         onClick={() => {
           setStepIndex(0)
           setOpen(true)

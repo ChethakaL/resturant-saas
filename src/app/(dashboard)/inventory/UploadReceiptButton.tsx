@@ -12,7 +12,7 @@ export default function UploadReceiptButton() {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setModalOpen(true)}>
+      <Button variant="outline" className="w-full sm:w-auto" onClick={() => setModalOpen(true)}>
         <Upload className="h-4 w-4 mr-2" />
         {t.common_upload}
       </Button>

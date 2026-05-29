@@ -12,7 +12,7 @@ export function SupplierDirectoryButton() {
 
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(true)}>
         <Building2 className="mr-2 h-4 w-4" />
         {td('Suppliers')}
       </Button>

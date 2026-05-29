@@ -27,9 +27,10 @@ import { useI18n, getStaticTranslationForSourceText } from '@/lib/i18n'
 interface SidebarProps {
   userName: string
   userRole: string
+  onNavigate?: () => void
 }
 
-export function Sidebar({ userName, userRole }: SidebarProps) {
+export function Sidebar({ userName, userRole, onNavigate }: SidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { locale, t } = useI18n()
@@ -106,6 +107,7 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
               key={item.name}
               href={item.href}
               data-tour={item.tour}
+              onClick={onNavigate}
               className={cn(
                 'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
                 isActive
@@ -132,6 +134,7 @@ export function Sidebar({ userName, userRole }: SidebarProps) {
           <Link
             href="/billing"
             data-tour="nav-billing"
+            onClick={onNavigate}
             className={cn(
               'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors shrink-0',
               pathname === '/billing' || pathname === '/dashboard/billing'

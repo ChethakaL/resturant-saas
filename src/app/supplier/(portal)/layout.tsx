@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { SupplierSidebar } from '@/components/layout/SupplierSidebar'
+import { SupplierShell } from '@/components/layout/SupplierShell'
 
 export default async function SupplierPortalLayout({
   children,
@@ -19,11 +19,8 @@ export default async function SupplierPortalLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <SupplierSidebar supplierName={session.user.supplierName ?? 'Supplier'} />
-      <main className="flex-1 min-h-0 overflow-auto bg-slate-50">
-        <div className="p-8">{children}</div>
-      </main>
-    </div>
+    <SupplierShell supplierName={session.user.supplierName ?? 'Supplier'}>
+      {children}
+    </SupplierShell>
   )
 }

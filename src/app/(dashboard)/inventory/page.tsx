@@ -269,24 +269,24 @@ export default async function InventoryPage({
   const badUnitCount = allUnits.filter((i) => !isAllowedUnit(canonicalise(i.unit))).length
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">{t.inventory_title}</h1>
+      <div className="flex min-w-0 flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div className="min-w-0">
+          <h1 className="break-words text-2xl font-bold text-slate-900 sm:text-3xl">{t.inventory_title}</h1>
           <p className="text-slate-500 mt-1">{t.inventory_subtitle}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center md:w-auto md:flex-nowrap">
           <InventorySearch />
 
-          <span data-tour="inventory-receipt">
+          <span className="w-full sm:w-auto" data-tour="inventory-receipt">
             <UploadReceiptButton />
           </span>
 
           <SupplierDirectoryButton />
 
-          <Link href="/inventory/new" data-tour="inventory-add">
-            <Button className="shrink-0">
+          <Link href="/inventory/new" className="w-full sm:w-auto" data-tour="inventory-add">
+            <Button className="w-full shrink-0 sm:w-auto">
               <Plus className="h-4 w-4 mr-2" />
               {t.inventory_add_ingredient}
             </Button>
@@ -298,15 +298,15 @@ export default async function InventoryPage({
       {badUnitCount > 0 && <FixUnitsButton badUnitCount={badUnitCount} />}
 
       {/* Ingredients Table */}
-      <Card data-tour="inventory-table">
+      <Card className="min-w-0" data-tour="inventory-table">
         <CardHeader>
           <CardTitle>{t.inventory_all_ingredients}</CardTitle>
           <p className="text-sm text-slate-500 font-normal mt-1">
             {t.inventory_cost_note}
           </p>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className="px-0 sm:px-6">
+          <div className="max-w-full overflow-x-auto px-4 sm:px-0">
             <InventoryTable
               ingredients={displayIngredients}
               totalCount={data.totalCount}
