@@ -209,33 +209,33 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-start gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900">{t.tables_title}</h1>
+        <div className="min-w-0 space-y-6">
+            <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                    <h1 className="break-words text-3xl font-bold text-slate-900">{t.tables_title}</h1>
                     <p className="text-slate-500 mt-1">{t.tables_subtitle}</p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:w-auto lg:shrink-0 lg:items-center">
                     <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="gap-2"
+                        className="w-full gap-2 lg:w-auto"
                         onClick={() => window.dispatchEvent(new Event('open-page-tour'))}
                         aria-label="Start interactive tour"
                     >
                         <HelpCircle className="h-4 w-4" />
                         Tour this page
                     </Button>
-                    <div className="flex items-center gap-3" data-tour="tables-header-actions">
+                    <div className="grid w-full grid-cols-1 gap-2 sm:contents lg:flex lg:w-auto lg:items-center lg:gap-3" data-tour="tables-header-actions">
                     {/* Branch Dropdown */}
                     {branches.length > 0 && (
-                        <div className="flex items-center gap-2" data-tour="tables-branch-filter">
-                            <Building2 className="h-4 w-4 text-slate-400" />
+                        <div className="grid min-w-0 grid-cols-[auto_1fr] items-center gap-2" data-tour="tables-branch-filter">
+                            <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
                             <select
                                 value={selectedBranch}
                                 onChange={(e) => setSelectedBranch(e.target.value)}
-                                className="h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             >
                                 <option value="all">{t.tables_all_branches}</option>
                                 {branches.map((b) => (
@@ -247,7 +247,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                             </select>
                         </div>
                     )}
-                    <Button asChild>
+                    <Button className="w-full lg:w-auto" asChild>
                         <Link href="/tables/new" data-tour="tables-add">
                             <Plus className="mr-2 h-4 w-4" />
                             {t.tables_add_table}
@@ -268,12 +268,12 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
 
             {/* Manage Waiters card */}
             <Card data-tour="tables-waiters">
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                         <Users className="h-5 w-5 text-emerald-500" />
                         <CardTitle className="text-lg">{t.tables_waiters}</CardTitle>
                     </div>
-                    <Button size="sm" onClick={() => setShowManageWaiters(true)}>
+                    <Button className="w-full sm:w-auto" size="sm" onClick={() => setShowManageWaiters(true)}>
                         <Users className="h-4 w-4 mr-1" />
                         {t.tables_manage_waiters ?? 'Manage Waiters'}
                     </Button>
