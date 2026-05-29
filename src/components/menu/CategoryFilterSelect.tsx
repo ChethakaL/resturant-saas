@@ -64,7 +64,7 @@ export default function CategoryFilterSelect({
             type="button"
             variant="outline"
             className={cn(
-              'h-9 min-w-[160px] max-w-[220px] justify-between border-input bg-transparent px-3 font-normal hover:bg-accent',
+              'h-9 min-w-0 justify-between border-input bg-transparent px-3 font-normal hover:bg-accent sm:min-w-[160px] sm:max-w-[220px]',
               className
             )}
           >

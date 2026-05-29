@@ -642,19 +642,19 @@ export default function SettingsClient({
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
       {/* Page Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 p-8 text-white">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 p-5 text-white sm:p-8">
         <div className="absolute top-0 right-0 w-72 h-72 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
         <div className="relative">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-3 mb-2">
+                <div className="w-10 h-10 shrink-0 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
                   <Dna className="w-5 h-5" />
                 </div>
-                <h1 className="text-3xl font-bold tracking-tight">{i18n.settings_title}</h1>
+                <h1 className="min-w-0 break-words text-3xl font-bold tracking-tight">{i18n.settings_title}</h1>
               </div>
-              <p className="text-white/80 ml-[52px]">
+              <p className="text-white/80 sm:ml-[52px]">
                 {i18n.settings_subtitle}
               </p>
             </div>
@@ -662,7 +662,7 @@ export default function SettingsClient({
               type="button"
               variant="secondary"
               size="sm"
-              className="shrink-0 gap-2 bg-white/15 text-white hover:bg-white/25 border-0"
+              className="w-full shrink-0 gap-2 bg-white/15 text-white hover:bg-white/25 border-0 sm:w-auto"
               onClick={() => window.dispatchEvent(new Event('open-page-tour'))}
               aria-label="Start interactive tour"
             >

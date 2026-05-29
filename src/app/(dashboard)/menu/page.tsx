@@ -234,17 +234,17 @@ export default async function MenuPage({
   const categoryOptions = data.categories.map((c) => ({ id: c.id, name: c.name, displayOrder: c.displayOrder }))
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">{t.menu_title}</h1>
+    <div className="min-w-0 space-y-6">
+      <div className="min-w-0">
+        <h1 className="break-words text-2xl font-bold text-slate-900 sm:text-3xl">{t.menu_title}</h1>
         <p className="text-slate-500 mt-1">{t.menu_subtitle}</p>
-        <div className="mt-3 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-          <span className="font-medium text-slate-700">{t.menu_client_url}</span>
+        <div className="mt-3 inline-flex max-w-full flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+          <span className="shrink-0 font-medium text-slate-700">{t.menu_client_url}</span>
           <a
             href={clientFacingMenuUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-emerald-700 hover:underline break-all"
+            className="min-w-0 text-emerald-700 hover:underline break-all"
           >
             {clientFacingMenuUrl}
           </a>
@@ -261,14 +261,14 @@ export default async function MenuPage({
         smartProfitRequiredPeriodLabel={formatSalesPdfPeriod(currentSalesPdfPeriod.year, currentSalesPdfPeriod.month)}
       >
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div />
-            <div className="flex flex-wrap gap-2">
+            <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
               <CategoriesButtonWithHelp />
               <BulkMenuImport categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
               <ImportByDigitalMenu categories={data.categories} ingredients={data.ingredients} defaultBackgroundPrompt={defaultBackgroundPrompt} />
-              <Link href="/menu/new" data-tour="menu-add-manual">
-                <Button>
+              <Link href="/menu/new" className="w-full sm:w-auto" data-tour="menu-add-manual">
+                <Button className="w-full sm:w-auto">
                   <Plus className="h-4 w-4 mr-2" />
                   {t.menu_add_item}
                 </Button>
@@ -307,27 +307,27 @@ export default async function MenuPage({
             </Card>
           </div>
 
-          <Card data-tour="menu-items-table">
+          <Card className="min-w-0" data-tour="menu-items-table">
             <CardHeader>
               <CardTitle>{t.menu_all_items}</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 sm:px-6">
               <form
                 method="get"
-                className="mb-4 flex flex-wrap items-end gap-2"
+                className="mb-4 flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-end"
               >
                 <input type="hidden" name="page" value="1" />
-                <div className="flex flex-1 gap-2 min-w-0">
+                <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:flex">
                   <Input
                     name="search"
                     placeholder={t.menu_search_placeholder}
                     defaultValue={normalizedSearch}
-                    className="min-w-0"
+                    className="min-w-0 sm:col-span-2 lg:col-span-1"
                   />
                   <select
                     name="status"
                     defaultValue={statusFilter}
-                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    className="h-9 min-w-0 rounded-md border border-input bg-transparent px-3 text-sm"
                   >
                     <option value="">{t.menu_all_statuses}</option>
                     <option value="DRAFT">{t.menu_draft}</option>
@@ -343,14 +343,15 @@ export default async function MenuPage({
                     allCategoriesLabel={t.menu_all_categories}
                     searchPlaceholder={t.menu_category_search_placeholder}
                     noResultsLabel={t.menu_category_search_no_results}
+                    className="w-full max-w-none"
                   />
-                  <Button size="sm" type="submit">
+                  <Button className="w-full sm:col-span-2 lg:col-span-1 lg:w-auto" size="sm" type="submit">
                     {t.menu_search}
                   </Button>
                 </div>
                 {(normalizedSearch || statusFilter || categoryFilter) && (
-                  <Link href="/dashboard/menu?page=1">
-                    <Button variant="outline" size="sm">
+                  <Link href="/dashboard/menu?page=1" className="w-full md:w-auto">
+                    <Button className="w-full md:w-auto" variant="outline" size="sm">
                       {t.menu_clear}
                     </Button>
                   </Link>

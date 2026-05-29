@@ -678,14 +678,15 @@ export default function MenuItemsTable({
         </div>
       ) : (
         <>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="mb-3 flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="text-sm text-slate-600">
               <span className="font-medium text-slate-900">{selectedIds.length}</span> selected
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={openBulkAdjustDialog}
                 disabled={bulkAdjusting || bulkDeleting || bulkPublishing}
               >
@@ -695,6 +696,7 @@ export default function MenuItemsTable({
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={handlePublishAll}
                 disabled={bulkPublishing}
               >
@@ -710,6 +712,7 @@ export default function MenuItemsTable({
                   <Button
                     variant="outline"
                     size="sm"
+                    className="w-full sm:w-auto"
                     onClick={() => setSelectedIds([])}
                     disabled={bulkDeleting || bulkPublishing}
                   >
@@ -718,7 +721,7 @@ export default function MenuItemsTable({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    className="w-full border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 sm:w-auto"
                     onClick={() => confirmBulkPublish()}
                     disabled={bulkPublishing || bulkDeleting}
                   >
@@ -734,6 +737,7 @@ export default function MenuItemsTable({
               <Button
                 variant="destructive"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={() => setBulkDeleteOpen(true)}
                 disabled={selectedIds.length === 0 || bulkDeleting || bulkPublishing}
               >
