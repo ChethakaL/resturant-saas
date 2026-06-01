@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   ArrowLeft,
+  ClipboardList,
   ShoppingCart,
   Plus,
   Minus,
@@ -30,7 +31,7 @@ import { formatCurrency } from '@/lib/utils'
 import { Category, Ingredient, MenuItem, MenuItemIngredient, Table } from '@prisma/client'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
-import { buildReceiptHtml, buildReceiptText, ReceiptOrder } from '@/lib/receipt'
+import { buildKitchenReceiptHtml, buildReceiptHtml, ReceiptOrder } from '@/lib/receipt'
 import { useToast } from '@/components/ui/use-toast'
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
@@ -278,17 +279,17 @@ export default function NewOrderForm({
   }
 
   const handleOrderSuccess = (order: SaleResponse) => {
-    setLatestOrder(mapSaleToReceiptOrder(order))
+    const receiptOrder = mapSaleToReceiptOrder(order)
+    setLatestOrder(receiptOrder)
     setOrderItems([])
     setOrderDetails({ ...DEFAULT_ORDER_DETAILS })
     setCashReceived('')
     setStripeClientSecret(null)
   }
 
-  const printReceipt = () => {
-    if (!latestOrder || typeof window === 'undefined') return
-    const html = buildReceiptHtml(latestOrder)
-    const printWindow = window.open('', '_blank', 'width=600,height=800')
+  const printHtml = (html: string, width = 600, height = 800) => {
+    if (typeof window === 'undefined') return
+    const printWindow = window.open('', '_blank', `width=${width},height=${height}`)
     if (!printWindow) return
     printWindow.document.write(html)
     printWindow.document.close()
@@ -296,6 +297,19 @@ export default function NewOrderForm({
     setTimeout(() => {
       printWindow.print()
     }, 300)
+  }
+
+  const printReceiptOrder = (order: ReceiptOrder) => {
+    printHtml(buildReceiptHtml(order), 600, 800)
+  }
+
+  const printKitchenTicket = (order: ReceiptOrder) => {
+    printHtml(buildKitchenReceiptHtml(order), 520, 720)
+  }
+
+  const printReceipt = () => {
+    if (!latestOrder) return
+    printReceiptOrder(latestOrder)
   }
 
   const emailReceipt = () => {
@@ -363,9 +377,12 @@ export default function NewOrderForm({
 
     try {
       setLatestOrder(null)
-      await createOrder({ paymentMethod: 'CASH', status: 'PENDING' })
-      router.push('/orders')
-      router.refresh()
+      const order = await createOrder({ paymentMethod: 'CASH', status: 'PENDING' })
+      handleOrderSuccess(order)
+      toast({
+        title: 'Order saved',
+        description: 'Print the kitchen/barista ticket, then complete payment from Orders.',
+      })
     } catch (error: any) {
       console.error('Error saving pending order:', error)
       toast({
@@ -457,17 +474,25 @@ export default function NewOrderForm({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/orders">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">New Order</h1>
+            <p className="text-slate-500 mt-1">Create a new order and process payment</p>
+          </div>
+        </div>
         <Link href="/dashboard/orders">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+          <Button type="button" variant="outline">
+            <ClipboardList className="h-4 w-4 mr-2" />
+            Orders
           </Button>
         </Link>
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">New Order</h1>
-          <p className="text-slate-500 mt-1">Create a new order and process payment</p>
-        </div>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -814,11 +839,12 @@ export default function NewOrderForm({
             {latestOrder && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Receipt Ready</CardTitle>
+                  <CardTitle>{latestOrder.status === 'COMPLETED' ? 'Receipt Ready' : 'Kitchen Ticket Ready'}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-slate-700">
-                    Order <strong>{latestOrder.orderNumber}</strong> completed for{' '}
+                    Order <strong>{latestOrder.orderNumber}</strong>{' '}
+                    {latestOrder.status === 'COMPLETED' ? 'completed' : 'saved as pending'} for{' '}
                     {latestOrder.tableNumber ? `Table ${latestOrder.tableNumber}` : 'a walk-in customer'}
                   </p>
                   <p className="text-xs text-slate-500">
@@ -829,16 +855,28 @@ export default function NewOrderForm({
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={printReceipt}
+                      onClick={() => printKitchenTicket(latestOrder)}
                     >
                       <Printer className="h-4 w-4 mr-2" />
-                      Print Receipt
+                      Print Kitchen/Barista
                     </Button>
+                    {latestOrder.status === 'COMPLETED' && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={printReceipt}
+                      >
+                        <Printer className="h-4 w-4 mr-2" />
+                        Print Customer Receipt
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
                       onClick={emailReceipt}
+                      disabled={latestOrder.status !== 'COMPLETED'}
                     >
                       <Mail className="h-4 w-4 mr-2" />
                       Email Receipt

@@ -71,6 +71,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
+    if (existing.status === 'COMPLETED' || existing.status === 'CANCELLED') {
+      return NextResponse.json(
+        { error: 'Cannot modify completed or cancelled order' },
+        { status: 400 }
+      )
+    }
+
     const order = await prisma.sale.update({
       where: { id: params.id },
       data: {
@@ -116,6 +123,10 @@ export async function DELETE(
 
     if (!sale) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    if (sale.status === 'COMPLETED') {
+      return NextResponse.json({ error: 'Cannot cancel a paid order' }, { status: 400 })
     }
 
     if (sale.status === 'CANCELLED') {

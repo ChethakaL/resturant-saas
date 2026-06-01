@@ -3,9 +3,12 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { formatCurrency, formatPercentage } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import OrderDetailActions from './OrderDetailActions'
+import CompleteOrderButton from '@/components/orders/CompleteOrderButton'
+import Link from 'next/link'
 
 function getStatusBadge(status: string) {
   if (status === 'COMPLETED') {
@@ -69,6 +72,11 @@ export default async function OrderDetailsPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
+          <Link href="/dashboard/orders">
+            <Button variant="ghost" size="sm" className="mb-3 -ml-3">
+              Back to Orders
+            </Button>
+          </Link>
           <h1 className="text-3xl font-bold text-slate-900">{order.orderNumber}</h1>
           <p className="text-slate-500 mt-1">{formatDate(order.timestamp)}</p>
         </div>
@@ -81,7 +89,10 @@ export default async function OrderDetailsPage({
           >
             {order.status}
           </span>
-          <OrderDetailActions orderId={order.id} status={order.status} />
+          <div className="flex flex-wrap justify-end gap-2">
+            {order.status === 'PENDING' && <CompleteOrderButton order={order} />}
+            <OrderDetailActions orderId={order.id} status={order.status} />
+          </div>
         </div>
       </div>
 

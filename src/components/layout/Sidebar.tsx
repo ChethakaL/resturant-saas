@@ -44,7 +44,7 @@ export function Sidebar({ userName, userRole, onNavigate }: SidebarProps) {
     { name: t.sidebar_inventory, href: '/inventory', icon: Package, disabled: false, tour: 'nav-inventory' },
     { name: t.sidebar_tables, href: '/tables', icon: Square, disabled: false, tour: 'nav-tables' },
     { name: t.sidebar_sales_reports, href: '/profit-loss', icon: BarChart3, disabled: false, tour: 'nav-sales-reports' },
-    { name: t.sidebar_sales_pos, href: '/orders/new', icon: ShoppingCart, disabled: true, comingSoon: true },
+    { name: t.sidebar_sales_pos, href: '/orders/new', icon: ShoppingCart, disabled: false, tour: 'nav-sales-pos' },
     { name: t.sidebar_hr, href: '/hr/employees', icon: Users, disabled: true, comingSoon: true },
     { name: t.sidebar_shifts, href: '/hr/shifts', icon: Clock, disabled: true, comingSoon: true },
     { name: t.sidebar_payroll, href: '/hr/payroll', icon: Wallet, disabled: true, comingSoon: true },

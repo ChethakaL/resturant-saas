@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
+import { buildKitchenReceiptHtml, buildReceiptHtml, ReceiptOrder } from '@/lib/receipt'
 
 // Types
 interface MenuItem {
@@ -73,6 +74,43 @@ interface Order {
 interface CartItem {
     menuItem: MenuItem
     quantity: number
+}
+
+const mapOrderToReceiptOrder = (order: Order): ReceiptOrder => ({
+    id: order.id,
+    orderNumber: order.orderNumber,
+    total: order.total,
+    paymentMethod: 'CASH',
+    status: order.status,
+    tableNumber: order.table?.number ? Number(order.table.number) : null,
+    customerName: order.customerName ?? null,
+    notes: order.notes ?? null,
+    timestamp: order.timestamp,
+    items: order.items.map((item) => ({
+        name: item.menuItem.name,
+        quantity: item.quantity,
+        price: item.price,
+    })),
+})
+
+const printHtml = (html: string) => {
+    if (typeof window === 'undefined') return
+    const printWindow = window.open('', '_blank', 'width=520,height=720')
+    if (!printWindow) return
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.focus()
+    setTimeout(() => {
+        printWindow.print()
+    }, 300)
+}
+
+const printKitchenTicket = (order: Order) => {
+    printHtml(buildKitchenReceiptHtml(mapOrderToReceiptOrder(order)))
+}
+
+const printCustomerReceipt = (order: Order) => {
+    printHtml(buildReceiptHtml({ ...mapOrderToReceiptOrder(order), status: 'COMPLETED' }))
 }
 
 // ─── Status Badge (simplified: Pending or Delivered) ───
@@ -267,6 +305,8 @@ function NewOrderPanel({
                 const data = await res.json()
                 throw new Error(data.error || 'Failed to create order')
             }
+            const order = await res.json()
+            printKitchenTicket(order)
             onOrderCreated()
             setIsMobileCartOpen(false)
         } catch (err: any) {
@@ -543,6 +583,7 @@ function OrderDetailPanel({
     onClose: () => void
 }) {
     const [isUpdating, setIsUpdating] = useState(false)
+    const [isPaying, setIsPaying] = useState(false)
     const [showAddItems, setShowAddItems] = useState(false)
     const [addItemCart, setAddItemCart] = useState<CartItem[]>([])
     const [addItemSearch, setAddItemSearch] = useState('')
@@ -618,6 +659,30 @@ function OrderDetailPanel({
     }
 
     const isModifiable = !['COMPLETED', 'CANCELLED'].includes(order.status)
+
+    const handlePay = async () => {
+        if (order.status === 'COMPLETED') return
+        if (!confirm('Take payment and lock this order? It cannot be changed after payment.')) return
+        setIsPaying(true)
+        try {
+            const res = await fetch(`/api/orders/${order.id}/complete`, {
+                method: 'POST',
+            })
+            if (!res.ok) {
+                const data = await res.json().catch(() => null)
+                throw new Error(data?.error || 'Failed to complete payment')
+            }
+            const data = await res.json()
+            const completedOrder = data.order as Order
+            printCustomerReceipt(completedOrder)
+            onUpdate()
+            onClose()
+        } catch (error) {
+            alert(error instanceof Error ? error.message : 'Failed to complete payment')
+        } finally {
+            setIsPaying(false)
+        }
+    }
 
     const allMenuItems = categories.flatMap((c) =>
         c.menuItems.map((item) => ({ ...item, categoryName: c.name }))
@@ -773,6 +838,13 @@ function OrderDetailPanel({
                 {/* Action buttons */}
                 {isModifiable && (
                     <div className="p-5 border-t border-white/10 bg-slate-900 space-y-3">
+                        <button
+                            onClick={() => printKitchenTicket(order)}
+                            disabled={isUpdating || isPaying}
+                            className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-sm font-medium rounded-xl transition-all active:scale-[0.98]"
+                        >
+                            Print kitchen ticket
+                        </button>
                         {!showAddItems && (
                             <button
                                 onClick={() => setShowAddItems(true)}
@@ -791,13 +863,13 @@ function OrderDetailPanel({
                         <div className="grid grid-cols-2 gap-3">
                             {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
                                 <button
-                                    onClick={() => updateStatus('COMPLETED')}
-                                    disabled={isUpdating}
+                                    onClick={handlePay}
+                                    disabled={isUpdating || isPaying}
                                     className="py-3 col-span-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-40 active:scale-[0.98]"
                                 >
                                     <span className="flex items-center justify-center gap-2">
                                         <Check className="h-4 w-4" />
-                                        Mark served
+                                        {isPaying ? 'Taking payment...' : 'Pay & Print Receipt'}
                                     </span>
                                 </button>
                             )}
@@ -816,6 +888,16 @@ function OrderDetailPanel({
                                 </button>
                             )}
                         </div>
+                    </div>
+                )}
+                {order.status === 'COMPLETED' && (
+                    <div className="p-5 border-t border-white/10 bg-slate-900">
+                        <button
+                            onClick={() => printCustomerReceipt(order)}
+                            className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-sm font-medium rounded-xl transition-all active:scale-[0.98]"
+                        >
+                            Reprint receipt
+                        </button>
                     </div>
                 )}
             </div>
@@ -1149,12 +1231,14 @@ export default function WaiterDashboard() {
                                                 body: JSON.stringify({ confirm: true }),
                                             })
                                             if (res.ok) {
+                                                const confirmedOrder = await res.json()
                                                 toast({
                                                     title: 'Order assigned',
                                                     description: `Table ${order.table?.number ?? ''} is now in your queue.`.trim(),
                                                 })
+                                                printKitchenTicket(confirmedOrder)
                                                 handleRefresh()
-                                                setSelectedOrder(await res.json())
+                                                setSelectedOrder(confirmedOrder)
                                             }
                                         }}
                                         className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-600"
@@ -1268,7 +1352,10 @@ export default function WaiterDashboard() {
                                             {selectedTable.sales.map((order) => (
                                                 <button
                                                     key={order.id}
-                                                    onClick={() => setSelectedOrder(order)}
+                                                    onClick={() => {
+                                                        printKitchenTicket(order)
+                                                        setSelectedOrder(order)
+                                                    }}
                                                     className="w-full text-left flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
                                                 >
                                                     <div className="flex items-center gap-3">
@@ -1351,7 +1438,10 @@ export default function WaiterDashboard() {
                                                 <button
                                                     key={order.id}
                                                     type="button"
-                                                    onClick={() => setSelectedOrder(order)}
+                                                    onClick={() => {
+                                                        printKitchenTicket(order)
+                                                        setSelectedOrder(order)
+                                                    }}
                                                     className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-left"
                                                 >
                                                     <div>
@@ -1443,7 +1533,12 @@ export default function WaiterDashboard() {
                                     .map((order) => (
                                     <button
                                         key={order.id}
-                                        onClick={() => setSelectedOrder(order)}
+                                        onClick={() => {
+                                            if (['PENDING', 'PREPARING', 'READY'].includes(order.status)) {
+                                                printKitchenTicket(order)
+                                            }
+                                            setSelectedOrder(order)
+                                        }}
                                         className="w-full text-left bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl p-4 transition-all active:scale-[0.99]"
                                     >
                                         <div className="flex items-center justify-between mb-2">

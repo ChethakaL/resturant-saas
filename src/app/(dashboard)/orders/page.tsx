@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import CompleteOrderButton from '@/components/orders/CompleteOrderButton'
+import CancelOrderButton from '@/components/orders/CancelOrderButton'
 
 const statusTabs = [
   { label: 'All Orders', value: 'all' },
@@ -364,8 +365,11 @@ export default async function OrdersPage({
                       <td className="py-3 px-4 text-right font-mono font-medium">
                         {formatCurrency(order.total)}
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        <CompleteOrderButton order={order} />
+                      <td className="py-3 px-4">
+                        <div className="flex justify-end gap-2">
+                          <CompleteOrderButton order={order} />
+                          <CancelOrderButton orderId={order.id} />
+                        </div>
                       </td>
                     </tr>
                   ))}

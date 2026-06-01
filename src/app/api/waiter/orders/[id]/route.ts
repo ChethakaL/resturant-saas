@@ -32,6 +32,13 @@ export async function PATCH(
             return NextResponse.json({ error: 'Order not found' }, { status: 404 })
         }
 
+        if (existing.status === 'COMPLETED' || existing.status === 'CANCELLED') {
+            return NextResponse.json(
+                { error: 'Cannot modify completed or cancelled order' },
+                { status: 400 }
+            )
+        }
+
         const updateData: any = {}
 
         // Waiter confirms/claims an order from customer QR (assigns themselves)

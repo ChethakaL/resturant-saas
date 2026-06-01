@@ -58,6 +58,7 @@ export async function POST(
           where: {
             tableId: existing.tableId,
             restaurantId: session.user.restaurantId,
+            id: { not: orderId },
             status: { in: ['PENDING', 'PREPARING', 'READY'] },
           },
         })

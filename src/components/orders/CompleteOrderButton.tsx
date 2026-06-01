@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { buildReceiptHtml, ReceiptOrder } from '@/lib/receipt'
+import { buildKitchenReceiptHtml, buildReceiptHtml, ReceiptOrder } from '@/lib/receipt'
 import { formatCurrency } from '@/lib/utils'
 import { Mail, Printer } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
@@ -31,7 +31,7 @@ interface PendingOrder {
   orderNumber: string
   customerName?: string | null
   table?: { number: number } | null
-  timestamp: string
+  timestamp: string | Date
   items: PendingOrderItem[]
   total: number
   paymentMethod: string
@@ -42,11 +42,15 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [receiptOrder, setReceiptOrder] = useState<ReceiptOrder | null>(null)
+  const [cashReceived, setCashReceived] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const [shouldRefreshAfterClose, setShouldRefreshAfterClose] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+  const cashReceivedAmount = Number(cashReceived) || 0
+  const changeDue = Math.max(cashReceivedAmount - order.total, 0)
+  const canPay = cashReceivedAmount >= order.total
 
   const mapSaleToReceiptOrder = (completedOrder: any): ReceiptOrder => ({
     id: completedOrder.id,
@@ -76,11 +80,12 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
         throw new Error(error.error || 'Failed to complete order')
       }
       const data = await response.json()
-      setReceiptOrder(mapSaleToReceiptOrder(data.order))
+      const completedReceipt = mapSaleToReceiptOrder(data.order)
+      setReceiptOrder(completedReceipt)
       setShouldRefreshAfterClose(true)
       toast({
-        title: 'Order completed',
-        description: 'The order is now marked as completed.',
+        title: 'Payment completed',
+        description: 'Order is now locked. Print kitchen/barista or customer receipt if needed.',
       })
     } catch (error: any) {
       toast({
@@ -102,14 +107,28 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
       setReceiptOrder(null)
       setCustomerEmail('')
       setSendingEmail(false)
+      setCashReceived('')
     }
     setDialogOpen(open)
   }
 
-  const printReceipt = () => {
-    if (!receiptOrder) return
-    const html = buildReceiptHtml(receiptOrder)
+  const printReceipt = (orderToPrint = receiptOrder) => {
+    if (!orderToPrint) return
+    const html = buildReceiptHtml(orderToPrint)
     const printWindow = window.open('', '_blank', 'width=600,height=700')
+    if (!printWindow) return
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.focus()
+    setTimeout(() => {
+      printWindow.print()
+    }, 300)
+  }
+
+  const printKitchenTicket = (orderToPrint = receiptOrder) => {
+    if (!orderToPrint) return
+    const html = buildKitchenReceiptHtml(orderToPrint)
+    const printWindow = window.open('', '_blank', 'width=520,height=720')
     if (!printWindow) return
     printWindow.document.write(html)
     printWindow.document.close()
@@ -170,8 +189,8 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
             </DialogTitle>
             <DialogDescription>
               {receiptOrder
-                ? 'Order completed. Print or email the receipt before closing.'
-                : 'Completing this order will deduct inventory and mark it as completed.'}
+                ? 'Payment completed. Reprint or email the receipt before closing.'
+                : 'Take cash payment, then print kitchen/barista and customer receipts from the next step.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -202,6 +221,30 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
                   <span>{formatCurrency(order.total)}</span>
                 </div>
               </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor={`cashReceived-${order.id}`}>Cash received</Label>
+                  <Input
+                    id={`cashReceived-${order.id}`}
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={cashReceived}
+                    onChange={(event) => setCashReceived(event.target.value)}
+                    placeholder="0"
+                    disabled={completing}
+                  />
+                </div>
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-medium uppercase text-slate-500">Change due</p>
+                  <p className="mt-1 text-lg font-semibold text-emerald-600">
+                    {formatCurrency(changeDue)}
+                  </p>
+                </div>
+              </div>
+              {!canPay && cashReceived && (
+                <p className="text-sm text-red-600">Cash received must cover the order total.</p>
+              )}
             </div>
           ) : (
             <div className="space-y-4 pt-2">
@@ -215,11 +258,20 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={printReceipt}
+                  onClick={() => printKitchenTicket()}
                   className="flex items-center gap-2"
                 >
                   <Printer className="h-4 w-4" />
-                  Print Receipt
+                  Print Kitchen/Barista
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => printReceipt()}
+                  className="flex items-center gap-2"
+                >
+                  <Printer className="h-4 w-4" />
+                  Print Customer Receipt
                 </Button>
                 <Button
                   variant="outline"
@@ -250,15 +302,15 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
             {!receiptOrder && (
               <Button
                 onClick={handleCompleteOrder}
-                disabled={completing}
+                disabled={completing || !canPay}
                 className="bg-green-600 hover:bg-green-700"
               >
-                {completing ? 'Completing...' : 'Complete Order'}
+                {completing ? 'Taking payment...' : 'Pay'}
               </Button>
             )}
             <Button
               variant="outline"
-              onClick={() => setDialogOpen(false)}
+              onClick={() => handleDialogOpenChange(false)}
               disabled={completing}
             >
               {receiptOrder ? 'Done' : 'Cancel'}
@@ -272,7 +324,7 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
         size="sm"
         className="bg-green-600 hover:bg-green-700"
       >
-        Complete
+        Pay
       </Button>
     </>
   )

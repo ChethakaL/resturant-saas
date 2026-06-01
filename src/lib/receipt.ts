@@ -159,3 +159,108 @@ export function buildReceiptHtml(order: ReceiptOrder): string {
     </html>
   `
 }
+
+export function buildKitchenReceiptHtml(order: ReceiptOrder): string {
+  const itemsRows =
+    order.items.length > 0
+      ? order.items
+          .map(
+            (item) => `
+            <tr>
+              <td>${item.quantity}</td>
+              <td>${item.name}</td>
+            </tr>
+          `
+          )
+          .join('')
+      : `
+          <tr>
+            <td colspan="2" style="text-align:center; padding: 12px;">No items added</td>
+          </tr>
+        `
+
+  const dateLine = order.timestamp
+    ? `<div><strong>Time:</strong> ${new Date(order.timestamp).toLocaleString('en-IQ')}</div>`
+    : ''
+
+  const tableLine =
+    order.tableNumber !== undefined && order.tableNumber !== null
+      ? `<div><strong>Table:</strong> ${order.tableNumber}</div>`
+      : ''
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Kitchen Ticket ${order.orderNumber}</title>
+        <style>
+          body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            padding: 18px;
+            color: #111827;
+            background: #fff;
+          }
+          h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+            letter-spacing: 0;
+          }
+          .meta {
+            margin-bottom: 18px;
+            color: #111827;
+            font-size: 15px;
+            line-height: 1.45;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+          }
+          th, td {
+            padding: 10px 8px;
+            border-bottom: 2px solid #111827;
+            text-align: left;
+            font-size: 18px;
+          }
+          th:first-child, td:first-child {
+            width: 52px;
+            text-align: center;
+            font-weight: 800;
+          }
+          .notes {
+            margin-top: 18px;
+            border: 2px solid #111827;
+            padding: 10px;
+            font-size: 16px;
+            font-weight: 700;
+          }
+          @media print {
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Kitchen Ticket</h1>
+        <div class="meta">
+          <div><strong>Order:</strong> ${order.orderNumber}</div>
+          ${tableLine}
+          ${order.customerName ? `<div><strong>Customer:</strong> ${order.customerName}</div>` : ''}
+          ${dateLine}
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Qty</th>
+              <th>Item</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsRows}
+          </tbody>
+        </table>
+        ${order.notes ? `<div class="notes">Notes: ${order.notes}</div>` : ''}
+      </body>
+    </html>
+  `
+}
