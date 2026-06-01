@@ -273,6 +273,7 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
                   <Printer className="h-4 w-4" />
                   Print Customer Receipt
                 </Button>
+                {/* Email receipt hidden for now; keep email flow code intact.
                 <Button
                   variant="outline"
                   size="sm"
@@ -283,7 +284,9 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
                   <Mail className="h-4 w-4" />
                   {sendingEmail ? 'Sending...' : 'Email Receipt'}
                 </Button>
+                */}
               </div>
+              {/* Send receipt to — hidden until email flow is functional.
               <div className="space-y-2">
                 <Label htmlFor="receiptEmail">Send receipt to</Label>
                 <Input
@@ -295,6 +298,7 @@ export default function CompleteOrderButton({ order }: { order: PendingOrder }) 
                   disabled={sendingEmail}
                 />
               </div>
+              */}
             </div>
           )}
 

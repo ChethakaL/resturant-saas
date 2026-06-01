@@ -871,6 +871,7 @@ export default function NewOrderForm({
                         Print Customer Receipt
                       </Button>
                     )}
+                    {/* Email receipt hidden for now; keep email flow code intact.
                     <Button
                       type="button"
                       size="sm"
@@ -881,6 +882,7 @@ export default function NewOrderForm({
                       <Mail className="h-4 w-4 mr-2" />
                       Email Receipt
                     </Button>
+                    */}
                     <Button
                       type="button"
                       size="sm"
