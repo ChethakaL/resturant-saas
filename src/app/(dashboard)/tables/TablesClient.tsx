@@ -437,6 +437,19 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                                                     {t.tables_no_active_orders}
                                                 </div>
                                             )}
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                className="mt-3 w-full"
+                                                onClick={(e) => {
+                                                    e.preventDefault()
+                                                    e.stopPropagation()
+                                                    window.location.href = `/orders/new?tableId=${table.id}`
+                                                }}
+                                            >
+                                                <Plus className="mr-2 h-4 w-4" />
+                                                New Order
+                                            </Button>
                                         </CardContent>
                                     </Card>
                                     </Link>

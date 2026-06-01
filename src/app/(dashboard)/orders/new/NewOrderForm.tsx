@@ -156,17 +156,23 @@ export default function NewOrderForm({
   menuItems,
   categories,
   tables,
+  initialTableId,
 }: {
   menuItems: MenuItemWithDetails[]
   categories: Category[]
   tables: Table[]
+  initialTableId?: string
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
-  const [orderDetails, setOrderDetails] = useState(() => ({ ...DEFAULT_ORDER_DETAILS }))
+  const validInitialTableId = tables.some((table) => table.id === initialTableId) ? initialTableId! : ''
+  const [orderDetails, setOrderDetails] = useState(() => ({
+    ...DEFAULT_ORDER_DETAILS,
+    tableId: validInitialTableId,
+  }))
   const TABLE_NONE_VALUE = 'TABLE_NONE'
   const [cashReceived, setCashReceived] = useState('')
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null)
@@ -211,6 +217,28 @@ export default function NewOrderForm({
 
   const cashReceivedAmount = parseFloat(cashReceived) || 0
   const changeDue = Math.max(cashReceivedAmount - orderSummary.total, 0)
+
+  const validateOrderReady = () => {
+    if (orderItems.length === 0) {
+      toast({
+        title: 'No Items',
+        description: 'Please add at least one item to the order',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    if (!orderDetails.tableId) {
+      toast({
+        title: 'Table Required',
+        description: 'Select a table before saving or completing this order.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    return true
+  }
 
   const addToOrder = (menuItemId: string) => {
     const existing = orderItems.find((item) => item.menuItemId === menuItemId)
@@ -364,12 +392,7 @@ export default function NewOrderForm({
   const handleSaveAsPending = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (orderItems.length === 0) {
-      toast({
-        title: 'No Items',
-        description: 'Please add at least one item to the order',
-        variant: 'destructive',
-      })
+    if (!validateOrderReady()) {
       return
     }
 
@@ -398,12 +421,7 @@ export default function NewOrderForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (orderItems.length === 0) {
-      toast({
-        title: 'No Items',
-        description: 'Please add at least one item to the order',
-        variant: 'destructive',
-      })
+    if (!validateOrderReady()) {
       return
     }
 
@@ -411,15 +429,6 @@ export default function NewOrderForm({
       toast({
         title: 'Card Payment Required',
         description: 'Use the card payment section to complete card payments.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (cashReceivedAmount < orderSummary.total) {
-      toast({
-        title: 'Insufficient Cash',
-        description: 'Cash received must cover the total amount.',
         variant: 'destructive',
       })
       return
@@ -443,6 +452,10 @@ export default function NewOrderForm({
   }
 
   const initCardPayment = async () => {
+    if (!validateOrderReady()) {
+      return
+    }
+
     setStripeInitLoading(true)
     try {
       const response = await fetch('/api/payments/intent', {
@@ -500,42 +513,48 @@ export default function NewOrderForm({
           <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Select Items</CardTitle>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle>Select Items</CardTitle>
+                  <Input
+                    placeholder="Search items..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-9 w-full text-sm sm:max-w-[240px]"
+                  />
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Search Menu</Label>
-                    <Input
-                      placeholder="Search items..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Filter by Category</Label>
-                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Categories</SelectItem>
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-3">
+                  <div className="min-w-0 space-y-2">
+                    <Label className="text-xs font-medium uppercase text-slate-500">Categories</Label>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={selectedCategory === 'all' ? 'default' : 'outline'}
+                        onClick={() => setSelectedCategory('all')}
+                        className="h-9 shrink-0"
+                      >
+                        All
+                      </Button>
+                      {categories.map((category) => (
+                        <Button
+                          key={category.id}
+                          type="button"
+                          size="sm"
+                          variant={selectedCategory === category.id ? 'default' : 'outline'}
+                          onClick={() => setSelectedCategory(category.id)}
+                          className="h-9 shrink-0"
+                        >
+                          {category.name}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                   {filteredMenuItems.map((item) => {
-                    const cost = item.ingredients.reduce(
-                      (sum, ing) => sum + ing.quantity * ing.ingredient.costPerUnit,
-                      0
-                    )
                     const isInOrder = orderItems.some((o) => o.menuItemId === item.id)
 
                     return (
@@ -543,33 +562,30 @@ export default function NewOrderForm({
                         key={item.id}
                         type="button"
                         onClick={() => addToOrder(item.id)}
-                        className={`text-left p-4 rounded-lg border-2 transition-all ${
+                        className={`overflow-hidden rounded-lg border-2 bg-white text-left transition-all ${
                           isInOrder
                             ? 'border-green-500 bg-green-50'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                            : 'border-slate-200 hover:border-slate-300'
                         }`}
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="h-14 w-20 overflow-hidden rounded-md bg-slate-100">
-                            <img
-                              src={
-                                item.imageUrl ||
-                                'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
-                              }
-                              alt={item.name}
-                              className="h-full w-full object-cover"
-                            />
+                        <div className="aspect-[4/3] overflow-hidden bg-slate-100">
+                          <img
+                            src={
+                              item.imageUrl ||
+                              'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
+                            }
+                            alt={item.name}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                        <div className="space-y-1 p-2.5">
+                          <div className="min-h-[2.5rem] text-sm font-semibold leading-5 text-slate-900">
+                            {item.name}
                           </div>
-                          <div className="flex-1">
-                            <div className="font-medium text-slate-900">{item.name}</div>
-                            <div className="text-sm text-slate-500">{item.category.name}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-slate-900">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="truncate text-xs text-slate-500">{item.category.name}</div>
+                            <div className="shrink-0 text-xs font-semibold text-slate-900">
                               {formatCurrency(item.price)}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              Cost: {formatCurrency(cost)}
                             </div>
                           </div>
                         </div>
@@ -587,7 +603,7 @@ export default function NewOrderForm({
             </Card>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 lg:sticky lg:top-6 lg:self-start">
             <Card>
               <CardHeader>
                 <CardTitle>Order Summary</CardTitle>
@@ -683,7 +699,7 @@ export default function NewOrderForm({
                 {orderItems.length > 0 && isCashPayment && (
                   <div className="mt-6 space-y-3 border-t border-slate-200 pt-4">
                     <div className="space-y-2">
-                      <Label htmlFor="cashReceived">Cash Received (IQD)</Label>
+                      <Label htmlFor="cashReceived">Cash Received (optional)</Label>
                       <Input
                         id="cashReceived"
                         type="number"
@@ -691,7 +707,7 @@ export default function NewOrderForm({
                         step="1"
                         value={cashReceived}
                         onChange={(e) => setCashReceived(e.target.value)}
-                        placeholder="Enter cash received"
+                        placeholder="Enter cash received if needed"
                       />
                     </div>
                     <div className="flex justify-between text-sm">
@@ -744,7 +760,7 @@ export default function NewOrderForm({
                         type="button"
                         size="lg"
                         className="w-full"
-                        disabled={stripeInitLoading}
+                        disabled={stripeInitLoading || !orderDetails.tableId}
                         onClick={initCardPayment}
                       >
                         {stripeInitLoading ? 'Preparing Payment...' : 'Start Card Payment'}
@@ -775,7 +791,7 @@ export default function NewOrderForm({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="tableId">Table</Label>
+                    <Label htmlFor="tableId">Table *</Label>
                     <Select
                       value={orderDetails.tableId || TABLE_NONE_VALUE}
                       onValueChange={(value) =>
@@ -786,10 +802,12 @@ export default function NewOrderForm({
                       }
                     >
                       <SelectTrigger id="tableId">
-                        <SelectValue placeholder="Select table (optional)" />
+                        <SelectValue placeholder="Select table" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={TABLE_NONE_VALUE}>No table</SelectItem>
+                        <SelectItem value={TABLE_NONE_VALUE} disabled>
+                          Select a table
+                        </SelectItem>
                         {tables.map((table) => (
                           <SelectItem key={table.id} value={table.id}>
                             Table {table.number} ({table.capacity} seats)
@@ -798,6 +816,9 @@ export default function NewOrderForm({
                         ))}
                       </SelectContent>
                     </Select>
+                    {!orderDetails.tableId && (
+                      <p className="text-xs text-red-600">Select a table to save or complete the order.</p>
+                    )}
                   </div>
                 </div>
 
@@ -962,7 +983,7 @@ export default function NewOrderForm({
             disabled={
               loading ||
               orderItems.length === 0 ||
-              (isCashPayment && cashReceivedAmount < orderSummary.total)
+              !orderDetails.tableId
             }
             size="lg"
             className="w-full"
@@ -973,12 +994,12 @@ export default function NewOrderForm({
           <Button
             type="button"
             onClick={handleSaveAsPending}
-            disabled={loading || orderItems.length === 0}
+            disabled={loading || orderItems.length === 0 || !orderDetails.tableId}
             variant="outline"
             size="lg"
             className="w-full"
           >
-            {loading ? 'Saving...' : 'Save as Pending'}
+            {loading ? 'Saving...' : 'Save & Print Kitchen'}
           </Button>
           <Link href="/orders" className="w-full">
             <Button type="button" variant="outline" disabled={loading} className="w-full">

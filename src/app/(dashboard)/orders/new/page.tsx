@@ -33,11 +33,22 @@ async function getOrderFormData(restaurantId: string) {
   return { menuItems, categories, tables }
 }
 
-export default async function NewOrderPage() {
+export default async function NewOrderPage({
+  searchParams,
+}: {
+  searchParams?: { tableId?: string }
+}) {
   const session = await getServerSession(authOptions)
   const restaurantId = session!.user.restaurantId
 
   const data = await getOrderFormData(restaurantId)
 
-  return <NewOrderForm menuItems={data.menuItems} categories={data.categories} tables={data.tables} />
+  return (
+    <NewOrderForm
+      menuItems={data.menuItems}
+      categories={data.categories}
+      tables={data.tables}
+      initialTableId={searchParams?.tableId}
+    />
+  )
 }
