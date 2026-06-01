@@ -15,15 +15,37 @@ async function getTable(tableId: string, restaurantId: string) {
       id: tableId,
       restaurantId,
     },
-    include: {
+    select: {
+      id: true,
+      number: true,
+      capacity: true,
+      status: true,
       sales: {
-        include: {
+        select: {
+          id: true,
+          orderNumber: true,
+          total: true,
+          status: true,
+          paymentMethod: true,
+          customerName: true,
+          createdAt: true,
           items: {
-            include: {
-              menuItem: true,
+            select: {
+              id: true,
+              quantity: true,
+              price: true,
+              menuItem: {
+                select: {
+                  name: true,
+                },
+              },
             },
           },
-          waiter: true,
+          waiter: {
+            select: {
+              name: true,
+            },
+          },
         },
         orderBy: {
           createdAt: 'desc',

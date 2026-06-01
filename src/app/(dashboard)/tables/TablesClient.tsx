@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -73,6 +74,7 @@ interface TablesClientProps {
 const tableNumberCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
 export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
+    const router = useRouter()
     const [branches, setBranches] = useState<Branch[]>([])
     const [selectedBranch, setSelectedBranch] = useState<string>('all')
     const [tables, setTables] = useState<TableData[]>([])
@@ -444,7 +446,7 @@ export default function TablesClient({ menuBaseUrl = '' }: TablesClientProps) {
                                                 onClick={(e) => {
                                                     e.preventDefault()
                                                     e.stopPropagation()
-                                                    window.location.href = `/orders/new?tableId=${table.id}`
+                                                    router.push(`/orders/new?tableId=${table.id}`)
                                                 }}
                                             >
                                                 <Plus className="mr-2 h-4 w-4" />

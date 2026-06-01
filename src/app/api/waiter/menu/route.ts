@@ -17,11 +17,20 @@ export async function GET() {
                 restaurantId: session.user.restaurantId,
                 showOnMenu: true,
             },
-            include: {
+            select: {
+                id: true,
+                name: true,
                 menuItems: {
                     where: {
                         available: true,
                         status: 'ACTIVE',
+                    },
+                    select: {
+                        id: true,
+                        name: true,
+                        price: true,
+                        description: true,
+                        imageUrl: true,
                     },
                     orderBy: {
                         name: 'asc',

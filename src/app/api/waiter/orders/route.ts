@@ -43,18 +43,50 @@ export async function GET(request: Request) {
 
         const orders = await prisma.sale.findMany({
             where,
-            include: {
+            select: {
+                id: true,
+                orderNumber: true,
+                total: true,
+                status: true,
+                customerName: true,
+                notes: true,
+                timestamp: true,
+                tableId: true,
                 items: {
-                    include: {
+                    select: {
+                        id: true,
+                        menuItemId: true,
+                        quantity: true,
+                        price: true,
                         menuItem: {
-                            include: {
-                                category: true,
+                            select: {
+                                id: true,
+                                name: true,
+                                price: true,
+                                description: true,
+                                imageUrl: true,
+                                category: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                    },
+                                },
                             },
                         },
                     },
                 },
-                table: true,
-                waiter: true,
+                table: {
+                    select: {
+                        id: true,
+                        number: true,
+                    },
+                },
+                waiter: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
             },
             orderBy: { timestamp: 'desc' },
             take: 50,

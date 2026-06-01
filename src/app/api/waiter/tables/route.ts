@@ -21,24 +21,61 @@ export async function GET() {
 
         const tables = await prisma.table.findMany({
             where,
-            include: {
+            select: {
+                id: true,
+                number: true,
+                capacity: true,
+                status: true,
                 sales: {
                     where: {
                         status: {
                             in: ['PENDING', 'PREPARING', 'READY'],
                         },
                     },
-                    include: {
+                    select: {
+                        id: true,
+                        orderNumber: true,
+                        total: true,
+                        status: true,
+                        customerName: true,
+                        notes: true,
+                        timestamp: true,
+                        tableId: true,
                         items: {
-                            include: {
+                            select: {
+                                id: true,
+                                menuItemId: true,
+                                quantity: true,
+                                price: true,
                                 menuItem: {
-                                    include: {
-                                        category: true,
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        price: true,
+                                        description: true,
+                                        imageUrl: true,
+                                        category: {
+                                            select: {
+                                                id: true,
+                                                name: true,
+                                            },
+                                        },
                                     },
                                 },
                             },
                         },
-                        waiter: true,
+                        table: {
+                            select: {
+                                id: true,
+                                number: true,
+                            },
+                        },
+                        waiter: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
                     },
                     orderBy: {
                         createdAt: 'desc',

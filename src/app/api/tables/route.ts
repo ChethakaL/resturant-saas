@@ -32,24 +32,42 @@ export async function GET(request: Request) {
 
     const tables = await prisma.table.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        number: true,
+        capacity: true,
+        status: true,
+        branchId: true,
         sales: {
           where: {
             status: {
               in: ['PENDING', 'PREPARING', 'READY'],
             },
           },
-          include: {
+          select: {
+            id: true,
+            orderNumber: true,
+            total: true,
+            status: true,
             items: {
-              include: {
-                menuItem: true,
+              select: {
+                menuItem: {
+                  select: {
+                    name: true,
+                  },
+                },
               },
             },
-            waiter: true,
+            waiter: {
+              select: {
+                name: true,
+              },
+            },
           },
           orderBy: {
             createdAt: 'desc',
           },
+          take: 3,
         },
       },
       orderBy: {

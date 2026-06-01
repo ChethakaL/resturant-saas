@@ -10,11 +10,47 @@ async function getOrderFormData(restaurantId: string) {
         restaurantId,
         available: true,
       },
-      include: {
-        category: true,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        imageUrl: true,
+        categoryId: true,
+        available: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        restaurantId: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            displayOrder: true,
+            showOnMenu: true,
+            createdAt: true,
+            updatedAt: true,
+            restaurantId: true,
+          },
+        },
         ingredients: {
-          include: {
-            ingredient: true,
+          select: {
+            id: true,
+            menuItemId: true,
+            ingredientId: true,
+            quantity: true,
+            ingredient: {
+              select: {
+                id: true,
+                name: true,
+                unit: true,
+                costPerUnit: true,
+                restaurantId: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
           },
         },
       },

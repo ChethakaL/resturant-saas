@@ -1050,15 +1050,19 @@ export default function WaiterDashboard() {
             return
         }
         if (authStatus === 'authenticated') {
+            setIsLoading(true)
+            fetchTables().finally(() => setIsLoading(false))
             Promise.all([
-                refreshDashboardData(),
+                fetchOrders(),
+                fetchKitchenOrders(),
+                fetchUnconfirmedOrders(),
                 fetchMenu(),
-            ]).finally(() => setIsLoading(false))
+            ]).catch(() => { })
 
             // Poll quickly enough that QR orders appear without a manual refresh.
             const interval = setInterval(() => {
                 refreshDashboardData()
-            }, 2000)
+            }, 5000)
 
             const handleVisibilityChange = () => {
                 if (document.visibilityState === 'visible') {
@@ -1069,7 +1073,6 @@ export default function WaiterDashboard() {
             window.addEventListener('focus', refreshDashboardData)
             document.addEventListener('visibilitychange', handleVisibilityChange)
 
-            refreshDashboardData()
             return () => {
                 clearInterval(interval)
                 window.removeEventListener('focus', refreshDashboardData)
