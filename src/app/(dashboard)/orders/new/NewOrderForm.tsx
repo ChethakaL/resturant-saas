@@ -1001,7 +1001,7 @@ export default function NewOrderForm({
             size="lg"
             className="w-full"
           >
-            {loading ? 'Saving...' : 'Save & Print Kitchen'}
+            {loading ? 'Saving...' : 'Save & Print Kitchen Receipt'}
           </Button>
           <Link href="/orders" className="w-full">
             <Button type="button" variant="outline" disabled={loading} className="w-full">
