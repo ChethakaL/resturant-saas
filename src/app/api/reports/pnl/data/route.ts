@@ -231,19 +231,11 @@ export async function GET(request: Request) {
     // const expenseByCategory = expenseTotals.reduce<Record<string, number>>((acc, exp) => { ... })
     const expenseByCategory: Record<string, number> = {}
 
-    // Add one-time expense transactions by category: only inventory purchases (exclude RENT, UTILITIES, etc.)
+    // Add one-time expense transactions by category.
     // Exclude expense transactions that are from waste records (they're already counted in wasteRecords)
     let deliveryCOGS = 0
     expenseTransactions.forEach((tx) => {
       if (tx.notes?.includes('Waste record:')) return
-      // Only include inventory purchases in sales report expenses
-      if (tx.category !== 'INVENTORY_PURCHASE') {
-        const isCOGS = tx.notes?.includes('COGS') || tx.notes?.includes('Manual stock adjustment')
-        if (isCOGS) {
-          expenseByCategory['COGS'] = (expenseByCategory['COGS'] || 0) + tx.amount
-        }
-        return
-      }
 
       const isCOGS = tx.notes?.includes('COGS') || tx.notes?.includes('Manual stock adjustment')
       const isDelivery = tx.category === 'INVENTORY_PURCHASE'
@@ -272,13 +264,9 @@ export async function GET(request: Request) {
 
     const netProfit = grossProfit - totalExpenses - payrollTotal
 
-    // Only return expense transactions that count toward report (inventory + COGS adjustments). Hide RENT/HR-style for now.
+    // Return regular expense transactions so the detailed records match the expense totals.
     const visibleExpenseTransactions = expenseTransactions.filter(
-      (tx) =>
-        !tx.notes?.includes('Waste record:') &&
-        (tx.category === 'INVENTORY_PURCHASE' ||
-          tx.notes?.includes('COGS') ||
-          tx.notes?.includes('Manual stock adjustment'))
+      (tx) => !tx.notes?.includes('Waste record:')
     )
 
     return NextResponse.json({
