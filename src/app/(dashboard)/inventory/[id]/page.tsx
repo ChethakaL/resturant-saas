@@ -24,6 +24,7 @@ async function getIngredient(id: string, restaurantId: string) {
       restaurantId,
     },
     include: {
+      pnlCategory: true,
       variants: true,
       stockAdjustments: {
         orderBy: { timestamp: 'desc' },

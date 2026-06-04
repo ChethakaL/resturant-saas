@@ -14,6 +14,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 
 export interface PlatformConfigValues {
   // AI API Keys
@@ -29,6 +30,14 @@ export interface PlatformConfigValues {
   priceAnnual?: number
   priceBranch?: number
   referralDiscountAmount?: number
+
+  // Live P&L defaults
+  livePnlSalesTaxRate?: number
+  livePnlProfitTaxRate?: number
+  livePnlServiceChargeRate?: number
+  livePnlOperatingDaysInMonth?: number
+  livePnlCurrency?: string
+  livePnlUsdRate?: number
 
   // Stripe
   stripeSecretKey?: string
@@ -74,6 +83,14 @@ export async function getPlatformConfig(): Promise<PlatformConfigValues> {
     priceBranch: (dbConfig.priceBranch as number) || Number(process.env.STRIPE_PRICE_BRANCH) || 10,
     referralDiscountAmount: (dbConfig.referralDiscountAmount as number) || 10,
 
+    // Live P&L defaults
+    livePnlSalesTaxRate: (dbConfig.livePnlSalesTaxRate as number) ?? 10,
+    livePnlProfitTaxRate: (dbConfig.livePnlProfitTaxRate as number) ?? 5,
+    livePnlServiceChargeRate: (dbConfig.livePnlServiceChargeRate as number) ?? 0,
+    livePnlOperatingDaysInMonth: (dbConfig.livePnlOperatingDaysInMonth as number) ?? 30,
+    livePnlCurrency: (dbConfig.livePnlCurrency as string) || 'IQD',
+    livePnlUsdRate: (dbConfig.livePnlUsdRate as number) ?? 0,
+
     // Stripe keys — DB wins, then .env
     stripeSecretKey: (dbConfig.stripeSecretKey as string) || process.env.STRIPE_SECRET_KEY || undefined,
     stripePriceIdMonthly: (dbConfig.stripePriceIdMonthly as string) || undefined,
@@ -94,11 +111,12 @@ export async function savePlatformConfig(updates: Partial<PlatformConfigValues>)
   const existing = await prisma.platformConfig.findUnique({ where: { id: 'global' } })
   const currentConfig = (existing?.config as Record<string, unknown>) ?? {}
   const merged = { ...currentConfig, ...updates }
+  const configJson = merged as Prisma.InputJsonObject
 
   await prisma.platformConfig.upsert({
     where: { id: 'global' },
-    update: { config: merged },
-    create: { id: 'global', config: merged },
+    update: { config: configJson },
+    create: { id: 'global', config: configJson },
   })
   invalidatePlatformConfigCache()
 }

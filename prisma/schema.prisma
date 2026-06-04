@@ -9,59 +9,59 @@ datasource db {
 }
 
 model Restaurant {
-  id                     String                   @id @default(cuid())
-  name                   String
-  slug                   String                   @unique
-  email                  String?
-  phone                  String?
-  address                String?
-  city                   String?
-  lat                    Float?
-  lng                    Float?
-  logo                   String?
-  currency               String                   @default("IQD")
-  timezone               String                   @default("Asia/Baghdad")
-  settings               Json?
-  stripeCustomerId       String?                  @unique @map("stripe_customer_id")
-  stripeSubscriptionId   String?                  @map("stripe_subscription_id")
-  subscriptionStatus     String?                  @map("subscription_status")
-  subscriptionPriceId    String?                  @map("subscription_price_id")
-  currentPeriodEnd       DateTime?                @map("current_period_end")
-  referralCode           String?                  @unique @map("referral_code")
-  referredByRestaurantId String?                  @map("referred_by_restaurant_id")
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
-  receipts               Receipt[]
-  addOns                 AddOn[]
-  aiInsights             AIInsight[]
-  branches               Branch[]
-  carouselAiCaches       CarouselAiCache[]
-  categories             Category[]
-  chefPicks              ChefPick[]
-  deliveries             Delivery[]
-  employees              Employee[]
-  expenseTransactions    ExpenseTransaction[]
-  expenses               Expense[]
-  ingredients            Ingredient[]
-  mealPrepSessions       MealPrepSession[]
-  mediaAssets            MediaAsset[]
-  menuBadgeAiCaches      MenuBadgeAiCache[]
-  menuEvents             MenuEvent[]
+  id                      String                   @id @default(cuid())
+  name                    String
+  slug                    String                   @unique
+  email                   String?
+  phone                   String?
+  address                 String?
+  city                    String?
+  lat                     Float?
+  lng                     Float?
+  logo                    String?
+  currency                String                   @default("IQD")
+  timezone                String                   @default("Asia/Baghdad")
+  settings                Json?
+  stripeCustomerId        String?                  @unique @map("stripe_customer_id")
+  stripeSubscriptionId    String?                  @map("stripe_subscription_id")
+  subscriptionStatus      String?                  @map("subscription_status")
+  subscriptionPriceId     String?                  @map("subscription_price_id")
+  currentPeriodEnd        DateTime?                @map("current_period_end")
+  referralCode            String?                  @unique @map("referral_code")
+  referredByRestaurantId  String?                  @map("referred_by_restaurant_id")
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  receipts                Receipt[]
+  addOns                  AddOn[]
+  aiInsights              AIInsight[]
+  branches                Branch[]
+  carouselAiCaches        CarouselAiCache[]
+  categories              Category[]
+  chefPicks               ChefPick[]
+  deliveries              Delivery[]
+  employees               Employee[]
+  expenseTransactions     ExpenseTransaction[]
+  expenses                Expense[]
+  ingredients             Ingredient[]
+  mealPrepSessions        MealPrepSession[]
+  mediaAssets             MediaAsset[]
+  menuBadgeAiCaches       MenuBadgeAiCache[]
+  menuEvents              MenuEvent[]
+  menuItems               MenuItem[]
+  menuShowcases           MenuShowcase[]
   monthlyFinancialImports MonthlyFinancialImport[]
-  menuItems              MenuItem[]
-  menuShowcases          MenuShowcase[]
-  payrolls               Payroll[]
-  preppedDishStocks      PreppedDishStock[]
-  promoRedemptions       PromoRedemption[]
-  supplierLinks          RestaurantSupplierLink[]
-  referredByRestaurant   Restaurant?              @relation("Referrals", fields: [referredByRestaurantId], references: [id])
-  referredRestaurants    Restaurant[]             @relation("Referrals")
-  sales                  Sale[]
-  shifts                 Shift[]
-  stockRequests          StockRequest[]
-  tables                 Table[]
-  users                  User[]
-  wasteRecords           WasteRecord[]
+  payrolls                Payroll[]
+  preppedDishStocks       PreppedDishStock[]
+  promoRedemptions        PromoRedemption[]
+  supplierLinks           RestaurantSupplierLink[]
+  referredByRestaurant    Restaurant?              @relation("Referrals", fields: [referredByRestaurantId], references: [id])
+  referredRestaurants     Restaurant[]             @relation("Referrals")
+  sales                   Sale[]
+  shifts                  Shift[]
+  stockRequests           StockRequest[]
+  tables                  Table[]
+  users                   User[]
+  wasteRecords            WasteRecord[]
 
   @@map("restaurants")
 }
@@ -70,11 +70,11 @@ model PromoCode {
   id             String            @id @default(cuid())
   code           String            @unique
   type           String
-  value          Float?
   stripeCouponId String?           @map("stripe_coupon_id")
   maxRedemptions Int?              @map("max_redemptions")
   timesRedeemed  Int               @default(0) @map("times_redeemed")
   createdAt      DateTime          @default(now()) @map("created_at")
+  value          Float?
   redemptions    PromoRedemption[]
 
   @@map("promo_codes")
@@ -156,11 +156,13 @@ model Ingredient {
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
   category            String                   @default("OTHER")
+  pnlCategoryId       String?                  @map("pnl_category_id")
   receipts            Receipt[]
   deliveries          Delivery[]
   expenseTransactions ExpenseTransaction[]
   expenses            Expense[]
   globalIngredient    GlobalIngredient?        @relation(fields: [globalIngredientId], references: [id])
+  pnlCategory         Category?                @relation("IngredientPnlCategory", fields: [pnlCategoryId], references: [id])
   preferredSupplier   Supplier?                @relation(fields: [preferredSupplierId], references: [id])
   restaurant          Restaurant?              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   mealPrepUsages      MealPrepInventoryUsage[]
@@ -173,6 +175,7 @@ model Ingredient {
   @@index([stockQuantity])
   @@index([globalIngredientId])
   @@index([preferredSupplierId])
+  @@index([pnlCategoryId])
   @@map("ingredients")
 }
 
@@ -254,19 +257,26 @@ model Delivery {
 }
 
 model Category {
-  id            String         @id @default(cuid())
+  id            String            @id @default(cuid())
   name          String
   description   String?
-  displayOrder  Int            @default(0)
-  showOnMenu    Boolean        @default(true)
+  displayOrder  Int               @default(0)
+  showOnMenu    Boolean           @default(true)
   restaurantId  String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  restaurant    Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  pnlParent     PnlParentCategory @default(FOOD) @map("pnl_parent")
+  pnlType       PnlCategoryType   @default(PRODUCT) @map("pnl_type")
+  systemLocked  Boolean           @default(false) @map("system_locked")
+  taxRate       Float?            @map("tax_rate")
+  restaurant    Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  ingredients   Ingredient[]      @relation("IngredientPnlCategory")
   menuItems     MenuItem[]
   menuShowcases MenuShowcase[]
 
   @@index([restaurantId])
+  @@index([restaurantId, pnlParent])
+  @@index([restaurantId, pnlType])
   @@index([displayOrder])
   @@map("categories")
 }
@@ -504,6 +514,7 @@ model SaleItem {
   @@index([saleId])
   @@index([menuItemId])
   @@index([saleId, menuItemId], map: "idx_sale_items_sale_menu_item")
+  @@index([saleId], map: "idx_sale_items_sale_id")
   @@map("sale_items")
 }
 
@@ -679,26 +690,26 @@ model DailySummary {
 }
 
 model MonthlyFinancialImport {
-  id            String     @id @default(cuid())
-  restaurantId  String     @map("restaurant_id")
-  year          Int
-  month         Int
-  sourceFileName String    @map("source_file_name")
-  restaurantName String?   @map("restaurant_name")
-  branchName    String?    @map("branch_name")
-  reportType    String?    @map("report_type")
-  currency      String     @default("IQD")
-  totalSales    Float      @default(0) @map("total_sales")
-  totalExpenses Float      @default(0) @map("total_expenses")
-  totalOrders   Int        @default(0) @map("total_orders")
-  avgOrderValue Float      @default(0) @map("avg_order_value")
-  taxCollected  Float      @default(0) @map("tax_collected")
-  discounts     Float      @default(0)
-  netSales      Float      @default(0) @map("net_sales")
-  details       Json?
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
-  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  id             String     @id @default(cuid())
+  restaurantId   String     @map("restaurant_id")
+  year           Int
+  month          Int
+  sourceFileName String     @map("source_file_name")
+  restaurantName String?    @map("restaurant_name")
+  branchName     String?    @map("branch_name")
+  reportType     String?    @map("report_type")
+  currency       String     @default("IQD")
+  totalSales     Float      @default(0) @map("total_sales")
+  totalExpenses  Float      @default(0) @map("total_expenses")
+  totalOrders    Int        @default(0) @map("total_orders")
+  avgOrderValue  Float      @default(0) @map("avg_order_value")
+  taxCollected   Float      @default(0) @map("tax_collected")
+  discounts      Float      @default(0)
+  netSales       Float      @default(0) @map("net_sales")
+  details        Json?
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@unique([restaurantId, year, month])
   @@index([restaurantId, year, month])
@@ -735,9 +746,9 @@ model Branch {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  employees    Employee[]
   sales        Sale[]
   tables       Table[]
-  employees    Employee[]
 
   @@index([restaurantId])
   @@map("branches")
@@ -755,9 +766,9 @@ model Employee {
   salaryType   SalaryType       @default(MONTHLY)
   isActive     Boolean          @default(true)
   restaurantId String
-  branchId     String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
+  branchId     String?
   branch       Branch?          @relation(fields: [branchId], references: [id])
   restaurant   Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   payrolls     Payroll[]
@@ -1020,6 +1031,16 @@ model RestaurantSupplierLink {
   @@map("restaurant_supplier_links")
 }
 
+/// Platform-wide configuration managed via the superadmin UI.
+/// Singleton row — always id = 'global'. Falls back to .env if a value is null.
+model PlatformConfig {
+  id        String   @id @default("global")
+  config    Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_config")
+}
+
 enum ReceiptStatus {
   PENDING
   CONFIRMED
@@ -1087,6 +1108,20 @@ enum ExpenseCategory {
   OTHER
 }
 
+enum PnlParentCategory {
+  FOOD
+  BEVERAGES
+  OTHER
+  SHISHA_TOBACCO
+  RETAIL
+  CATERING
+}
+
+enum PnlCategoryType {
+  PRODUCT
+  INCOME
+}
+
 enum InsightType {
   REVENUE_FORECAST
   DEMAND_PREDICTION
@@ -1135,14 +1170,4 @@ enum PayrollStatus {
 enum ShowcaseType {
   CHEFS_HIGHLIGHTS
   RECOMMENDATIONS
-}
-
-/// Platform-wide configuration managed via the superadmin UI.
-/// Singleton row — always id = 'global'. Falls back to .env if a value is null.
-model PlatformConfig {
-  id        String   @id @default("global")
-  config    Json     @default("{}")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("platform_config")
 }

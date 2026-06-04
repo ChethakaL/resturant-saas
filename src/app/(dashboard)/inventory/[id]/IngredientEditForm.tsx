@@ -21,6 +21,13 @@ import { SupplierDirectoryModal, type SupplierDirectoryEntry } from '../Supplier
 import { DEFAULT_INVENTORY_CATEGORY } from '@/lib/inventory-categories'
 import { convertQuantityValue } from '@/lib/unit-converter'
 
+type ProductPnlCategory = {
+  id: string
+  name: string
+  pnlParent: string
+  pnlType: string
+}
+
 function PurchaseDateField({
   value,
   onChange,
@@ -106,6 +113,7 @@ type IngredientWithVariants = {
   minStockLevel: number
   notes: string | null
   preferredSupplierId: string | null
+  pnlCategoryId?: string | null
   variants: {
     id: number | string
     brand: string
@@ -200,6 +208,7 @@ export default function IngredientEditForm({
   const { t, locale } = useI18n()
   const { t: td, fetchTranslation } = useDynamicTranslate()
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
+  const [productPnlCategories, setProductPnlCategories] = useState<ProductPnlCategory[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState(ingredient.name)
@@ -209,6 +218,7 @@ export default function IngredientEditForm({
   const [formData, setFormData] = useState({
     name: ingredient.name,
     category: ingredient.category || DEFAULT_INVENTORY_CATEGORY,
+    pnlCategoryId: ingredient.pnlCategoryId || '',
     unit: ingredient.unit,
     preferredSupplierId: ingredient.preferredSupplierId || '',
     notes: ingredient.notes || '',
@@ -228,6 +238,17 @@ export default function IngredientEditForm({
     fetch('/api/suppliers')
       .then((res) => (res.ok ? res.json() : []))
       .then(setSuppliers)
+
+    fetch('/api/categories')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((categories) => {
+        setProductPnlCategories(
+          Array.isArray(categories)
+            ? categories.filter((category) => category.pnlType !== 'INCOME')
+            : []
+        )
+      })
+      .catch(() => setProductPnlCategories([]))
   }, [])
 
   useEffect(() => {
@@ -354,6 +375,7 @@ export default function IngredientEditForm({
         body: JSON.stringify({
           name: formData.name.trim(),
           category: formData.category,
+          pnlCategoryId: formData.pnlCategoryId || null,
           unit: formData.unit,
           preferredSupplierId: formData.preferredSupplierId || null,
           notes: formData.notes.trim() || null,
@@ -475,6 +497,25 @@ export default function IngredientEditForm({
                       setFormData({ ...formData, name: e.target.value })
                     }}
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pnlCategoryId">{td('Product P&L category')}</Label>
+                  <select
+                    id="pnlCategoryId"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={formData.pnlCategoryId}
+                    onChange={(e) => setFormData({ ...formData, pnlCategoryId: e.target.value })}
+                  >
+                    <option value="">{td('— Use item recipe category —')}</option>
+                    {productPnlCategories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {td(category.name)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500">
+                    {td('Income categories are excluded because inventory must roll up to Product COGS.')}
+                  </p>
                 </div>
               </CardContent>
             </Card>

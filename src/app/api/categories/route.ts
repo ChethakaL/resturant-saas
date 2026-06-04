@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { isPnlCategoryType, isPnlParentCategory } from '@/lib/live-pnl-categories'
 
 export async function GET(request: Request) {
   try {
@@ -34,12 +35,19 @@ export async function POST(request: Request) {
 
     const data = await request.json()
 
+    const pnlParent = isPnlParentCategory(data.pnlParent) ? data.pnlParent : 'FOOD'
+    const pnlType = isPnlCategoryType(data.pnlType) ? data.pnlType : pnlParent === 'OTHER' ? 'INCOME' : 'PRODUCT'
+    const taxRate = typeof data.taxRate === 'number' && Number.isFinite(data.taxRate) ? data.taxRate : null
+
     const category = await prisma.category.create({
       data: {
         name: data.name,
         description: data.description,
         displayOrder: data.displayOrder ?? 0,
         showOnMenu: data.showOnMenu !== false,
+        pnlParent,
+        pnlType,
+        taxRate,
         restaurantId: session.user.restaurantId,
       },
     })

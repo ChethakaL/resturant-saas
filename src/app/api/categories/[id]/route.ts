@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
+import { isPnlCategoryType, isPnlParentCategory } from '@/lib/live-pnl-categories'
 
 export async function PATCH(
   request: Request,
@@ -15,7 +16,15 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { name, description, displayOrder, showOnMenu } = body
+    const { name, description, displayOrder, showOnMenu, pnlParent, pnlType, taxRate } = body
+
+    const existing = await prisma.category.findFirst({
+      where: { id: params.id, restaurantId: session.user.restaurantId },
+      select: { systemLocked: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
 
     const category = await prisma.category.updateMany({
       where: {
@@ -23,10 +32,14 @@ export async function PATCH(
         restaurantId: session.user.restaurantId,
       },
       data: {
-        ...(name !== undefined && { name }),
+        ...(name !== undefined && !existing.systemLocked && { name }),
         ...(description !== undefined && { description }),
         ...(typeof displayOrder === 'number' && { displayOrder }),
         ...(typeof showOnMenu === 'boolean' && { showOnMenu }),
+        ...(isPnlParentCategory(pnlParent) && { pnlParent }),
+        ...(isPnlCategoryType(pnlType) && { pnlType }),
+        ...(taxRate === null && { taxRate: null }),
+        ...(typeof taxRate === 'number' && Number.isFinite(taxRate) && { taxRate }),
       },
     })
 
@@ -58,6 +71,19 @@ export async function DELETE(
     }
 
     const restaurantId = session.user.restaurantId
+
+    const category = await prisma.category.findFirst({
+      where: { id: params.id, restaurantId },
+      select: { systemLocked: true },
+    })
+
+    if (!category) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+
+    if (category.systemLocked) {
+      return NextResponse.json({ error: 'System-locked categories cannot be deleted' }, { status: 400 })
+    }
 
     // Count items in this category
     const itemCount = await prisma.menuItem.count({

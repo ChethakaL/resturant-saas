@@ -44,6 +44,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { getStaticTranslationForSourceText, getTranslatedCategoryName, useI18n } from '@/lib/i18n'
+import { PNL_CATEGORY_TYPE_OPTIONS, PNL_PARENT_OPTIONS, getPnlParentLabel, getPnlTypeLabel } from '@/lib/live-pnl-categories'
 
 export interface CategoryWithItems extends Category {
   menuItems: { id: string; name: string; translations?: { language: string; translatedName: string }[] }[]
@@ -212,6 +213,7 @@ interface SortableCategoryItemProps {
   onToggleShowOnMenu: (categoryId: string) => void
   onOpenDeleteDialog: (category: CategoryWithItems) => void
   onMoveItemToCategory: (menuItemId: string, categoryId: string) => void
+  onUpdatePnlMeta: (categoryId: string, updates: { pnlParent?: string; pnlType?: string; taxRate?: number | null }) => void
   copy: CategoryCopy
   locale: string
   translatedCategoryName: string
@@ -235,6 +237,7 @@ function SortableCategoryItem({
   onToggleShowOnMenu,
   onOpenDeleteDialog,
   onMoveItemToCategory,
+  onUpdatePnlMeta,
   copy,
   locale,
   translatedCategoryName,
@@ -301,6 +304,13 @@ function SortableCategoryItem({
             <p className="text-sm text-slate-500">{translateSourceText(category.description)}</p>
           )}
           <Badge variant="secondary" className="text-[11px]">{`${copy.order} ${index + 1}`}</Badge>
+          <Badge variant="outline" className="text-[11px]">{getPnlParentLabel(category.pnlParent)}</Badge>
+          <Badge variant={category.pnlType === 'INCOME' ? 'secondary' : 'outline'} className="text-[11px]">
+            {category.pnlType === 'INCOME' ? 'Income' : 'Product'}
+          </Badge>
+          {category.taxRate !== null && category.taxRate !== undefined && (
+            <Badge variant="outline" className="text-[11px]">Tax {category.taxRate}%</Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -326,6 +336,56 @@ function SortableCategoryItem({
           >
             <Trash className="h-4 w-4" />
           </Button>
+        </div>
+      </div>
+      <div className="grid gap-3 pl-6 md:grid-cols-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-500">Top-level rollup</Label>
+          <Select
+            value={category.pnlParent || 'FOOD'}
+            onValueChange={(value) => onUpdatePnlMeta(category.id, { pnlParent: value })}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PNL_PARENT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-500">P&amp;L type</Label>
+          <Select
+            value={category.pnlType || 'PRODUCT'}
+            onValueChange={(value) => onUpdatePnlMeta(category.id, { pnlType: value })}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PNL_CATEGORY_TYPE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{getPnlTypeLabel(option.value)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-500">Sales tax override</Label>
+          <Input
+            className="h-8 text-xs"
+            type="number"
+            min="0"
+            step="0.1"
+            value={category.taxRate ?? ''}
+            placeholder="Default"
+            onChange={(e) =>
+              onUpdatePnlMeta(category.id, {
+                taxRate: e.target.value.trim() === '' ? null : Number(e.target.value),
+              })
+            }
+          />
         </div>
       </div>
       <div className="pl-6">
@@ -397,6 +457,9 @@ export default function CategoriesManager({ initialCategories, uiTranslationMap 
   const [categories, setCategories] = useState<CategoryWithItems[]>(initialCategories)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [pnlParent, setPnlParent] = useState('FOOD')
+  const [pnlType, setPnlType] = useState('PRODUCT')
+  const [taxRate, setTaxRate] = useState('')
   const [loading, setLoading] = useState(false)
   const [deletingIds, setDeletingIds] = useState<string[]>([])
   const [updatingVisibilityIds, setUpdatingVisibilityIds] = useState<string[]>([])
@@ -473,6 +536,9 @@ export default function CategoriesManager({ initialCategories, uiTranslationMap 
         body: JSON.stringify({
           name: trimmedName,
           description: description.trim(),
+          pnlParent,
+          pnlType,
+          taxRate: taxRate.trim() === '' ? null : Number(taxRate),
           displayOrder: categories.length,
         }),
       })
@@ -481,6 +547,9 @@ export default function CategoriesManager({ initialCategories, uiTranslationMap 
       setCategories((prev) => [...prev, { ...data, menuItems: [] }])
       setName('')
       setDescription('')
+      setPnlParent('FOOD')
+      setPnlType('PRODUCT')
+      setTaxRate('')
       toast({ title: copy.categoryAdded })
     } catch (error) {
       console.error('Add category failed', error)
@@ -568,6 +637,35 @@ export default function CategoriesManager({ initialCategories, uiTranslationMap 
       toast({ title: copy.couldNotUpdateName, variant: 'destructive' })
     } finally {
       setEditingNameId(null)
+    }
+  }
+
+  const updatePnlMeta = async (
+    categoryId: string,
+    updates: { pnlParent?: string; pnlType?: string; taxRate?: number | null }
+  ) => {
+    const previous = categories
+    setCategories((prev) =>
+      prev.map((category) =>
+        category.id === categoryId
+          ? ({ ...category, ...updates } as CategoryWithItems)
+          : category
+      )
+    )
+    try {
+      const response = await fetch(`/api/categories/${categoryId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!response.ok) throw new Error('Failed to update P&L category settings')
+    } catch (error) {
+      setCategories(previous)
+      toast({
+        title: 'Could not update P&L category settings',
+        description: error instanceof Error ? error.message : copy.unknownError,
+        variant: 'destructive',
+      })
     }
   }
 
@@ -750,6 +848,53 @@ export default function CategoriesManager({ initialCategories, uiTranslationMap 
               />
             </div>
           </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Locked top-level P&amp;L category</Label>
+              <Select value={pnlParent} onValueChange={(value) => {
+                setPnlParent(value)
+                if (value === 'OTHER') setPnlType('INCOME')
+              }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PNL_PARENT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}{option.alwaysOn ? ' · always on' : ' · optional'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={pnlType} onValueChange={setPnlType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PNL_CATEGORY_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category-tax-rate">Sales tax override %</Label>
+              <Input
+                id="category-tax-rate"
+                type="number"
+                min="0"
+                step="0.1"
+                value={taxRate}
+                onChange={(e) => setTaxRate(e.target.value)}
+                placeholder="Default"
+              />
+            </div>
+          </div>
           <Button onClick={handleAddCategory} disabled={loading} className="self-start">
             {loading ? copy.saving : copy.create}
           </Button>
@@ -799,6 +944,7 @@ export default function CategoriesManager({ initialCategories, uiTranslationMap 
                     onToggleShowOnMenu={toggleShowOnMenu}
                     onOpenDeleteDialog={openDeleteDialog}
                     onMoveItemToCategory={moveItemToCategory}
+                    onUpdatePnlMeta={updatePnlMeta}
                   />
                 ))}
               </SortableContext>
