@@ -58,6 +58,59 @@ function expenseTotalForPeriod(
   }
 }
 
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0)
+}
+
+function addMonths(date: Date, count: number) {
+  return new Date(date.getFullYear(), date.getMonth() + count, 1)
+}
+
+function isSameMonth(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+}
+
+function accruedFixedExpenseTotalForPeriod(
+  expense: {
+    amount: number
+    cadence: 'MONTHLY' | 'ANNUAL'
+    startDate: Date
+    endDate: Date | null
+  },
+  rangeStart: Date,
+  rangeEnd: Date,
+  today: Date,
+  operatingDaysInMonth: number
+) {
+  const effectiveReportEnd = rangeEnd > today ? today : rangeEnd
+  const expenseEnd = expense.endDate && expense.endDate < effectiveReportEnd ? expense.endDate : effectiveReportEnd
+  const range = overlapRange(expense.startDate, expenseEnd, rangeStart, effectiveReportEnd)
+  if (!range) return 0
+
+  const monthlyAmount = expense.cadence === 'ANNUAL' ? expense.amount / 12 : expense.amount
+  let total = 0
+  let cursor = startOfMonth(range.start)
+
+  while (cursor <= range.end) {
+    const monthRange = overlapRange(cursor, endOfMonth(cursor), range.start, range.end)
+    if (monthRange) {
+      const recognizedDays = isSameMonth(cursor, today)
+        ? Math.min(operatingDaysInMonth, Math.max(0, today.getDate()))
+        : Math.min(operatingDaysInMonth, daysBetweenInclusive(monthRange.start, monthRange.end))
+
+      total += monthlyAmount * (recognizedDays / operatingDaysInMonth)
+    }
+
+    cursor = addMonths(cursor, 1)
+  }
+
+  return total
+}
+
 function percentOf(amount: number, base: number) {
   return base > 0 ? (amount / base) * 100 : 0
 }
@@ -362,21 +415,30 @@ export async function GET(request: Request) {
     const laborTotal = payrollTotal + serviceChargeStaffPayout
 
     const today = new Date()
-    const rangeIsCurrentMonth =
-      rangeStart.getFullYear() === today.getFullYear() &&
-      rangeStart.getMonth() === today.getMonth()
-    const elapsedOperatingDays = rangeIsCurrentMonth
+    const effectiveExpenseRangeEnd = rangeEnd > today ? today : rangeEnd
+    const rangeIncludesCurrentMonth =
+      rangeStart <= today &&
+      rangeEnd >= startOfMonth(today)
+    const elapsedOperatingDays = rangeIncludesCurrentMonth
       ? Math.min(config.operatingDaysInMonth, Math.max(1, today.getDate()))
-      : Math.min(config.operatingDaysInMonth, daysBetweenInclusive(rangeStart, rangeEnd))
+      : Math.min(config.operatingDaysInMonth, daysBetweenInclusive(rangeStart, effectiveExpenseRangeEnd))
 
     const expenseTotals = expenses.map((expense) => {
-      const normalTotal = expenseTotalForPeriod(expense, rangeStart, rangeEnd)
       const isMonthlyFixed = ['MONTHLY', 'ANNUAL'].includes(expense.cadence)
-      const accruedTotal =
-        isMonthlyFixed && rangeIsCurrentMonth
-          ? (expense.cadence === 'ANNUAL' ? expense.amount / 12 : expense.amount) *
-            (elapsedOperatingDays / config.operatingDaysInMonth)
-          : normalTotal
+      const accruedTotal = isMonthlyFixed
+        ? accruedFixedExpenseTotalForPeriod(
+            expense as {
+              amount: number
+              cadence: 'MONTHLY' | 'ANNUAL'
+              startDate: Date
+              endDate: Date | null
+            },
+            rangeStart,
+            rangeEnd,
+            today,
+            config.operatingDaysInMonth
+          )
+        : expenseTotalForPeriod(expense, rangeStart, effectiveExpenseRangeEnd)
       return {
         ...expense,
         total: accruedTotal,

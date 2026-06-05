@@ -18,13 +18,6 @@ import { SupplierDirectoryModal, type SupplierDirectoryEntry } from '../Supplier
 import { DEFAULT_INVENTORY_CATEGORY } from '@/lib/inventory-categories'
 import { convertQuantityValue } from '@/lib/unit-converter'
 
-type ProductPnlCategory = {
-  id: string
-  name: string
-  pnlParent: string
-  pnlType: string
-}
-
 function PurchaseDateField({
   value,
   onChange,
@@ -208,14 +201,12 @@ export default function NewIngredientPage() {
   const { t: td } = useDynamicTranslate()
   const copy = INVENTORY_COPY[locale] ?? INVENTORY_COPY.en
   const [suppliers, setSuppliers] = useState<SupplierDirectoryEntry[]>([])
-  const [productPnlCategories, setProductPnlCategories] = useState<ProductPnlCategory[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [supplierModalOpen, setSupplierModalOpen] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     category: DEFAULT_INVENTORY_CATEGORY,
-    pnlCategoryId: '',
     unit: 'g',
     preferredSupplierId: '',
     notes: '',
@@ -235,17 +226,6 @@ export default function NewIngredientPage() {
       .then((res) => (res.ok ? res.json() : []))
       .then(setSuppliers)
       .catch(() => setSuppliers([]))
-
-    fetch('/api/categories')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((categories) => {
-        setProductPnlCategories(
-          Array.isArray(categories)
-            ? categories.filter((category) => category.pnlType !== 'INCOME')
-            : []
-        )
-      })
-      .catch(() => setProductPnlCategories([]))
   }, [])
 
   const calculateCostPerUnit = (variant: any) => {
@@ -352,7 +332,6 @@ export default function NewIngredientPage() {
         body: JSON.stringify({
           name: formData.name,
           category: formData.category,
-          pnlCategoryId: formData.pnlCategoryId || null,
           unit: formData.unit,
           preferredSupplierId: formData.preferredSupplierId || null,
           notes: formData.notes || null,
@@ -419,25 +398,6 @@ export default function NewIngredientPage() {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={copy.chicken}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pnlCategoryId">{td('Product P&L category')}</Label>
-                  <select
-                    id="pnlCategoryId"
-                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-                    value={formData.pnlCategoryId}
-                    onChange={(e) => setFormData({ ...formData, pnlCategoryId: e.target.value })}
-                  >
-                    <option value="">{td('— Use item recipe category —')}</option>
-                    {productPnlCategories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {td(category.name)}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-slate-500">
-                    {td('Income categories are excluded because inventory must roll up to Product COGS.')}
-                  </p>
                 </div>
               </CardContent>
             </Card>

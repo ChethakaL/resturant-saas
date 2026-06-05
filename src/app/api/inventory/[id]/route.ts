@@ -60,7 +60,6 @@ export async function PATCH(
       minStockLevel?: number
       notes?: string | null
       preferredSupplierId?: string | null
-      pnlCategoryId?: string | null
     } = {
       name: data.name,
       category:
@@ -76,25 +75,6 @@ export async function PATCH(
     if (data.preferredSupplierId !== undefined) {
       updateData.preferredSupplierId = data.preferredSupplierId === '' || data.preferredSupplierId == null ? null : data.preferredSupplierId
     }
-    if (data.pnlCategoryId !== undefined) {
-      if (data.pnlCategoryId === '' || data.pnlCategoryId === null) {
-        updateData.pnlCategoryId = null
-      } else if (typeof data.pnlCategoryId === 'string') {
-        const pnlCategory = await prisma.category.findFirst({
-          where: {
-            id: data.pnlCategoryId,
-            restaurantId: session.user.restaurantId,
-            pnlType: 'PRODUCT',
-          },
-          select: { id: true },
-        })
-        if (!pnlCategory) {
-          return NextResponse.json({ error: 'Inventory ingredients must use a Product P&L category' }, { status: 400 })
-        }
-        updateData.pnlCategoryId = pnlCategory.id
-      }
-    }
-
     if (data.variants && Array.isArray(data.variants)) {
       updateData.costPerUnit = getPrimaryVariantCost(data.variants, data.costPerUnit)
     } else if (data.costPerUnit !== undefined) {
@@ -169,7 +149,7 @@ export async function PATCH(
 
     const fullIngredient = await prisma.ingredient.findUnique({
       where: { id: resolvedParams.id },
-      include: { variants: true, pnlCategory: true },
+      include: { variants: true },
     })
 
     return NextResponse.json(fullIngredient)

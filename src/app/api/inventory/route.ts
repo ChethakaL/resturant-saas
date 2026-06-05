@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { canonicalise, isAllowedUnit, computeConversion } from '@/lib/unit-converter'
 import { DEFAULT_INVENTORY_CATEGORY, isInventoryCategory } from '@/lib/inventory-categories'
-import { isPnlCategoryType } from '@/lib/live-pnl-categories'
 import type { ManagementLocale } from '@/lib/i18n/translations'
 import { translateInventoryApiIngredients } from '@/lib/i18n/inventory-display-translate'
 
@@ -41,27 +40,10 @@ export async function POST(request: Request) {
       }
     }
 
-    let pnlCategoryId: string | null = null
-    if (typeof data.pnlCategoryId === 'string' && data.pnlCategoryId) {
-      const pnlCategory = await prisma.category.findFirst({
-        where: {
-          id: data.pnlCategoryId,
-          restaurantId: session.user.restaurantId,
-          pnlType: 'PRODUCT',
-        },
-        select: { id: true },
-      })
-      if (!pnlCategory) {
-        return NextResponse.json({ error: 'Inventory ingredients must use a Product P&L category' }, { status: 400 })
-      }
-      pnlCategoryId = pnlCategory.id
-    }
-
     const ingredient = await prisma.ingredient.create({
       data: {
         name: data.name,
         category: isInventoryCategory(data.category) ? data.category : DEFAULT_INVENTORY_CATEGORY,
-        pnlCategoryId,
         unit: resolvedUnit,
         stockQuantity: 999999,
         costPerUnit: getPrimaryVariantCost(data.variants, resolvedCostPerUnit),
@@ -118,7 +100,6 @@ export async function GET(request: Request) {
         where: { restaurantId: session.user.restaurantId },
         include: {
           variants: true,
-          pnlCategory: true,
         },
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
       }),
@@ -137,7 +118,6 @@ export async function GET(request: Request) {
     const mapped = ingredients.map((ingredient) => ({
       ...ingredient,
       costPerUnit: getPrimaryVariantCost(ingredient.variants, ingredient.costPerUnit),
-      pnlCategory: isPnlCategoryType(ingredient.pnlCategory?.pnlType) ? ingredient.pnlCategory : null,
     }))
 
     const translated = await translateInventoryApiIngredients(mapped, managementLocale)
