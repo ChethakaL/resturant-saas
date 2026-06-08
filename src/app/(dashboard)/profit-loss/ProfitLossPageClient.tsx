@@ -888,6 +888,14 @@ export default function ProfitLossPageClient() {
     ? (data.summary.netProfit / data.summary.revenue) * 100
     : 0
 
+  const saleItemNetRevenue = (item: any) => {
+    const gross = item.price * item.quantity
+    const taxRate = item.menuItem?.category?.taxRate
+    return typeof taxRate === 'number' && Number.isFinite(taxRate) && taxRate > 0
+      ? gross / (1 + taxRate / 100)
+      : gross
+  }
+
   // Group sales by category (for detailed breakdown)
   const salesByCategory = data.sales.reduce((acc: Record<string, { revenue: number; cogs: number; count: number }>, sale) => {
     sale.items.forEach((item: any) => {
@@ -897,7 +905,7 @@ export default function ProfitLossPageClient() {
       if (!acc[category]) {
         acc[category] = { revenue: 0, cogs: 0, count: 0 }
       }
-      acc[category].revenue += item.price * item.quantity
+      acc[category].revenue += saleItemNetRevenue(item)
       acc[category].cogs += item.cost * item.quantity
       acc[category].count += item.quantity
     })

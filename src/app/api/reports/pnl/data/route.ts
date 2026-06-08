@@ -70,10 +70,6 @@ function addMonths(date: Date, count: number) {
   return new Date(date.getFullYear(), date.getMonth() + count, 1)
 }
 
-function isSameMonth(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
-}
-
 function accruedFixedExpenseTotalForPeriod(
   expense: {
     amount: number
@@ -98,9 +94,10 @@ function accruedFixedExpenseTotalForPeriod(
   while (cursor <= range.end) {
     const monthRange = overlapRange(cursor, endOfMonth(cursor), range.start, range.end)
     if (monthRange) {
-      const recognizedDays = isSameMonth(cursor, today)
-        ? Math.min(operatingDaysInMonth, Math.max(0, today.getDate()))
-        : Math.min(operatingDaysInMonth, daysBetweenInclusive(monthRange.start, monthRange.end))
+      const recognizedDays = Math.min(
+        operatingDaysInMonth,
+        daysBetweenInclusive(monthRange.start, monthRange.end)
+      )
 
       total += monthlyAmount * (recognizedDays / operatingDaysInMonth)
     }
