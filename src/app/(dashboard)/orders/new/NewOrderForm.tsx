@@ -28,7 +28,6 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
-import { Category, Ingredient, MenuItem, MenuItemIngredient, Table } from '@prisma/client'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { buildKitchenReceiptHtml, buildReceiptHtml, ReceiptOrder } from '@/lib/receipt'
@@ -37,9 +36,31 @@ import { useToast } from '@/components/ui/use-toast'
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null
 
-interface MenuItemWithDetails extends MenuItem {
-  category: Category
-  ingredients: (MenuItemIngredient & { ingredient: Ingredient })[]
+interface PosCategory {
+  id: string
+  name: string
+}
+
+interface PosMenuItem {
+  id: string
+  name: string
+  price: number
+  imageUrl: string | null
+  categoryId: string
+  category: PosCategory
+  ingredients: {
+    quantity: number
+    ingredient: {
+      costPerUnit: number
+    }
+  }[]
+}
+
+interface PosTable {
+  id: string
+  number: string
+  capacity: number
+  status: string
 }
 
 interface OrderItem {
@@ -158,9 +179,9 @@ export default function NewOrderForm({
   tables,
   initialTableId,
 }: {
-  menuItems: MenuItemWithDetails[]
-  categories: Category[]
-  tables: Table[]
+  menuItems: PosMenuItem[]
+  categories: PosCategory[]
+  tables: PosTable[]
   initialTableId?: string
 }) {
   const router = useRouter()
@@ -577,6 +598,12 @@ export default function NewOrderForm({
                             alt={item.name}
                             loading="lazy"
                             decoding="async"
+                            onError={(event) => {
+                              if (event.currentTarget.dataset.fallbackApplied) return
+                              event.currentTarget.dataset.fallbackApplied = 'true'
+                              event.currentTarget.src =
+                                'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
+                            }}
                             className="h-full w-full object-cover"
                           />
                         </div>

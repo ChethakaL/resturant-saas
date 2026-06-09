@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth'
+import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import NewOrderForm from './NewOrderForm'
@@ -13,42 +14,21 @@ async function getOrderFormData(restaurantId: string) {
       select: {
         id: true,
         name: true,
-        description: true,
         price: true,
-        imageUrl: true,
         categoryId: true,
-        available: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-        restaurantId: true,
+        mediaAssetId: true,
         category: {
           select: {
             id: true,
             name: true,
-            description: true,
-            displayOrder: true,
-            showOnMenu: true,
-            createdAt: true,
-            updatedAt: true,
-            restaurantId: true,
           },
         },
         ingredients: {
           select: {
-            id: true,
-            menuItemId: true,
-            ingredientId: true,
             quantity: true,
             ingredient: {
               select: {
-                id: true,
-                name: true,
-                unit: true,
                 costPerUnit: true,
-                restaurantId: true,
-                createdAt: true,
-                updatedAt: true,
               },
             },
           },
@@ -58,15 +38,34 @@ async function getOrderFormData(restaurantId: string) {
     }),
     prisma.category.findMany({
       where: { restaurantId },
+      select: {
+        id: true,
+        name: true,
+      },
       orderBy: { displayOrder: 'asc' },
     }),
     prisma.table.findMany({
       where: { restaurantId },
+      select: {
+        id: true,
+        number: true,
+        capacity: true,
+        status: true,
+      },
       orderBy: { number: 'asc' },
     }),
   ])
 
-  return { menuItems, categories, tables }
+  return {
+    menuItems: menuItems.map(({ mediaAssetId, ...item }) => ({
+      ...item,
+      imageUrl: mediaAssetId
+        ? `/api/media-assets/${mediaAssetId}/image`
+        : `/api/public/menu-item-image?id=${encodeURIComponent(item.id)}`,
+    })),
+    categories,
+    tables,
+  }
 }
 
 export default async function NewOrderPage({
@@ -75,7 +74,11 @@ export default async function NewOrderPage({
   searchParams?: { tableId?: string }
 }) {
   const session = await getServerSession(authOptions)
-  const restaurantId = session!.user.restaurantId
+  if (!session?.user?.restaurantId) {
+    redirect('/login')
+  }
+
+  const restaurantId = session.user.restaurantId
 
   const data = await getOrderFormData(restaurantId)
 
