@@ -9,6 +9,7 @@ import {
     CheckCircle2,
     ChefHat,
     ClipboardList,
+    MoreHorizontal,
     PencilLine,
     Trash2,
     User,
@@ -69,7 +70,11 @@ interface Order {
     table?: { id: string; number: string } | null
     waiter?: Waiter | null
     items: SaleItem[]
+    itemCount?: number
 }
+
+const getOrderItemCount = (order: Pick<Order, 'items' | 'itemCount'>) =>
+    order.itemCount ?? order.items.length
 
 interface CartItem {
     menuItem: MenuItem
@@ -136,12 +141,14 @@ function TableCard({
     table,
     isSelected,
     onClick,
+    onManage,
     onViewOrders,
     onNewOrder,
 }: {
     table: Table
     isSelected: boolean
     onClick: () => void
+    onManage: () => void
     onViewOrders: () => void
     onNewOrder: () => void
 }) {
@@ -172,7 +179,20 @@ function TableCard({
         >
             <div className="flex items-center justify-between mb-2">
                 <span className="text-xl font-bold text-slate-900 sm:text-2xl">T{table.number}</span>
-                <StatusIcon className="h-5 w-5 text-slate-500" />
+                <div className="flex items-center gap-1">
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            onManage()
+                        }}
+                        className="rounded-lg border border-slate-200 bg-white/80 p-1.5 text-slate-500 hover:border-slate-300 hover:text-slate-900"
+                        aria-label={`Manage table ${table.number}`}
+                    >
+                        <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                    <StatusIcon className="h-5 w-5 text-slate-500" />
+                </div>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-600">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -183,9 +203,16 @@ function TableCard({
             </div>
             {hasActiveOrders && (
                 <div className="mt-2 flex items-center gap-1">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-800">
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            onViewOrders()
+                        }}
+                        className="inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-800 hover:bg-slate-300"
+                    >
                         {table.sales.length} order{table.sales.length > 1 ? 's' : ''}
-                    </span>
+                    </button>
                 </div>
             )}
             <div className="mt-3 grid grid-cols-1 gap-2 md:hidden">
@@ -205,7 +232,7 @@ function TableCard({
                     type="button"
                     onClick={(event) => {
                         event.stopPropagation()
-                        onClick()
+                        onManage()
                     }}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900"
                 >
@@ -931,7 +958,7 @@ export default function WaiterDashboard() {
     const [orderSearchTable, setOrderSearchTable] = useState('')
     const [orderSort, setOrderSort] = useState<'newest' | 'oldest' | 'expensive' | 'cheap'>('newest')
     const [kitchenSort, setKitchenSort] = useState<'oldest' | 'newest' | 'expensive' | 'cheap'>('oldest')
-    const [isLoading, setIsLoading] = useState(true)
+    const [isTablesLoading, setIsTablesLoading] = useState(true)
     const previousUnconfirmedCountRef = useRef(0)
     const previousOrderStatusesRef = useRef<Map<string, string>>(new Map())
     const previousKitchenOrderIdsRef = useRef<Set<string>>(new Set())
@@ -1031,6 +1058,20 @@ export default function WaiterDashboard() {
         }
     }, [])
 
+    const openOrder = useCallback(async (orderId: string, options?: { print?: boolean }) => {
+        try {
+            const res = await fetch(`/api/waiter/orders/${orderId}`, { cache: 'no-store' })
+            if (!res.ok) return
+            const order = await res.json()
+            if (options?.print) {
+                printKitchenTicket(order)
+            }
+            setSelectedOrder(order)
+        } catch (err) {
+            console.error('Failed to load order:', err)
+        }
+    }, [])
+
     const refreshDashboardData = useCallback(async () => {
         await Promise.all([
             fetchTables(),
@@ -1043,39 +1084,43 @@ export default function WaiterDashboard() {
     useEffect(() => {
         if (authStatus === 'unauthenticated') {
             router.push('/waiter/login')
-            return
         }
-        if (authStatus === 'authenticated') {
-            setIsLoading(true)
-            fetchTables().finally(() => setIsLoading(false))
-            Promise.all([
-                fetchOrders(),
-                fetchKitchenOrders(),
-                fetchUnconfirmedOrders(),
-                fetchMenu(),
-            ]).catch(() => { })
+    }, [authStatus, router])
 
-            // Poll quickly enough that QR orders appear without a manual refresh.
-            const interval = setInterval(() => {
+    useEffect(() => {
+        setIsTablesLoading(true)
+        fetchTables().finally(() => setIsTablesLoading(false))
+        Promise.all([
+            fetchOrders(),
+            fetchKitchenOrders(),
+            fetchUnconfirmedOrders(),
+        ]).catch(() => { })
+
+        const interval = setInterval(() => {
+            refreshDashboardData()
+        }, 5000)
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
                 refreshDashboardData()
-            }, 5000)
-
-            const handleVisibilityChange = () => {
-                if (document.visibilityState === 'visible') {
-                    refreshDashboardData()
-                }
-            }
-
-            window.addEventListener('focus', refreshDashboardData)
-            document.addEventListener('visibilitychange', handleVisibilityChange)
-
-            return () => {
-                clearInterval(interval)
-                window.removeEventListener('focus', refreshDashboardData)
-                document.removeEventListener('visibilitychange', handleVisibilityChange)
             }
         }
-    }, [authStatus, router, fetchMenu, refreshDashboardData])
+
+        window.addEventListener('focus', refreshDashboardData)
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+
+        return () => {
+            clearInterval(interval)
+            window.removeEventListener('focus', refreshDashboardData)
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+        }
+    }, [fetchKitchenOrders, fetchOrders, fetchTables, fetchUnconfirmedOrders, refreshDashboardData])
+
+    useEffect(() => {
+        if (!showNewOrder && !selectedOrder) return
+        if (categories.length > 0) return
+        fetchMenu().catch(() => { })
+    }, [categories.length, fetchMenu, selectedOrder, showNewOrder])
 
     useEffect(() => {
         if (authStatus === 'authenticated') {
@@ -1182,15 +1227,8 @@ export default function WaiterDashboard() {
         }
     }
 
-    if (authStatus === 'loading' || isLoading) {
-        return (
-            <div className="flex items-center justify-center py-24">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin" />
-                    <p className="text-slate-600 text-sm">Loading waiter dashboard...</p>
-                </div>
-            </div>
-        )
+    if (authStatus === 'unauthenticated') {
+        return null
     }
 
     const activeOrders = myOrders.filter((o) => ['PENDING', 'PREPARING', 'READY'].includes(o.status))
@@ -1276,18 +1314,36 @@ export default function WaiterDashboard() {
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                            {tables.map((table) => (
+                            {isTablesLoading
+                                ? Array.from({ length: 12 }).map((_, index) => (
+                                    <div
+                                        key={`table-skeleton-${index}`}
+                                        className="h-[108px] animate-pulse rounded-xl border border-slate-200 bg-slate-100 sm:h-[120px]"
+                                    />
+                                ))
+                                : tables.map((table) => (
                                 <TableCard
                                     key={table.id}
                                     table={table}
                                     isSelected={selectedTable?.id === table.id}
                                     onClick={() => {
                                         setSelectedTable(table)
-                                        setShowNewOrder(true)
+                                        if (table.sales.length === 0) {
+                                            setShowNewOrder(true)
+                                        } else {
+                                            setShowNewOrder(false)
+                                        }
+                                    }}
+                                    onManage={() => {
+                                        setSelectedTable(table)
+                                        setShowNewOrder(false)
                                     }}
                                     onViewOrders={() => {
                                         setSelectedTable(table)
-                                        if (table.sales.length > 0) setSelectedOrder(table.sales[0])
+                                        setShowNewOrder(false)
+                                        if (table.sales.length > 0) {
+                                            void openOrder(table.sales[0].id)
+                                        }
                                     }}
                                     onNewOrder={() => {
                                         setSelectedTable(table)
@@ -1353,8 +1409,7 @@ export default function WaiterDashboard() {
                                                 <button
                                                     key={order.id}
                                                     onClick={() => {
-                                                        printKitchenTicket(order)
-                                                        setSelectedOrder(order)
+                                                        void openOrder(order.id, { print: true })
                                                     }}
                                                     className="w-full text-left flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
                                                 >
@@ -1363,7 +1418,7 @@ export default function WaiterDashboard() {
                                                         <div>
                                                             <p className="text-sm font-medium text-slate-900">{order.orderNumber}</p>
                                                             <p className="text-xs text-slate-500">
-                                                                {order.items.length} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                {getOrderItemCount(order)} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1439,15 +1494,14 @@ export default function WaiterDashboard() {
                                                     key={order.id}
                                                     type="button"
                                                     onClick={() => {
-                                                        printKitchenTicket(order)
-                                                        setSelectedOrder(order)
+                                                        void openOrder(order.id, { print: true })
                                                     }}
                                                     className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-left"
                                                 >
                                                     <div>
                                                         <p className="text-sm font-semibold text-slate-900">{order.orderNumber}</p>
                                                         <p className="text-xs text-slate-500">
-                                                            {order.items.length} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            {getOrderItemCount(order)} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                         </p>
                                                     </div>
                                                     <StatusBadge status={order.status} />

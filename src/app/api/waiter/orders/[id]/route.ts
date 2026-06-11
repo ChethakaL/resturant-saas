@@ -3,6 +3,88 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
+const waiterOrderSelect = {
+    id: true,
+    orderNumber: true,
+    total: true,
+    status: true,
+    customerName: true,
+    notes: true,
+    timestamp: true,
+    tableId: true,
+    items: {
+        select: {
+            id: true,
+            menuItemId: true,
+            quantity: true,
+            price: true,
+            menuItem: {
+                select: {
+                    id: true,
+                    name: true,
+                    price: true,
+                    description: true,
+                    imageUrl: true,
+                    category: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                },
+            },
+        },
+    },
+    table: {
+        select: {
+            id: true,
+            number: true,
+        },
+    },
+    waiter: {
+        select: {
+            id: true,
+            name: true,
+        },
+    },
+} as const
+
+async function resolveOrderId(params: Promise<{ id: string }> | { id: string }) {
+    return typeof params === 'object' && 'then' in params ? (await params).id : params.id
+}
+
+export async function GET(
+    _request: Request,
+    { params }: { params: Promise<{ id: string }> | { id: string } }
+) {
+    try {
+        const session = await getServerSession(authOptions)
+        if (!session?.user?.restaurantId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        const orderId = await resolveOrderId(params)
+        const order = await prisma.sale.findFirst({
+            where: {
+                id: orderId,
+                restaurantId: session.user.restaurantId,
+            },
+            select: waiterOrderSelect,
+        })
+
+        if (!order) {
+            return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+        }
+
+        return NextResponse.json(order)
+    } catch (error) {
+        console.error('Error fetching waiter order:', error)
+        return NextResponse.json({ error: 'Failed to fetch order' }, { status: 500 })
+    }
+}
+
 export async function PATCH(
     request: Request,
     { params }: { params: Promise<{ id: string }> | { id: string } }
@@ -13,11 +95,7 @@ export async function PATCH(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const resolvedParams = typeof params === 'object' && 'then' in params
-            ? await params
-            : params
-        const orderId = resolvedParams.id
-
+        const orderId = await resolveOrderId(params)
         const data = await request.json()
 
         const existing = await prisma.sale.findFirst({
@@ -95,11 +173,7 @@ export async function DELETE(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const resolvedParams = typeof params === 'object' && 'then' in params
-            ? await params
-            : params
-        const orderId = resolvedParams.id
-
+        const orderId = await resolveOrderId(params)
         const { searchParams } = new URL(request.url)
         const saleItemId = searchParams.get('saleItemId')
 
