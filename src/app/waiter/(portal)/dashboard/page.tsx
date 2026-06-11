@@ -187,7 +187,8 @@ function TableCard({
                             onManage()
                         }}
                         className="rounded-lg border border-slate-200 bg-white/80 p-1.5 text-slate-500 hover:border-slate-300 hover:text-slate-900"
-                        aria-label={`Manage table ${table.number}`}
+                        aria-label={`Table options for T${table.number}`}
+                        title="Table options"
                     >
                         <MoreHorizontal className="h-4 w-4" />
                     </button>
@@ -953,6 +954,7 @@ export default function WaiterDashboard() {
     const [activeTab, setActiveTab] = useState<'tables' | 'orders' | 'kitchen'>(tabParam === 'orders' ? 'orders' : tabParam === 'kitchen' ? 'kitchen' : 'tables')
     const [selectedTable, setSelectedTable] = useState<Table | null>(null)
     const [showNewOrder, setShowNewOrder] = useState(false)
+    const [showTableManage, setShowTableManage] = useState(false)
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
     const [orderFilter, setOrderFilter] = useState<'active' | 'all' | 'COMPLETED'>('active')
     const [orderSearchTable, setOrderSearchTable] = useState('')
@@ -1176,6 +1178,7 @@ export default function WaiterDashboard() {
 
     const handleOrderCreated = () => {
         setShowNewOrder(false)
+        setShowTableManage(false)
         setSelectedTable(null)
         toast({
             title: 'Order created',
@@ -1304,126 +1307,62 @@ export default function WaiterDashboard() {
                                     onClick={() => {
                                         setSelectedTable(table)
                                         if (table.sales.length === 0) {
+                                            setShowTableManage(false)
                                             setShowNewOrder(true)
                                         } else {
                                             setShowNewOrder(false)
+                                            setShowTableManage(true)
                                         }
                                     }}
                                     onManage={() => {
                                         setSelectedTable(table)
                                         setShowNewOrder(false)
+                                        setShowTableManage(true)
                                     }}
                                     onViewOrders={() => {
                                         setSelectedTable(table)
                                         setShowNewOrder(false)
+                                        setShowTableManage(false)
                                         if (table.sales.length > 0) {
                                             void openOrder(table.sales[0].id)
                                         }
                                     }}
                                     onNewOrder={() => {
                                         setSelectedTable(table)
+                                        setShowTableManage(false)
                                         setShowNewOrder(true)
                                     }}
                                 />
                             ))}
                         </div>
 
-                        {/* Selected table info */}
-                        {selectedTable && !showNewOrder && (
-                            <Card className="mt-5 hidden md:block">
-                                <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <CardTitle>Table {selectedTable.number}</CardTitle>
-                                        <p className="text-sm text-slate-500 mt-1">
-                                            {selectedTable.capacity} seats
-                                        </p>
-                                    </div>
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                        <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
-                                            {[
-                                                { status: 'AVAILABLE', label: 'Available' },
-                                                { status: 'OCCUPIED', label: 'Occupied' },
-                                                { status: 'RESERVED', label: 'Reserved' },
-                                            ].map((s) => (
-                                                <button
-                                                    key={s.status}
-                                                    onClick={async () => {
-                                                        try {
-                                                            const res = await fetch(`/api/tables/${selectedTable.id}`, {
-                                                                method: 'PATCH',
-                                                                headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({ status: s.status }),
-                                                            })
-                                                            if (res.ok) {
-                                                                setSelectedTable((prev) => (prev ? { ...prev, status: s.status } : null))
-                                                                fetchTables()
-                                                            }
-                                                        } catch { }
-                                                    }}
-                                                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                                                        selectedTable.status === s.status
-                                                            ? 'bg-white text-slate-900 shadow'
-                                                            : 'text-slate-600 hover:text-slate-900'
-                                                    }`}
-                                                >
-                                                    {s.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <Button onClick={() => setShowNewOrder(true)}>
-                                            New Order
-                                        </Button>
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    {/* Active orders for this table */}
-                                    {selectedTable.sales.length > 0 ? (
-                                        <div className="space-y-2">
-                                            <h4 className="text-sm font-semibold text-slate-700">Active Orders</h4>
-                                            {selectedTable.sales.map((order) => (
-                                                <button
-                                                    key={order.id}
-                                                    onClick={() => {
-                                                        void openOrder(order.id, { print: true })
-                                                    }}
-                                                    className="w-full text-left flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <StatusBadge status={order.status} />
-                                                        <div>
-                                                            <p className="text-sm font-medium text-slate-900">{order.orderNumber}</p>
-                                                            <p className="text-xs text-slate-500">
-                                                                {getOrderItemCount(order)} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <p className="text-sm font-semibold text-emerald-600">
-                                                        {order.total.toLocaleString()} {currency}
-                                                    </p>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-slate-500">No active orders. Tap &quot;New Order&quot; to start.</p>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {selectedTable && !showNewOrder && (
-                            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white shadow-2xl shadow-slate-950/20 md:hidden">
-                                <div className="mx-auto h-1.5 w-12 rounded-full bg-slate-300 mt-2" />
+                        {showTableManage && selectedTable && !showNewOrder && (
+                            <>
+                                <button
+                                    type="button"
+                                    aria-label="Close table options"
+                                    className="fixed inset-0 z-40 bg-black/30"
+                                    onClick={() => {
+                                        setSelectedTable(null)
+                                        setShowTableManage(false)
+                                    }}
+                                />
+                                <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white shadow-2xl shadow-slate-950/20 sm:mx-auto sm:mb-4 sm:max-w-lg sm:rounded-2xl sm:border">
+                                <div className="mx-auto h-1.5 w-12 rounded-full bg-slate-300 mt-2 sm:hidden" />
                                 <div className="p-4">
                                     <div className="mb-3 flex items-center justify-between gap-3">
                                         <div>
                                             <h3 className="text-lg font-bold text-slate-900">Table {selectedTable.number}</h3>
-                                            <p className="text-xs text-slate-500">{selectedTable.capacity} seats</p>
+                                            <p className="text-xs text-slate-500">{selectedTable.capacity} seats · change status or view orders</p>
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => setSelectedTable(null)}
+                                            onClick={() => {
+                                                setSelectedTable(null)
+                                                setShowTableManage(false)
+                                            }}
                                             className="rounded-full border border-slate-200 p-2 text-slate-500"
-                                            aria-label="Close table actions"
+                                            aria-label="Close table options"
                                         >
                                             <X className="h-4 w-4" />
                                         </button>
@@ -1463,12 +1402,14 @@ export default function WaiterDashboard() {
                                     </div>
 
                                     {selectedTable.sales.length > 0 && (
-                                        <div className="mb-3 max-h-32 space-y-2 overflow-y-auto">
+                                        <div className="mb-3 max-h-40 space-y-2 overflow-y-auto">
+                                            <h4 className="text-sm font-semibold text-slate-700">Active orders</h4>
                                             {selectedTable.sales.map((order) => (
                                                 <button
                                                     key={order.id}
                                                     type="button"
                                                     onClick={() => {
+                                                        setShowTableManage(false)
                                                         void openOrder(order.id, { print: true })
                                                     }}
                                                     className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-left"
@@ -1485,11 +1426,18 @@ export default function WaiterDashboard() {
                                         </div>
                                     )}
 
-                                    <Button className="w-full" onClick={() => setShowNewOrder(true)}>
+                                    <Button
+                                        className="w-full"
+                                        onClick={() => {
+                                            setShowTableManage(false)
+                                            setShowNewOrder(true)
+                                        }}
+                                    >
                                         New Order
                                     </Button>
                                 </div>
                             </div>
+                            </>
                         )}
                     </div>
                 )}
@@ -1773,6 +1721,7 @@ export default function WaiterDashboard() {
                     onClose={() => {
                         setShowNewOrder(false)
                         setSelectedTable(null)
+                        setShowTableManage(false)
                     }}
                 />
             )}
