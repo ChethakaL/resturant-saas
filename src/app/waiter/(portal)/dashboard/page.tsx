@@ -317,12 +317,8 @@ function NewOrderPanel({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex">
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-            {/* Panel */}
-            <div className="relative ml-auto flex h-full w-full max-w-4xl flex-col overflow-hidden border-l border-white/10 bg-slate-900 animate-slide-in-right">
+        <div className="fixed inset-0 z-50 flex bg-slate-900">
+            <div className="relative flex h-full w-full flex-col overflow-hidden bg-slate-900">
                 {/* Header */}
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-900/80 p-3 backdrop-blur sm:p-5">
                     <div className="min-w-0">
@@ -337,7 +333,7 @@ function NewOrderPanel({
                     </button>
                 </div>
 
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
                     {/* Menu items section */}
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {/* Search + filter */}
@@ -390,7 +386,7 @@ function NewOrderPanel({
                                     <p>No menu items found</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 lg:gap-4">
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2 lg:grid-cols-5 xl:grid-cols-6 lg:gap-3">
                                     {filteredItems.map((item) => {
                                         const inCart = cart.find((c) => c.menuItem.id === item.id)
                                         return (
@@ -406,7 +402,7 @@ function NewOrderPanel({
                                                   active:scale-[0.97]
                                                 `}
                                             >
-                                                <div className="relative h-[104px] w-[112px] shrink-0 overflow-hidden bg-slate-800 sm:h-36 sm:w-full md:h-40">
+                                                <div className="relative h-[88px] w-[88px] shrink-0 overflow-hidden bg-slate-800 sm:h-24 sm:w-full md:h-28">
                                                     {item.imageUrl ? (
                                                         <img
                                                             src={item.imageUrl}
@@ -449,11 +445,11 @@ function NewOrderPanel({
                     </div>
 
                     {/* Cart sidebar */}
-                    <div className="absolute inset-x-0 bottom-0 z-10 flex max-h-[78dvh] flex-col border-t border-white/10 bg-slate-950 shadow-2xl shadow-black/40 sm:relative sm:max-h-[42vh] sm:bg-slate-950/50 sm:shadow-none lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
+                    <div className="absolute inset-x-0 bottom-0 z-10 flex max-h-[40dvh] flex-col border-t border-white/10 bg-slate-950 shadow-2xl shadow-black/40 md:relative md:max-h-none md:w-72 md:bg-slate-950/50 md:shadow-none lg:w-80 lg:border-l lg:border-t-0">
                         <button
                             type="button"
                             onClick={() => setIsMobileCartOpen((open) => !open)}
-                            className="flex items-center justify-between gap-3 p-3 text-left sm:hidden"
+                            className="flex items-center justify-between gap-3 p-3 text-left md:hidden"
                         >
                             <span className="text-sm font-semibold text-white flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -469,7 +465,7 @@ function NewOrderPanel({
                             </span>
                         </button>
 
-                        <div className="hidden p-4 border-b border-white/5 sm:block">
+                        <div className="hidden p-4 border-b border-white/5 md:block">
                             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <circle cx="9" cy="21" r="1" />
@@ -480,7 +476,7 @@ function NewOrderPanel({
                             </h3>
                         </div>
 
-                        <div className={`${isMobileCartOpen ? 'block' : 'hidden'} flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar sm:block sm:p-4 sm:space-y-3`}>
+                        <div className={`${isMobileCartOpen ? 'block' : 'hidden'} flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar md:block md:p-4 md:space-y-3`}>
                             {cart.length === 0 ? (
                                 <p className="text-sm text-slate-500 text-center py-4 sm:py-8">Tap items to add</p>
                             ) : (
@@ -1287,6 +1283,7 @@ export default function WaiterDashboard() {
                                     isSelected={selectedTable?.id === table.id}
                                     onClick={() => {
                                         setSelectedTable(table)
+                                        setShowNewOrder(true)
                                     }}
                                     onViewOrders={() => {
                                         setSelectedTable(table)
@@ -1301,7 +1298,7 @@ export default function WaiterDashboard() {
                         </div>
 
                         {/* Selected table info */}
-                        {selectedTable && (
+                        {selectedTable && !showNewOrder && (
                             <Card className="mt-5 hidden md:block">
                                 <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
@@ -1383,7 +1380,7 @@ export default function WaiterDashboard() {
                             </Card>
                         )}
 
-                        {selectedTable && (
+                        {selectedTable && !showNewOrder && (
                             <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white shadow-2xl shadow-slate-950/20 md:hidden">
                                 <div className="mx-auto h-1.5 w-12 rounded-full bg-slate-300 mt-2" />
                                 <div className="p-4">
@@ -1744,7 +1741,10 @@ export default function WaiterDashboard() {
                     categories={categories}
                     currency={currency}
                     onOrderCreated={handleOrderCreated}
-                    onClose={() => setShowNewOrder(false)}
+                    onClose={() => {
+                        setShowNewOrder(false)
+                        setSelectedTable(null)
+                    }}
                 />
             )}
 
