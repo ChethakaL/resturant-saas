@@ -959,6 +959,7 @@ export default function WaiterDashboard() {
     const [orderSort, setOrderSort] = useState<'newest' | 'oldest' | 'expensive' | 'cheap'>('newest')
     const [kitchenSort, setKitchenSort] = useState<'oldest' | 'newest' | 'expensive' | 'cheap'>('oldest')
     const [isTablesLoading, setIsTablesLoading] = useState(true)
+    const refreshInFlightRef = useRef(false)
     const previousUnconfirmedCountRef = useRef(0)
     const previousOrderStatusesRef = useRef<Map<string, string>>(new Map())
     const previousKitchenOrderIdsRef = useRef<Set<string>>(new Set())
@@ -994,69 +995,50 @@ export default function WaiterDashboard() {
         }
     }, [])
 
-    const fetchTables = useCallback(async () => {
-        try {
-            const res = await fetch('/api/waiter/tables', { cache: 'no-store' })
-            if (res.ok) {
-                const data = await res.json()
-                setTables(data)
-                setSelectedTable((current) => {
-                    if (!current) return current
-                    return data.find((table: Table) => table.id === current.id) ?? null
-                })
-            }
-        } catch (err) {
-            console.error('Failed to fetch tables:', err)
-        }
-    }, [])
+    const fetchDashboard = useCallback(async (options?: { tablesOnly?: boolean }) => {
+        if (refreshInFlightRef.current) return
+        refreshInFlightRef.current = true
 
-    const fetchOrders = useCallback(async () => {
         try {
-            const res = await fetch(`/api/waiter/orders?myOnly=true&status=${orderFilter}`, { cache: 'no-store' })
-            if (res.ok) {
-                const data = await res.json()
-                setMyOrders(data)
+            const res = await fetch(`/api/waiter/dashboard?orderFilter=${orderFilter}`, {
+                cache: 'no-store',
+            })
+            if (!res.ok) return
+
+            const data = await res.json()
+            setTables(data.tables ?? [])
+            setSelectedTable((current) => {
+                if (!current) return current
+                return (data.tables ?? []).find((table: Table) => table.id === current.id) ?? null
+            })
+
+            if (!options?.tablesOnly) {
+                setMyOrders(data.myOrders ?? [])
+                setKitchenOrders(data.kitchenOrders ?? [])
+                setUnconfirmedOrders(data.unconfirmedOrders ?? [])
             }
         } catch (err) {
-            console.error('Failed to fetch orders:', err)
+            console.error('Failed to fetch waiter dashboard:', err)
+        } finally {
+            refreshInFlightRef.current = false
         }
     }, [orderFilter])
 
-    const fetchKitchenOrders = useCallback(async () => {
-        try {
-            const res = await fetch(`/api/waiter/orders?myOnly=false&status=active`, { cache: 'no-store' })
-            if (res.ok) {
-                const data = await res.json()
-                setKitchenOrders(data.filter((order: Order) => order.status !== 'READY'))
-            }
-        } catch (err) {
-            console.error('Failed to fetch kitchen orders:', err)
-        }
-    }, [])
+    const fetchTables = useCallback(async () => {
+        await fetchDashboard({ tablesOnly: true })
+    }, [fetchDashboard])
 
-    const fetchMenu = useCallback(async () => {
-        try {
-            const res = await fetch('/api/waiter/menu', { cache: 'no-store' })
-            if (res.ok) {
-                const data = await res.json()
-                setCategories(data)
-            }
-        } catch (err) {
-            console.error('Failed to fetch menu:', err)
-        }
-    }, [])
+    const fetchOrders = useCallback(async () => {
+        await fetchDashboard()
+    }, [fetchDashboard])
+
+    const fetchKitchenOrders = useCallback(async () => {
+        await fetchDashboard()
+    }, [fetchDashboard])
 
     const fetchUnconfirmedOrders = useCallback(async () => {
-        try {
-            const res = await fetch('/api/waiter/orders?unassigned=true', { cache: 'no-store' })
-            if (res.ok) {
-                const data = await res.json()
-                setUnconfirmedOrders(data)
-            }
-        } catch (err) {
-            console.error('Failed to fetch unconfirmed orders:', err)
-        }
-    }, [])
+        await fetchDashboard()
+    }, [fetchDashboard])
 
     const openOrder = useCallback(async (orderId: string, options?: { print?: boolean }) => {
         try {
@@ -1072,14 +1054,21 @@ export default function WaiterDashboard() {
         }
     }, [])
 
+    const fetchMenu = useCallback(async () => {
+        try {
+            const res = await fetch('/api/waiter/menu', { cache: 'no-store' })
+            if (res.ok) {
+                const data = await res.json()
+                setCategories(data)
+            }
+        } catch (err) {
+            console.error('Failed to fetch menu:', err)
+        }
+    }, [])
+
     const refreshDashboardData = useCallback(async () => {
-        await Promise.all([
-            fetchTables(),
-            fetchOrders(),
-            fetchKitchenOrders(),
-            fetchUnconfirmedOrders(),
-        ])
-    }, [fetchKitchenOrders, fetchOrders, fetchTables, fetchUnconfirmedOrders])
+        await fetchDashboard()
+    }, [fetchDashboard])
 
     useEffect(() => {
         if (authStatus === 'unauthenticated') {
@@ -1089,20 +1078,18 @@ export default function WaiterDashboard() {
 
     useEffect(() => {
         setIsTablesLoading(true)
-        fetchTables().finally(() => setIsTablesLoading(false))
-        Promise.all([
-            fetchOrders(),
-            fetchKitchenOrders(),
-            fetchUnconfirmedOrders(),
-        ]).catch(() => { })
+        void fetchDashboard().finally(() => {
+            setIsTablesLoading(false)
+            void fetchMenu()
+        })
 
         const interval = setInterval(() => {
-            refreshDashboardData()
-        }, 5000)
+            void refreshDashboardData()
+        }, 10000)
 
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
-                refreshDashboardData()
+                void refreshDashboardData()
             }
         }
 
@@ -1114,25 +1101,13 @@ export default function WaiterDashboard() {
             window.removeEventListener('focus', refreshDashboardData)
             document.removeEventListener('visibilitychange', handleVisibilityChange)
         }
-    }, [fetchKitchenOrders, fetchOrders, fetchTables, fetchUnconfirmedOrders, refreshDashboardData])
+    }, [fetchDashboard, fetchMenu, refreshDashboardData])
 
     useEffect(() => {
         if (!showNewOrder && !selectedOrder) return
         if (categories.length > 0) return
-        fetchMenu().catch(() => { })
+        void fetchMenu()
     }, [categories.length, fetchMenu, selectedOrder, showNewOrder])
-
-    useEffect(() => {
-        if (authStatus === 'authenticated') {
-            fetchOrders()
-        }
-    }, [orderFilter, authStatus, fetchOrders])
-
-    useEffect(() => {
-        if (authStatus === 'authenticated') {
-            fetchKitchenOrders()
-        }
-    }, [authStatus, fetchKitchenOrders])
 
     useEffect(() => {
         setActiveTab(tabParam === 'orders' ? 'orders' : tabParam === 'kitchen' ? 'kitchen' : 'tables')
@@ -1257,7 +1232,7 @@ export default function WaiterDashboard() {
                                             {order.orderNumber}
                                         </span>
                                         <span className="text-sm text-slate-500">
-                                            {order.total.toLocaleString()} {currency} · {order.items.length} items
+                                            {order.total.toLocaleString()} {currency} · {getOrderItemCount(order)} items
                                         </span>
                                     </div>
                                     <button
@@ -1613,7 +1588,7 @@ export default function WaiterDashboard() {
                                                     Table {order.table.number}
                                                 </span>
                                             )}
-                                            <span>{order.items.length} items</span>
+                                            <span>{getOrderItemCount(order)} items</span>
                                             <span>{new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                             {order.customerName && (
                                                 <span className="flex items-center gap-1">
@@ -1628,9 +1603,9 @@ export default function WaiterDashboard() {
                                                     {item.quantity}× {item.menuItem.name}
                                                 </span>
                                             ))}
-                                            {order.items.length > 4 && (
+                                            {getOrderItemCount(order) > 4 && (
                                                 <span className="text-[10px] px-2 py-0.5 bg-slate-100 rounded-full text-slate-500">
-                                                    +{order.items.length - 4} more
+                                                    +{getOrderItemCount(order) - 4} more
                                                 </span>
                                             )}
                                         </div>
