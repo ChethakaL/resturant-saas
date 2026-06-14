@@ -48,6 +48,7 @@ export async function GET(request: Request) {
                 orderNumber: true,
                 total: true,
                 status: true,
+                deliveredAt: true,
                 customerName: true,
                 notes: true,
                 timestamp: true,

@@ -10,6 +10,7 @@ const waiterOrderSelect = {
     orderNumber: true,
     total: true,
     status: true,
+    deliveredAt: true,
     customerName: true,
     notes: true,
     timestamp: true,
@@ -132,6 +133,10 @@ export async function PATCH(
 
         if (data.notes !== undefined) {
             updateData.notes = data.notes
+        }
+
+        if (data.delivered === true && existing.status === 'READY' && !existing.deliveredAt) {
+            updateData.deliveredAt = new Date()
         }
 
         const order = await prisma.sale.update({

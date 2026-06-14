@@ -38,7 +38,7 @@ export async function getCachedPublicMenuFeelingAi(params: {
       })
     },
     [
-      'public-menu-feeling-ai-v2',
+      'public-menu-feeling-ai-v3',
       params.restaurantId,
       params.language,
       hourBucket,

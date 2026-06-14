@@ -30,7 +30,7 @@ export function getCachedPublicMenuFeeling(params: {
         allowAi: false,
       }),
     [
-      'public-menu-feeling-v2',
+      'public-menu-feeling-v3',
       params.restaurantId,
       params.timezone,
       params.slot,

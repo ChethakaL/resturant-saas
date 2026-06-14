@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { buildKitchenReceiptHtml, buildReceiptHtml, ReceiptOrder } from '@/lib/receipt'
+import { WaiterPayOrderButton, type WaiterPayOrder } from '@/components/waiters/WaiterPayOrderButton'
 
 // Types
 interface MenuItem {
@@ -63,6 +64,7 @@ interface Order {
     orderNumber: string
     total: number
     status: string
+    deliveredAt?: string | null
     customerName?: string | null
     notes?: string | null
     timestamp: string
@@ -118,13 +120,22 @@ const printCustomerReceipt = (order: Order) => {
     printHtml(buildReceiptHtml({ ...mapOrderToReceiptOrder(order), status: 'COMPLETED' }))
 }
 
-// ─── Status Badge (simplified: Pending or Delivered) ───
-function StatusBadge({ status }: { status: string }) {
+// ─── Status Badge ───
+function StatusBadge({ status, deliveredAt }: { status: string; deliveredAt?: string | null }) {
+    if (status === 'READY' && deliveredAt) {
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+                Delivered
+            </span>
+        )
+    }
+
     const config: Record<string, { bg: string; text: string; dot: string; label: string }> = {
         PENDING: { bg: 'bg-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Pending' },
         PREPARING: { bg: 'bg-sky-100', text: 'text-sky-800', dot: 'bg-sky-500', label: 'Preparing' },
         READY: { bg: 'bg-emerald-100', text: 'text-emerald-800', dot: 'bg-emerald-500', label: 'Ready to Deliver' },
-        COMPLETED: { bg: 'bg-slate-100', text: 'text-slate-800', dot: 'bg-slate-500', label: 'Delivered' },
+        COMPLETED: { bg: 'bg-slate-100', text: 'text-slate-800', dot: 'bg-slate-500', label: 'Paid' },
         CANCELLED: { bg: 'bg-red-100', text: 'text-red-800', dot: 'bg-red-500', label: 'Cancelled' },
     }
     const c = config[status] || config.PENDING
@@ -607,7 +618,6 @@ function OrderDetailPanel({
     onClose: () => void
 }) {
     const [isUpdating, setIsUpdating] = useState(false)
-    const [isPaying, setIsPaying] = useState(false)
     const [showAddItems, setShowAddItems] = useState(false)
     const [addItemCart, setAddItemCart] = useState<CartItem[]>([])
     const [addItemSearch, setAddItemSearch] = useState('')
@@ -624,6 +634,24 @@ function OrderDetailPanel({
             onUpdate()
         } catch {
             alert('Failed to update order status')
+        } finally {
+            setIsUpdating(false)
+        }
+    }
+
+    const markDelivered = async () => {
+        if (order.status !== 'READY' || order.deliveredAt) return
+        setIsUpdating(true)
+        try {
+            const res = await fetch(`/api/waiter/orders/${order.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ delivered: true }),
+            })
+            if (!res.ok) throw new Error('Failed to mark delivered')
+            onUpdate()
+        } catch {
+            alert('Failed to mark order as delivered')
         } finally {
             setIsUpdating(false)
         }
@@ -684,30 +712,6 @@ function OrderDetailPanel({
 
     const isModifiable = !['COMPLETED', 'CANCELLED'].includes(order.status)
 
-    const handlePay = async () => {
-        if (order.status === 'COMPLETED') return
-        if (!confirm('Take payment and lock this order? It cannot be changed after payment.')) return
-        setIsPaying(true)
-        try {
-            const res = await fetch(`/api/orders/${order.id}/complete`, {
-                method: 'POST',
-            })
-            if (!res.ok) {
-                const data = await res.json().catch(() => null)
-                throw new Error(data?.error || 'Failed to complete payment')
-            }
-            const data = await res.json()
-            const completedOrder = data.order as Order
-            printCustomerReceipt(completedOrder)
-            onUpdate()
-            onClose()
-        } catch (error) {
-            alert(error instanceof Error ? error.message : 'Failed to complete payment')
-        } finally {
-            setIsPaying(false)
-        }
-    }
-
     const allMenuItems = categories.flatMap((c) =>
         c.menuItems.map((item) => ({ ...item, categoryName: c.name }))
     )
@@ -733,7 +737,7 @@ function OrderDetailPanel({
                         </button>
                     </div>
                     <div className="flex items-center gap-3">
-                        <StatusBadge status={order.status} />
+                        <StatusBadge status={order.status} deliveredAt={order.deliveredAt} />
                         {order.table && (
                             <span className="text-xs text-slate-400 flex items-center gap-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -864,7 +868,7 @@ function OrderDetailPanel({
                     <div className="p-5 border-t border-white/10 bg-slate-900 space-y-3">
                         <button
                             onClick={() => printKitchenTicket(order)}
-                            disabled={isUpdating || isPaying}
+                            disabled={isUpdating}
                             className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-sm font-medium rounded-xl transition-all active:scale-[0.98]"
                         >
                             Print kitchen ticket
@@ -885,17 +889,30 @@ function OrderDetailPanel({
                         )}
 
                         <div className="grid grid-cols-2 gap-3">
-                            {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
+                            {order.status === 'READY' && !order.deliveredAt && (
                                 <button
-                                    onClick={handlePay}
-                                    disabled={isUpdating || isPaying}
-                                    className="py-3 col-span-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-40 active:scale-[0.98]"
+                                    onClick={markDelivered}
+                                    disabled={isUpdating}
+                                    className="py-3 col-span-2 bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 text-violet-200 text-sm font-semibold rounded-xl transition-all disabled:opacity-40 active:scale-[0.98]"
                                 >
                                     <span className="flex items-center justify-center gap-2">
                                         <Check className="h-4 w-4" />
-                                        {isPaying ? 'Taking payment...' : 'Pay & Print Receipt'}
+                                        Mark as Delivered
                                     </span>
                                 </button>
+                            )}
+                            {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
+                                <WaiterPayOrderButton
+                                    order={order}
+                                    tableNumber={order.table?.number}
+                                    loadOrder={async () => order as WaiterPayOrder}
+                                    onCompleted={() => {
+                                        onUpdate()
+                                        onClose()
+                                    }}
+                                    className="col-span-2 w-full py-3 h-auto text-sm font-semibold rounded-xl shadow-lg shadow-emerald-500/20"
+                                    label="Pay & Print Receipt"
+                                />
                             )}
                             {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
                                 <button
@@ -965,6 +982,7 @@ export default function WaiterDashboard() {
     const previousUnconfirmedCountRef = useRef(0)
     const previousOrderStatusesRef = useRef<Map<string, string>>(new Map())
     const previousKitchenOrderIdsRef = useRef<Set<string>>(new Set())
+    const tableHadActiveOrdersRef = useRef(false)
     const { toast } = useToast()
 
     const currency = 'IQD'
@@ -1056,6 +1074,12 @@ export default function WaiterDashboard() {
         }
     }, [])
 
+    const loadOrderForPayment = useCallback(async (orderId: string): Promise<WaiterPayOrder | null> => {
+        const res = await fetch(`/api/waiter/orders/${orderId}`, { cache: 'no-store' })
+        if (!res.ok) return null
+        return res.json()
+    }, [])
+
     const fetchMenu = useCallback(async () => {
         try {
             const res = await fetch('/api/waiter/menu', { cache: 'no-store' })
@@ -1071,6 +1095,35 @@ export default function WaiterDashboard() {
     const refreshDashboardData = useCallback(async () => {
         await fetchDashboard()
     }, [fetchDashboard])
+
+    const handleTableOrderPaid = useCallback(async () => {
+        await refreshDashboardData()
+    }, [refreshDashboardData])
+
+    const markOrderDelivered = useCallback(async (orderId: string) => {
+        try {
+            const res = await fetch(`/api/waiter/orders/${orderId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ delivered: true }),
+            })
+            if (!res.ok) {
+                const data = await res.json().catch(() => null)
+                throw new Error(data?.error || 'Failed to mark as delivered')
+            }
+            await refreshDashboardData()
+            toast({
+                title: 'Order delivered',
+                description: 'Marked as delivered to the table.',
+            })
+        } catch (error) {
+            toast({
+                title: 'Could not update order',
+                description: error instanceof Error ? error.message : 'Failed to mark as delivered.',
+                variant: 'destructive',
+            })
+        }
+    }, [refreshDashboardData, toast])
 
     useEffect(() => {
         if (authStatus === 'unauthenticated') {
@@ -1104,6 +1157,24 @@ export default function WaiterDashboard() {
             document.removeEventListener('visibilitychange', handleVisibilityChange)
         }
     }, [fetchDashboard, fetchMenu, refreshDashboardData])
+
+    useEffect(() => {
+        if (!showTableManage || !selectedTable) {
+            tableHadActiveOrdersRef.current = false
+            return
+        }
+        if (selectedTable.sales.length > 0) {
+            tableHadActiveOrdersRef.current = true
+            return
+        }
+        if (!tableHadActiveOrdersRef.current) return
+        setShowTableManage(false)
+        tableHadActiveOrdersRef.current = false
+        toast({
+            title: 'Table available',
+            description: `Table ${selectedTable.number} is ready for new guests.`,
+        })
+    }, [selectedTable, showTableManage, toast])
 
     useEffect(() => {
         if (!showNewOrder && !selectedOrder) return
@@ -1189,19 +1260,11 @@ export default function WaiterDashboard() {
 
     const handleOrderUpdated = () => {
         handleRefresh()
-        // Refresh the selected order
         if (selectedOrder) {
-            fetch('/api/waiter/orders?myOnly=true&status=all', { cache: 'no-store' })
-                .then((r) => r.json())
-                .then((orders) => {
-                    const updated = orders.find((o: Order) => o.id === selectedOrder.id)
-                    if (updated) {
-                        setSelectedOrder(updated)
-                    } else {
-                        setSelectedOrder(null)
-                    }
-                })
-                .catch(() => { })
+            void loadOrderForPayment(selectedOrder.id).then((updated) => {
+                if (updated) setSelectedOrder(updated as Order)
+                else setSelectedOrder(null)
+            })
         }
     }
 
@@ -1402,31 +1465,69 @@ export default function WaiterDashboard() {
                                     </div>
 
                                     {selectedTable.sales.length > 0 && (
-                                        <div className="mb-3 max-h-40 space-y-2 overflow-y-auto">
+                                        <div className="mb-3 max-h-52 space-y-2 overflow-y-auto">
                                             <h4 className="text-sm font-semibold text-slate-700">Active orders</h4>
                                             {selectedTable.sales.map((order) => (
-                                                <button
+                                                <div
                                                     key={order.id}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setShowTableManage(false)
-                                                        void openOrder(order.id, { print: true })
-                                                    }}
-                                                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-left"
+                                                    className="rounded-xl border border-slate-200 bg-slate-50 p-3"
                                                 >
-                                                    <div>
-                                                        <p className="text-sm font-semibold text-slate-900">{order.orderNumber}</p>
-                                                        <p className="text-xs text-slate-500">
-                                                            {getOrderItemCount(order)} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </p>
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-semibold text-slate-900">{order.orderNumber}</p>
+                                                            <p className="text-xs text-slate-500">
+                                                                {getOrderItemCount(order)} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </p>
+                                                            <p className="mt-1 text-sm font-bold text-emerald-600">
+                                                                {order.total.toLocaleString()} {currency}
+                                                            </p>
+                                                        </div>
+                                                        <StatusBadge status={order.status} deliveredAt={order.deliveredAt} />
                                                     </div>
-                                                    <StatusBadge status={order.status} />
-                                                </button>
+                                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                                        {order.status === 'READY' && !order.deliveredAt && (
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="col-span-2 w-full border-violet-300 text-violet-700 hover:bg-violet-50"
+                                                                onClick={() => void markOrderDelivered(order.id)}
+                                                            >
+                                                                <Check className="mr-2 h-4 w-4" />
+                                                                Mark as Delivered
+                                                            </Button>
+                                                        )}
+                                                        {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
+                                                            <WaiterPayOrderButton
+                                                                order={order}
+                                                                tableNumber={selectedTable.number}
+                                                                loadOrder={() => loadOrderForPayment(order.id)}
+                                                                onCompleted={handleTableOrderPaid}
+                                                                size="sm"
+                                                                className="col-span-2 w-full"
+                                                                label="Pay & Print Receipt"
+                                                            />
+                                                        )}
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="col-span-2 w-full"
+                                                            onClick={() => {
+                                                                setShowTableManage(false)
+                                                                void openOrder(order.id, { print: true })
+                                                            }}
+                                                        >
+                                                            View order details
+                                                        </Button>
+                                                    </div>
+                                                </div>
                                             ))}
                                         </div>
                                     )}
 
                                     <Button
+                                        variant="outline"
                                         className="w-full"
                                         onClick={() => {
                                             setShowTableManage(false)
@@ -1521,7 +1622,7 @@ export default function WaiterDashboard() {
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-3">
                                                 <span className="text-base font-bold text-slate-900">{order.orderNumber}</span>
-                                                <StatusBadge status={order.status} />
+                                                <StatusBadge status={order.status} deliveredAt={order.deliveredAt} />
                                             </div>
                                             <span className="text-base font-bold text-emerald-600">
                                                 {order.total.toLocaleString()} {currency}
