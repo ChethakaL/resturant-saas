@@ -100,10 +100,13 @@ export function WaiterPayOrderButton({
 
   const isPayable = ['PENDING', 'PREPARING', 'READY'].includes(order.status)
   const activeOrder = orderDetails ?? null
-  const cashReceivedAmount = Number(cashReceived) || 0
   const orderTotal = activeOrder?.total ?? order.total
-  const changeDue = Math.max(cashReceivedAmount - orderTotal, 0)
-  const canPay = cashReceivedAmount >= orderTotal
+  const cashInput = cashReceived.trim()
+  /** Empty = exact payment (assumes customer paid the total). */
+  const effectiveCashReceived = cashInput === '' ? orderTotal : Number(cashReceived) || 0
+  const changeDue = Math.max(effectiveCashReceived - orderTotal, 0)
+  const canPay = cashInput === '' || effectiveCashReceived >= orderTotal
+  const cashTooLow = cashInput !== '' && effectiveCashReceived < orderTotal
 
   const resetDialog = () => {
     setReceiptOrder(null)
@@ -198,7 +201,7 @@ export function WaiterPayOrderButton({
             <DialogDescription>
               {receiptOrder
                 ? 'Payment recorded. Reprint receipts if needed, then close.'
-                : 'Enter cash received, then pay and print the customer receipt.'}
+                : 'Cash received is optional — leave blank for exact payment, or enter amount for change.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -236,7 +239,9 @@ export function WaiterPayOrderButton({
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor={`waiter-cash-${order.id}`}>Cash received</Label>
+                  <Label htmlFor={`waiter-cash-${order.id}`}>
+                    Cash received <span className="font-normal text-slate-500">(optional)</span>
+                  </Label>
                   <Input
                     id={`waiter-cash-${order.id}`}
                     type="number"
@@ -244,16 +249,19 @@ export function WaiterPayOrderButton({
                     step="1"
                     value={cashReceived}
                     onChange={(event) => setCashReceived(event.target.value)}
-                    placeholder="0"
+                    placeholder={`Exact: ${formatCurrency(orderTotal)}`}
                     disabled={completing || loadingOrder}
                   />
                 </div>
                 <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-medium uppercase text-slate-500">Change due</p>
                   <p className="mt-1 text-lg font-semibold text-emerald-600">{formatCurrency(changeDue)}</p>
+                  {cashInput === '' && (
+                    <p className="mt-1 text-xs text-slate-500">No cash entered — assumes exact payment.</p>
+                  )}
                 </div>
               </div>
-              {!canPay && cashReceived && (
+              {cashTooLow && (
                 <p className="text-sm text-red-600">Cash received must cover the order total.</p>
               )}
             </div>
