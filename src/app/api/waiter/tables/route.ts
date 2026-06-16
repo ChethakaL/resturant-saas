@@ -41,27 +41,9 @@ export async function GET() {
                         notes: true,
                         timestamp: true,
                         tableId: true,
-                        items: {
+                        _count: {
                             select: {
-                                id: true,
-                                menuItemId: true,
-                                quantity: true,
-                                price: true,
-                                menuItem: {
-                                    select: {
-                                        id: true,
-                                        name: true,
-                                        price: true,
-                                        description: true,
-                                        imageUrl: true,
-                                        category: {
-                                            select: {
-                                                id: true,
-                                                name: true,
-                                            },
-                                        },
-                                    },
-                                },
+                                items: true,
                             },
                         },
                         table: {
@@ -87,7 +69,16 @@ export async function GET() {
             },
         })
 
-        return NextResponse.json(tables)
+        const payload = tables.map((table) => ({
+            ...table,
+            sales: table.sales.map(({ _count, ...sale }) => ({
+                ...sale,
+                itemCount: _count.items,
+                items: [] as [],
+            })),
+        }))
+
+        return NextResponse.json(payload)
     } catch (error) {
         console.error('Error fetching tables for waiter:', error)
         return NextResponse.json(

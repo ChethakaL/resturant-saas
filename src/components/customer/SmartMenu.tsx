@@ -32,7 +32,7 @@ import { getAllVariants, getVariant } from '@/lib/experiments'
 import { logMenuEvent } from '@/lib/menu-events'
 import { googleFontUrl, resolveGoogleFont } from '@/lib/google-fonts'
 import type { ItemDisplayHints, BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
-import type { MenuFeelingContext } from '@/lib/menu-feeling-message'
+import { pickRandomHeroMessage, type MenuFeelingContext } from '@/lib/menu-feeling-message'
 import { getCurrentTimeSlot, getHourInTimeZone, mapSlotToGreetingContext, type SlotTimes } from '@/lib/time-slots'
 
 interface MenuItem {
@@ -1199,9 +1199,15 @@ export default function SmartMenu({
       { signal: ac.signal }
     )
       .then((r) => r.json())
-      .then((data: { message?: string | null }) => {
-        if (typeof data?.message === 'string' && data.message.trim()) {
-          setHeroAiLine(data.message.trim())
+      .then((data: { message?: string | null; variants?: string[] }) => {
+        const pool =
+          Array.isArray(data?.variants) && data.variants.length > 0
+            ? data.variants.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+            : typeof data?.message === 'string' && data.message.trim()
+              ? [data.message.trim()]
+              : []
+        if (pool.length > 0) {
+          setHeroAiLine(pickRandomHeroMessage(pool))
         }
       })
       .catch(() => {})
@@ -2879,9 +2885,16 @@ export default function SmartMenu({
       : contextHeroTailMap[selectedContext]
   /** Server composes weather + slot copy in menu-feeling-message (Open-Meteo + restaurant lat/lng + menu timezone). */
   const fallbackHeroMessage = `${contextHeroMessageMap[selectedContext]} ${localizedHeroTail}`.replace(/\s+/g, ' ').trim()
-  const activeHeroMessage = smartSearchFeelingContext?.message?.trim()
-    ? smartSearchFeelingContext.message.trim()
-    : fallbackHeroMessage
+  const ssrHeroMessage = useMemo(() => {
+    const pool =
+      smartSearchFeelingContext?.messageVariants?.length
+        ? smartSearchFeelingContext.messageVariants
+        : smartSearchFeelingContext?.message?.trim()
+          ? [smartSearchFeelingContext.message.trim()]
+          : []
+    return pickRandomHeroMessage(pool)
+  }, [smartSearchFeelingContext])
+  const activeHeroMessage = ssrHeroMessage || fallbackHeroMessage
   const displayHeroMessage = heroAiLine ?? activeHeroMessage
   const summaryTemplate =
     filteredItems.length === 1

@@ -16,8 +16,8 @@ services:
     volumes:
       - ./prisma:/app/prisma
     networks:
-      - default
+      - frankfurt_net
 
 networks:
-  default:
-    driver: bridge
+  frankfurt_net:
+    external: true

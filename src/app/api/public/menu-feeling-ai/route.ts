@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
     if (!ctx) {
       return NextResponse.json({ message: null }, { status: 404 })
     }
-    return NextResponse.json({ message: ctx.message })
+    return NextResponse.json({
+      message: ctx.message,
+      variants: ctx.messageVariants?.length ? ctx.messageVariants : [ctx.message],
+    })
   } catch (e) {
     console.error('menu-feeling-ai:', e)
     return NextResponse.json({ message: null }, { status: 500 })

@@ -75,7 +75,6 @@ export async function PATCH(
     if (data.preferredSupplierId !== undefined) {
       updateData.preferredSupplierId = data.preferredSupplierId === '' || data.preferredSupplierId == null ? null : data.preferredSupplierId
     }
-
     if (data.variants && Array.isArray(data.variants)) {
       updateData.costPerUnit = getPrimaryVariantCost(data.variants, data.costPerUnit)
     } else if (data.costPerUnit !== undefined) {

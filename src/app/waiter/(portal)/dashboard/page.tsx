@@ -9,6 +9,7 @@ import {
     CheckCircle2,
     ChefHat,
     ClipboardList,
+    MoreHorizontal,
     PencilLine,
     Trash2,
     User,
@@ -19,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { buildKitchenReceiptHtml, buildReceiptHtml, ReceiptOrder } from '@/lib/receipt'
+import { WaiterPayOrderButton, type WaiterPayOrder } from '@/components/waiters/WaiterPayOrderButton'
 
 // Types
 interface MenuItem {
@@ -62,6 +64,7 @@ interface Order {
     orderNumber: string
     total: number
     status: string
+    deliveredAt?: string | null
     customerName?: string | null
     notes?: string | null
     timestamp: string
@@ -69,7 +72,11 @@ interface Order {
     table?: { id: string; number: string } | null
     waiter?: Waiter | null
     items: SaleItem[]
+    itemCount?: number
 }
+
+const getOrderItemCount = (order: Pick<Order, 'items' | 'itemCount'>) =>
+    order.itemCount ?? order.items.length
 
 interface CartItem {
     menuItem: MenuItem
@@ -113,13 +120,22 @@ const printCustomerReceipt = (order: Order) => {
     printHtml(buildReceiptHtml({ ...mapOrderToReceiptOrder(order), status: 'COMPLETED' }))
 }
 
-// ─── Status Badge (simplified: Pending or Delivered) ───
-function StatusBadge({ status }: { status: string }) {
+// ─── Status Badge ───
+function StatusBadge({ status, deliveredAt }: { status: string; deliveredAt?: string | null }) {
+    if (status === 'READY' && deliveredAt) {
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+                Delivered
+            </span>
+        )
+    }
+
     const config: Record<string, { bg: string; text: string; dot: string; label: string }> = {
         PENDING: { bg: 'bg-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', label: 'Pending' },
         PREPARING: { bg: 'bg-sky-100', text: 'text-sky-800', dot: 'bg-sky-500', label: 'Preparing' },
         READY: { bg: 'bg-emerald-100', text: 'text-emerald-800', dot: 'bg-emerald-500', label: 'Ready to Deliver' },
-        COMPLETED: { bg: 'bg-slate-100', text: 'text-slate-800', dot: 'bg-slate-500', label: 'Delivered' },
+        COMPLETED: { bg: 'bg-slate-100', text: 'text-slate-800', dot: 'bg-slate-500', label: 'Paid' },
         CANCELLED: { bg: 'bg-red-100', text: 'text-red-800', dot: 'bg-red-500', label: 'Cancelled' },
     }
     const c = config[status] || config.PENDING
@@ -136,12 +152,14 @@ function TableCard({
     table,
     isSelected,
     onClick,
+    onManage,
     onViewOrders,
     onNewOrder,
 }: {
     table: Table
     isSelected: boolean
     onClick: () => void
+    onManage: () => void
     onViewOrders: () => void
     onNewOrder: () => void
 }) {
@@ -172,7 +190,21 @@ function TableCard({
         >
             <div className="flex items-center justify-between mb-2">
                 <span className="text-xl font-bold text-slate-900 sm:text-2xl">T{table.number}</span>
-                <StatusIcon className="h-5 w-5 text-slate-500" />
+                <div className="flex items-center gap-1">
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            onManage()
+                        }}
+                        className="rounded-lg border border-slate-200 bg-white/80 p-1.5 text-slate-500 hover:border-slate-300 hover:text-slate-900"
+                        aria-label={`Table options for T${table.number}`}
+                        title="Table options"
+                    >
+                        <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                    <StatusIcon className="h-5 w-5 text-slate-500" />
+                </div>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-600">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -183,9 +215,16 @@ function TableCard({
             </div>
             {hasActiveOrders && (
                 <div className="mt-2 flex items-center gap-1">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-800">
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            onViewOrders()
+                        }}
+                        className="inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-800 hover:bg-slate-300"
+                    >
                         {table.sales.length} order{table.sales.length > 1 ? 's' : ''}
-                    </span>
+                    </button>
                 </div>
             )}
             <div className="mt-3 grid grid-cols-1 gap-2 md:hidden">
@@ -205,7 +244,7 @@ function TableCard({
                     type="button"
                     onClick={(event) => {
                         event.stopPropagation()
-                        onClick()
+                        onManage()
                     }}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900"
                 >
@@ -317,12 +356,8 @@ function NewOrderPanel({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex">
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-            {/* Panel */}
-            <div className="relative ml-auto flex h-full w-full max-w-4xl flex-col overflow-hidden border-l border-white/10 bg-slate-900 animate-slide-in-right">
+        <div className="fixed inset-0 z-50 flex bg-slate-900">
+            <div className="relative flex h-full w-full flex-col overflow-hidden bg-slate-900">
                 {/* Header */}
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-900/80 p-3 backdrop-blur sm:p-5">
                     <div className="min-w-0">
@@ -337,7 +372,7 @@ function NewOrderPanel({
                     </button>
                 </div>
 
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
                     {/* Menu items section */}
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {/* Search + filter */}
@@ -390,7 +425,7 @@ function NewOrderPanel({
                                     <p>No menu items found</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 lg:gap-4">
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2 lg:grid-cols-5 xl:grid-cols-6 lg:gap-3">
                                     {filteredItems.map((item) => {
                                         const inCart = cart.find((c) => c.menuItem.id === item.id)
                                         return (
@@ -406,7 +441,7 @@ function NewOrderPanel({
                                                   active:scale-[0.97]
                                                 `}
                                             >
-                                                <div className="relative h-[104px] w-[112px] shrink-0 overflow-hidden bg-slate-800 sm:h-36 sm:w-full md:h-40">
+                                                <div className="relative h-[88px] w-[88px] shrink-0 overflow-hidden bg-slate-800 sm:h-24 sm:w-full md:h-28">
                                                     {item.imageUrl ? (
                                                         <img
                                                             src={item.imageUrl}
@@ -449,11 +484,11 @@ function NewOrderPanel({
                     </div>
 
                     {/* Cart sidebar */}
-                    <div className="absolute inset-x-0 bottom-0 z-10 flex max-h-[78dvh] flex-col border-t border-white/10 bg-slate-950 shadow-2xl shadow-black/40 sm:relative sm:max-h-[42vh] sm:bg-slate-950/50 sm:shadow-none lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
+                    <div className="absolute inset-x-0 bottom-0 z-10 flex max-h-[40dvh] flex-col border-t border-white/10 bg-slate-950 shadow-2xl shadow-black/40 md:relative md:max-h-none md:w-72 md:bg-slate-950/50 md:shadow-none lg:w-80 lg:border-l lg:border-t-0">
                         <button
                             type="button"
                             onClick={() => setIsMobileCartOpen((open) => !open)}
-                            className="flex items-center justify-between gap-3 p-3 text-left sm:hidden"
+                            className="flex items-center justify-between gap-3 p-3 text-left md:hidden"
                         >
                             <span className="text-sm font-semibold text-white flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -469,7 +504,7 @@ function NewOrderPanel({
                             </span>
                         </button>
 
-                        <div className="hidden p-4 border-b border-white/5 sm:block">
+                        <div className="hidden p-4 border-b border-white/5 md:block">
                             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <circle cx="9" cy="21" r="1" />
@@ -480,7 +515,7 @@ function NewOrderPanel({
                             </h3>
                         </div>
 
-                        <div className={`${isMobileCartOpen ? 'block' : 'hidden'} flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar sm:block sm:p-4 sm:space-y-3`}>
+                        <div className={`${isMobileCartOpen ? 'block' : 'hidden'} flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar md:block md:p-4 md:space-y-3`}>
                             {cart.length === 0 ? (
                                 <p className="text-sm text-slate-500 text-center py-4 sm:py-8">Tap items to add</p>
                             ) : (
@@ -583,7 +618,6 @@ function OrderDetailPanel({
     onClose: () => void
 }) {
     const [isUpdating, setIsUpdating] = useState(false)
-    const [isPaying, setIsPaying] = useState(false)
     const [showAddItems, setShowAddItems] = useState(false)
     const [addItemCart, setAddItemCart] = useState<CartItem[]>([])
     const [addItemSearch, setAddItemSearch] = useState('')
@@ -600,6 +634,24 @@ function OrderDetailPanel({
             onUpdate()
         } catch {
             alert('Failed to update order status')
+        } finally {
+            setIsUpdating(false)
+        }
+    }
+
+    const markDelivered = async () => {
+        if (order.status !== 'READY' || order.deliveredAt) return
+        setIsUpdating(true)
+        try {
+            const res = await fetch(`/api/waiter/orders/${order.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ delivered: true }),
+            })
+            if (!res.ok) throw new Error('Failed to mark delivered')
+            onUpdate()
+        } catch {
+            alert('Failed to mark order as delivered')
         } finally {
             setIsUpdating(false)
         }
@@ -660,30 +712,6 @@ function OrderDetailPanel({
 
     const isModifiable = !['COMPLETED', 'CANCELLED'].includes(order.status)
 
-    const handlePay = async () => {
-        if (order.status === 'COMPLETED') return
-        if (!confirm('Take payment and lock this order? It cannot be changed after payment.')) return
-        setIsPaying(true)
-        try {
-            const res = await fetch(`/api/orders/${order.id}/complete`, {
-                method: 'POST',
-            })
-            if (!res.ok) {
-                const data = await res.json().catch(() => null)
-                throw new Error(data?.error || 'Failed to complete payment')
-            }
-            const data = await res.json()
-            const completedOrder = data.order as Order
-            printCustomerReceipt(completedOrder)
-            onUpdate()
-            onClose()
-        } catch (error) {
-            alert(error instanceof Error ? error.message : 'Failed to complete payment')
-        } finally {
-            setIsPaying(false)
-        }
-    }
-
     const allMenuItems = categories.flatMap((c) =>
         c.menuItems.map((item) => ({ ...item, categoryName: c.name }))
     )
@@ -709,7 +737,7 @@ function OrderDetailPanel({
                         </button>
                     </div>
                     <div className="flex items-center gap-3">
-                        <StatusBadge status={order.status} />
+                        <StatusBadge status={order.status} deliveredAt={order.deliveredAt} />
                         {order.table && (
                             <span className="text-xs text-slate-400 flex items-center gap-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -840,7 +868,7 @@ function OrderDetailPanel({
                     <div className="p-5 border-t border-white/10 bg-slate-900 space-y-3">
                         <button
                             onClick={() => printKitchenTicket(order)}
-                            disabled={isUpdating || isPaying}
+                            disabled={isUpdating}
                             className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-sm font-medium rounded-xl transition-all active:scale-[0.98]"
                         >
                             Print kitchen ticket
@@ -861,17 +889,30 @@ function OrderDetailPanel({
                         )}
 
                         <div className="grid grid-cols-2 gap-3">
-                            {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
+                            {order.status === 'READY' && !order.deliveredAt && (
                                 <button
-                                    onClick={handlePay}
-                                    disabled={isUpdating || isPaying}
-                                    className="py-3 col-span-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-40 active:scale-[0.98]"
+                                    onClick={markDelivered}
+                                    disabled={isUpdating}
+                                    className="py-3 col-span-2 bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 text-violet-200 text-sm font-semibold rounded-xl transition-all disabled:opacity-40 active:scale-[0.98]"
                                 >
                                     <span className="flex items-center justify-center gap-2">
                                         <Check className="h-4 w-4" />
-                                        {isPaying ? 'Taking payment...' : 'Pay & Print Receipt'}
+                                        Mark as Delivered
                                     </span>
                                 </button>
+                            )}
+                            {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
+                                <WaiterPayOrderButton
+                                    order={order}
+                                    tableNumber={order.table?.number}
+                                    loadOrder={async () => order as WaiterPayOrder}
+                                    onCompleted={() => {
+                                        onUpdate()
+                                        onClose()
+                                    }}
+                                    className="col-span-2 w-full py-3 h-auto text-sm font-semibold rounded-xl shadow-lg shadow-emerald-500/20"
+                                    label="Pay & Print Receipt"
+                                />
                             )}
                             {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
                                 <button
@@ -930,15 +971,18 @@ export default function WaiterDashboard() {
     const [activeTab, setActiveTab] = useState<'tables' | 'orders' | 'kitchen'>(tabParam === 'orders' ? 'orders' : tabParam === 'kitchen' ? 'kitchen' : 'tables')
     const [selectedTable, setSelectedTable] = useState<Table | null>(null)
     const [showNewOrder, setShowNewOrder] = useState(false)
+    const [showTableManage, setShowTableManage] = useState(false)
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
     const [orderFilter, setOrderFilter] = useState<'active' | 'all' | 'COMPLETED'>('active')
     const [orderSearchTable, setOrderSearchTable] = useState('')
     const [orderSort, setOrderSort] = useState<'newest' | 'oldest' | 'expensive' | 'cheap'>('newest')
     const [kitchenSort, setKitchenSort] = useState<'oldest' | 'newest' | 'expensive' | 'cheap'>('oldest')
-    const [isLoading, setIsLoading] = useState(true)
+    const [isTablesLoading, setIsTablesLoading] = useState(true)
+    const refreshInFlightRef = useRef(false)
     const previousUnconfirmedCountRef = useRef(0)
     const previousOrderStatusesRef = useRef<Map<string, string>>(new Map())
     const previousKitchenOrderIdsRef = useRef<Set<string>>(new Set())
+    const tableHadActiveOrdersRef = useRef(false)
     const { toast } = useToast()
 
     const currency = 'IQD'
@@ -971,44 +1015,69 @@ export default function WaiterDashboard() {
         }
     }, [])
 
-    const fetchTables = useCallback(async () => {
-        try {
-            const res = await fetch('/api/waiter/tables', { cache: 'no-store' })
-            if (res.ok) {
-                const data = await res.json()
-                setTables(data)
-                setSelectedTable((current) => {
-                    if (!current) return current
-                    return data.find((table: Table) => table.id === current.id) ?? null
-                })
-            }
-        } catch (err) {
-            console.error('Failed to fetch tables:', err)
-        }
-    }, [])
+    const fetchDashboard = useCallback(async (options?: { tablesOnly?: boolean }) => {
+        if (refreshInFlightRef.current) return
+        refreshInFlightRef.current = true
 
-    const fetchOrders = useCallback(async () => {
         try {
-            const res = await fetch(`/api/waiter/orders?myOnly=true&status=${orderFilter}`, { cache: 'no-store' })
-            if (res.ok) {
-                const data = await res.json()
-                setMyOrders(data)
+            const res = await fetch(`/api/waiter/dashboard?orderFilter=${orderFilter}`, {
+                cache: 'no-store',
+            })
+            if (!res.ok) return
+
+            const data = await res.json()
+            setTables(data.tables ?? [])
+            setSelectedTable((current) => {
+                if (!current) return current
+                return (data.tables ?? []).find((table: Table) => table.id === current.id) ?? null
+            })
+
+            if (!options?.tablesOnly) {
+                setMyOrders(data.myOrders ?? [])
+                setKitchenOrders(data.kitchenOrders ?? [])
+                setUnconfirmedOrders(data.unconfirmedOrders ?? [])
             }
         } catch (err) {
-            console.error('Failed to fetch orders:', err)
+            console.error('Failed to fetch waiter dashboard:', err)
+        } finally {
+            refreshInFlightRef.current = false
         }
     }, [orderFilter])
 
+    const fetchTables = useCallback(async () => {
+        await fetchDashboard({ tablesOnly: true })
+    }, [fetchDashboard])
+
+    const fetchOrders = useCallback(async () => {
+        await fetchDashboard()
+    }, [fetchDashboard])
+
     const fetchKitchenOrders = useCallback(async () => {
+        await fetchDashboard()
+    }, [fetchDashboard])
+
+    const fetchUnconfirmedOrders = useCallback(async () => {
+        await fetchDashboard()
+    }, [fetchDashboard])
+
+    const openOrder = useCallback(async (orderId: string, options?: { print?: boolean }) => {
         try {
-            const res = await fetch(`/api/waiter/orders?myOnly=false&status=active`, { cache: 'no-store' })
-            if (res.ok) {
-                const data = await res.json()
-                setKitchenOrders(data.filter((order: Order) => order.status !== 'READY'))
+            const res = await fetch(`/api/waiter/orders/${orderId}`, { cache: 'no-store' })
+            if (!res.ok) return
+            const order = await res.json()
+            if (options?.print) {
+                printKitchenTicket(order)
             }
+            setSelectedOrder(order)
         } catch (err) {
-            console.error('Failed to fetch kitchen orders:', err)
+            console.error('Failed to load order:', err)
         }
+    }, [])
+
+    const loadOrderForPayment = useCallback(async (orderId: string): Promise<WaiterPayOrder | null> => {
+        const res = await fetch(`/api/waiter/orders/${orderId}`, { cache: 'no-store' })
+        if (!res.ok) return null
+        return res.json()
     }, [])
 
     const fetchMenu = useCallback(async () => {
@@ -1023,75 +1092,95 @@ export default function WaiterDashboard() {
         }
     }, [])
 
-    const fetchUnconfirmedOrders = useCallback(async () => {
-        try {
-            const res = await fetch('/api/waiter/orders?unassigned=true', { cache: 'no-store' })
-            if (res.ok) {
-                const data = await res.json()
-                setUnconfirmedOrders(data)
-            }
-        } catch (err) {
-            console.error('Failed to fetch unconfirmed orders:', err)
-        }
-    }, [])
-
     const refreshDashboardData = useCallback(async () => {
-        await Promise.all([
-            fetchTables(),
-            fetchOrders(),
-            fetchKitchenOrders(),
-            fetchUnconfirmedOrders(),
-        ])
-    }, [fetchKitchenOrders, fetchOrders, fetchTables, fetchUnconfirmedOrders])
+        await fetchDashboard()
+    }, [fetchDashboard])
+
+    const handleTableOrderPaid = useCallback(async () => {
+        await refreshDashboardData()
+    }, [refreshDashboardData])
+
+    const markOrderDelivered = useCallback(async (orderId: string) => {
+        try {
+            const res = await fetch(`/api/waiter/orders/${orderId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ delivered: true }),
+            })
+            if (!res.ok) {
+                const data = await res.json().catch(() => null)
+                throw new Error(data?.error || 'Failed to mark as delivered')
+            }
+            await refreshDashboardData()
+            toast({
+                title: 'Order delivered',
+                description: 'Marked as delivered to the table.',
+            })
+        } catch (error) {
+            toast({
+                title: 'Could not update order',
+                description: error instanceof Error ? error.message : 'Failed to mark as delivered.',
+                variant: 'destructive',
+            })
+        }
+    }, [refreshDashboardData, toast])
 
     useEffect(() => {
         if (authStatus === 'unauthenticated') {
             router.push('/waiter/login')
+        }
+    }, [authStatus, router])
+
+    useEffect(() => {
+        setIsTablesLoading(true)
+        void fetchDashboard().finally(() => {
+            setIsTablesLoading(false)
+            void fetchMenu()
+        })
+
+        const interval = setInterval(() => {
+            void refreshDashboardData()
+        }, 10000)
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                void refreshDashboardData()
+            }
+        }
+
+        window.addEventListener('focus', refreshDashboardData)
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+
+        return () => {
+            clearInterval(interval)
+            window.removeEventListener('focus', refreshDashboardData)
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+        }
+    }, [fetchDashboard, fetchMenu, refreshDashboardData])
+
+    useEffect(() => {
+        if (!showTableManage || !selectedTable) {
+            tableHadActiveOrdersRef.current = false
             return
         }
-        if (authStatus === 'authenticated') {
-            setIsLoading(true)
-            fetchTables().finally(() => setIsLoading(false))
-            Promise.all([
-                fetchOrders(),
-                fetchKitchenOrders(),
-                fetchUnconfirmedOrders(),
-                fetchMenu(),
-            ]).catch(() => { })
-
-            // Poll quickly enough that QR orders appear without a manual refresh.
-            const interval = setInterval(() => {
-                refreshDashboardData()
-            }, 5000)
-
-            const handleVisibilityChange = () => {
-                if (document.visibilityState === 'visible') {
-                    refreshDashboardData()
-                }
-            }
-
-            window.addEventListener('focus', refreshDashboardData)
-            document.addEventListener('visibilitychange', handleVisibilityChange)
-
-            return () => {
-                clearInterval(interval)
-                window.removeEventListener('focus', refreshDashboardData)
-                document.removeEventListener('visibilitychange', handleVisibilityChange)
-            }
+        if (selectedTable.sales.length > 0) {
+            tableHadActiveOrdersRef.current = true
+            return
         }
-    }, [authStatus, router, fetchMenu, refreshDashboardData])
+        if (!tableHadActiveOrdersRef.current) return
+        setShowTableManage(false)
+        tableHadActiveOrdersRef.current = false
+        toast({
+            title: 'Table available',
+            description: `Table ${selectedTable.number} is ready for new guests.`,
+        })
+    }, [selectedTable, showTableManage, toast])
 
     useEffect(() => {
-        if (authStatus === 'authenticated') {
-            fetchOrders()
-        }
-    }, [orderFilter, authStatus, fetchOrders])
-
-    useEffect(() => {
-        if (authStatus === 'authenticated') {
-            fetchKitchenOrders()
-        }
-    }, [authStatus, fetchKitchenOrders])
+        if (!showNewOrder && !selectedOrder) return
+        if (categories.length > 0) return
+        void fetchMenu()
+    }, [categories.length, fetchMenu, selectedOrder, showNewOrder])
 
     useEffect(() => {
         setActiveTab(tabParam === 'orders' ? 'orders' : tabParam === 'kitchen' ? 'kitchen' : 'tables')
@@ -1160,6 +1249,7 @@ export default function WaiterDashboard() {
 
     const handleOrderCreated = () => {
         setShowNewOrder(false)
+        setShowTableManage(false)
         setSelectedTable(null)
         toast({
             title: 'Order created',
@@ -1170,31 +1260,16 @@ export default function WaiterDashboard() {
 
     const handleOrderUpdated = () => {
         handleRefresh()
-        // Refresh the selected order
         if (selectedOrder) {
-            fetch('/api/waiter/orders?myOnly=true&status=all', { cache: 'no-store' })
-                .then((r) => r.json())
-                .then((orders) => {
-                    const updated = orders.find((o: Order) => o.id === selectedOrder.id)
-                    if (updated) {
-                        setSelectedOrder(updated)
-                    } else {
-                        setSelectedOrder(null)
-                    }
-                })
-                .catch(() => { })
+            void loadOrderForPayment(selectedOrder.id).then((updated) => {
+                if (updated) setSelectedOrder(updated as Order)
+                else setSelectedOrder(null)
+            })
         }
     }
 
-    if (authStatus === 'loading' || isLoading) {
-        return (
-            <div className="flex items-center justify-center py-24">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin" />
-                    <p className="text-slate-600 text-sm">Loading waiter dashboard...</p>
-                </div>
-            </div>
-        )
+    if (authStatus === 'unauthenticated') {
+        return null
     }
 
     const activeOrders = myOrders.filter((o) => ['PENDING', 'PREPARING', 'READY'].includes(o.status))
@@ -1223,7 +1298,7 @@ export default function WaiterDashboard() {
                                             {order.orderNumber}
                                         </span>
                                         <span className="text-sm text-slate-500">
-                                            {order.total.toLocaleString()} {currency} · {order.items.length} items
+                                            {order.total.toLocaleString()} {currency} · {getOrderItemCount(order)} items
                                         </span>
                                     </div>
                                     <button
@@ -1280,123 +1355,77 @@ export default function WaiterDashboard() {
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                            {tables.map((table) => (
+                            {isTablesLoading
+                                ? Array.from({ length: 12 }).map((_, index) => (
+                                    <div
+                                        key={`table-skeleton-${index}`}
+                                        className="h-[108px] animate-pulse rounded-xl border border-slate-200 bg-slate-100 sm:h-[120px]"
+                                    />
+                                ))
+                                : tables.map((table) => (
                                 <TableCard
                                     key={table.id}
                                     table={table}
                                     isSelected={selectedTable?.id === table.id}
                                     onClick={() => {
                                         setSelectedTable(table)
+                                        if (table.sales.length === 0) {
+                                            setShowTableManage(false)
+                                            setShowNewOrder(true)
+                                        } else {
+                                            setShowNewOrder(false)
+                                            setShowTableManage(true)
+                                        }
+                                    }}
+                                    onManage={() => {
+                                        setSelectedTable(table)
+                                        setShowNewOrder(false)
+                                        setShowTableManage(true)
                                     }}
                                     onViewOrders={() => {
                                         setSelectedTable(table)
-                                        if (table.sales.length > 0) setSelectedOrder(table.sales[0])
+                                        setShowNewOrder(false)
+                                        setShowTableManage(false)
+                                        if (table.sales.length > 0) {
+                                            void openOrder(table.sales[0].id)
+                                        }
                                     }}
                                     onNewOrder={() => {
                                         setSelectedTable(table)
+                                        setShowTableManage(false)
                                         setShowNewOrder(true)
                                     }}
                                 />
                             ))}
                         </div>
 
-                        {/* Selected table info */}
-                        {selectedTable && (
-                            <Card className="mt-5 hidden md:block">
-                                <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <CardTitle>Table {selectedTable.number}</CardTitle>
-                                        <p className="text-sm text-slate-500 mt-1">
-                                            {selectedTable.capacity} seats
-                                        </p>
-                                    </div>
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                        <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
-                                            {[
-                                                { status: 'AVAILABLE', label: 'Available' },
-                                                { status: 'OCCUPIED', label: 'Occupied' },
-                                                { status: 'RESERVED', label: 'Reserved' },
-                                            ].map((s) => (
-                                                <button
-                                                    key={s.status}
-                                                    onClick={async () => {
-                                                        try {
-                                                            const res = await fetch(`/api/tables/${selectedTable.id}`, {
-                                                                method: 'PATCH',
-                                                                headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({ status: s.status }),
-                                                            })
-                                                            if (res.ok) {
-                                                                setSelectedTable((prev) => (prev ? { ...prev, status: s.status } : null))
-                                                                fetchTables()
-                                                            }
-                                                        } catch { }
-                                                    }}
-                                                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                                                        selectedTable.status === s.status
-                                                            ? 'bg-white text-slate-900 shadow'
-                                                            : 'text-slate-600 hover:text-slate-900'
-                                                    }`}
-                                                >
-                                                    {s.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <Button onClick={() => setShowNewOrder(true)}>
-                                            New Order
-                                        </Button>
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    {/* Active orders for this table */}
-                                    {selectedTable.sales.length > 0 ? (
-                                        <div className="space-y-2">
-                                            <h4 className="text-sm font-semibold text-slate-700">Active Orders</h4>
-                                            {selectedTable.sales.map((order) => (
-                                                <button
-                                                    key={order.id}
-                                                    onClick={() => {
-                                                        printKitchenTicket(order)
-                                                        setSelectedOrder(order)
-                                                    }}
-                                                    className="w-full text-left flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <StatusBadge status={order.status} />
-                                                        <div>
-                                                            <p className="text-sm font-medium text-slate-900">{order.orderNumber}</p>
-                                                            <p className="text-xs text-slate-500">
-                                                                {order.items.length} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <p className="text-sm font-semibold text-emerald-600">
-                                                        {order.total.toLocaleString()} {currency}
-                                                    </p>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-slate-500">No active orders. Tap &quot;New Order&quot; to start.</p>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {selectedTable && (
-                            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white shadow-2xl shadow-slate-950/20 md:hidden">
-                                <div className="mx-auto h-1.5 w-12 rounded-full bg-slate-300 mt-2" />
+                        {showTableManage && selectedTable && !showNewOrder && (
+                            <>
+                                <button
+                                    type="button"
+                                    aria-label="Close table options"
+                                    className="fixed inset-0 z-40 bg-black/30"
+                                    onClick={() => {
+                                        setSelectedTable(null)
+                                        setShowTableManage(false)
+                                    }}
+                                />
+                                <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white shadow-2xl shadow-slate-950/20 sm:mx-auto sm:mb-4 sm:max-w-lg sm:rounded-2xl sm:border">
+                                <div className="mx-auto h-1.5 w-12 rounded-full bg-slate-300 mt-2 sm:hidden" />
                                 <div className="p-4">
                                     <div className="mb-3 flex items-center justify-between gap-3">
                                         <div>
                                             <h3 className="text-lg font-bold text-slate-900">Table {selectedTable.number}</h3>
-                                            <p className="text-xs text-slate-500">{selectedTable.capacity} seats</p>
+                                            <p className="text-xs text-slate-500">{selectedTable.capacity} seats · change status or view orders</p>
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => setSelectedTable(null)}
+                                            onClick={() => {
+                                                setSelectedTable(null)
+                                                setShowTableManage(false)
+                                            }}
                                             className="rounded-full border border-slate-200 p-2 text-slate-500"
-                                            aria-label="Close table actions"
+                                            aria-label="Close table options"
                                         >
                                             <X className="h-4 w-4" />
                                         </button>
@@ -1436,34 +1465,80 @@ export default function WaiterDashboard() {
                                     </div>
 
                                     {selectedTable.sales.length > 0 && (
-                                        <div className="mb-3 max-h-32 space-y-2 overflow-y-auto">
+                                        <div className="mb-3 max-h-52 space-y-2 overflow-y-auto">
+                                            <h4 className="text-sm font-semibold text-slate-700">Active orders</h4>
                                             {selectedTable.sales.map((order) => (
-                                                <button
+                                                <div
                                                     key={order.id}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        printKitchenTicket(order)
-                                                        setSelectedOrder(order)
-                                                    }}
-                                                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-left"
+                                                    className="rounded-xl border border-slate-200 bg-slate-50 p-3"
                                                 >
-                                                    <div>
-                                                        <p className="text-sm font-semibold text-slate-900">{order.orderNumber}</p>
-                                                        <p className="text-xs text-slate-500">
-                                                            {order.items.length} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </p>
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-semibold text-slate-900">{order.orderNumber}</p>
+                                                            <p className="text-xs text-slate-500">
+                                                                {getOrderItemCount(order)} items · {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </p>
+                                                            <p className="mt-1 text-sm font-bold text-emerald-600">
+                                                                {order.total.toLocaleString()} {currency}
+                                                            </p>
+                                                        </div>
+                                                        <StatusBadge status={order.status} deliveredAt={order.deliveredAt} />
                                                     </div>
-                                                    <StatusBadge status={order.status} />
-                                                </button>
+                                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                                        {order.status === 'READY' && !order.deliveredAt && (
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="col-span-2 w-full border-violet-300 text-violet-700 hover:bg-violet-50"
+                                                                onClick={() => void markOrderDelivered(order.id)}
+                                                            >
+                                                                <Check className="mr-2 h-4 w-4" />
+                                                                Mark as Delivered
+                                                            </Button>
+                                                        )}
+                                                        {['PENDING', 'PREPARING', 'READY'].includes(order.status) && (
+                                                            <WaiterPayOrderButton
+                                                                order={order}
+                                                                tableNumber={selectedTable.number}
+                                                                loadOrder={() => loadOrderForPayment(order.id)}
+                                                                onCompleted={handleTableOrderPaid}
+                                                                size="sm"
+                                                                className="col-span-2 w-full"
+                                                                label="Pay & Print Receipt"
+                                                            />
+                                                        )}
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="col-span-2 w-full"
+                                                            onClick={() => {
+                                                                setShowTableManage(false)
+                                                                void openOrder(order.id, { print: true })
+                                                            }}
+                                                        >
+                                                            View order details
+                                                        </Button>
+                                                    </div>
+                                                </div>
                                             ))}
                                         </div>
                                     )}
 
-                                    <Button className="w-full" onClick={() => setShowNewOrder(true)}>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => {
+                                            setShowTableManage(false)
+                                            setShowNewOrder(true)
+                                        }}
+                                    >
                                         New Order
                                     </Button>
                                 </div>
                             </div>
+                            </>
                         )}
                     </div>
                 )}
@@ -1547,7 +1622,7 @@ export default function WaiterDashboard() {
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-3">
                                                 <span className="text-base font-bold text-slate-900">{order.orderNumber}</span>
-                                                <StatusBadge status={order.status} />
+                                                <StatusBadge status={order.status} deliveredAt={order.deliveredAt} />
                                             </div>
                                             <span className="text-base font-bold text-emerald-600">
                                                 {order.total.toLocaleString()} {currency}
@@ -1562,7 +1637,7 @@ export default function WaiterDashboard() {
                                                     Table {order.table.number}
                                                 </span>
                                             )}
-                                            <span>{order.items.length} items</span>
+                                            <span>{getOrderItemCount(order)} items</span>
                                             <span>{new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                             {order.customerName && (
                                                 <span className="flex items-center gap-1">
@@ -1577,9 +1652,9 @@ export default function WaiterDashboard() {
                                                     {item.quantity}× {item.menuItem.name}
                                                 </span>
                                             ))}
-                                            {order.items.length > 4 && (
+                                            {getOrderItemCount(order) > 4 && (
                                                 <span className="text-[10px] px-2 py-0.5 bg-slate-100 rounded-full text-slate-500">
-                                                    +{order.items.length - 4} more
+                                                    +{getOrderItemCount(order) - 4} more
                                                 </span>
                                             )}
                                         </div>
@@ -1744,7 +1819,11 @@ export default function WaiterDashboard() {
                     categories={categories}
                     currency={currency}
                     onOrderCreated={handleOrderCreated}
-                    onClose={() => setShowNewOrder(false)}
+                    onClose={() => {
+                        setShowNewOrder(false)
+                        setSelectedTable(null)
+                        setShowTableManage(false)
+                    }}
                 />
             )}
 

@@ -23,7 +23,7 @@ import AddExpenseModal from './AddExpenseModal'
 import AddWasteModal from './AddWasteModal'
 import { useI18n, getTranslatedCategoryName } from '@/lib/i18n'
 import DatePicker from '@/components/ui/date-picker'
-import MonthlySalesPdfUploadCard from '@/components/dashboard/MonthlySalesPdfUploadCard'
+import { getPnlParentLabel } from '@/lib/live-pnl-categories'
 
 function daysBetweenInclusive(start: Date, end: Date) {
   const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
@@ -80,6 +80,10 @@ function recurringTotalForRange(
 interface PnLData {
   summary: {
     revenue: number
+    grossSales?: number
+    netRevenue?: number
+    taxCollected?: number
+    serviceChargeRevenue?: number
     cogs: number
     cogsFromSales: number
     cogsFromMealPrep: number
@@ -87,10 +91,48 @@ interface PnLData {
     grossProfit: number
     expenses: number
     payroll: number
+    payrollBase?: number
+    serviceChargeStaffPayout?: number
+    labor?: number
+    primeCost?: number
+    operatingProfit?: number
+    ebitda?: number
+    profitTax?: number
     netProfit: number
+    controllableExpenses?: number
+    occupancyExpenses?: number
+    grossProfitPercent?: number
+    primeCostPercent?: number
+    ebitdaPercent?: number
+    netProfitPercent?: number
     cogsCoveragePercent?: number
     revenueWithCosting?: number
   }
+  config?: {
+    salesTaxRate: number
+    profitTaxRate: number
+    serviceChargeRate: number
+    operatingDaysInMonth: number
+    currency: string
+    usdRate: number
+  }
+  fixedCostAccrual?: {
+    operatingDaysInMonth: number
+    elapsedOperatingDays: number
+    monthlyFixed: number
+    recognizedSoFar: number
+  }
+  itemProfitability?: Array<{
+    menuItemId: string
+    name: string
+    category: string
+    sold: number
+    revenue: number
+    cogs: number
+    contributionMargin: number
+    marginPercent: number
+    quadrant: 'Star' | 'Plowhorse' | 'Puzzle' | 'Dog'
+  }>
   expenseByCategory: Record<string, number>
   expenseTransactions: any[]
   expenses: any[]
@@ -115,11 +157,43 @@ type TransactionRow = {
 
 /** Helper: format a date as YYYY-MM-DD */
 function toDateString(d: Date) {
-  return d.toISOString().split('T')[0]
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
+function percent(value: number | undefined) {
+  return `${(value || 0).toFixed(1)}%`
+}
+
+function ratioPercent(amount: number | undefined, base: number | undefined) {
+  if (!base || base <= 0) return 0
+  return ((amount || 0) / base) * 100
+}
+
+function compactCurrencyDisplay(amount: number, currency = 'IQD', usdRate = 0) {
+  const displayAmount = currency === 'USD' && usdRate > 0 ? amount / usdRate : amount
+  const sign = amount < 0 ? '-' : ''
+  const absolute = Math.abs(displayAmount)
+  const compact = new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: currency === 'USD' ? 2 : absolute >= 1_000_000 ? 1 : 0,
+  }).format(absolute)
+  return `${sign}${currency} ${compact}`
+}
+
+function quadrantClass(quadrant: string) {
+  if (quadrant === 'Star') return 'bg-green-100 text-green-700'
+  if (quadrant === 'Plowhorse') return 'bg-amber-100 text-amber-700'
+  if (quadrant === 'Puzzle') return 'bg-blue-100 text-blue-700'
+  return 'bg-slate-100 text-slate-600'
+}
+
+type QuickPeriod = 'today' | 'week' | 'month' | 'year'
+
 /** Quick-period date ranges */
-function getQuickPeriod(period: 'today' | 'week' | 'month') {
+function getQuickPeriod(period: QuickPeriod) {
   const now = new Date()
   switch (period) {
     case 'today':
@@ -137,6 +211,11 @@ function getQuickPeriod(period: 'today' | 'week' | 'month') {
       const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
       return { start: toDateString(start), end: toDateString(end) }
     }
+    case 'year': {
+      const start = new Date(now.getFullYear(), 0, 1)
+      const end = new Date(now.getFullYear(), 11, 31)
+      return { start: toDateString(start), end: toDateString(end) }
+    }
   }
 }
 
@@ -152,6 +231,7 @@ const UI_COPY = {
     today: 'Today',
     thisWeek: 'This week',
     thisMonth: 'This month',
+    thisYear: 'This year',
     from: 'From',
     to: 'To',
     apply: 'Apply',
@@ -239,6 +319,7 @@ const UI_COPY = {
     today: 'اليوم',
     thisWeek: 'هذا الأسبوع',
     thisMonth: 'هذا الشهر',
+    thisYear: 'هذه السنة',
     from: 'من',
     to: 'إلى',
     apply: 'تطبيق',
@@ -326,6 +407,7 @@ const UI_COPY = {
     today: 'ئەمڕۆ',
     thisWeek: 'ئەم هەفتەیە',
     thisMonth: 'ئەم مانگە',
+    thisYear: 'ئەم ساڵە',
     from: 'لە',
     to: 'بۆ',
     apply: 'جێبەجێکردن',
@@ -421,9 +503,10 @@ export default function ProfitLossPageClient() {
     key: keyof TransactionRow
     direction: 'asc' | 'desc'
   }>({ key: 'date', direction: 'desc' })
-  // Branch filtering (per-branch only; no "all branches" option)
+  // Empty value means all branches, including legacy/unassigned sales.
   const [branches, setBranches] = useState<{ id: string; name: string; address?: string | null }[]>([])
   const [selectedBranch, setSelectedBranch] = useState<string>('')
+  const [displayCurrency, setDisplayCurrency] = useState<'IQD' | 'USD'>('IQD')
 
   const formatDate = (value: Date, options?: Intl.DateTimeFormatOptions) =>
     new Intl.DateTimeFormat(
@@ -438,13 +521,26 @@ export default function ProfitLossPageClient() {
     return ui.cadenceAnnual
   }
 
+  const usdRate = data?.config?.usdRate || 0
+  const canDisplayUsd = usdRate > 0
+  const activeCurrency = displayCurrency === 'USD' && canDisplayUsd ? 'USD' : 'IQD'
+  const displayAmount = (amount: number) => {
+    if (activeCurrency === 'USD') {
+      return `USD ${new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount / usdRate)}`
+    }
+    return formatCurrency(amount)
+  }
+  const displayCompact = (amount: number) => compactCurrencyDisplay(amount, activeCurrency, usdRate)
+
   const fetchData = async () => {
     setLoading(true)
     try {
       let url = `/api/reports/pnl/data?start=${dateRange.start}&end=${dateRange.end}`
-      const branchId = selectedBranch || (branches.length > 0 ? branches[0].id : null)
-      if (branchId) {
-        url += `&branchId=${branchId}`
+      if (selectedBranch) {
+        url += `&branchId=${selectedBranch}`
       }
       const response = await fetch(url)
       if (!response.ok) throw new Error(ui.failedLoad)
@@ -461,14 +557,13 @@ export default function ProfitLossPageClient() {
     }
   }
 
-  // Fetch branches on mount; default to first branch (per-branch only, no "all")
+  // Fetch branches on mount; keep all branches selected by default.
   useEffect(() => {
     fetch('/api/branches')
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
           setBranches(data)
-          setSelectedBranch((prev) => (prev === '' && data.length > 0 ? data[0].id : prev))
         }
       })
       .catch(() => { })
@@ -479,7 +574,7 @@ export default function ProfitLossPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange.start, dateRange.end, selectedBranch])
 
-  const handleQuickPeriod = (period: 'today' | 'week' | 'month') => {
+  const handleQuickPeriod = (period: QuickPeriod) => {
     setActivePeriod(period)
     setDateRange(getQuickPeriod(period))
   }
@@ -793,19 +888,32 @@ export default function ProfitLossPageClient() {
     ? (data.summary.netProfit / data.summary.revenue) * 100
     : 0
 
+  const saleItemNetRevenue = (item: any) => {
+    const gross = item.price * item.quantity
+    const taxRate = item.menuItem?.category?.taxRate
+    return typeof taxRate === 'number' && Number.isFinite(taxRate) && taxRate > 0
+      ? gross / (1 + taxRate / 100)
+      : gross
+  }
+
   // Group sales by category (for detailed breakdown)
   const salesByCategory = data.sales.reduce((acc: Record<string, { revenue: number; cogs: number; count: number }>, sale) => {
     sale.items.forEach((item: any) => {
-      const category = localizeCategory(item.menuItem?.category?.name || '')
+      const category = item.menuItem?.category?.pnlParent
+        ? getPnlParentLabel(item.menuItem.category.pnlParent)
+        : localizeCategory(item.menuItem?.category?.name || '')
       if (!acc[category]) {
         acc[category] = { revenue: 0, cogs: 0, count: 0 }
       }
-      acc[category].revenue += item.price * item.quantity
+      acc[category].revenue += saleItemNetRevenue(item)
       acc[category].cogs += item.cost * item.quantity
       acc[category].count += item.quantity
     })
     return acc
   }, {})
+  const salesByCategoryEntries = Object.entries(salesByCategory) as Array<
+    [string, { revenue: number; cogs: number; count: number }]
+  >
 
   // Format date range label
   const dateRangeLabel = `${formatDate(new Date(dateRange.start), {
@@ -823,18 +931,46 @@ export default function ProfitLossPageClient() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">{t.sales_title}</h1>
-          <p className="text-slate-500 mt-1">{ui.period}: {dateRangeLabel}</p>
+          <h1 className="text-3xl font-bold text-slate-900">Live P&amp;L</h1>
+          <p className="text-slate-500 mt-1">
+            USAR structure · {activeCurrency} display · {ui.period}: {dateRangeLabel}
+          </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setDisplayCurrency('IQD')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${activeCurrency === 'IQD'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+                }`}
+            >
+              IQD
+            </button>
+            <button
+              type="button"
+              onClick={() => canDisplayUsd && setDisplayCurrency('USD')}
+              disabled={!canDisplayUsd}
+              title={canDisplayUsd ? 'Show USD values' : 'Set USD rate in Super Admin settings'}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${activeCurrency === 'USD'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+                }`}
+            >
+              USD
+            </button>
+          </div>
           {branches.length > 0 && (
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-slate-400" />
               <select
-                value={selectedBranch || (branches.length > 0 ? branches[0].id : '')}
+                value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
                 className="h-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               >
+                <option value="">All branches</option>
+                <option value="unassigned">Unassigned sales</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name} {b.address ? `(${b.address})` : ''}
@@ -846,9 +982,8 @@ export default function ProfitLossPageClient() {
           <Button
             variant="outline"
             onClick={() => {
-              const branchId = selectedBranch || (branches.length > 0 ? branches[0].id : null)
               let url = `/api/reports/pnl?start=${dateRange.start}&end=${dateRange.end}`
-              if (branchId) url += `&branchId=${branchId}`
+              if (selectedBranch) url += `&branchId=${selectedBranch}`
               window.open(url, '_blank')
             }}
           >
@@ -857,8 +992,6 @@ export default function ProfitLossPageClient() {
           </Button>
         </div>
       </div>
-
-      <MonthlySalesPdfUploadCard description="Upload a monthly sales PDF here. The current month upload unlocks the dashboard and Smart Profit mode." />
 
       {/* ── COGS incomplete warning ── */}
       {data.summary.revenue > 0 &&
@@ -877,46 +1010,6 @@ export default function ProfitLossPageClient() {
           </div>
         )}
 
-      {/* ── Loss Forecasting Alert ── */}
-      {forecast?.isLoss && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-red-800">
-                {t.dashboard_projected_loss}: {formatCurrency(Math.abs(forecast.projectedNetProfit))}
-              </h3>
-              <p className="text-sm text-red-700 mt-1">
-                {ui.basedOnElapsed
-                  .replace('{elapsed}', String(forecast.daysElapsed))
-                  .replace('{total}', String(forecast.daysInMonth))
-                  .replace('{revenue}', formatCurrency(forecast.projectedRevenue))}
-              </p>
-              {forecast.drivers.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs font-medium text-red-700 uppercase tracking-wide">
-                    {ui.topCostDrivers}:
-                  </p>
-                  <ul className="mt-1 space-y-0.5">
-                    {forecast.drivers.map((d) => (
-                      <li
-                        key={d.label}
-                        className="text-sm text-red-700 flex items-center justify-between max-w-xs"
-                      >
-                        <span>{d.label}</span>
-                        <span className="font-mono">
-                          {formatCurrency(d.amount)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Date range — one card, no overlap */}
       <Card>
         <CardContent className="pt-6">
@@ -927,11 +1020,12 @@ export default function ProfitLossPageClient() {
                 { key: 'today', label: ui.today },
                 { key: 'week', label: ui.thisWeek },
                 { key: 'month', label: ui.thisMonth },
+                { key: 'year', label: ui.thisYear },
               ].map(({ key, label }) => (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => handleQuickPeriod(key as 'today' | 'week' | 'month')}
+                  onClick={() => handleQuickPeriod(key as QuickPeriod)}
                   className={`rounded-md px-4 py-2 text-sm font-medium transition-colors min-w-[88px] ${activePeriod === key
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
@@ -985,8 +1079,8 @@ export default function ProfitLossPageClient() {
         </CardContent>
       </Card>
 
-      {/* ── Summary Card Tiles ── */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {/* ── Live P&L tiles ── */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3 min-w-0">
@@ -995,10 +1089,10 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {ui.revenue}
+                  Net revenue
                 </p>
-                <p className="text-base sm:text-lg xl:text-xl font-bold text-green-600 font-mono break-all">
-                  {formatCurrency(data.summary.revenue)}
+                <p className="text-sm sm:text-base font-bold text-green-600 font-mono break-words">
+                  {displayCompact(data.summary.revenue)}
                 </p>
               </div>
             </div>
@@ -1013,16 +1107,14 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {ui.cogsType}
+                  Prime cost
                 </p>
-                <p className="text-base sm:text-lg xl:text-xl font-bold text-amber-600 font-mono break-all">
-                  {formatCurrency(data.summary.cogs)}
+                <p className="text-sm sm:text-base font-bold text-amber-600 font-mono break-words">
+                  {displayCompact(data.summary.primeCost || 0)}
                 </p>
-                {typeof data.summary.cogsCoveragePercent === 'number' && (
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    {ui.coverage}: {data.summary.cogsCoveragePercent}%
-                  </p>
-                )}
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  target 55-65%
+                </p>
               </div>
             </div>
           </CardContent>
@@ -1038,8 +1130,8 @@ export default function ProfitLossPageClient() {
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                   {ui.grossProfit}
                 </p>
-                <p className="text-base sm:text-lg xl:text-xl font-bold text-emerald-600 font-mono break-all">
-                  {formatCurrency(data.summary.grossProfit)}
+                <p className="text-sm sm:text-base font-bold text-emerald-600 font-mono break-words">
+                  {displayCompact(data.summary.grossProfit)}
                 </p>
               </div>
             </div>
@@ -1054,10 +1146,10 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {ui.expenses}
+                  EBITDA
                 </p>
-                <p className="text-base sm:text-lg xl:text-xl font-bold text-red-600 font-mono break-all">
-                  {formatCurrency(data.summary.expenses + data.summary.payroll)}
+                <p className="text-sm sm:text-base font-bold text-slate-700 font-mono break-words">
+                  {displayCompact(data.summary.ebitda || 0)}
                 </p>
               </div>
             </div>
@@ -1081,113 +1173,228 @@ export default function ProfitLossPageClient() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {ui.netProfit}
+                  Net profit
                 </p>
                 <p
-                  className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${data.summary.netProfit >= 0
+                  className={`text-sm sm:text-base font-bold font-mono break-words ${data.summary.netProfit >= 0
                     ? 'text-green-600'
                     : 'text-red-600'
                     }`}
                 >
-                  {formatCurrency(data.summary.netProfit)}
+                  {displayCompact(data.summary.netProfit)}
+                </p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  margin {percent(data.summary.netProfitPercent)}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className={`rounded-lg p-2 flex-shrink-0 ${profitMargin >= 0 ? 'bg-blue-100' : 'bg-red-100'
-                  }`}
-              >
-                {profitMargin >= 0 ? (
-                  <TrendingUp className="h-5 w-5 text-blue-600" />
-                ) : (
-                  <TrendingDown className="h-5 w-5 text-red-600" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
-                  {ui.profitMargin}
-                </p>
-                <p
-                  className={`text-base sm:text-lg xl:text-xl font-bold font-mono break-all ${profitMargin >= 0 ? 'text-blue-600' : 'text-red-600'
-                    }`}
-                >
-                  {profitMargin.toFixed(1)}%
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* P&L Summary Table */}
+      {/* Live P&L Summary Table */}
       <Card>
         <CardHeader className="bg-slate-800 text-white">
           <CardTitle className="text-white">{ui.profitAndLossSummary}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <table className="w-full">
-            <thead className="bg-slate-100">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-100 text-slate-600">
               <tr>
-                <th className="text-left p-4 font-semibold">{ui.item}</th>
-                <th className="text-right p-4 font-semibold">{ui.amount}</th>
+                <th className="text-left p-3 font-semibold uppercase tracking-wide">{ui.item}</th>
+                <th className="text-right p-3 font-semibold uppercase tracking-wide">{activeCurrency}</th>
+                <th className="text-right p-3 font-semibold uppercase tracking-wide">%</th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b">
-                <td className="p-4 font-semibold">{ui.sales}</td>
-                <td className="p-4 text-right font-mono text-green-600">
-                  {formatCurrency(data.summary.revenue)}
-                </td>
+              <tr className="bg-slate-100 text-slate-600">
+                <td colSpan={3} className="p-2 font-bold uppercase tracking-wide">Revenue</td>
+              </tr>
+              {salesByCategoryEntries.map(([category, stats]) => (
+                <tr key={`revenue-${category}`} className="border-b">
+                  <td className="p-2 pl-6">{localizeCategory(category)}</td>
+                  <td className="p-2 text-right font-mono">{displayAmount(stats.revenue)}</td>
+                  <td className="p-2 text-right text-slate-500">{percent(ratioPercent(stats.revenue, data.summary.revenue))}</td>
+                </tr>
+              ))}
+              {data.summary.serviceChargeRevenue ? (
+                <tr className="border-b">
+                  <td className="p-2 pl-6">Service charge revenue</td>
+                  <td className="p-2 text-right font-mono">{displayAmount(data.summary.serviceChargeRevenue)}</td>
+                  <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.serviceChargeRevenue, data.summary.revenue))}</td>
+                </tr>
+              ) : null}
+              <tr className="border-b font-bold">
+                <td className="p-2">Net revenue</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.revenue)}</td>
+                <td className="p-2 text-right text-slate-500">100.0%</td>
+              </tr>
+              <tr className="bg-slate-100 text-slate-600">
+                <td colSpan={3} className="p-2 font-bold uppercase tracking-wide">Cost of Goods Sold</td>
+              </tr>
+              {salesByCategoryEntries.map(([category, stats]) => (
+                <tr key={`cogs-${category}`} className="border-b">
+                  <td className="p-2 pl-6">{localizeCategory(category)} cost</td>
+                  <td className="p-2 text-right font-mono">{displayAmount(stats.cogs)}</td>
+                  <td className="p-2 text-right text-slate-500">{percent(ratioPercent(stats.cogs, stats.revenue))}</td>
+                </tr>
+              ))}
+              <tr className="border-b font-bold">
+                <td className="p-2">Total COGS</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.cogs)}</td>
+                <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.cogs, data.summary.revenue))}</td>
+              </tr>
+              <tr className="border-b bg-slate-100 font-bold">
+                <td className="p-2">Gross profit</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.grossProfit)}</td>
+                <td className="p-2 text-right text-slate-500">{percent(data.summary.grossProfitPercent)}</td>
+              </tr>
+              <tr className="bg-slate-100 text-slate-600">
+                <td colSpan={3} className="p-2 font-bold uppercase tracking-wide">Labor</td>
               </tr>
               <tr className="border-b">
-                <td className="p-4 font-semibold">{ui.cogsCostOfGoodsSold}</td>
-                <td className="p-4 text-right font-mono text-amber-600">
-                  {formatCurrency(data.summary.cogs)}
-                </td>
+                <td className="p-2 pl-6">Wages & salaries</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.payrollBase || 0)}</td>
+                <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.payrollBase, data.summary.revenue))}</td>
               </tr>
-              <tr className="border-b bg-slate-50">
-                <td className="p-4 font-semibold">{ui.grossProfit}</td>
-                <td className="p-4 text-right font-mono font-bold text-green-600">
-                  {formatCurrency(data.summary.grossProfit)}
-                </td>
+              {data.summary.serviceChargeStaffPayout ? (
+                <tr className="border-b">
+                  <td className="p-2 pl-6">Service charge staff payout</td>
+                  <td className="p-2 text-right font-mono">{displayAmount(data.summary.serviceChargeStaffPayout)}</td>
+                  <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.serviceChargeStaffPayout, data.summary.revenue))}</td>
+                </tr>
+              ) : null}
+              <tr className="border-b font-bold">
+                <td className="p-2">Total labor</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.labor || data.summary.payroll)}</td>
+                <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.labor || data.summary.payroll, data.summary.revenue))}</td>
               </tr>
-              {/* DISABLED for now: Labour/HR. Re-enable when full P&L is needed.
+              <tr className="border-b bg-blue-50 font-bold text-blue-700">
+                <td className="p-2">Prime cost (COGS + labor)</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.primeCost || 0)}</td>
+                <td className="p-2 text-right">{percent(data.summary.primeCostPercent)}</td>
+              </tr>
+              <tr className="bg-slate-100 text-slate-600">
+                <td colSpan={3} className="p-2 font-bold uppercase tracking-wide">Operating expenses</td>
+              </tr>
               <tr className="border-b">
-                <td className="p-4 font-semibold">{td('LABOR EXPENSE')}</td>
-                <td className="p-4 text-right font-mono text-red-600">
-                  {formatCurrency(data.summary.payroll)}
-                </td>
+                <td className="p-2 pl-6">Controllable</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.controllableExpenses || 0)}</td>
+                <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.controllableExpenses, data.summary.revenue))}</td>
               </tr>
-              */}
               <tr className="border-b">
-                <td className="p-4 font-semibold">{ui.otherExpense}</td>
-                <td className="p-4 text-right font-mono text-red-600">
-                  {formatCurrency(data.summary.expenses)}
-                </td>
+                <td className="p-2 pl-6">Occupancy</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.occupancyExpenses || 0)}</td>
+                <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.occupancyExpenses, data.summary.revenue))}</td>
               </tr>
-              <tr className="bg-slate-50">
-                <td className="p-4 font-bold text-lg">{ui.netIncome}</td>
-                <td className={`p-4 text-right font-mono font-bold text-lg ${data.summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                  {formatCurrency(data.summary.netProfit)}
-                </td>
+              <tr className="border-b font-bold">
+                <td className="p-2">Total operating expenses</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.expenses)}</td>
+                <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.expenses, data.summary.revenue))}</td>
               </tr>
-              <tr>
-                <td className="p-4 font-semibold">{ui.profitMargin}</td>
-                <td className="p-4 text-right font-mono">
-                  {profitMargin.toFixed(2)}%
-                </td>
+              <tr className="border-b bg-slate-100 font-bold">
+                <td className="p-2">Operating profit (EBIT)</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.operatingProfit || 0)}</td>
+                <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.operatingProfit, data.summary.revenue))}</td>
+              </tr>
+              <tr className="border-b text-blue-700 italic">
+                <td className="p-2">EBITDA</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.ebitda || 0)}</td>
+                <td className="p-2 text-right">{percent(data.summary.ebitdaPercent)}</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-2 pl-6">Income tax - KRG {data.config?.profitTaxRate ?? 5}%</td>
+                <td className="p-2 text-right font-mono">({displayAmount(data.summary.profitTax || 0)})</td>
+                <td className="p-2 text-right text-slate-500">{percent(ratioPercent(data.summary.profitTax, data.summary.revenue))}</td>
+              </tr>
+              <tr className="bg-green-50 font-bold text-green-700">
+                <td className="p-2">Net profit</td>
+                <td className="p-2 text-right font-mono">{displayAmount(data.summary.netProfit)}</td>
+                <td className="p-2 text-right">{percent(data.summary.netProfitPercent)}</td>
               </tr>
             </tbody>
           </table>
         </CardContent>
       </Card>
+
+      {data.fixedCostAccrual && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Fixed-cost daily accrual</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <div>
+                <p className="text-xs text-slate-500">Monthly fixed</p>
+                <p className="font-mono text-lg font-bold">{displayAmount(data.fixedCostAccrual.monthlyFixed)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Operating days</p>
+                <p className="font-mono text-lg font-bold">{data.fixedCostAccrual.operatingDaysInMonth}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Elapsed days</p>
+                <p className="font-mono text-lg font-bold">{data.fixedCostAccrual.elapsedOperatingDays}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Per operating day</p>
+                <p className="font-mono text-lg font-bold">
+                  {displayAmount(data.fixedCostAccrual.monthlyFixed / Math.max(data.fixedCostAccrual.operatingDaysInMonth, 1))}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Recognized so far</p>
+                <p className="font-mono text-lg font-bold text-blue-700">{displayAmount(data.fixedCostAccrual.recognizedSoFar)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {data.itemProfitability && data.itemProfitability.length > 0 && (
+        <Card>
+          <CardHeader className="bg-slate-800 text-white">
+            <CardTitle className="text-white">Menu P&amp;L - item contribution</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100 text-slate-600">
+                  <tr>
+                    <th className="text-left p-3 font-semibold uppercase tracking-wide">Item</th>
+                    <th className="text-left p-3 font-semibold uppercase tracking-wide">Category</th>
+                    <th className="text-right p-3 font-semibold uppercase tracking-wide">Sold</th>
+                    <th className="text-right p-3 font-semibold uppercase tracking-wide">Revenue</th>
+                    <th className="text-right p-3 font-semibold uppercase tracking-wide">COGS</th>
+                    <th className="text-right p-3 font-semibold uppercase tracking-wide">Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.itemProfitability.slice(0, 12).map((item) => (
+                    <tr key={item.menuItemId} className="border-b">
+                      <td className="p-3">
+                        <span className="font-medium">{item.name}</span>
+                        <span className={`ml-2 rounded px-2 py-0.5 text-[11px] font-bold ${quadrantClass(item.quadrant)}`}>
+                          {item.quadrant}
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-500">{localizeCategory(item.category)}</td>
+                      <td className="p-3 text-right font-mono">{item.sold}</td>
+                      <td className="p-3 text-right font-mono">{displayAmount(item.revenue)}</td>
+                      <td className="p-3 text-right font-mono">{displayAmount(item.cogs)}</td>
+                      <td className="p-3 text-right font-mono text-green-700">{percent(item.marginPercent)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t bg-slate-50 px-4 py-3 text-xs text-slate-500">
+              Star = popular + high margin · Plowhorse = popular + low margin · Puzzle = high margin + low sales. Item level shows contribution only.
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Detailed Breakdown - Sales and COGS */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -1204,18 +1411,18 @@ export default function ProfitLossPageClient() {
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(salesByCategory).map(([category, stats]: [string, { revenue: number; cogs: number; count: number }]) => (
+                {salesByCategoryEntries.map(([category, stats]) => (
                   <tr key={category} className="border-b">
                   <td className="p-3">{localizeCategory(category)}</td>
                     <td className="p-3 text-right font-mono">
-                      {formatCurrency(stats.revenue)}
+                      {displayAmount(stats.revenue)}
                     </td>
                   </tr>
                 ))}
                 <tr className="bg-slate-50 font-semibold">
                   <td className="p-3">{ui.totalSales}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.revenue)}
+                    {displayAmount(data.summary.revenue)}
                   </td>
                 </tr>
               </tbody>
@@ -1236,18 +1443,18 @@ export default function ProfitLossPageClient() {
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(salesByCategory).map(([category, stats]: [string, { revenue: number; cogs: number; count: number }]) => (
+                {salesByCategoryEntries.map(([category, stats]) => (
                   <tr key={category} className="border-b">
                   <td className="p-3">{localizeCategory(category)}</td>
                     <td className="p-3 text-right font-mono">
-                      {formatCurrency(stats.cogs)}
+                      {displayAmount(stats.cogs)}
                     </td>
                   </tr>
                 ))}
                 <tr className="bg-slate-50 font-semibold">
                   <td className="p-3">{ui.totalCogs}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.cogs)}
+                    {displayAmount(data.summary.cogs)}
                   </td>
                 </tr>
               </tbody>
@@ -1275,25 +1482,25 @@ export default function ProfitLossPageClient() {
                 <tr className="border-b">
                   <td className="p-3">{td('Salaries and Wages')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.payroll * 0.7)}
+                    {displayAmount(data.summary.payroll * 0.7)}
                   </td>
                 </tr>
                 <tr className="border-b">
                   <td className="p-3">{td('Payroll Taxes')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.payroll * 0.15)}
+                    {displayAmount(data.summary.payroll * 0.15)}
                   </td>
                 </tr>
                 <tr className="border-b">
                   <td className="p-3">{td('Employee Benefits')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.payroll * 0.15)}
+                    {displayAmount(data.summary.payroll * 0.15)}
                   </td>
                 </tr>
                 <tr className="bg-slate-50 font-semibold">
                   <td className="p-3">{td('TOTAL LABOR EXPENSE')}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.payroll)}
+                    {displayAmount(data.summary.payroll)}
                   </td>
                 </tr>
               </tbody>
@@ -1326,7 +1533,7 @@ export default function ProfitLossPageClient() {
                       <tr key={category} className="border-b">
                         <td className="p-3">{localizeCategory(category)}</td>
                         <td className="p-3 text-right font-mono">
-                          {formatCurrency(total)}
+                          {displayAmount(total)}
                         </td>
                         <td className="p-3 text-center">
                           <Button
@@ -1352,7 +1559,7 @@ export default function ProfitLossPageClient() {
                   <tr className="border-b bg-red-50">
                     <td className="p-3 font-semibold text-red-700">{ui.wasteLossesDamages}</td>
                     <td className="p-3 text-right font-mono text-red-700">
-                      {formatCurrency(
+                      {displayAmount(
                         data.wasteRecords.reduce((sum, w) => sum + w.cost, 0)
                       )}
                     </td>
@@ -1370,7 +1577,7 @@ export default function ProfitLossPageClient() {
                 <tr className="bg-slate-50 font-semibold">
                   <td className="p-3">{ui.totalOtherExpense}</td>
                   <td className="p-3 text-right font-mono">
-                    {formatCurrency(data.summary.expenses)}
+                    {displayAmount(data.summary.expenses)}
                   </td>
                   <td className="p-3"></td>
                 </tr>
@@ -1542,8 +1749,8 @@ export default function ProfitLossPageClient() {
                         }`}
                     >
                       {row.amount >= 0
-                        ? formatCurrency(row.amount)
-                        : `-${formatCurrency(Math.abs(row.amount))}`}
+                        ? displayAmount(row.amount)
+                        : `-${displayAmount(Math.abs(row.amount))}`}
                     </td>
                     <td className="p-3 text-slate-500">{row.details}</td>
                     <td className="p-3 text-center">

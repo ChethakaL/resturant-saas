@@ -15,7 +15,6 @@ export async function GET() {
         const categories = await prisma.category.findMany({
             where: {
                 restaurantId: session.user.restaurantId,
-                showOnMenu: true,
             },
             select: {
                 id: true,

@@ -58,6 +58,27 @@ function expenseTotalForPeriod(
   }
 }
 
+function parseReportDateParam(param: string | null, fallback: Date, boundary: 'start' | 'end') {
+  const dateOnlyMatch = param?.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const date = dateOnlyMatch
+    ? new Date(
+        Number(dateOnlyMatch[1]),
+        Number(dateOnlyMatch[2]) - 1,
+        Number(dateOnlyMatch[3])
+      )
+    : param
+      ? new Date(param)
+      : new Date(fallback)
+
+  if (boundary === 'start') {
+    date.setHours(0, 0, 0, 0)
+  } else {
+    date.setHours(23, 59, 59, 999)
+  }
+
+  return date
+}
+
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -70,8 +91,8 @@ export async function GET(request: Request) {
     const endParam = searchParams.get('end')
 
     const now = new Date()
-    const rangeStart = startParam ? new Date(startParam) : new Date(now.getFullYear(), now.getMonth(), 1)
-    const rangeEnd = endParam ? new Date(endParam) : now
+    const rangeStart = parseReportDateParam(startParam, new Date(now.getFullYear(), now.getMonth(), 1), 'start')
+    const rangeEnd = parseReportDateParam(endParam, now, 'end')
 
     const sales = await prisma.sale.findMany({
       where: {

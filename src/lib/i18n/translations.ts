@@ -539,7 +539,7 @@ const en: TranslationStrings = {
     sidebar_sales_reports: 'Sales Reports',
     sidebar_inventory: 'Inventory',
     sidebar_tables: 'Tables',
-    sidebar_sales_pos: 'Sales POS',
+    sidebar_sales_pos: 'POS',
     sidebar_hr: 'HR',
     sidebar_shifts: 'Shifts',
     sidebar_payroll: 'Payroll',

@@ -13,6 +13,14 @@ interface ConfigState {
   priceAnnual: string
   priceBranch: string
   referralDiscountAmount: string
+
+  // Live P&L
+  livePnlSalesTaxRate: string
+  livePnlProfitTaxRate: string
+  livePnlServiceChargeRate: string
+  livePnlOperatingDaysInMonth: string
+  livePnlCurrency: string
+  livePnlUsdRate: string
 }
 
 const DEFAULTS: ConfigState = {
@@ -23,9 +31,15 @@ const DEFAULTS: ConfigState = {
   priceAnnual: '590',
   priceBranch: '10',
   referralDiscountAmount: '10',
+  livePnlSalesTaxRate: '10',
+  livePnlProfitTaxRate: '5',
+  livePnlServiceChargeRate: '0',
+  livePnlOperatingDaysInMonth: '30',
+  livePnlCurrency: 'IQD',
+  livePnlUsdRate: '0',
 }
 
-type SectionKey = 'ai' | 'pricing'
+type SectionKey = 'ai' | 'pricing' | 'livePnl'
 
 export default function PlatformSettingsClient() {
   const [config, setConfig] = useState<ConfigState>(DEFAULTS)
@@ -49,6 +63,12 @@ export default function PlatformSettingsClient() {
         priceAnnual: String(c.priceAnnual ?? '590'),
         priceBranch: String(c.priceBranch ?? '10'),
         referralDiscountAmount: String(c.referralDiscountAmount ?? '10'),
+        livePnlSalesTaxRate: String(c.livePnlSalesTaxRate ?? '10'),
+        livePnlProfitTaxRate: String(c.livePnlProfitTaxRate ?? '5'),
+        livePnlServiceChargeRate: String(c.livePnlServiceChargeRate ?? '0'),
+        livePnlOperatingDaysInMonth: String(c.livePnlOperatingDaysInMonth ?? '30'),
+        livePnlCurrency: String(c.livePnlCurrency ?? 'IQD'),
+        livePnlUsdRate: String(c.livePnlUsdRate ?? '0'),
       })
     } catch {
       setError('Failed to load platform configuration.')
@@ -72,6 +92,12 @@ export default function PlatformSettingsClient() {
       updates.priceAnnual = Number(config.priceAnnual) || 590
       updates.priceBranch = Number(config.priceBranch) || 10
       updates.referralDiscountAmount = Number(config.referralDiscountAmount) || 10
+      updates.livePnlSalesTaxRate = Number(config.livePnlSalesTaxRate)
+      updates.livePnlProfitTaxRate = Number(config.livePnlProfitTaxRate)
+      updates.livePnlServiceChargeRate = Number(config.livePnlServiceChargeRate)
+      updates.livePnlOperatingDaysInMonth = Number(config.livePnlOperatingDaysInMonth) || 30
+      updates.livePnlCurrency = config.livePnlCurrency || 'IQD'
+      updates.livePnlUsdRate = Number(config.livePnlUsdRate) || 0
 
       const res = await fetch('/api/admin/platform-config', {
         method: 'POST',
@@ -112,7 +138,7 @@ export default function PlatformSettingsClient() {
 
       {/* Section tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
-        {(['ai', 'pricing'] as SectionKey[]).map((s) => (
+        {(['ai', 'pricing', 'livePnl'] as SectionKey[]).map((s) => (
           <button
             key={s}
             onClick={() => setActiveSection(s)}
@@ -120,7 +146,7 @@ export default function PlatformSettingsClient() {
               activeSection === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            {s === 'ai' ? '🤖 AI API Keys' : '💰 Subscription Pricing'}
+            {s === 'ai' ? '🤖 AI API Keys' : s === 'pricing' ? '💰 Subscription Pricing' : '📊 Live P&L Defaults'}
           </button>
         ))}
       </div>
@@ -159,6 +185,70 @@ export default function PlatformSettingsClient() {
               onChange={set('anthropicApiKey')}
               placeholder="sk-ant-api03-..."
             />
+          </div>
+        </div>
+      )}
+
+      {/* Live P&L Section */}
+      {activeSection === 'livePnl' && (
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+            <h2 className="font-semibold text-slate-900">Live P&L Defaults</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Global defaults used by Live P&L. A venue can still override these from its own settings later.
+            </p>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <PriceField
+                label="Sales Tax"
+                description="Customer bill tax. Live P&L shows revenue net of this."
+                id="livePnlSalesTaxRate"
+                value={config.livePnlSalesTaxRate}
+                onChange={set('livePnlSalesTaxRate')}
+                suffix="%"
+              />
+              <PriceField
+                label="Profit Tax"
+                description="Below-the-line tax, default KRG 5%."
+                id="livePnlProfitTaxRate"
+                value={config.livePnlProfitTaxRate}
+                onChange={set('livePnlProfitTaxRate')}
+                suffix="%"
+              />
+              <PriceField
+                label="Service Charge"
+                description="Optional revenue percentage with matching staff payout in labor."
+                id="livePnlServiceChargeRate"
+                value={config.livePnlServiceChargeRate}
+                onChange={set('livePnlServiceChargeRate')}
+                suffix="%"
+              />
+              <PriceField
+                label="Operating Days"
+                description="Days venue is open in a month, used for fixed-cost accrual."
+                id="livePnlOperatingDaysInMonth"
+                value={config.livePnlOperatingDaysInMonth}
+                onChange={set('livePnlOperatingDaysInMonth')}
+                suffix="days/month"
+              />
+              <TextField
+                label="Currency"
+                description="Default Live P&L display currency."
+                id="livePnlCurrency"
+                value={config.livePnlCurrency}
+                onChange={set('livePnlCurrency')}
+                placeholder="IQD"
+              />
+              <PriceField
+                label="USD Rate"
+                description="Optional IQD per USD rate for future USD toggle."
+                id="livePnlUsdRate"
+                value={config.livePnlUsdRate}
+                onChange={set('livePnlUsdRate')}
+                suffix="IQD/USD"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -290,12 +380,13 @@ function PriceField({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   suffix: string
 }) {
+  const prefix = suffix.includes('%') || suffix.includes('days') || suffix.includes('IQD') ? '' : '$'
   return (
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-0.5">{label}</label>
       <p className="text-xs text-slate-400 mb-2">{description}</p>
       <div className="flex items-center gap-2">
-        <span className="text-slate-500 text-sm">$</span>
+        {prefix && <span className="text-slate-500 text-sm">{prefix}</span>}
         <input
           id={id}
           type="number"
@@ -307,6 +398,32 @@ function PriceField({
         />
         <span className="text-slate-400 text-sm">{suffix}</span>
       </div>
+    </div>
+  )
+}
+
+function TextField({
+  label, description, id, value, onChange, placeholder,
+}: {
+  label: string
+  description: string
+  id: string
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  placeholder: string
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-0.5">{label}</label>
+      <p className="text-xs text-slate-400 mb-2">{description}</p>
+      <input
+        id={id}
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-32 border border-slate-300 rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-slate-400"
+      />
     </div>
   )
 }
