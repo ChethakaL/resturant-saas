@@ -235,13 +235,17 @@ export async function PUT(request: Request) {
     if (restaurantLat !== undefined) updateData.lat = restaurantLat
     if (restaurantLng !== undefined) updateData.lng = restaurantLng
 
-    await prisma.restaurant.update({
+    const updatedRestaurant = await prisma.restaurant.update({
       where: { id: session.user.restaurantId },
       data: updateData,
+      select: { slug: true },
     })
 
     revalidatePath('/settings')
     revalidatePath('/')
+    if (updatedRestaurant.slug) {
+      revalidatePath(`/${updatedRestaurant.slug}`)
+    }
 
     return NextResponse.json({
       primaryColor: primaryColor ?? (currentSettings.theme as any)?.primaryColor,
