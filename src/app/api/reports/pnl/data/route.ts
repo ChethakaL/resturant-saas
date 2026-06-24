@@ -225,7 +225,7 @@ export async function GET(request: Request) {
     }
 
     // Fetch all data sources
-    const [platformConfig, restaurant, sales, expenses, payrolls, expenseTransactions, wasteRecords, mealPrepSessions] = await Promise.all([
+    const [platformConfig, restaurant, sales, orderVoids, expenses, payrolls, expenseTransactions, wasteRecords, mealPrepSessions] = await Promise.all([
       getPlatformConfig(),
       prisma.restaurant.findUnique({
         where: { id: session.user.restaurantId },
@@ -247,6 +247,27 @@ export async function GET(request: Request) {
                   category: true,
                 },
               },
+            },
+          },
+        },
+      }),
+      prisma.orderVoid.findMany({
+        where: {
+          restaurantId: session.user.restaurantId,
+          voidedAt: { gte: rangeStart, lte: rangeEnd },
+          order: branchId
+            ? branchId === 'unassigned'
+              ? { branchId: null }
+              : { branchId }
+            : undefined,
+        },
+        include: {
+          order: true,
+          performedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
             },
           },
         },
@@ -327,13 +348,19 @@ export async function GET(request: Request) {
     ])
 
     const config = readLivePnlConfig(restaurant?.settings, platformConfig)
+    const voidGrossSales = orderVoids.reduce((sum, orderVoid) => sum + orderVoid.amount, 0)
 
     // Calculate revenue net of customer-bill sales tax. Sales tax is a liability, not income.
-    const grossSales = sales.reduce((sum, sale) => sum + sale.total, 0)
-    const netRevenue = sales.reduce(
+    const grossSalesBeforeVoids = sales.reduce((sum, sale) => sum + sale.total, 0)
+    const grossSales = grossSalesBeforeVoids - voidGrossSales
+    const netRevenueBeforeVoids = sales.reduce(
       (sum, sale) => sum + sale.items.reduce((saleSum, item) => saleSum + itemNetRevenue(item, config.salesTaxRate), 0),
       0
     )
+    const netVoidRevenue = config.salesTaxRate > 0
+      ? voidGrossSales / (1 + config.salesTaxRate / 100)
+      : voidGrossSales
+    const netRevenue = netRevenueBeforeVoids - netVoidRevenue
     const taxCollected = Math.max(0, grossSales - netRevenue)
     const serviceChargeRevenue = config.serviceChargeRate > 0 ? netRevenue * (config.serviceChargeRate / 100) : 0
     const totalRevenue = netRevenue + serviceChargeRevenue
@@ -586,6 +613,16 @@ export async function GET(request: Request) {
       })),
       expenses: expenseTotals,
       payrolls,
+      orderVoids: orderVoids.map((orderVoid) => ({
+        id: orderVoid.id,
+        orderId: orderVoid.orderId,
+        orderNumber: orderVoid.order.orderNumber,
+        amount: orderVoid.amount,
+        reason: orderVoid.reason,
+        restoresInventory: orderVoid.restoresInventory,
+        voidedAt: orderVoid.voidedAt,
+        performedBy: orderVoid.performedBy,
+      })),
       sales: sales.map((s) => ({
         id: s.id,
         orderNumber: s.orderNumber,
