@@ -12,6 +12,7 @@ import SetupOnboardingGuide from '@/components/onboarding/SetupOnboardingGuide'
 import { getServerTranslations } from '@/lib/i18n/server'
 import { getPlatformConfig } from '@/lib/platform-config'
 import { reconcileRestaurantMainSubscriptions } from '@/lib/billing-subscription-sync'
+import { getRestaurantPlanTier, type ProductPlanTier } from '@/lib/plan-features'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +54,7 @@ export default async function DashboardLayout({
   let onboardingComplete = true
   let setupOnboardingSeen = true
   let restaurantName = ''
+  let productPlanTier: ProductPlanTier = 'SMART_MENU_MANAGER'
   let setupProgress = {
     restaurantName: '',
     hasRestaurantDna: false,
@@ -89,6 +91,7 @@ export default async function DashboardLayout({
       }
     }
     hasActiveSubscription = isSubscriptionAccessActive(restaurant?.subscriptionStatus)
+    productPlanTier = getRestaurantPlanTier(restaurant)
     const platformCfg = await getPlatformConfig()
     const priceMonthly = String(platformCfg.priceMonthly || process.env.STRIPE_PRICE_MONTHLY || '59')
     const priceAnnual = String(platformCfg.priceAnnual || process.env.STRIPE_PRICE_ANNUAL || '590')
@@ -139,7 +142,7 @@ export default async function DashboardLayout({
           hasActiveSubscription={!!hasActiveSubscription}
           subscription={subscriptionData}
         >
-        <DashboardShell userName={session.user.name} userRole={session.user.role}>
+        <DashboardShell userName={session.user.name} userRole={session.user.role} productPlanTier={productPlanTier}>
           {/* Restaurant DNA Onboarding (first login) */}
           <RestaurantDNAGate
             onboardingComplete={onboardingComplete}

@@ -7,6 +7,7 @@ import { getBranchCapacityForRestaurant } from '@/lib/billing-branches'
 import { getBranchBillingConfig } from '@/lib/branch-billing'
 import { getPlatformConfig } from '@/lib/platform-config'
 import { isSubscriptionAccessActive } from '@/lib/subscription-status'
+import { getRestaurantPlanTier } from '@/lib/plan-features'
 
 export default async function BillingPage() {
   const session = await getServerSession(authOptions)
@@ -32,12 +33,26 @@ export default async function BillingPage() {
   const branchBilling = await getBranchBillingConfig()
   const priceMonthly = String(platformCfg.priceMonthly ?? process.env.STRIPE_PRICE_MONTHLY ?? '59')
   const priceAnnual = String(platformCfg.priceAnnual ?? process.env.STRIPE_PRICE_ANNUAL ?? '590')
+  const settings = (restaurant?.settings as Record<string, unknown> | null) || {}
+  const settingsBillingPeriod =
+    settings.subscriptionBillingPeriod === 'annual' || settings.subscriptionBillingPeriod === 'monthly'
+      ? settings.subscriptionBillingPeriod
+      : null
   const currentPlan =
     restaurant?.subscriptionPriceId === priceAnnual
       ? 'annual'
       : restaurant?.subscriptionPriceId === priceMonthly
         ? 'monthly'
-        : null
+        : settingsBillingPeriod
+  const currentProductPlanTier = getRestaurantPlanTier(restaurant)
+  const pendingProductPlanTier =
+    settings.pendingProductPlanTier === 'SMART_MENU_MANAGER' || settings.pendingProductPlanTier === 'SMART_RESTAURANT_MANAGER'
+      ? settings.pendingProductPlanTier
+      : null
+  const pendingProductPlanTierEffectiveAt =
+    typeof settings.pendingProductPlanTierEffectiveAt === 'string'
+      ? settings.pendingProductPlanTierEffectiveAt
+      : null
 
   let maxBranches = 0
   let extraBranchSlots = 0
@@ -69,6 +84,9 @@ export default async function BillingPage() {
       isActive={!!isActive}
       currentPeriodEnd={restaurant?.currentPeriodEnd?.toISOString() ?? null}
       currentPlan={currentPlan}
+      currentProductPlanTier={currentProductPlanTier}
+      pendingProductPlanTier={pendingProductPlanTier}
+      pendingProductPlanTierEffectiveAt={pendingProductPlanTierEffectiveAt}
       pricesConfigured={!!(priceMonthly && priceAnnual)}
       priceMonthly={priceMonthly}
       priceAnnual={priceAnnual}

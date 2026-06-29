@@ -9,6 +9,7 @@ import {
   getStripeCouponIdsFromSubscription,
   recordPromoRedemptionForRestaurant,
 } from '@/lib/promo-redemptions'
+import { normalizeProductPlanTier } from '@/lib/plan-features'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
-      select: { id: true, stripeCustomerId: true },
+      select: { id: true, stripeCustomerId: true, settings: true },
     })
     if (!restaurant) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
@@ -140,11 +141,22 @@ export async function POST(request: NextRequest) {
       }
 
       const ridForStripeMeta = metaRid || restaurant.id
-      if (subscription.metadata?.restaurantId !== ridForStripeMeta) {
+      const checkoutPlanTier = normalizeProductPlanTier(cs.metadata?.productPlanTier)
+      const checkoutBillingPeriod = cs.metadata?.plan === 'annual' || cs.metadata?.plan === 'monthly' ? cs.metadata.plan : null
+      if (
+        subscription.metadata?.restaurantId !== ridForStripeMeta ||
+        (checkoutPlanTier && subscription.metadata?.productPlanTier !== checkoutPlanTier) ||
+        (checkoutBillingPeriod && subscription.metadata?.plan !== checkoutBillingPeriod)
+      ) {
         await stripe.subscriptions.update(subId, {
-          metadata: { ...subscription.metadata, restaurantId: ridForStripeMeta },
+          metadata: {
+            ...subscription.metadata,
+            restaurantId: ridForStripeMeta,
+            ...(checkoutPlanTier && { productPlanTier: checkoutPlanTier }),
+            ...(checkoutBillingPeriod && { plan: checkoutBillingPeriod }),
+          },
         })
-        console.info('[billing] sync-from-stripe: patched subscription.metadata.restaurantId', {
+        console.info('[billing] sync-from-stripe: patched subscription.metadata', {
           subscriptionId: subId,
           restaurantId: ridForStripeMeta,
         })
@@ -166,6 +178,13 @@ export async function POST(request: NextRequest) {
           subscriptionStatus: subscription.status,
           subscriptionPriceId: firstItem?.price?.id ?? null,
           currentPeriodEnd: cpe ? new Date(cpe * 1000) : null,
+          ...(checkoutPlanTier && {
+            settings: {
+              ...((restaurant.settings as Record<string, unknown> | null) || {}),
+              productPlanTier: checkoutPlanTier,
+              ...(checkoutBillingPeriod && { subscriptionBillingPeriod: checkoutBillingPeriod }),
+            },
+          }),
         },
       })
 

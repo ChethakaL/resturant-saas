@@ -5,6 +5,7 @@ import {
   getStripeCouponIdsFromSubscription,
   recordPromoRedemptionForRestaurant,
 } from '@/lib/promo-redemptions'
+import { normalizeProductPlanTier } from '@/lib/plan-features'
 
 function isRestaurantMainSubscription(sub: Stripe.Subscription, restaurantId: string): boolean {
   if (sub.metadata?.kind === 'branch_addon') return false
@@ -94,10 +95,19 @@ export async function reconcileRestaurantMainSubscriptions(params: {
 
   const firstItem = primary.items.data[0]
   const periodEndSec = primary.current_period_end
+  const productPlanTier = normalizeProductPlanTier(primary.metadata?.productPlanTier)
+  const subscriptionBillingPeriod =
+    primary.metadata?.plan === 'annual' || primary.metadata?.plan === 'monthly'
+      ? primary.metadata.plan
+      : null
   const currentPeriodEndIso =
     periodEndSec != null && periodEndSec > 0
       ? new Date(periodEndSec * 1000).toISOString()
       : null
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { settings: true },
+  })
 
   await prisma.restaurant.update({
     where: { id: restaurantId },
@@ -107,6 +117,13 @@ export async function reconcileRestaurantMainSubscriptions(params: {
       subscriptionStatus: primary.status,
       subscriptionPriceId: firstItem?.price?.id ?? null,
       currentPeriodEnd: currentPeriodEndIso ? new Date(currentPeriodEndIso) : null,
+      ...((productPlanTier || subscriptionBillingPeriod) && {
+        settings: {
+          ...((restaurant?.settings as Record<string, unknown> | null) || {}),
+          ...(productPlanTier && { productPlanTier }),
+          ...(subscriptionBillingPeriod && { subscriptionBillingPeriod }),
+        },
+      }),
     },
   })
 

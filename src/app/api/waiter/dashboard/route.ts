@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { requireRestaurantFeature } from '@/lib/require-product-feature'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,6 +76,8 @@ export async function GET(request: Request) {
         if (!session?.user?.restaurantId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
+        const locked = await requireRestaurantFeature(session.user.restaurantId, 'waiterPortal', 'Waiter Portal')
+        if (locked) return locked
 
         const { searchParams } = new URL(request.url)
         const orderFilter = searchParams.get('orderFilter') || 'active'

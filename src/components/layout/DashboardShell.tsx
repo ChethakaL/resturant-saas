@@ -4,20 +4,22 @@ import { useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import ChatbotWidget from '@/components/chatbot/ChatbotWidget'
+import type { ProductPlanTier } from '@/lib/plan-features'
 
 interface DashboardShellProps {
   children: React.ReactNode
   userName: string
   userRole: string
+  productPlanTier: ProductPlanTier
 }
 
-export function DashboardShell({ children, userName, userRole }: DashboardShellProps) {
+export function DashboardShell({ children, userName, userRole, productPlanTier }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
     <div className="flex h-screen h-[100dvh] min-w-0 overflow-hidden">
       <aside className="hidden h-full shrink-0 lg:block">
-        <Sidebar userName={userName} userRole={userRole} />
+        <Sidebar userName={userName} userRole={userRole} productPlanTier={productPlanTier} />
       </aside>
 
       {sidebarOpen && (
@@ -29,7 +31,7 @@ export function DashboardShell({ children, userName, userRole }: DashboardShellP
             onClick={() => setSidebarOpen(false)}
           />
           <div className="relative h-full w-[min(84vw,20rem)] max-w-full shadow-2xl">
-            <Sidebar userName={userName} userRole={userRole} onNavigate={() => setSidebarOpen(false)} />
+            <Sidebar userName={userName} userRole={userRole} productPlanTier={productPlanTier} onNavigate={() => setSidebarOpen(false)} />
           </div>
         </div>
       )}

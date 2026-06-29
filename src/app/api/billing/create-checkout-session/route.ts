@@ -7,8 +7,13 @@ import Stripe from 'stripe'
 import { getPlatformConfig } from '@/lib/platform-config'
 import { reconcileRestaurantMainSubscriptions } from '@/lib/billing-subscription-sync'
 import { isSubscriptionAccessActive, formatSubscriptionPeriodEnd } from '@/lib/subscription-status'
+import { normalizeProductPlanTier } from '@/lib/plan-features'
 
 const BILLING_CURRENCY = (process.env.STRIPE_BILLING_CURRENCY || 'usd').toLowerCase()
+const RESTAURANT_MANAGER_MONTHLY = process.env.STRIPE_RESTAURANT_MANAGER_PRICE_MONTHLY || '200'
+const RESTAURANT_MANAGER_ANNUAL = process.env.STRIPE_RESTAURANT_MANAGER_PRICE_ANNUAL || '2000'
+const RESTAURANT_MANAGER_REFERRAL_MONTHLY = 34
+const RESTAURANT_MANAGER_REFERRAL_ANNUAL = 340
 
 function buildLineItem(
   configuredPrice: string,
@@ -62,6 +67,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const plan = body.plan === 'annual' ? 'annual' : 'monthly'
+    const productPlanTier =
+      normalizeProductPlanTier(body.productPlanTier) ||
+      normalizeProductPlanTier(body.tier) ||
+      'SMART_MENU_MANAGER'
     const promotionCode = typeof body.promotionCode === 'string' ? body.promotionCode.trim().toUpperCase() : null
     const requestedReturnPath = typeof body.returnPath === 'string' ? body.returnPath.trim() : ''
     const returnPath =
@@ -84,9 +93,24 @@ export async function POST(request: NextRequest) {
     }
 
     const isReferred = !!restaurant.referredByRestaurantId
-    const referralDiscount = isReferred ? (plan === 'annual' ? 100 : platformReferralDiscount) : 0
+    const referralDiscount = isReferred
+      ? productPlanTier === 'SMART_RESTAURANT_MANAGER'
+        ? plan === 'annual'
+          ? RESTAURANT_MANAGER_REFERRAL_ANNUAL
+          : RESTAURANT_MANAGER_REFERRAL_MONTHLY
+        : plan === 'annual'
+          ? 100
+          : platformReferralDiscount
+      : 0
 
-    const configuredPrice = plan === 'annual' ? PRICE_ANNUAL : PRICE_MONTHLY
+    const configuredPrice =
+      productPlanTier === 'SMART_RESTAURANT_MANAGER'
+        ? plan === 'annual'
+          ? RESTAURANT_MANAGER_ANNUAL
+          : RESTAURANT_MANAGER_MONTHLY
+        : plan === 'annual'
+          ? PRICE_ANNUAL
+          : PRICE_MONTHLY
     const lineItem = buildLineItem(configuredPrice, plan, referralDiscount)
 
     let customerId = restaurant.stripeCustomerId
@@ -171,9 +195,9 @@ export async function POST(request: NextRequest) {
       // session_id lets the app sync Postgres when webhooks do not reach this host (e.g. local dev).
       success_url: `${origin}${returnPath}${returnSep}success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}${returnPath}${returnSep}canceled=true`,
-      metadata: { restaurantId: restaurant.id, plan, ...(promotionCode && { promotionCode }) },
+      metadata: { restaurantId: restaurant.id, plan, productPlanTier, ...(promotionCode && { promotionCode }) },
       subscription_data: {
-        metadata: { restaurantId: restaurant.id },
+        metadata: { restaurantId: restaurant.id, plan, productPlanTier },
         ...(trialDays && { trial_period_days: trialDays }),
       },
     })

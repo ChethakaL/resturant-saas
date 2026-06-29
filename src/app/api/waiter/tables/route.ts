@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 export const dynamic = 'force-dynamic'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { requireRestaurantFeature } from '@/lib/require-product-feature'
 
 export async function GET() {
     try {
@@ -11,6 +12,8 @@ export async function GET() {
         if (!session?.user?.restaurantId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
+        const locked = await requireRestaurantFeature(session.user.restaurantId, 'waiterPortal', 'Waiter Portal')
+        if (locked) return locked
 
         const where: { restaurantId: string; branchId?: string } = {
             restaurantId: session.user.restaurantId,
