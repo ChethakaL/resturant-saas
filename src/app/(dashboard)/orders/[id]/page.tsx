@@ -10,7 +10,10 @@ import OrderDetailActions from './OrderDetailActions'
 import CompleteOrderButton from '@/components/orders/CompleteOrderButton'
 import Link from 'next/link'
 
-function getStatusBadge(status: string) {
+function getStatusBadge(status: string, isVoided?: boolean) {
+  if (isVoided) {
+    return 'bg-rose-100 text-rose-800'
+  }
   if (status === 'COMPLETED') {
     return 'bg-green-100 text-green-800'
   }
@@ -48,6 +51,16 @@ export default async function OrderDetailsPage({
       },
       table: true,
       waiter: true,
+      void: {
+        include: {
+          performedBy: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
     },
   })
 
@@ -68,6 +81,14 @@ export default async function OrderDetailsPage({
       timeStyle: 'short',
     }).format(date)
 
+  const voidReasonLabels: Record<string, string> = {
+    MIS_RING_WRONG_ITEM: 'Mis-ring / wrong item',
+    WRONG_TABLE: 'Wrong table',
+    CUSTOMER_WALKOUT: 'Customer walkout',
+    COMP_STAFF_MEAL: 'Comp / staff meal',
+    KITCHEN_ERROR: 'Kitchen error',
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -84,17 +105,48 @@ export default async function OrderDetailsPage({
           <span
             className={cn(
               'inline-flex px-3 py-1 rounded-full text-xs font-medium',
-              getStatusBadge(order.status)
+              getStatusBadge(order.status, Boolean(order.void))
             )}
           >
-            {order.status}
+            {order.void ? 'VOIDED' : order.status}
           </span>
           <div className="flex flex-wrap justify-end gap-2">
             {order.status === 'PENDING' && <CompleteOrderButton order={order} />}
-            <OrderDetailActions orderId={order.id} status={order.status} />
+            <OrderDetailActions
+              orderId={order.id}
+              status={order.status}
+              userRole={session!.user.role}
+              isVoided={Boolean(order.void)}
+            />
           </div>
         </div>
       </div>
+
+      {order.void && (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="text-red-800">Order Voided</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm text-red-950 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <div className="text-xs font-medium uppercase text-red-700">Reason</div>
+              <div>{voidReasonLabels[order.void.reason] || order.void.reason}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase text-red-700">Voided by</div>
+              <div>{order.void.performedBy.name || order.void.performedBy.email}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase text-red-700">Timestamp</div>
+              <div>{formatDate(order.void.voidedAt)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase text-red-700">Inventory</div>
+              <div>{order.void.restoresInventory ? 'Stock restored' : 'Stock not restored'}</div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

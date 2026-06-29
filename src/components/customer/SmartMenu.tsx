@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Star, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3, ShoppingBag, Minus, Plus, Clock3, ChefHat, GlassWater, Handshake, IceCreamCone, Instagram, Facebook, MessageCircle, QrCode } from 'lucide-react'
+import { Star, Flame, Leaf, X, Loader2, Globe, SlidersHorizontal, User, LayoutGrid, Rows3, ShoppingBag, Minus, Plus, Clock3, ChefHat, GlassWater, Handshake, IceCreamCone, Instagram, Facebook, MessageCircle, QrCode, Filter, Tags } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MenuCarousel } from './MenuCarousel'
@@ -2196,6 +2196,7 @@ export default function SmartMenu({
 
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
 
   // Theme computation: CSS vars for colors and granular fonts
   const themeStyle = useMemo((): React.CSSProperties => {
@@ -3397,56 +3398,235 @@ export default function SmartMenu({
         <main className="relative pb-36" style={{ backgroundColor: pageBg }}>
           <div className="absolute inset-x-0 top-0 h-6 rounded-t-[26px]" style={{ backgroundColor: pageBg }} />
 
-          {availableMoods.length > 0 && (
+          {(engineMode === 'classic' || availableMoods.length > 0) && (
             <section className="px-5 pt-7 sm:px-6 lg:px-8">
-              <div className="mb-3 text-[0.62rem] font-bold uppercase tracking-[0.16em]" style={{ color: textMuted }}>
-                {localizedContextCopy.moodPrompt}
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-[0.62rem] font-bold uppercase tracking-[0.16em]" style={{ color: textMuted }}>
+                  {engineMode === 'classic' ? currentCopy.filterCategoriesLabel : localizedContextCopy.moodPrompt}
+                </div>
+                <div className="flex items-center gap-2">
+                  {engineMode !== 'classic' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCategoryDialogOpen(true)}
+                      className="flex h-9 w-9 items-center justify-center rounded-full border"
+                      style={{ borderColor: dividerColor, backgroundColor: surfaceBg, color: textMain }}
+                      aria-label={currentCopy.filterCategoriesLabel}
+                      title={currentCopy.filterCategoriesLabel}
+                    >
+                      <Tags className="h-4 w-4" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterDialogOpen(true)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border"
+                    style={{ borderColor: dividerColor, backgroundColor: surfaceBg, color: textMain }}
+                    aria-label={currentCopy.filterDialogTitle}
+                    title={currentCopy.filterDialogTitle}
+                  >
+                    <Filter className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                <button
-                  type="button"
-                  onClick={() => setSelectedMoodId(null)}
-                  className="flex min-w-[76px] flex-shrink-0 flex-col items-center gap-1 rounded-2xl border px-4 py-3 text-center shadow-sm"
-                  style={{
-                    borderColor: selectedMoodId == null ? accentBorder : dividerColor,
-                    backgroundColor: selectedMoodId == null ? accentSoft : surfaceBg,
-                  }}
-                >
-                  <Star className="h-5 w-5 fill-current" style={{ color: selectedMoodId == null ? themeAccent : textMain }} />
-                  <span className="text-[0.68rem] font-semibold" style={{ color: selectedMoodId == null ? themeAccent : textMain }}>
-                    {localizedContextCopy.everything}
-                  </span>
-                </button>
-                {availableMoods.map((mood) => {
-                  const active = selectedMoodId === mood.id
-                  const MoodIcon =
-                    mood.id === 'light' ? Leaf :
-                    mood.id === 'filling' ? ChefHat :
-                    mood.id === 'sharing' || mood.id === 'share' ? Handshake :
-                    mood.id === 'drinks' ? GlassWater :
-                    mood.id === 'sweet' ? IceCreamCone :
-                    Star
-                  return (
+                {engineMode === 'classic' ? (
+                  <>
                     <button
-                      key={mood.id}
                       type="button"
-                      onClick={() => setSelectedMoodId(active ? null : mood.id)}
-                      className="flex min-w-[76px] flex-shrink-0 flex-col items-center gap-1 rounded-2xl border px-4 py-3 text-center shadow-sm"
+                      onClick={() => setSelectedCategory('all')}
+                      className="flex min-w-[76px] flex-shrink-0 items-center justify-center rounded-2xl border px-4 py-3 text-center text-[0.68rem] font-semibold shadow-sm"
                       style={{
-                        borderColor: active ? accentBorder : dividerColor,
-                        backgroundColor: active ? accentSoft : surfaceBg,
+                        borderColor: selectedCategory === 'all' ? accentBorder : dividerColor,
+                        backgroundColor: selectedCategory === 'all' ? accentSoft : surfaceBg,
+                        color: selectedCategory === 'all' ? themeAccent : textMain,
                       }}
                     >
-                      <MoodIcon className="h-5 w-5" style={{ color: active ? themeAccent : textMain }} />
-                      <span className="text-[0.68rem] font-semibold" style={{ color: active ? themeAccent : textMain }}>
-                        {getMoodLabel(mood)}
+                      {currentCopy.filterAllLabel}
+                    </button>
+                    {categories.map((category) => {
+                      const active = selectedCategory === category.id
+                      return (
+                        <button
+                          key={category.id}
+                          type="button"
+                          onClick={() => setSelectedCategory(active ? 'all' : category.id)}
+                          className="flex min-w-[76px] flex-shrink-0 items-center justify-center rounded-2xl border px-4 py-3 text-center text-[0.68rem] font-semibold shadow-sm"
+                          style={{
+                            borderColor: active ? accentBorder : dividerColor,
+                            backgroundColor: active ? accentSoft : surfaceBg,
+                            color: active ? themeAccent : textMain,
+                          }}
+                        >
+                          {getLocalizedCategoryName(category.name)}
+                        </button>
+                      )
+                    })}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMoodId(null)}
+                      className="flex min-w-[76px] flex-shrink-0 flex-col items-center gap-1 rounded-2xl border px-4 py-3 text-center shadow-sm"
+                      style={{
+                        borderColor: selectedMoodId == null ? accentBorder : dividerColor,
+                        backgroundColor: selectedMoodId == null ? accentSoft : surfaceBg,
+                      }}
+                    >
+                      <Star className="h-5 w-5 fill-current" style={{ color: selectedMoodId == null ? themeAccent : textMain }} />
+                      <span className="text-[0.68rem] font-semibold" style={{ color: selectedMoodId == null ? themeAccent : textMain }}>
+                        {localizedContextCopy.everything}
                       </span>
                     </button>
-                  )
-                })}
+                    {availableMoods.map((mood) => {
+                      const active = selectedMoodId === mood.id
+                      const MoodIcon =
+                        mood.id === 'light' ? Leaf :
+                        mood.id === 'filling' ? ChefHat :
+                        mood.id === 'sharing' || mood.id === 'share' ? Handshake :
+                        mood.id === 'drinks' ? GlassWater :
+                        mood.id === 'sweet' ? IceCreamCone :
+                        Star
+                      return (
+                        <button
+                          key={mood.id}
+                          type="button"
+                          onClick={() => setSelectedMoodId(active ? null : mood.id)}
+                          className="flex min-w-[76px] flex-shrink-0 flex-col items-center gap-1 rounded-2xl border px-4 py-3 text-center shadow-sm"
+                          style={{
+                            borderColor: active ? accentBorder : dividerColor,
+                            backgroundColor: active ? accentSoft : surfaceBg,
+                          }}
+                        >
+                          <MoodIcon className="h-5 w-5" style={{ color: active ? themeAccent : textMain }} />
+                          <span className="text-[0.68rem] font-semibold" style={{ color: active ? themeAccent : textMain }}>
+                            {getMoodLabel(mood)}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </>
+                )}
               </div>
             </section>
           )}
+
+          <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+            <DialogContent className="max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-semibold text-slate-900">
+                  {currentCopy.filterCategoriesLabel}
+                </DialogTitle>
+                <DialogDescription className="text-sm text-slate-500">
+                  Choose one category to filter the menu.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex max-h-[50vh] flex-wrap gap-2 overflow-y-auto pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory('all')
+                    setIsCategoryDialogOpen(false)
+                  }}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${selectedCategory === 'all'
+                    ? 'bg-slate-900 text-white'
+                    : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {currentCopy.filterAllLabel}
+                </button>
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory(category.id)
+                      setIsCategoryDialogOpen(false)
+                    }}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${selectedCategory === category.id
+                      ? 'bg-slate-900 text-white'
+                      : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {getLocalizedCategoryName(category.name)}
+                  </button>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+            <DialogContent className="max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-semibold text-slate-900">
+                  {currentCopy.filterDialogTitle}
+                </DialogTitle>
+                <DialogDescription className="text-sm text-slate-500">
+                  Choose dietary filters and sort order.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-5 pt-3">
+                {allTags.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                      {currentCopy.filterDietaryLabel}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {allTags.map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => toggleTag(tag)}
+                          className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${selectedTags.includes(tag)
+                            ? 'border-emerald-400 bg-emerald-500/20 text-emerald-900'
+                            : 'border-slate-200 bg-slate-100 text-slate-700 hover:border-slate-300 hover:text-slate-900'
+                          }`}
+                        >
+                          {getTagIcon(tag)}
+                          {getLocalizedTagLabel(tag)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                    {currentCopy.filterSortByLabel}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {localizedSortOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setSortBy(option.value)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${sortBy === option.value
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <DialogFooter className="justify-between pt-4">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setSelectedTags([])
+                    setSortBy('popular')
+                  }}
+                >
+                  {currentCopy.filterClearLabel}
+                </Button>
+                <Button onClick={() => setIsFilterDialogOpen(false)}>
+                  {currentCopy.filterApplyLabel}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <div ref={socialFooterTriggerRef} aria-hidden className="h-px" />
 
