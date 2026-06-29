@@ -139,6 +139,7 @@ interface PnLData {
   wasteRecords: any[]
   mealPrepSessions: any[]
   sales: any[]
+  orderVoids?: any[]
   payrolls: any[]
 }
 
@@ -188,6 +189,14 @@ function quadrantClass(quadrant: string) {
   if (quadrant === 'Plowhorse') return 'bg-amber-100 text-amber-700'
   if (quadrant === 'Puzzle') return 'bg-blue-100 text-blue-700'
   return 'bg-slate-100 text-slate-600'
+}
+
+const VOID_REASON_LABELS: Record<string, string> = {
+  MIS_RING_WRONG_ITEM: 'Mis-ring / wrong item',
+  WRONG_TABLE: 'Wrong table',
+  CUSTOMER_WALKOUT: 'Customer walkout',
+  COMP_STAFF_MEAL: 'Comp / staff meal',
+  KITCHEN_ERROR: 'Kitchen error',
 }
 
 type QuickPeriod = 'today' | 'week' | 'month' | 'year'
@@ -749,6 +758,15 @@ export default function ProfitLossPageClient() {
       amount: sale.total,
       details: `${sale.items.length} ${ui.itemsSuffix}`,
     })),
+    ...(data.orderVoids || []).map((orderVoid) => ({
+      id: orderVoid.id,
+      date: new Date(orderVoid.voidedAt),
+      type: 'REVENUE' as const,
+      description: `Void: ${orderVoid.orderNumber}`,
+      category: ui.revenueCategory,
+      amount: -orderVoid.amount,
+      details: VOID_REASON_LABELS[orderVoid.reason] || orderVoid.reason,
+    })),
     ...data.sales.map((sale) => ({
       id: `${sale.id}-cogs`,
       date: new Date(sale.timestamp),
@@ -911,6 +929,14 @@ export default function ProfitLossPageClient() {
     })
     return acc
   }, {})
+  ;(data.orderVoids || []).forEach((orderVoid) => {
+    const taxRate = data.config?.salesTaxRate || 0
+    const voidRevenue = taxRate > 0 ? orderVoid.amount / (1 + taxRate / 100) : orderVoid.amount
+    if (!salesByCategory.Voids) {
+      salesByCategory.Voids = { revenue: 0, cogs: 0, count: 0 }
+    }
+    salesByCategory.Voids.revenue -= voidRevenue
+  })
   const salesByCategoryEntries = Object.entries(salesByCategory) as Array<
     [string, { revenue: number; cogs: number; count: number }]
   >

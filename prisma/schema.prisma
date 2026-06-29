@@ -54,6 +54,7 @@ model Restaurant {
   preppedDishStocks       PreppedDishStock[]
   promoRedemptions        PromoRedemption[]
   supplierLinks           RestaurantSupplierLink[]
+  orderVoids              OrderVoid[]
   referredByRestaurant    Restaurant?              @relation("Referrals", fields: [referredByRestaurantId], references: [id])
   referredRestaurants     Restaurant[]             @relation("Referrals")
   sales                   Sale[]
@@ -134,6 +135,7 @@ model User {
   defaultBackgroundImageData String?
   createdAt                  DateTime   @default(now())
   updatedAt                  DateTime   @updatedAt
+  orderVoids                 OrderVoid[]
   restaurant                 Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([restaurantId])
@@ -489,6 +491,7 @@ model Sale {
   restaurant            Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   table                 Table?        @relation(fields: [tableId], references: [id])
   waiter                Employee?     @relation("WaiterSales", fields: [waiterId], references: [id])
+  void                  OrderVoid?
 
   @@index([restaurantId])
   @@index([customerId])
@@ -499,6 +502,26 @@ model Sale {
   @@index([branchId])
   @@index([restaurantId, timestamp(sort: Desc)], map: "idx_sales_restaurant_timestamp_desc")
   @@map("sales")
+}
+
+model OrderVoid {
+  id                String          @id @default(cuid())
+  orderId           String          @unique @map("order_id")
+  restaurantId      String          @map("restaurant_id")
+  performedByUserId String          @map("performed_by_user_id")
+  reason            OrderVoidReason
+  amount            Float
+  restoresInventory Boolean         @default(false) @map("restores_inventory")
+  voidedAt          DateTime        @default(now()) @map("voided_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  order             Sale            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  performedBy       User            @relation(fields: [performedByUserId], references: [id])
+  restaurant        Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@index([voidedAt])
+  @@index([performedByUserId])
+  @@map("order_voids")
 }
 
 model SaleItem {
@@ -1091,6 +1114,14 @@ enum OrderStatus {
   READY
   COMPLETED
   CANCELLED
+}
+
+enum OrderVoidReason {
+  MIS_RING_WRONG_ITEM
+  WRONG_TABLE
+  CUSTOMER_WALKOUT
+  COMP_STAFF_MEAL
+  KITCHEN_ERROR
 }
 
 enum ExpenseCadence {
