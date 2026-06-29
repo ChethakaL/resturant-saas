@@ -14,6 +14,7 @@ import { CreditCard, Check, Loader2 } from 'lucide-react'
 import { SubscriptionPlans } from '@/components/settings/SubscriptionPlans'
 import { useToast } from '@/components/ui/use-toast'
 import { useI18n } from '@/lib/i18n'
+import type { ProductPlanTier } from '@/lib/plan-features'
 
 interface SubscriptionGateProps {
   hasActiveSubscription: boolean
@@ -47,7 +48,7 @@ export function SubscriptionGate({
   const postPaymentReturn =
     searchParams.get('success') === 'true' || Boolean(stripeCheckoutSessionId)
   const [postCheckoutSyncExhausted, setPostCheckoutSyncExhausted] = useState(false)
-  const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'annual' | null>(null)
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
   const [promoCode, setPromoCode] = useState('')
   const [promoApplied, setPromoApplied] = useState(false)
   const [applyingPromo, setApplyingPromo] = useState(false)
@@ -88,7 +89,7 @@ export function SubscriptionGate({
   }, [hasActiveSubscription, postPaymentReturn, router])
 
   useEffect(() => {
-    if (!postPaymentReturn || hasActiveSubscription) {
+    if (!postPaymentReturn) {
       setPostCheckoutSyncExhausted(false)
       return
     }
@@ -117,7 +118,7 @@ export function SubscriptionGate({
         if (process.env.NODE_ENV === 'development') {
           console.log('[SubscriptionGate] sync-from-stripe', syncData)
         }
-        if (!cancelled && syncData.isActive) {
+        if (!cancelled && (syncData.isActive || syncData.ok)) {
           router.refresh()
           return
         }
@@ -172,14 +173,15 @@ export function SubscriptionGate({
     pathname !== '/billing' &&
     pathname !== '/dashboard/billing'
 
-  const handleSubscribe = async (plan: 'monthly' | 'annual') => {
-    setLoadingPlan(plan)
+  const handleSubscribe = async (plan: 'monthly' | 'annual', productPlanTier: ProductPlanTier) => {
+    setLoadingPlan(`${productPlanTier}:${plan}`)
     try {
       const res = await fetch('/api/billing/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plan,
+          productPlanTier,
           returnPath: pathname || '/dashboard',
           ...(promoCode.trim() && { promotionCode: promoCode.trim() }),
         }),

@@ -9,6 +9,7 @@ import { Building2, Plus, Trash2, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import AddBranchModal, { AddBranchFormData } from '@/components/branches/AddBranchModal'
 import { useI18n } from '@/lib/i18n'
+import type { ProductPlanTier } from '@/lib/plan-features'
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,9 @@ interface BillingClientProps {
   isActive: boolean
   currentPeriodEnd: string | null
   currentPlan: 'monthly' | 'annual' | null
+  currentProductPlanTier: ProductPlanTier
+  pendingProductPlanTier: ProductPlanTier | null
+  pendingProductPlanTierEffectiveAt: string | null
   pricesConfigured: boolean
   priceMonthly: string
   priceAnnual: string
@@ -44,6 +48,9 @@ export default function BillingClient({
   isActive,
   currentPeriodEnd,
   currentPlan,
+  currentProductPlanTier,
+  pendingProductPlanTier,
+  pendingProductPlanTierEffectiveAt,
   pricesConfigured,
   priceMonthly,
   priceAnnual,
@@ -65,7 +72,7 @@ export default function BillingClient({
   const [releaseSlotModalOpen, setReleaseSlotModalOpen] = useState(false)
   const [deletingBranch, setDeletingBranch] = useState(false)
   const [openAddBranchAfterSlotPurchase, setOpenAddBranchAfterSlotPurchase] = useState(false)
-  const [redirectingToStripe, setRedirectingToStripe] = useState<'monthly' | 'annual' | 'branch' | null>(null)
+  const [redirectingToStripe, setRedirectingToStripe] = useState<string | null>(null)
   const upgradeCardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -115,46 +122,6 @@ export default function BillingClient({
   const openBranchSlotConfirm = (openAddBranchAfter = true) => {
     setOpenAddBranchAfterSlotPurchase(openAddBranchAfter)
     setBranchSlotConfirmOpen(true)
-  }
-
-  const redirectToSubscriptionCheckout = async (plan: 'monthly' | 'annual') => {
-    setRedirectingToStripe(plan)
-    try {
-      const res = await fetch('/api/billing/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plan,
-          returnPath: '/billing',
-        }),
-      })
-      const data = await res.json()
-      if (res.status === 409 && data.code === 'ALREADY_SUBSCRIBED') {
-        const payload = data as { message?: string }
-        toast({
-          title: 'Already subscribed',
-          description:
-            typeof payload.message === 'string'
-              ? payload.message
-              : 'Your restaurant already has an active plan. Refreshing…',
-        })
-        router.refresh()
-        return
-      }
-      if (!res.ok) throw new Error(data.error || 'Failed to start checkout')
-      if (data.url) {
-        window.location.href = data.url
-        return
-      }
-      throw new Error('No checkout URL returned')
-    } catch (error) {
-      toast({
-        title: 'Stripe checkout failed',
-        description: error instanceof Error ? error.message : 'Could not open Stripe checkout.',
-        variant: 'destructive',
-      })
-      setRedirectingToStripe(null)
-    }
   }
 
   const purchaseBranchSlot = async (options?: { openAddBranchAfter?: boolean }) => {
@@ -314,6 +281,9 @@ export default function BillingClient({
         isActive={isActive}
         currentPeriodEnd={currentPeriodEnd}
         currentPlan={currentPlan}
+        currentProductPlanTier={currentProductPlanTier}
+        pendingProductPlanTier={pendingProductPlanTier}
+        pendingProductPlanTierEffectiveAt={pendingProductPlanTierEffectiveAt}
         pricesConfigured={pricesConfigured}
         priceMonthly={priceMonthly}
         priceAnnual={priceAnnual}
@@ -495,7 +465,7 @@ export default function BillingClient({
             </DialogTitle>
             <DialogDescription>
               {paymentDialogMode === 'subscribe'
-                ? 'Branches are a paid feature. Choose a plan below and continue to Stripe checkout before adding your branch.'
+                ? 'Choose a membership plan first. You can add paid branch slots after the restaurant subscription is active.'
                 : `Your card on file will be charged now (prorated for this billing period, then $${additionalBranchCost}/month for each extra branch). Do you want to continue?`}
             </DialogDescription>
           </DialogHeader>
@@ -504,20 +474,19 @@ export default function BillingClient({
             <DialogFooter className="flex-col gap-2 sm:flex-col">
               <Button
                 type="button"
-                onClick={() => void redirectToSubscriptionCheckout('monthly')}
-                disabled={redirectingToStripe !== null}
+                onClick={() => {
+                  setPaymentDialogOpen(false)
+                  router.push('/billing')
+                }}
               >
-                {redirectingToStripe === 'monthly' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Continue with monthly plan
+                View membership plans
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => void redirectToSubscriptionCheckout('annual')}
-                disabled={redirectingToStripe !== null}
+                onClick={() => setPaymentDialogOpen(false)}
               >
-                {redirectingToStripe === 'annual' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Continue with annual plan
+                Back
               </Button>
             </DialogFooter>
           ) : (

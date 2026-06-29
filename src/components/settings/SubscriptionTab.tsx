@@ -5,13 +5,25 @@ import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { SubscriptionPlans } from '@/components/settings/SubscriptionPlans'
 import { useI18n } from '@/lib/i18n'
+import type { ProductPlanTier } from '@/lib/plan-features'
 
 interface SubscriptionTabProps {
   isActive: boolean
   currentPeriodEnd: string | null
   currentPlan: 'monthly' | 'annual' | null
+  currentProductPlanTier?: ProductPlanTier
+  pendingProductPlanTier?: ProductPlanTier | null
+  pendingProductPlanTierEffectiveAt?: string | null
   pricesConfigured: boolean
   priceMonthly: string
   priceAnnual: string
@@ -23,6 +35,9 @@ export default function SubscriptionTab({
   isActive,
   currentPeriodEnd,
   currentPlan,
+  currentProductPlanTier = 'SMART_MENU_MANAGER',
+  pendingProductPlanTier = null,
+  pendingProductPlanTierEffectiveAt = null,
   pricesConfigured,
   priceMonthly,
   priceAnnual,
@@ -34,7 +49,7 @@ export default function SubscriptionTab({
   const router = useRouter()
   const { toast } = useToast()
   const { t } = useI18n()
-  const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'annual' | null>(null)
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null)
   const [managingSubscription, setManagingSubscription] = useState(false)
   const [referralLink, setReferralLink] = useState<string | null>(null)
   const [promoCode, setPromoCode] = useState('')
@@ -42,6 +57,18 @@ export default function SubscriptionTab({
   const [copied, setCopied] = useState(false)
   const [promoApplied, setPromoApplied] = useState(false)
   const [applyingPromo, setApplyingPromo] = useState(false)
+  const [schedulingDowngrade, setSchedulingDowngrade] = useState(false)
+  const [cancelingDowngrade, setCancelingDowngrade] = useState(false)
+  const [upgradingPlan, setUpgradingPlan] = useState(false)
+  const [upgradePreviewOpen, setUpgradePreviewOpen] = useState(false)
+  const [upgradePreview, setUpgradePreview] = useState<{
+    amountDue: number
+    amountDueFormatted: string
+    currency: string
+    currentPeriodEnd: string
+    isTrialing: boolean
+    message: string
+  } | null>(null)
 
   useEffect(() => {
     const success = searchParams.get('success') === 'true'
@@ -77,14 +104,15 @@ export default function SubscriptionTab({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleSubscribe = async (plan: 'monthly' | 'annual') => {
-    setLoadingPlan(plan)
+  const handleSubscribe = async (plan: 'monthly' | 'annual', productPlanTier: ProductPlanTier) => {
+    setLoadingPlan(`${productPlanTier}:${plan}`)
     try {
       const res = await fetch('/api/billing/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plan,
+          productPlanTier,
           returnPath: pathname || '/billing',
           ...(promoCode.trim() && { promotionCode: promoCode.trim() }),
         }),
@@ -116,6 +144,115 @@ export default function SubscriptionTab({
     }
   }
 
+  const handleScheduleDowngrade = async (productPlanTier: ProductPlanTier) => {
+    setLoadingPlan(`downgrade:${productPlanTier}`)
+    setSchedulingDowngrade(true)
+    try {
+      const res = await fetch('/api/billing/schedule-plan-change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productPlanTier }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not schedule downgrade')
+      toast({
+        title: 'Downgrade scheduled',
+        description: data.message || 'Your plan will change at the next billing period.',
+      })
+      router.refresh()
+    } catch (error) {
+      toast({
+        title: 'Could not schedule downgrade',
+        description: error instanceof Error ? error.message : 'Please try again or contact support.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSchedulingDowngrade(false)
+      setLoadingPlan(null)
+    }
+  }
+
+  const handleUpgradeNow = async (productPlanTier: ProductPlanTier) => {
+    setLoadingPlan(`upgrade:${productPlanTier}`)
+    setUpgradingPlan(true)
+    try {
+      const res = await fetch('/api/billing/upgrade-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productPlanTier, preview: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not upgrade plan')
+      setUpgradePreview(data)
+      setUpgradePreviewOpen(true)
+    } catch (error) {
+      toast({
+        title: 'Could not preview upgrade',
+        description: error instanceof Error ? error.message : 'Please try again or contact support.',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpgradingPlan(false)
+      setLoadingPlan(null)
+    }
+  }
+
+  const handleConfirmUpgrade = async () => {
+    setLoadingPlan('upgrade:SMART_RESTAURANT_MANAGER')
+    setUpgradingPlan(true)
+    try {
+      const res = await fetch('/api/billing/upgrade-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productPlanTier: 'SMART_RESTAURANT_MANAGER' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not upgrade plan')
+      toast({
+        title: 'Plan upgraded',
+        description: data.invoice?.amountPaidFormatted
+          ? `Smart Restaurant Manager is active. Stripe charged ${data.invoice.amountPaidFormatted}.`
+          : data.message || 'Smart Restaurant Manager is now active.',
+      })
+      setUpgradePreviewOpen(false)
+      setUpgradePreview(null)
+      router.refresh()
+    } catch (error) {
+      toast({
+        title: 'Could not upgrade plan',
+        description: error instanceof Error ? error.message : 'Please try again or contact support.',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpgradingPlan(false)
+      setLoadingPlan(null)
+    }
+  }
+
+  const handleCancelScheduledDowngrade = async () => {
+    setLoadingPlan('cancel-downgrade')
+    setCancelingDowngrade(true)
+    try {
+      const res = await fetch('/api/billing/cancel-scheduled-plan-change', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not cancel scheduled downgrade')
+      toast({
+        title: 'Downgrade canceled',
+        description: data.message || 'Smart Restaurant Manager will remain active.',
+      })
+      router.refresh()
+    } catch (error) {
+      toast({
+        title: 'Could not cancel downgrade',
+        description: error instanceof Error ? error.message : 'Please try again or contact support.',
+        variant: 'destructive',
+      })
+    } finally {
+      setCancelingDowngrade(false)
+      setLoadingPlan(null)
+    }
+  }
+
   const periodEndLabel = currentPeriodEnd
     ? new Date(currentPeriodEnd).toLocaleDateString(undefined, {
         year: 'numeric',
@@ -125,8 +262,26 @@ export default function SubscriptionTab({
     : null
 
   const basePlanPrice =
-    currentPlan === 'annual' ? priceAnnual : currentPlan === 'monthly' ? priceMonthly : null
+    currentProductPlanTier === 'SMART_RESTAURANT_MANAGER'
+      ? currentPlan === 'annual'
+        ? '2000'
+        : currentPlan === 'monthly'
+          ? '200'
+          : null
+      : currentPlan === 'annual'
+        ? priceAnnual
+        : currentPlan === 'monthly'
+          ? priceMonthly
+          : null
   const branchAddonTotal = extraBranchSlots * (Number(priceBranch) || 10)
+  const pendingDowngradeLabel =
+    pendingProductPlanTier === 'SMART_MENU_MANAGER' && pendingProductPlanTierEffectiveAt
+      ? new Date(pendingProductPlanTierEffectiveAt).toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      : null
 
   const handleApplyPromo = async () => {
     const trimmed = promoCode.trim()
@@ -198,6 +353,12 @@ export default function SubscriptionTab({
                 <ul className="mt-2 space-y-1 text-sm text-slate-600">
                   <li className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                    {currentProductPlanTier === 'SMART_RESTAURANT_MANAGER'
+                      ? 'Smart Restaurant Manager'
+                      : 'Smart Menu Manager'}
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
                     {currentPlan === 'annual'
                       ? `${t.sub_annual} · $${basePlanPrice ?? priceAnnual}/year`
                       : currentPlan === 'monthly'
@@ -219,6 +380,20 @@ export default function SubscriptionTab({
                           <span className="text-slate-400">{` ($${branchAddonTotal}/mo)`}</span>
                         )}
                       </span>
+                    </li>
+                  )}
+                  {pendingDowngradeLabel && (
+                    <li className="flex flex-wrap items-center gap-2">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                      <span>Downgrades to Smart Menu Manager on {pendingDowngradeLabel}</span>
+                      <button
+                        type="button"
+                        onClick={handleCancelScheduledDowngrade}
+                        disabled={cancelingDowngrade}
+                        className="text-xs font-semibold text-slate-900 underline underline-offset-2 disabled:opacity-60"
+                      >
+                        {cancelingDowngrade ? 'Canceling…' : 'Keep current plan'}
+                      </button>
                     </li>
                   )}
                 </ul>
@@ -289,8 +464,14 @@ export default function SubscriptionTab({
           pricesConfigured={pricesConfigured}
           isActive={isActive}
           currentPlan={currentPlan}
+          currentProductPlanTier={currentProductPlanTier}
+          pendingProductPlanTier={pendingProductPlanTier}
+          pendingProductPlanTierEffectiveAt={pendingProductPlanTierEffectiveAt}
           loadingPlan={loadingPlan}
           onSubscribe={handleSubscribe}
+          onUpgradeNow={upgradingPlan ? undefined : handleUpgradeNow}
+          onScheduleDowngrade={schedulingDowngrade ? undefined : handleScheduleDowngrade}
+          onCancelScheduledDowngrade={cancelingDowngrade ? undefined : handleCancelScheduledDowngrade}
           priceMonthly={priceMonthly}
           priceAnnual={priceAnnual}
         />
@@ -323,6 +504,62 @@ export default function SubscriptionTab({
           </div>
         ) : null}
       </div>
+
+      <Dialog open={upgradePreviewOpen} onOpenChange={setUpgradePreviewOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm upgrade</DialogTitle>
+            <DialogDescription>
+              Review the immediate Stripe charge before unlocking Smart Restaurant Manager.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-600">Charged now</p>
+              <p className="mt-1 text-3xl font-bold text-slate-950">
+                {upgradePreview?.amountDueFormatted ?? '$0.00'}
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                {upgradePreview?.message ?? 'Stripe will calculate the prorated upgrade charge.'}
+              </p>
+            </div>
+            <div className="space-y-2 text-sm text-slate-600">
+              <div className="flex items-center justify-between gap-4">
+                <span>New plan</span>
+                <span className="font-medium text-slate-900">Smart Restaurant Manager</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Billing</span>
+                <span className="font-medium text-slate-900">
+                  {currentPlan === 'annual' ? '$2000/year' : '$200/month'}
+                </span>
+              </div>
+              {upgradePreview?.isTrialing && (
+                <p className="rounded-md bg-amber-50 p-3 text-amber-800">
+                  This subscription is still in trial, so Stripe may show no immediate charge.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={upgradingPlan}
+              onClick={() => setUpgradePreviewOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-slate-900 text-white hover:bg-slate-800"
+              disabled={upgradingPlan}
+              onClick={handleConfirmUpgrade}
+            >
+              {upgradingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirm upgrade
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

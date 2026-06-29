@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import NewOrderForm from './NewOrderForm'
+import { restaurantHasFeature } from '@/lib/require-product-feature'
 
 async function getOrderFormData(restaurantId: string) {
   const [menuItems, categories, tables] = await Promise.all([
@@ -79,6 +80,9 @@ export default async function NewOrderPage({
   }
 
   const restaurantId = session.user.restaurantId
+  if (!(await restaurantHasFeature(restaurantId, 'pos'))) {
+    redirect('/billing')
+  }
 
   const data = await getOrderFormData(restaurantId)
 

@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
+import { requireRestaurantFeature } from '@/lib/require-product-feature'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,6 +86,8 @@ export async function GET(request: Request) {
     if (!session?.user?.restaurantId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const locked = await requireRestaurantFeature(session.user.restaurantId, 'livePnl', 'Live P&L')
+    if (locked) return locked
 
     const { searchParams } = new URL(request.url)
     const startParam = searchParams.get('start')

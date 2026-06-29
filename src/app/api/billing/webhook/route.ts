@@ -7,6 +7,7 @@ import {
   getStripeCouponIdsFromSubscription,
   recordPromoRedemptionForRestaurant,
 } from '@/lib/promo-redemptions'
+import { normalizeProductPlanTier } from '@/lib/plan-features'
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
 if (!webhookSecret) {
@@ -47,6 +48,18 @@ export async function POST(request: NextRequest) {
         const isBranchAddon =
           subscription.metadata?.kind === 'branch_addon' || session.metadata?.kind === 'branch_addon'
 
+        const productPlanTier = normalizeProductPlanTier(
+          subscription.metadata?.productPlanTier || session.metadata?.productPlanTier
+        )
+        const subscriptionBillingPeriod =
+          session.metadata?.plan === 'annual' || session.metadata?.plan === 'monthly'
+            ? session.metadata.plan
+            : null
+        const currentRestaurant = await prisma.restaurant.findUnique({
+          where: { id: restaurantId },
+          select: { settings: true, referredByRestaurantId: true },
+        })
+
         await prisma.restaurant.update({
           where: { id: restaurantId },
           data: {
@@ -56,6 +69,13 @@ export async function POST(request: NextRequest) {
                 : subscription.customer && typeof subscription.customer === 'string'
                   ? subscription.customer
                   : undefined,
+            ...(productPlanTier && {
+              settings: {
+                ...((currentRestaurant?.settings as Record<string, unknown> | null) || {}),
+                productPlanTier,
+                ...(subscriptionBillingPeriod && { subscriptionBillingPeriod }),
+              },
+            }),
           },
         })
 
@@ -67,10 +87,6 @@ export async function POST(request: NextRequest) {
           restaurantId,
           promotionCode: session.metadata?.promotionCode,
           stripeCouponIds: getStripeCouponIdsFromSubscription(subscription),
-        })
-        const restaurant = await prisma.restaurant.findUnique({
-          where: { id: restaurantId },
-          select: { referredByRestaurantId: true },
         })
         const customerIdForReconcile =
           typeof subscription.customer === 'string'
@@ -86,10 +102,10 @@ export async function POST(request: NextRequest) {
           })
         }
         // Referral bonus: grant referrer 10% off their next month
-        if (restaurant?.referredByRestaurantId) {
+        if (currentRestaurant?.referredByRestaurantId) {
           try {
             const referrer = await prisma.restaurant.findUnique({
-              where: { id: restaurant.referredByRestaurantId },
+              where: { id: currentRestaurant.referredByRestaurantId },
               select: { stripeSubscriptionId: true },
             })
             if (referrer?.stripeSubscriptionId) {
@@ -118,7 +134,7 @@ export async function POST(request: NextRequest) {
         }
         const row = await prisma.restaurant.findUnique({
           where: { id: restaurantId },
-          select: { stripeSubscriptionId: true },
+          select: { stripeSubscriptionId: true, settings: true },
         })
         if (!row) break
         // Cancelling a duplicate subscription must not overwrite the canonical row we keep in DB.
@@ -138,6 +154,15 @@ export async function POST(request: NextRequest) {
             subscriptionStatus: status,
             subscriptionPriceId: mainPlanItem?.price?.id ?? subscription.items.data[0]?.price?.id ?? null,
             currentPeriodEnd: new Date((subscription.current_period_end ?? 0) * 1000),
+            ...(normalizeProductPlanTier(subscription.metadata?.productPlanTier) && {
+              settings: {
+                ...((row.settings as Record<string, unknown> | null) || {}),
+                productPlanTier: normalizeProductPlanTier(subscription.metadata.productPlanTier),
+                ...(subscription.metadata?.plan === 'annual' || subscription.metadata?.plan === 'monthly'
+                  ? { subscriptionBillingPeriod: subscription.metadata.plan }
+                  : {}),
+              },
+            }),
           },
         })
         break

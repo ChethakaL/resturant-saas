@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { requireRestaurantFeature } from '@/lib/require-product-feature'
 
 export async function GET(request: Request) {
   try {
@@ -9,6 +10,8 @@ export async function GET(request: Request) {
     if (!session?.user?.restaurantId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const locked = await requireRestaurantFeature(session.user.restaurantId, 'hr', 'HR and shift management')
+    if (locked) return locked
 
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
@@ -56,6 +59,8 @@ export async function POST(request: Request) {
     if (!session?.user?.restaurantId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const locked = await requireRestaurantFeature(session.user.restaurantId, 'hr', 'HR and shift management')
+    if (locked) return locked
 
     const data = await request.json()
 

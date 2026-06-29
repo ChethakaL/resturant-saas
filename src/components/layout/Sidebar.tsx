@@ -1,5 +1,6 @@
 'use client'
 
+import type { ComponentType } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -23,19 +24,32 @@ import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { useI18n, getStaticTranslationForSourceText } from '@/lib/i18n'
+import type { ProductPlanTier } from '@/lib/plan-features'
+
+type NavigationItem = {
+  name: string
+  href: string
+  icon: ComponentType<{ className?: string }>
+  disabled: boolean
+  tour?: string
+  comingSoon?: boolean
+  locked?: boolean
+}
 
 interface SidebarProps {
   userName: string
   userRole: string
+  productPlanTier: ProductPlanTier
   onNavigate?: () => void
 }
 
-export function Sidebar({ userName, userRole, onNavigate }: SidebarProps) {
+export function Sidebar({ userName, userRole, productPlanTier, onNavigate }: SidebarProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { locale, t } = useI18n()
 
-  const navigation = [
+  const hasRestaurantManager = productPlanTier === 'SMART_RESTAURANT_MANAGER'
+  const navigation: NavigationItem[] = [
     { name: t.sidebar_dashboard, href: '/dashboard', icon: Home, disabled: false, tour: 'nav-dashboard' },
     { name: t.sidebar_add_menu_items, href: '/menu', icon: UtensilsCrossed, disabled: false, tour: 'nav-menu' },
     { name: t.sidebar_media_library, href: '/media-library', icon: Images, disabled: false, tour: 'nav-media' },
@@ -43,11 +57,11 @@ export function Sidebar({ userName, userRole, onNavigate }: SidebarProps) {
     { name: t.sidebar_restaurant_dna, href: '/settings', icon: Dna, disabled: false, tour: 'nav-restaurant-dna' },
     { name: t.sidebar_inventory, href: '/inventory', icon: Package, disabled: false, tour: 'nav-inventory' },
     { name: t.sidebar_tables, href: '/tables', icon: Square, disabled: false, tour: 'nav-tables' },
-    { name: 'Live P&L', href: '/profit-loss', icon: BarChart3, disabled: false, tour: 'nav-sales-reports' },
-    { name: t.sidebar_sales_pos, href: '/orders/new', icon: ShoppingCart, disabled: false, tour: 'nav-sales-pos' },
-    { name: t.sidebar_hr, href: '/hr/employees', icon: Users, disabled: true, comingSoon: true },
-    { name: t.sidebar_shifts, href: '/hr/shifts', icon: Clock, disabled: true, comingSoon: true },
-    { name: t.sidebar_payroll, href: '/hr/payroll', icon: Wallet, disabled: true, comingSoon: true },
+    { name: 'Live P&L', href: '/profit-loss', icon: BarChart3, disabled: !hasRestaurantManager, locked: !hasRestaurantManager, tour: 'nav-sales-reports' },
+    { name: t.sidebar_sales_pos, href: '/orders/new', icon: ShoppingCart, disabled: !hasRestaurantManager, locked: !hasRestaurantManager, tour: 'nav-sales-pos' },
+    { name: t.sidebar_hr, href: '/hr/employees', icon: Users, disabled: !hasRestaurantManager, locked: !hasRestaurantManager },
+    { name: t.sidebar_shifts, href: '/hr/shifts', icon: Clock, disabled: !hasRestaurantManager, locked: !hasRestaurantManager },
+    { name: t.sidebar_payroll, href: '/hr/payroll', icon: Wallet, disabled: !hasRestaurantManager, locked: !hasRestaurantManager },
   ]
 
   const visibleNavigation =
@@ -91,12 +105,14 @@ export function Sidebar({ userName, userRole, onNavigate }: SidebarProps) {
               <div
                 key={item.name}
                 className="flex items-center gap-3 px-4 py-3 rounded-lg opacity-40 cursor-not-allowed select-none"
-                title="Coming soon"
+                title={item.locked ? 'Requires Smart Restaurant Manager' : 'Coming soon'}
               >
                 <item.icon className="h-5 w-5 text-slate-500" />
                 <span className="font-medium text-slate-500">{item.name}</span>
-                {item.comingSoon && (
-                  <span className="ml-auto text-[10px] font-semibold bg-slate-700 text-slate-400 rounded px-1.5 py-0.5">{t.sidebar_soon}</span>
+                {(item.comingSoon || item.locked) && (
+                  <span className="ml-auto text-[10px] font-semibold bg-slate-700 text-slate-400 rounded px-1.5 py-0.5">
+                    {item.locked ? 'Upgrade' : t.sidebar_soon}
+                  </span>
                 )}
               </div>
             )

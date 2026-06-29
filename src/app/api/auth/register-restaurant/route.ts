@@ -5,9 +5,14 @@ import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
 import { getPlatformConfig } from '@/lib/platform-config'
 import { mergeRestaurantWhatsAppSettings, normalizeWhatsAppNumber } from '@/lib/restaurant-whatsapp'
+import { normalizeProductPlanTier } from '@/lib/plan-features'
 
 const BILLING_CURRENCY = (process.env.STRIPE_BILLING_CURRENCY || 'usd').toLowerCase()
 const VALID_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const RESTAURANT_MANAGER_MONTHLY = process.env.STRIPE_RESTAURANT_MANAGER_PRICE_MONTHLY || '200'
+const RESTAURANT_MANAGER_ANNUAL = process.env.STRIPE_RESTAURANT_MANAGER_PRICE_ANNUAL || '2000'
+const RESTAURANT_MANAGER_REFERRAL_MONTHLY = 34
+const RESTAURANT_MANAGER_REFERRAL_ANNUAL = 340
 
 function buildSignupLineItem(
   configuredPrice: string,
@@ -74,6 +79,7 @@ export async function POST(request: Request) {
       password,
       referralCode: refCode,
       plan: planInput,
+      productPlanTier: productPlanTierInput,
       promotionCode: promotionCodeInput,
     } = body as {
       restaurantName?: string
@@ -84,9 +90,11 @@ export async function POST(request: Request) {
       password?: string
       referralCode?: string
       plan?: string
+      productPlanTier?: string
       promotionCode?: string
     }
     const plan = planInput === 'annual' ? 'annual' : 'monthly'
+    const productPlanTier = normalizeProductPlanTier(productPlanTierInput) || 'SMART_MENU_MANAGER'
     const promotionCode = typeof promotionCodeInput === 'string' ? promotionCodeInput.trim().toUpperCase() : null
 
     if (!restaurantName?.trim()) {
@@ -183,8 +191,15 @@ export async function POST(request: Request) {
         slug,
         email: userEmail.trim().toLowerCase(),
         settings: normalizedWhatsappNumber
-          ? mergeRestaurantWhatsAppSettings({}, { number: normalizedWhatsappNumber })
-          : undefined,
+          ? {
+              ...mergeRestaurantWhatsAppSettings({}, { number: normalizedWhatsappNumber }),
+              productPlanTier,
+              subscriptionBillingPeriod: plan,
+            }
+          : {
+              productPlanTier,
+              subscriptionBillingPeriod: plan,
+            },
         ...(referredByRestaurantId && { referredByRestaurantId }),
       },
     })
@@ -206,8 +221,23 @@ export async function POST(request: Request) {
       const priceMonthly = String(platformCfg.priceMonthly ?? process.env.STRIPE_PRICE_MONTHLY ?? '59')
       const priceAnnual = String(platformCfg.priceAnnual ?? process.env.STRIPE_PRICE_ANNUAL ?? '590')
       const platformReferralDiscount = Number(platformCfg.referralDiscountAmount ?? 10)
-      const referralDiscount = referredByRestaurantId ? (plan === 'annual' ? 100 : platformReferralDiscount) : 0
-      const configuredPrice = plan === 'annual' ? priceAnnual : priceMonthly
+      const referralDiscount = referredByRestaurantId
+        ? productPlanTier === 'SMART_RESTAURANT_MANAGER'
+          ? plan === 'annual'
+            ? RESTAURANT_MANAGER_REFERRAL_ANNUAL
+            : RESTAURANT_MANAGER_REFERRAL_MONTHLY
+          : plan === 'annual'
+            ? 100
+            : platformReferralDiscount
+        : 0
+      const configuredPrice =
+        productPlanTier === 'SMART_RESTAURANT_MANAGER'
+          ? plan === 'annual'
+            ? RESTAURANT_MANAGER_ANNUAL
+            : RESTAURANT_MANAGER_MONTHLY
+          : plan === 'annual'
+            ? priceAnnual
+            : priceMonthly
 
       const customer = await stripe.customers.create({
         email: restaurant.email || undefined,
@@ -230,9 +260,9 @@ export async function POST(request: Request) {
           : { allow_promotion_codes: true }),
         success_url: `${origin}/login?registered=1&payment=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/login?registered=1&payment=canceled`,
-        metadata: { restaurantId: restaurant.id, plan, ...(promotionCode && { promotionCode }) },
+        metadata: { restaurantId: restaurant.id, plan, productPlanTier, ...(promotionCode && { promotionCode }) },
         subscription_data: {
-          metadata: { restaurantId: restaurant.id },
+          metadata: { restaurantId: restaurant.id, plan, productPlanTier },
           trial_period_days: 3,
         },
       })
