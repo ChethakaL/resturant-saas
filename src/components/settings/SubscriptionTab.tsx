@@ -5,6 +5,14 @@ import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { SubscriptionPlans } from '@/components/settings/SubscriptionPlans'
 import { useI18n } from '@/lib/i18n'
 import type { ProductPlanTier } from '@/lib/plan-features'
@@ -51,6 +59,16 @@ export default function SubscriptionTab({
   const [applyingPromo, setApplyingPromo] = useState(false)
   const [schedulingDowngrade, setSchedulingDowngrade] = useState(false)
   const [cancelingDowngrade, setCancelingDowngrade] = useState(false)
+  const [upgradingPlan, setUpgradingPlan] = useState(false)
+  const [upgradePreviewOpen, setUpgradePreviewOpen] = useState(false)
+  const [upgradePreview, setUpgradePreview] = useState<{
+    amountDue: number
+    amountDueFormatted: string
+    currency: string
+    currentPeriodEnd: string
+    isTrialing: boolean
+    message: string
+  } | null>(null)
 
   useEffect(() => {
     const success = searchParams.get('success') === 'true'
@@ -150,6 +168,63 @@ export default function SubscriptionTab({
       })
     } finally {
       setSchedulingDowngrade(false)
+      setLoadingPlan(null)
+    }
+  }
+
+  const handleUpgradeNow = async (productPlanTier: ProductPlanTier) => {
+    setLoadingPlan(`upgrade:${productPlanTier}`)
+    setUpgradingPlan(true)
+    try {
+      const res = await fetch('/api/billing/upgrade-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productPlanTier, preview: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not upgrade plan')
+      setUpgradePreview(data)
+      setUpgradePreviewOpen(true)
+    } catch (error) {
+      toast({
+        title: 'Could not preview upgrade',
+        description: error instanceof Error ? error.message : 'Please try again or contact support.',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpgradingPlan(false)
+      setLoadingPlan(null)
+    }
+  }
+
+  const handleConfirmUpgrade = async () => {
+    setLoadingPlan('upgrade:SMART_RESTAURANT_MANAGER')
+    setUpgradingPlan(true)
+    try {
+      const res = await fetch('/api/billing/upgrade-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productPlanTier: 'SMART_RESTAURANT_MANAGER' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not upgrade plan')
+      toast({
+        title: 'Plan upgraded',
+        description: data.invoice?.amountPaidFormatted
+          ? `Smart Restaurant Manager is active. Stripe charged ${data.invoice.amountPaidFormatted}.`
+          : data.message || 'Smart Restaurant Manager is now active.',
+      })
+      setUpgradePreviewOpen(false)
+      setUpgradePreview(null)
+      router.refresh()
+    } catch (error) {
+      toast({
+        title: 'Could not upgrade plan',
+        description: error instanceof Error ? error.message : 'Please try again or contact support.',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpgradingPlan(false)
       setLoadingPlan(null)
     }
   }
@@ -394,6 +469,7 @@ export default function SubscriptionTab({
           pendingProductPlanTierEffectiveAt={pendingProductPlanTierEffectiveAt}
           loadingPlan={loadingPlan}
           onSubscribe={handleSubscribe}
+          onUpgradeNow={upgradingPlan ? undefined : handleUpgradeNow}
           onScheduleDowngrade={schedulingDowngrade ? undefined : handleScheduleDowngrade}
           onCancelScheduledDowngrade={cancelingDowngrade ? undefined : handleCancelScheduledDowngrade}
           priceMonthly={priceMonthly}
@@ -428,6 +504,62 @@ export default function SubscriptionTab({
           </div>
         ) : null}
       </div>
+
+      <Dialog open={upgradePreviewOpen} onOpenChange={setUpgradePreviewOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm upgrade</DialogTitle>
+            <DialogDescription>
+              Review the immediate Stripe charge before unlocking Smart Restaurant Manager.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-600">Charged now</p>
+              <p className="mt-1 text-3xl font-bold text-slate-950">
+                {upgradePreview?.amountDueFormatted ?? '$0.00'}
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                {upgradePreview?.message ?? 'Stripe will calculate the prorated upgrade charge.'}
+              </p>
+            </div>
+            <div className="space-y-2 text-sm text-slate-600">
+              <div className="flex items-center justify-between gap-4">
+                <span>New plan</span>
+                <span className="font-medium text-slate-900">Smart Restaurant Manager</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Billing</span>
+                <span className="font-medium text-slate-900">
+                  {currentPlan === 'annual' ? '$2000/year' : '$200/month'}
+                </span>
+              </div>
+              {upgradePreview?.isTrialing && (
+                <p className="rounded-md bg-amber-50 p-3 text-amber-800">
+                  This subscription is still in trial, so Stripe may show no immediate charge.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={upgradingPlan}
+              onClick={() => setUpgradePreviewOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-slate-900 text-white hover:bg-slate-800"
+              disabled={upgradingPlan}
+              onClick={handleConfirmUpgrade}
+            >
+              {upgradingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirm upgrade
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

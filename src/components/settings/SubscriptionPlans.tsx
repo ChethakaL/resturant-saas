@@ -15,6 +15,7 @@ interface SubscriptionPlansProps {
   pendingProductPlanTierEffectiveAt?: string | null
   loadingPlan: string | null
   onSubscribe: (plan: 'monthly' | 'annual', productPlanTier: ProductPlanTier) => void
+  onUpgradeNow?: (productPlanTier: ProductPlanTier) => void
   onScheduleDowngrade?: (productPlanTier: ProductPlanTier) => void
   onCancelScheduledDowngrade?: () => void
   priceMonthly: string
@@ -31,6 +32,7 @@ export function SubscriptionPlans({
   pendingProductPlanTierEffectiveAt,
   loadingPlan,
   onSubscribe,
+  onUpgradeNow,
   onScheduleDowngrade,
   onCancelScheduledDowngrade,
   priceMonthly = '59',
@@ -131,6 +133,10 @@ export function SubscriptionPlans({
             currentProductPlanTier === 'SMART_RESTAURANT_MANAGER' &&
             card.productPlanTier === 'SMART_MENU_MANAGER' &&
             pendingProductPlanTier !== 'SMART_MENU_MANAGER'
+          const canUpgradeNow =
+            isActive &&
+            currentProductPlanTier === 'SMART_MENU_MANAGER' &&
+            card.productPlanTier === 'SMART_RESTAURANT_MANAGER'
           const isPendingDowngrade =
             pendingProductPlanTier === 'SMART_MENU_MANAGER' &&
             card.productPlanTier === 'SMART_MENU_MANAGER' &&
@@ -193,6 +199,15 @@ export function SubscriptionPlans({
                 <Button disabled className="mt-auto w-full" variant="secondary">
                   <Check className="mr-2 h-4 w-4" />
                   {t.sub_current_plan}
+                </Button>
+              ) : canUpgradeNow ? (
+                <Button
+                  className="mt-auto w-full bg-slate-900 text-white hover:bg-slate-800"
+                  disabled={!!loadingPlan}
+                  onClick={() => onUpgradeNow?.(card.productPlanTier)}
+                >
+                  {loadingPlan === 'upgrade:SMART_RESTAURANT_MANAGER' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Upgrade now
                 </Button>
               ) : isPendingDowngrade ? (
                 <Button
