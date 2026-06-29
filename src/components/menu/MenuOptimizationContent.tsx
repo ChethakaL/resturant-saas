@@ -163,9 +163,9 @@ export default function MenuOptimizationContent({
   const { toast } = useToast()
   const { loaded } = useI18n()
   const { t: td, fetchTranslation } = useDynamicTranslate()
-  const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'profit'
+  const storedMode = (initialMenuEngineSettings?.mode as EngineMode) || 'classic'
   const resolvedStoredMode =
-    storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'profit'
+    storedMode && ['classic', 'profit', 'adaptive'].includes(storedMode) ? storedMode : 'classic'
   const resolvedMode =
     resolvedStoredMode === 'adaptive' && !smartProfitUnlocked ? 'profit' : resolvedStoredMode
   const [engineMode, setEngineMode] = useState<MenuEngineSettings['mode']>(resolvedMode)

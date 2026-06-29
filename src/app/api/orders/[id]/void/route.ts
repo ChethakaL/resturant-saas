@@ -16,6 +16,15 @@ const RESTORE_INVENTORY_REASONS = new Set<(typeof VOID_REASONS)[number]>([
   'WRONG_TABLE',
 ])
 
+class VoidOrderError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 function isVoidReason(value: unknown): value is (typeof VOID_REASONS)[number] {
   return typeof value === 'string' && VOID_REASONS.includes(value as (typeof VOID_REASONS)[number])
 }
@@ -68,15 +77,15 @@ export async function POST(
       })
 
       if (!existingOrder) {
-        throw new Error('Order not found')
+        throw new VoidOrderError('Order not found', 404)
       }
 
       if (existingOrder.status !== 'COMPLETED') {
-        throw new Error('Only paid completed orders can be voided')
+        throw new VoidOrderError('Only paid completed orders can be voided', 400)
       }
 
       if (existingOrder.void) {
-        throw new Error('Order has already been voided')
+        throw new VoidOrderError('Order has already been voided', 409)
       }
 
       const createdVoid = await tx.orderVoid.create({
@@ -139,9 +148,10 @@ export async function POST(
     return NextResponse.json({ success: true, void: voidRecord })
   } catch (error: any) {
     console.error('Error voiding order:', error)
+    const status = error instanceof VoidOrderError ? error.status : 500
     return NextResponse.json(
       { error: error.message || 'Failed to void order' },
-      { status: 500 }
+      { status }
     )
   }
 }

@@ -507,7 +507,7 @@ export default function NewOrderForm({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 lg:h-[calc(100vh-5.5rem)] lg:flex lg:flex-col lg:overflow-hidden">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <Link href="/dashboard/orders">
@@ -529,11 +529,11 @@ export default function NewOrderForm({
         </Link>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
+      <form onSubmit={handleSubmit} className="lg:flex-1 lg:min-h-0 lg:h-full">
+        <div className="grid gap-6 lg:grid-cols-3 lg:h-full">
+          <div className="lg:col-span-2 lg:h-full lg:flex lg:flex-col lg:overflow-hidden">
+            <Card className="lg:h-full lg:flex lg:flex-col lg:overflow-hidden">
+              <CardHeader className="shrink-0 pb-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <CardTitle>Select Items</CardTitle>
                   <Input
@@ -544,7 +544,7 @@ export default function NewOrderForm({
                   />
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 lg:flex-1 lg:overflow-y-auto">
                 <div className="space-y-3">
                   <div className="min-w-0 space-y-2">
                     <Label className="text-xs font-medium uppercase text-slate-500">Categories</Label>
@@ -632,8 +632,8 @@ export default function NewOrderForm({
             </Card>
           </div>
 
-          <div className="space-y-6 lg:sticky lg:top-6 lg:self-start">
-            <Card>
+          <div className="space-y-6 lg:h-full lg:overflow-y-auto pr-2 pb-4">
+              <Card>
               <CardHeader>
                 <CardTitle>Order Summary</CardTitle>
               </CardHeader>
@@ -1005,37 +1005,36 @@ export default function NewOrderForm({
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        <div className="flex flex-col gap-3">
-          <Button
-            type="submit"
-            disabled={
-              loading ||
-              orderItems.length === 0 ||
-              !orderDetails.tableId
-            }
-            size="lg"
-            className="w-full"
-          >
-            <ShoppingCart className="h-4 w-4 mr-2" />
-            {loading ? 'Processing...' : isCashPayment ? 'Complete Cash Order' : 'Complete Order'}
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSaveAsPending}
-            disabled={loading || orderItems.length === 0 || !orderDetails.tableId}
-            variant="outline"
-            size="lg"
-            className="w-full"
-          >
-            {loading ? 'Saving...' : 'Save & Print Kitchen Receipt'}
-          </Button>
-          <Link href="/orders" className="w-full">
-            <Button type="button" variant="outline" disabled={loading} className="w-full">
-              Cancel
-            </Button>
-          </Link>
-        </div>
+            <div className="flex flex-col gap-3 pt-4">
+              <Button
+                type="submit"
+                disabled={
+                  loading ||
+                  orderItems.length === 0 ||
+                  !orderDetails.tableId
+                }
+                size="lg"
+                className="w-full"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                {loading ? 'Processing...' : isCashPayment ? 'Complete Cash Order' : 'Complete Order'}
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveAsPending}
+                disabled={loading || orderItems.length === 0 || !orderDetails.tableId}
+                variant="outline"
+                size="lg"
+                className="w-full"
+              >
+                {loading ? 'Saving...' : 'Save & Print Kitchen Receipt'}
+              </Button>
+              <Link href="/orders" className="w-full">
+                <Button type="button" variant="outline" disabled={loading} className="w-full">
+                  Cancel
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </form>

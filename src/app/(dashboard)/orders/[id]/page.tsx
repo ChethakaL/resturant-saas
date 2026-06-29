@@ -10,7 +10,10 @@ import OrderDetailActions from './OrderDetailActions'
 import CompleteOrderButton from '@/components/orders/CompleteOrderButton'
 import Link from 'next/link'
 
-function getStatusBadge(status: string) {
+function getStatusBadge(status: string, isVoided?: boolean) {
+  if (isVoided) {
+    return 'bg-rose-100 text-rose-800'
+  }
   if (status === 'COMPLETED') {
     return 'bg-green-100 text-green-800'
   }
@@ -102,10 +105,10 @@ export default async function OrderDetailsPage({
           <span
             className={cn(
               'inline-flex px-3 py-1 rounded-full text-xs font-medium',
-              getStatusBadge(order.status)
+              getStatusBadge(order.status, Boolean(order.void))
             )}
           >
-            {order.status}
+            {order.void ? 'VOIDED' : order.status}
           </span>
           <div className="flex flex-wrap justify-end gap-2">
             {order.status === 'PENDING' && <CompleteOrderButton order={order} />}
