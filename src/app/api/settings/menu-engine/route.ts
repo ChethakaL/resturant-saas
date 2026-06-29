@@ -124,12 +124,16 @@ export async function PUT(request: Request) {
             ...(parsed.data.priceAnchoring !== undefined && { priceAnchoring: parsed.data.priceAnchoring }),
           }
 
-    await prisma.restaurant.update({
+    const updatedRestaurant = await prisma.restaurant.update({
       where: { id: session.user.restaurantId },
       data: { settings: { ...currentSettings, menuEngine } },
+      select: { slug: true },
     })
 
     revalidatePath('/')
+    if (updatedRestaurant.slug) {
+      revalidatePath(`/${updatedRestaurant.slug}`)
+    }
     const suggestionKeys = ['moodFlow', 'bundles', 'upsells', 'scarcityBadges', 'priceAnchoring'] as const
     const overrides =
       mode === 'classic'
