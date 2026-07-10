@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
+import { getRestaurantPlanTier, PRODUCT_PLAN_LABELS } from '@/lib/plan-features'
 
 function StatusBadge({ status }: { status: string | null }) {
   const s = status || 'none'
@@ -15,6 +16,19 @@ function StatusBadge({ status }: { status: string | null }) {
   return (
     <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${colors[s] || 'bg-slate-100'}`}>
       {s}
+    </span>
+  )
+}
+
+function PlanBadge({ tier }: { tier: ReturnType<typeof getRestaurantPlanTier> }) {
+  const isRestaurantManager = tier === 'SMART_RESTAURANT_MANAGER'
+  return (
+    <span
+      className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
+        isRestaurantManager ? 'bg-violet-100 text-violet-800' : 'bg-slate-100 text-slate-600'
+      }`}
+    >
+      {PRODUCT_PLAN_LABELS[tier]}
     </span>
   )
 }
@@ -62,7 +76,10 @@ export default async function AdminRestaurantsPage() {
                       {r.email && ` · ${r.email}`}
                     </CardDescription>
                   </div>
-                  <StatusBadge status={r.subscriptionStatus} />
+                  <div className="flex flex-col items-end gap-1">
+                    <StatusBadge status={r.subscriptionStatus} />
+                    <PlanBadge tier={getRestaurantPlanTier(r)} />
+                  </div>
                 </CardHeader>
                 <CardContent className="text-sm text-slate-600 space-y-1">
                   <p>Users: {r._count.users}</p>

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getRestaurantPlanTier, normalizeProductPlanTier } from '@/lib/plan-features'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,17 +22,18 @@ export async function PATCH(
 
     const status = body.subscriptionStatus as string | undefined
     const extendDays = typeof body.extendDays === 'number' ? body.extendDays : null
+    const productPlanTier = normalizeProductPlanTier(body.productPlanTier)
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id },
-      select: { id: true, currentPeriodEnd: true },
+      select: { id: true, currentPeriodEnd: true, settings: true },
     })
 
     if (!restaurant) {
       return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
     }
 
-    const updates: Record<string, unknown> = {}
+    const updates: Prisma.RestaurantUpdateInput = {}
 
     if (status && ['active', 'trialing', 'canceled', 'past_due', 'none'].includes(status)) {
       updates.subscriptionStatus = status === 'none' ? null : status
@@ -45,9 +48,24 @@ export async function PATCH(
       }
       base.setDate(base.getDate() + extendDays)
       updates.currentPeriodEnd = base
-      if (!updates.subscriptionStatus) {
+      if (updates.subscriptionStatus === undefined) {
         updates.subscriptionStatus = 'active'
       }
+    }
+
+    if (productPlanTier) {
+      const settings = (restaurant.settings as Record<string, unknown> | null) || {}
+      const {
+        pendingProductPlanTier: _pendingTier,
+        pendingProductPlanTierEffectiveAt: _pendingAt,
+        scheduledProductPlanTier: _scheduledTier,
+        ...restSettings
+      } = settings
+
+      updates.settings = {
+        ...restSettings,
+        productPlanTier,
+      } as Prisma.InputJsonValue
     }
 
     if (Object.keys(updates).length === 0) {
@@ -57,9 +75,18 @@ export async function PATCH(
     const updated = await prisma.restaurant.update({
       where: { id },
       data: updates,
+      select: {
+        id: true,
+        subscriptionStatus: true,
+        currentPeriodEnd: true,
+        settings: true,
+      },
     })
 
-    return NextResponse.json(updated)
+    return NextResponse.json({
+      ...updated,
+      productPlanTier: getRestaurantPlanTier(updated),
+    })
   } catch (error) {
     console.error('Admin subscription update error:', error)
     return NextResponse.json(

@@ -22,6 +22,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Loader2, User, CreditCard } from 'lucide-react'
+import {
+  PRODUCT_PLAN_LABELS,
+  type ProductPlanTier,
+} from '@/lib/plan-features'
 
 interface RestaurantDetailClientProps {
   restaurant: {
@@ -36,6 +40,9 @@ interface RestaurantDetailClientProps {
     stripeCustomerId: string | null
     stripeSubscriptionId: string | null
     createdAt: string
+    productPlanTier: ProductPlanTier
+    pendingProductPlanTier: ProductPlanTier | null
+    pendingProductPlanTierEffectiveAt: string | null
   }
   users: Array<{
     id: string
@@ -59,8 +66,10 @@ export default function RestaurantDetailClient({
 }: RestaurantDetailClientProps) {
   const { toast } = useToast()
   const [subscriptionStatus, setSubscriptionStatus] = useState(restaurant.subscriptionStatus || 'none')
+  const [productPlanTier, setProductPlanTier] = useState<ProductPlanTier>(restaurant.productPlanTier)
   const [extendDays, setExtendDays] = useState('30')
   const [saving, setSaving] = useState(false)
+  const [savingPlan, setSavingPlan] = useState(false)
   const [showExtendDialog, setShowExtendDialog] = useState(false)
 
   const handleUpdateSubscription = async () => {
@@ -118,6 +127,34 @@ export default function RestaurantDetailClient({
     }
   }
 
+  const handleUpdatePlanTier = async () => {
+    setSavingPlan(true)
+    try {
+      const res = await fetch(`/api/admin/restaurants/${restaurant.id}/subscription`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productPlanTier }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed')
+      }
+      toast({
+        title: 'Plan updated',
+        description: `${restaurant.name} is now on ${PRODUCT_PLAN_LABELS[productPlanTier]}.`,
+      })
+      window.location.reload()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to update plan',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingPlan(false)
+    }
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* Info */}
@@ -156,9 +193,50 @@ export default function RestaurantDetailClient({
             <CreditCard className="h-5 w-5" />
             Subscription
           </CardTitle>
-          <CardDescription>Manage subscription status and period</CardDescription>
+          <CardDescription>Manage subscription status, plan tier, and billing period</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
+          <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <p className="text-sm font-medium text-slate-900">Product plan</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Controls feature access (POS, Waiter Portal, Live P&amp;L, HR). Does not change Stripe billing.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="space-y-2">
+                <Label>Plan tier</Label>
+                <Select
+                  value={productPlanTier}
+                  onValueChange={(value) => setProductPlanTier(value as ProductPlanTier)}
+                >
+                  <SelectTrigger className="w-[260px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SMART_MENU_MANAGER">
+                      {PRODUCT_PLAN_LABELS.SMART_MENU_MANAGER}
+                    </SelectItem>
+                    <SelectItem value="SMART_RESTAURANT_MANAGER">
+                      {PRODUCT_PLAN_LABELS.SMART_RESTAURANT_MANAGER}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={handleUpdatePlanTier} disabled={savingPlan || productPlanTier === restaurant.productPlanTier}>
+                {savingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Save plan
+              </Button>
+            </div>
+            {restaurant.pendingProductPlanTier && restaurant.pendingProductPlanTierEffectiveAt && (
+              <p className="text-xs text-amber-700">
+                Scheduled change to {PRODUCT_PLAN_LABELS[restaurant.pendingProductPlanTier]} on{' '}
+                {new Date(restaurant.pendingProductPlanTierEffectiveAt).toLocaleDateString()}.
+                Saving a plan here will clear that schedule.
+              </p>
+            )}
+          </div>
+
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-2">
               <Label>Status</Label>

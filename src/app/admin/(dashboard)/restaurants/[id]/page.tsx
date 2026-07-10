@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { getRestaurantPlanTier } from '@/lib/plan-features'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import RestaurantDetailClient from './RestaurantDetailClient'
@@ -35,6 +35,18 @@ export default async function AdminRestaurantDetailPage({
   })
 
   if (!restaurant) notFound()
+
+  const settings = (restaurant.settings as Record<string, unknown> | null) || {}
+  const productPlanTier = getRestaurantPlanTier(restaurant)
+  const pendingProductPlanTier =
+    settings.pendingProductPlanTier === 'SMART_MENU_MANAGER' ||
+    settings.pendingProductPlanTier === 'SMART_RESTAURANT_MANAGER'
+      ? settings.pendingProductPlanTier
+      : null
+  const pendingProductPlanTierEffectiveAt =
+    typeof settings.pendingProductPlanTierEffectiveAt === 'string'
+      ? settings.pendingProductPlanTierEffectiveAt
+      : null
 
   return (
     <div className="space-y-6">
@@ -69,6 +81,9 @@ export default async function AdminRestaurantDetailPage({
           stripeCustomerId: restaurant.stripeCustomerId,
           stripeSubscriptionId: restaurant.stripeSubscriptionId,
           createdAt: restaurant.createdAt.toISOString(),
+          productPlanTier,
+          pendingProductPlanTier,
+          pendingProductPlanTierEffectiveAt,
         }}
         users={restaurant.users}
         counts={{
