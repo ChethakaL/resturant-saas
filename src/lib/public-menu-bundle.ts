@@ -26,6 +26,7 @@ import type { MenuTemperatureFeel, MenuWeatherLabel } from '@/lib/menu-feeling-m
 import { buildContextShowcaseSuggestions } from '@/lib/context-showcase-ranking'
 import { buildCostedMenuItems, buildImportedSalesByItem } from '@/lib/monthly-sales-derived'
 import { upsertContextShowcases } from '@/lib/context-showcase-persistence'
+import { designConfigToTheme, menuDesignConfigSchema } from '@/lib/menu-design'
 
 const MAX_CONTEXT_SHOWCASE_ITEMS = 3
 
@@ -97,6 +98,7 @@ export async function getPublicMenuBundleBySlug(slug: string) {
 
   const restaurant = await prisma.restaurant.findUnique({
     where: { slug: slug.toLowerCase() },
+    include: { menuDesign: true },
   })
   perfMark('restaurant lookup')
 
@@ -857,17 +859,28 @@ export async function getPublicMenuBundleBySlug(slug: string) {
 
   // Extract theme from restaurant settings
   const themeFromSettings = (settings.theme as Record<string, unknown>) || {}
+  const publishedDesign = restaurant.menuDesign?.publishedConfig
+    ? menuDesignConfigSchema.safeParse(restaurant.menuDesign.publishedConfig)
+    : null
   const theme = {
     ...themeFromSettings,
     menuLayout: storedEngine.menuLayout === 'grid' ? 'grid' : 'list',
     themePreset: settings.themePreset ?? null,
     backgroundImageUrl: settings.backgroundImageUrl ?? null,
+    ...(publishedDesign?.success ? designConfigToTheme(publishedDesign.data) : {}),
   }
 
   perfMark('bundle complete')
 
   return {
-    restaurant,
+    restaurant: {
+      id: restaurant.id,
+      name: restaurant.name,
+      slug: restaurant.slug,
+      logo: restaurant.logo,
+      currency: restaurant.currency,
+      timezone: restaurant.timezone,
+    },
     menuItems: clientMenuItems,
     initialLanguage,
     initialTranslationCache,
@@ -892,6 +905,15 @@ export async function getPublicMenuBundleBySlug(slug: string) {
       }
     }),
     theme,
+    menuDesign: publishedDesign?.success
+      ? {
+          config: publishedDesign.data,
+          customHtml:
+            publishedDesign.data.mode === 'custom'
+              ? restaurant.menuDesign?.publishedHtml ?? null
+              : null,
+        }
+      : null,
     engineMode: engineOutput.engineMode,
     bundles: engineOutput.bundles,
     moods: engineOutput.moods,

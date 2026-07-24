@@ -11,6 +11,7 @@ interface CarouselItem {
   name: string
   description?: string | null
   price: number
+  calories?: number | null
   imageUrl?: string | null
   category?: { name: string | null; id: string } | null
 }
@@ -45,6 +46,9 @@ interface MenuCarouselProps {
    * Key = menuItem.id, value = data URL of the regenerated photo.
    */
   seasonalItemImages?: Record<string, string>
+  showImages?: boolean
+  showDescriptions?: boolean
+  showCalories?: boolean
 }
 
 export function MenuCarousel({
@@ -64,6 +68,9 @@ export function MenuCarousel({
   chefRecommendationLabel,
   label,
   seasonalItemImages,
+  showImages = true,
+  showDescriptions = true,
+  showCalories = true,
 }: MenuCarouselProps) {
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
@@ -145,7 +152,7 @@ export function MenuCarousel({
                   className={`${cardWidth} snap-start flex-shrink-0 w-[min(200px,70vw)] sm:w-[200px] text-left rounded-2xl overflow-hidden transition-transform active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--menu-accent,#f59e0b)]`}
                   onClick={() => onItemClick?.(item as CarouselItem)}
                 >
-                  <div className={`aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
+                  {showImages && <div className={`aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
                     <CategoryImageFallback
                       src={photo}
                       alt={item.name}
@@ -155,7 +162,7 @@ export function MenuCarousel({
                       decoding="async"
                       className="h-full w-full object-cover"
                     />
-                  </div>
+                  </div>}
                   <div className="rounded-b-2xl px-3 py-3 bg-slate-900/90 text-left">
                     <p className={`text-sm font-semibold text-white line-clamp-2 ${displayFontClassName ?? ''}`}>
                       {displayName}
@@ -168,6 +175,9 @@ export function MenuCarousel({
                     <p className="font-price mt-1 text-sm font-bold" style={{ color: highlightColor }}>
                       {formatMenuPrice(item.price)}
                     </p>
+                    {showCalories && item.calories != null && (
+                      <p className="mt-0.5 text-[10px] text-white/60">{item.calories} kcal</p>
+                    )}
                   </div>
                 </button>
               )
@@ -199,15 +209,15 @@ export function MenuCarousel({
                 className="flex-[0_0_100%] min-w-0 w-full h-full relative text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                 onClick={() => onItemClick?.(item as CarouselItem)}
               >
-                <CategoryImageFallback
-                  src={seasonalItemImages?.[item.id] || item.imageUrl}
-                  alt={item.name}
-                  categoryName={item.category?.name}
-                  description={item.description}
-                  loading="lazy"
-                  decoding="async"
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
+                {showImages ? <CategoryImageFallback
+                    src={seasonalItemImages?.[item.id] || item.imageUrl}
+                    alt={item.name}
+                    categoryName={item.category?.name}
+                    description={item.description}
+                    loading="lazy"
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  /> : <div className="absolute inset-0 bg-slate-900" />}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                 <div className="absolute bottom-0 left-0 right-0 px-14 py-5 sm:px-16 sm:py-8 text-white">
                   {title && (
@@ -222,9 +232,10 @@ export function MenuCarousel({
                     {chefRecommendationLabel ?? "Chef's recommendation"}
                   </span>
                   <p className={`text-2xl sm:text-3xl md:text-4xl font-bold leading-tight tracking-tight ${displayFontClassName ?? ''}`}>{getDisplayName?.(item.id) || item.name}</p>
-                  {(getDescription?.(item.id) || item.description) && (
+                  {showDescriptions && (getDescription?.(item.id) || item.description) && (
                     <p className="text-sm sm:text-base text-white/90 mt-1.5 line-clamp-2 font-body">{getDescription?.(item.id) || item.description || ''}</p>
                   )}
+                  {showCalories && item.calories != null && <p className="mt-1 text-xs text-white/70">{item.calories} kcal</p>}
                 </div>
               </button>
             ))}
@@ -309,7 +320,7 @@ export function MenuCarousel({
                 className={`${items.length === 1 ? 'flex-[0_0_100%]' : 'flex-[0_0_82%] sm:flex-[0_0_42%] md:flex-[0_0_30%]'} min-w-0 shrink-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--menu-accent,#f59e0b)] rounded-2xl overflow-hidden transition-transform active:scale-[0.98]`}
                 onClick={() => onItemClick?.(item as CarouselItem)}
               >
-                <div className={`relative aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
+                {showImages && <div className={`relative aspect-[3/2] w-full overflow-hidden rounded-t-2xl ${isDarkTheme ? 'bg-white/5' : 'bg-slate-100'}`}>
                   <CategoryImageFallback
                     src={photo}
                     alt={item.name}
@@ -320,7 +331,7 @@ export function MenuCarousel({
                     className="h-full w-full object-cover transition duration-300 hover:scale-105"
                   />
                   <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
-                </div>
+                </div>}
                 <div className="rounded-b-2xl px-3 py-3 sm:py-4 bg-transparent">
                   <p className={`text-base sm:text-lg font-semibold ${textPrimary} line-clamp-2 leading-tight ${displayFontClassName ?? ''}`}>
                     {displayName}
@@ -331,6 +342,7 @@ export function MenuCarousel({
                   >
                     {formatMenuPrice(item.price)}
                   </p>
+                  {showCalories && item.calories != null && <p className={`mt-0.5 text-[10px] ${isDarkTheme ? 'text-white/60' : 'text-slate-500'}`}>{item.calories} kcal</p>}
                 </div>
               </button>
             )

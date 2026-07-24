@@ -55,6 +55,8 @@ export function Sidebar({ userName, userRole, productPlanTier, onNavigate }: Sid
     { name: t.sidebar_media_library, href: '/media-library', icon: Images, disabled: false, tour: 'nav-media' },
     { name: t.sidebar_optimize_menu, href: '/menu?tab=optimization', icon: Zap, disabled: false, tour: 'nav-optimization' },
     { name: t.sidebar_restaurant_dna, href: '/settings', icon: Dna, disabled: false, tour: 'nav-restaurant-dna' },
+    // Kept accessible from Restaurant DNA; do not show as a separate sidebar item.
+    // { name: 'Smart Menu Appearance', href: '/settings/appearance', icon: Paintbrush, disabled: false },
     { name: t.sidebar_inventory, href: '/inventory', icon: Package, disabled: false, tour: 'nav-inventory' },
     { name: t.sidebar_tables, href: '/tables', icon: Square, disabled: false, tour: 'nav-tables' },
     { name: 'Live P&L', href: '/profit-loss', icon: BarChart3, disabled: !hasRestaurantManager, locked: !hasRestaurantManager, tour: 'nav-sales-reports' },

@@ -48,6 +48,7 @@ model Restaurant {
   menuBadgeAiCaches       MenuBadgeAiCache[]
   menuEvents              MenuEvent[]
   menuItems               MenuItem[]
+  menuDesign              MenuDesign?
   menuShowcases           MenuShowcase[]
   monthlyFinancialImports MonthlyFinancialImport[]
   payrolls                Payroll[]
@@ -65,6 +66,22 @@ model Restaurant {
   wasteRecords            WasteRecord[]
 
   @@map("restaurants")
+}
+
+model MenuDesign {
+  id              String     @id @default(cuid())
+  restaurantId    String     @unique @map("restaurant_id")
+  draftConfig     Json       @map("draft_config")
+  publishedConfig Json       @map("published_config")
+  customHtml      String?    @db.Text @map("custom_html")
+  publishedHtml   String?    @db.Text @map("published_html")
+  version         Int        @default(1)
+  publishedAt     DateTime?  @map("published_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("menu_designs")
 }
 
 model PromoCode {

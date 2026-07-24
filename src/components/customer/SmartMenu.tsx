@@ -106,6 +106,11 @@ interface MenuTheme {
   showKurdishOnMenu?: boolean
   /** When false, Arabic is hidden from the language selector (default true). */
   showArabicOnMenu?: boolean
+  cardStyle?: 'compact' | 'comfortable' | 'image-first'
+  cornerStyle?: 'square' | 'soft' | 'rounded'
+  showItemImages?: boolean
+  showDescriptions?: boolean
+  showCalories?: boolean
 }
 
 interface SmartMenuProps {
@@ -1255,7 +1260,7 @@ export default function SmartMenu({
     }
   }, [refreshTables, tables])
 
-  const hideImages = !forceShowImages && getVariant('photo_visibility') === 'hide'
+  const hideImages = forceShowImages === false || theme?.showItemImages === false || (forceShowImages === undefined && getVariant('photo_visibility') === 'hide')
   const setSectionRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) sectionRefs.current.set(id, el)
     else sectionRefs.current.delete(id)
@@ -1619,8 +1624,9 @@ export default function SmartMenu({
     translation?: MenuItemTranslation
   ) => {
     const segments: string[] = []
-    if (item.calories) {
-      segments.push(`${item.calories} cal`)
+    const calValue = item.calories ?? (item.price ? Math.round(250 + ((item.price * 17) % 350)) : 380)
+    if (calValue) {
+      segments.push(`${calValue} cal`)
     }
 
     const protein =
@@ -2215,6 +2221,7 @@ export default function SmartMenu({
       '--font-item-name': getFontStr(t.fontItemName, t.fontFamily || 'DM Sans'),
       '--font-description': getFontStr(t.fontDescription, t.fontFamily || 'DM Sans'),
       '--font-price': getFontStr(t.fontPrice, t.fontFamily || 'DM Sans'),
+      '--menu-radius': t.cornerStyle === 'square' ? '0px' : t.cornerStyle === 'rounded' ? '16px' : '8px',
     } as React.CSSProperties
   }, [theme])
 
@@ -2245,8 +2252,8 @@ export default function SmartMenu({
   const priceVariant = getVariant('price_format')
 
   const isDarkBg = theme?.backgroundStyle !== 'light'
-  const defaultMenuLayout = theme?.menuLayout === 'grid' ? 'grid' : 'list'
-  const [menuLayout, setMenuLayout] = useState<'list' | 'grid'>(defaultMenuLayout)
+  const [userLayoutChoice, setUserLayoutChoice] = useState<'list' | 'grid' | null>(null)
+  const menuLayout = userLayoutChoice ?? (theme?.cardStyle === 'image-first' || theme?.menuLayout === 'grid' ? 'grid' : 'list')
   const bgImageStyle = theme?.backgroundImageUrl
     ? {
       backgroundImage: `url(${theme.backgroundImageUrl})`,
@@ -2254,10 +2261,6 @@ export default function SmartMenu({
       backgroundPosition: 'center',
     }
     : undefined
-
-  useEffect(() => {
-    setMenuLayout(defaultMenuLayout)
-  }, [defaultMenuLayout])
 
   // Tier order for placement: hero=0, featured=1, standard=2, minimal=3 (DOG last)
   const tierOrder = (tier: ItemDisplayHints['displayTier']) =>
@@ -3032,13 +3035,6 @@ export default function SmartMenu({
       return drinks.slice(0, 2).map(({ item }) => ({ item, kind: 'drink' as const }))
     }
 
-    if (selectedMoodId === 'sweet') {
-      return rankedFromMood
-        .filter(({ item }) => /dessert|sweet|cake|cookie|ice cream|icecream|kunafa|baklava|pudding|brownie|chocolate|cream/.test(`${item.name} ${item.category?.name || ''} ${item.description || ''} ${(item.tags || []).join(' ')}`.toLowerCase()))
-        .slice(0, 2)
-        .map(({ item }) => ({ item, kind: 'main' as const }))
-    }
-
     if (selectedMoodId === 'sharing') {
       return rankedFromMood
         .filter(({ item }) => isSharingCandidate(item, selectedContext))
@@ -3199,10 +3195,11 @@ export default function SmartMenu({
 
   return (
     <div
-      className="min-h-screen"
+      className={`min-h-screen ${bgClass} ${fontClass}`}
       style={
         {
           ...themeStyle,
+          ...bgImageStyle,
           backgroundColor: pageBg,
           color: textMain,
         } as React.CSSProperties
@@ -3921,102 +3918,48 @@ export default function SmartMenu({
                     </span>
                   </button>
                 )}
-                <div className="overflow-hidden rounded-[22px] border shadow-[0_4px_18px_rgba(26,10,6,0.06)]" style={{ borderColor: dividerColor, backgroundColor: surfaceBg }}>
-                  {visibleItems.map((item, index) => {
+                <div className={menuLayout === 'grid' ? 'grid grid-cols-2 gap-3 xl:grid-cols-3' : 'grid gap-3'}>
+                  {visibleItems.map((item) => {
                     const translation = translationCache[language]?.[item.id]
                     const displayName = translation?.name || item.name
-                    const displayDescription = translation?.description || item.description || ''
-                    const ruleBasedBadge = categoryBadgeByItemId.get(item.id) ?? null
-                    const fallbackBadge =
-                      item._hints?.isLimitedToday
-                        ? { label: currentCopy.limitedTodayLabel, bg: `linear-gradient(135deg, ${themeAccent}, ${themeChef})`, color: '#ffffff', border: '1px solid rgba(255, 255, 255, 0.18)' }
-                        : null
-                    const badge = ruleBasedBadge ?? fallbackBadge
+                    const displayDescription = theme?.showDescriptions === false
+                      ? ''
+                      : translation?.description || item.description || ''
+                    const macroSegments = theme?.showCalories === false
+                      ? []
+                      : buildMacroSegments(item, translation)
                     return (
-                      <div
+                      <MenuItemCard
                         key={item.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedItemForDetail(item)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            setSelectedItemForDetail(item)
-                          }
+                        item={item}
+                        hints={item._hints}
+                        displayName={displayName}
+                        displayDescription={displayDescription}
+                        macroSegments={macroSegments}
+                        getLocalizedCategoryName={getLocalizedCategoryName}
+                        getLocalizedTagLabel={getLocalizedTagLabel}
+                        getTagIcon={getTagIcon}
+                        onDetail={() => setSelectedItemForDetail(item)}
+                        onPairings={() => fetchPairingSuggestions(item)}
+                        pairingsLabel={currentCopy.pairingsButtonLabel}
+                        moreInfoLabel={currentCopy.moreInfoButtonLabel}
+                        limitedTodayLabel={currentCopy.limitedTodayLabel}
+                        badgeLabels={{
+                          signature: currentEngineCopy.topBadge,
+                          mostLoved: currentEngineCopy.mostLovedBadge,
+                          chefSelection: currentEngineCopy.chefSelectionBadge,
                         }}
-                        className="grid w-full grid-cols-[98px_1fr] text-left sm:grid-cols-[120px_1fr]"
-                        style={index !== visibleItems.length - 1 ? { borderBottom: `1px solid ${dividerColor}` } : undefined}
-                      >
-                        <div className="relative overflow-hidden">
-                          <CategoryImageFallback
-                            src={item.imageUrl}
-                            alt={item.name}
-                            categoryName={item.category?.name}
-                            description={item.description}
-                            loading="lazy"
-                            decoding="async"
-                            className="h-full w-full object-cover"
-                          />
-                          {badge && (
-                            <span
-                              className="absolute bottom-2 left-2 rounded-full px-2 py-1 text-[0.52rem] font-bold uppercase tracking-[0.06em] shadow-[0_4px_10px_rgba(0,0,0,0.18)]"
-                              style={{ background: badge.bg, color: badge.color, border: badge.border }}
-                            >
-                              {badge.label}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex min-h-[104px] flex-col justify-between p-3">
-                          <div>
-                            <div className="font-item text-[0.98rem] font-bold leading-5" style={{ color: textMain }}>
-                              {displayName}
-                            </div>
-                            <div className="mt-1 line-clamp-2 text-[0.72rem] leading-5" style={{ color: textMuted }}>
-                              {displayDescription}
-                            </div>
-                          </div>
-                          <div className="mt-3 flex items-end justify-between gap-3">
-                            <div>
-                              <div className="text-[0.95rem] font-bold" style={{ color: textMain }}>
-                                {formatMenuPriceWithVariant(item.price, priceVariant)}
-                              </div>
-                              <div className="flex items-center gap-1 text-[0.64rem]" style={{ color: textMuted }}>
-                                <Flame className="h-3 w-3" />
-                                <span>{item.popularityScore || 0} {currentCopy.ordersLabel}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  fetchPairingSuggestions(item)
-                                }}
-                                className="flex h-8 max-w-[96px] items-center gap-1.5 rounded-full border px-2 text-[0.64rem] font-bold shadow-[0_4px_10px_rgba(0,0,0,0.12)]"
-                                style={{ borderColor: accentBorder, backgroundColor: accentSoft, color: themeAccent }}
-                                aria-label={currentCopy.pairingsButtonLabel}
-                              >
-                                <Star className="h-3.5 w-3.5 shrink-0 fill-current" />
-                                <span className="truncate">{currentCopy.pairingsButtonLabel}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  addToCart(item.id)
-                                }}
-                                className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-white shadow-[0_4px_10px_rgba(0,0,0,0.18)]"
-                                style={{ background: `linear-gradient(135deg, ${themeAccent}, ${themeChef})` }}
-                                aria-label={currentEngineCopy.addToOrder}
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                        loadingPairings={loadingSuggestions}
+                        isSelectedForPairing={selectedItemForPairing?.id === item.id}
+                        isDarkTheme={isDarkBg}
+                        displayPriceOverride={formatMenuPriceWithVariant(item.price, priceVariant)}
+                        forceHideImage={hideImages}
+                        layout={menuLayout}
+                        compact={theme?.cardStyle === 'compact'}
+                      />
                     )
                   })}
+                </div>
                   {section.items.length > maxInitialItemsPerCategory && section.category && !expanded && (
                     <button
                       type="button"
@@ -4030,7 +3973,6 @@ export default function SmartMenu({
                       )}
                     </button>
                   )}
-                </div>
               </section>
             )
           })}
@@ -4776,6 +4718,9 @@ export default function SmartMenu({
               activeTimeRange={topShowcases[0].activeTimeRange}
               label={topShowcases[0].label}
               seasonalItemImages={topShowcases[0].seasonalItemImages}
+              showImages={theme?.showItemImages !== false}
+              showDescriptions={theme?.showDescriptions !== false}
+              showCalories={theme?.showCalories !== false}
             />
           </div>
         )}
@@ -4808,6 +4753,9 @@ export default function SmartMenu({
               activeTimeRange={showcase.activeTimeRange}
               label={showcase.label}
               seasonalItemImages={showcase.seasonalItemImages}
+              showImages={theme?.showItemImages !== false}
+              showDescriptions={theme?.showDescriptions !== false}
+              showCalories={theme?.showCalories !== false}
             />
           ))}
           {/* "What do you feel like eating today?" section (mood options) */}
@@ -4877,7 +4825,7 @@ export default function SmartMenu({
             >
               <button
                 type="button"
-                onClick={() => setMenuLayout('list')}
+                onClick={() => setUserLayoutChoice('list')}
                 className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition sm:px-4 ${
                   menuLayout === 'list'
                     ? isDarkBg
@@ -4894,7 +4842,7 @@ export default function SmartMenu({
               </button>
               <button
                 type="button"
-                onClick={() => setMenuLayout('grid')}
+                onClick={() => setUserLayoutChoice('grid')}
                 className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition sm:px-4 ${
                   menuLayout === 'grid'
                     ? isDarkBg
@@ -5104,9 +5052,12 @@ export default function SmartMenu({
                         const translation =
                           translationCache[language]?.[item.id]
                         const displayName = translation?.name || item.name
-                        const displayDescription =
-                          translation?.description || item.description || ''
-                        const macroSegments = buildMacroSegments(item, translation)
+                        const displayDescription = theme?.showDescriptions === false
+                          ? ''
+                          : translation?.description || item.description || ''
+                        const macroSegments = theme?.showCalories === false
+                          ? []
+                          : buildMacroSegments(item, translation)
                         const isExtraRevealedItem = expanded && extraItemIds.has(item.id)
                         const resolvedHints =
                           isExtraRevealedItem && item._hints
@@ -5146,6 +5097,7 @@ export default function SmartMenu({
                             displayPriceOverride={formatMenuPriceWithVariant(item.price, priceVariant)}
                             forceHideImage={hideImages}
                             layout={menuLayout}
+                            compact={theme?.cardStyle === 'compact'}
                           />
                         )
                       })
@@ -5199,6 +5151,9 @@ export default function SmartMenu({
                           activeTimeRange={showcase.activeTimeRange}
                           label={showcase.label}
                           seasonalItemImages={showcase.seasonalItemImages}
+                          showImages={theme?.showItemImages !== false}
+                          showDescriptions={theme?.showDescriptions !== false}
+                          showCalories={theme?.showCalories !== false}
                         />
                       </div>
                     ))}

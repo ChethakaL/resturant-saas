@@ -52,6 +52,7 @@ interface MenuItemCardProps {
   /** When true, hide image (e.g. from photo_visibility experiment). */
   forceHideImage?: boolean
   layout?: 'list' | 'grid'
+  compact?: boolean
 }
 
 function getBadgeLabel(
@@ -97,9 +98,10 @@ export function MenuItemCard({
   displayPriceOverride,
   forceHideImage = false,
   layout = 'list',
+  compact = false,
 }: MenuItemCardProps) {
   const tier = hints?.displayTier ?? 'standard'
-  const showImage = !forceHideImage && (hints?.showImage ?? true)
+  const showImage = !forceHideImage
   const priceDisplay = displayPriceOverride ?? hints?.priceDisplay ?? String(Math.round(item.price))
   const badgeText = hints?.badgeText
   const isLimitedToday = hints?.isLimitedToday
@@ -119,10 +121,11 @@ export function MenuItemCard({
     return (
       <Card
         className={`overflow-hidden backdrop-blur hover:shadow-lg transition-all border ${cardBg} ${textMain} h-full`}
+        style={{ borderRadius: 'var(--menu-radius, 8px)' }}
         onClick={onDetail}
       >
-        {showImage && !isMinimal && (
-          <div className="relative aspect-[4/3] w-full overflow-hidden">
+        {showImage && (
+          <div className="relative aspect-[4/3] w-full overflow-hidden" style={{ borderRadius: 'var(--menu-radius, 8px) var(--menu-radius, 8px) 0 0' }}>
             <CategoryImageFallback
               src={item.imageUrl}
               alt={item.name}
@@ -140,7 +143,7 @@ export function MenuItemCard({
             )}
           </div>
         )}
-        <div className="flex h-full flex-col p-3 sm:p-4">
+        <div className={`flex h-full flex-col ${compact ? 'p-2.5' : 'p-3 sm:p-4'}`}>
           <div>
             <div className="flex flex-col gap-2">
               <h3 className="font-item min-w-0 text-sm font-semibold leading-tight line-clamp-2 sm:text-base">
@@ -221,19 +224,22 @@ export function MenuItemCard({
   return (
     <Card
       className={`overflow-hidden backdrop-blur hover:shadow-lg transition-all border ${cardBg} ${textMain}`}
+      style={{ borderRadius: 'var(--menu-radius, 8px)' }}
       onClick={onDetail}
     >
-      <div className="flex min-h-[120px] sm:min-h-[140px]">
-        {showImage && !isMinimal && (
+      <div className={`flex ${compact ? 'min-h-[96px]' : 'min-h-[120px] sm:min-h-[140px]'}`}>
+        {showImage && (
           <div
-            className="relative flex-shrink-0 flex items-center justify-center p-2 order-first sm:order-none w-24 sm:w-28 aspect-square rounded-xl overflow-hidden"
+            className="relative flex-shrink-0 flex items-center justify-center p-2 order-first sm:order-none w-24 sm:w-28 aspect-square overflow-hidden"
+            style={{ borderRadius: 'calc(var(--menu-radius, 8px) * 0.75)' }}
           >
             <CategoryImageFallback
               src={item.imageUrl}
               alt={item.name}
               categoryName={item.category?.name}
               description={item.description}
-              className="w-full h-full object-cover rounded-xl"
+              className="w-full h-full object-cover"
+              style={{ borderRadius: 'calc(var(--menu-radius, 8px) * 0.75)' }}
             />
             {badgeLabel && (
               <span

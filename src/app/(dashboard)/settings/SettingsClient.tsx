@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -30,6 +31,8 @@ import {
   ExternalLink,
   ShieldCheck,
   HelpCircle,
+  Paintbrush,
+  ArrowRight,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useI18n, useDynamicTranslate, type ManagementLocale } from '@/lib/i18n'
@@ -693,6 +696,23 @@ export default function SettingsClient({
         </CardContent>
       </Card>
 
+      <Card className="border-slate-200">
+        <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
+            <Paintbrush className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-semibold text-slate-900">Smart Menu Appearance</h3>
+            <p className="text-sm text-slate-500">Change the customer menu format, preview drafts, or upload a developer template.</p>
+          </div>
+          <Button asChild className="shrink-0">
+            <Link href="/settings/appearance">
+              Change appearance <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       <div className="space-y-6" data-tour="settings-languages">
       {/* Management Language */}
       <Card>
@@ -768,6 +788,7 @@ export default function SettingsClient({
       </Card>
       </div>
 
+      {false && <>
       {/* Quick Style Presets */}
       <Card data-tour="settings-style-presets">
         <CardHeader>
@@ -898,7 +919,9 @@ export default function SettingsClient({
           </div>
         </CardContent>
       </Card>
+      </>}
 
+      {false && <>
       {/* Menu Background */}
       <Card data-tour="settings-menu-background">
         <CardHeader>
@@ -1516,6 +1539,7 @@ export default function SettingsClient({
       </Card>
 
       {/* AI menu description tone */}
+      </>}
       <Card data-tour="settings-ai-content">
         <CardHeader>
           <CardTitle>{td('AI Menu Description Tone')}</CardTitle>

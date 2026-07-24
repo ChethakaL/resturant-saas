@@ -29,6 +29,7 @@ interface CategoryImageFallbackProps {
   className?: string
   loading?: 'eager' | 'lazy'
   decoding?: 'async' | 'auto' | 'sync'
+  style?: React.CSSProperties
 }
 
 const categoryIconRules: Array<{ keywords: string[]; icon: LucideIcon }> = [
@@ -117,6 +118,7 @@ export function CategoryImageFallback({
   className,
   loading = 'lazy',
   decoding = 'async',
+  style,
 }: CategoryImageFallbackProps) {
   const [failed, setFailed] = useState(false)
   const cleanSrc = src?.trim()
@@ -129,6 +131,7 @@ export function CategoryImageFallback({
         loading={loading}
         decoding={decoding}
         className={className}
+        style={style}
         onError={() => setFailed(true)}
       />
     )
@@ -139,6 +142,7 @@ export function CategoryImageFallback({
   return (
     <div
       className={`flex items-center justify-center bg-[color-mix(in_srgb,var(--menu-accent,#f59e0b)_12%,white)] text-[var(--menu-accent,#f59e0b)] ${className ?? ''}`}
+      style={style}
       role="img"
       aria-label={alt}
     >

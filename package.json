@@ -13,7 +13,8 @@
     "db:seed-feb-2026": "tsx scripts/seed-february-2026.ts",
     "db:seed-pnl-restaurant": "tsx scripts/seed-pnl-restaurant.ts",
     "db:seed-supplier": "tsx prisma/seed-supplier.ts",
-    "test:receipt-lines": "tsx scripts/test-receipt-16-lines.ts"
+    "test:receipt-lines": "tsx scripts/test-receipt-16-lines.ts",
+    "test:menu-design": "tsx scripts/test-menu-design.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import SmartMenu from './SmartMenu'
+import CustomTemplateMenu from './CustomTemplateMenu'
 import type { BundleHint, MoodOption, UpsellSuggestion } from '@/types/menu-engine'
 import type { MenuFeelingContext } from '@/lib/menu-feeling-message'
 
@@ -41,6 +42,10 @@ export interface MenuPersonalizationWrapperProps {
   smartSearchFeelingContext?: MenuFeelingContext
   forceShowImages?: boolean
   snowfallSettings?: { enabled: boolean; start: string; end: string } | null
+  menuDesign?: {
+    config: { mode?: 'standard' | 'custom' }
+    customHtml?: string | null
+  } | null
 }
 
 export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProps) {
@@ -51,6 +56,20 @@ export function MenuPersonalizationWrapper(props: MenuPersonalizationWrapperProp
   const tableParam = searchParams.get('table') ?? searchParams.get('tableNumber')
   const tableNumber =
     props.tableOrderingEnabled !== false ? (tableParam?.trim() || undefined) : undefined
+
+  if (props.menuDesign?.config.mode === 'custom' && props.menuDesign.customHtml) {
+    return (
+      <CustomTemplateMenu
+        restaurantId={props.restaurantId}
+        restaurantName={props.restaurantName || 'Restaurant'}
+        restaurantLogo={props.restaurantLogo}
+        menuItems={props.menuItems}
+        showcases={props.showcases}
+        customHtml={props.menuDesign.customHtml}
+        tableNumber={tableNumber}
+      />
+    )
+  }
 
   return (
     <SmartMenu

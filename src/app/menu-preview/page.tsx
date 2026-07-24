@@ -1,39 +1,42 @@
 import { notFound } from 'next/navigation'
-import { MenuPersonalizationWrapper } from '@/components/customer/MenuPersonalizationWrapper'
+import { menuDesignConfigSchema } from '@/lib/menu-design'
+import { designConfigToTheme } from '@/lib/menu-design'
 import { getPublicMenuBundleBySlug } from '@/lib/public-menu-bundle'
+import SmartMenu from '@/components/customer/SmartMenu'
 
-/** ISR hint; full payload is not unstable_cached (can exceed Next.js ~2MB data cache limit). */
-export const revalidate = 300
+export const dynamic = 'force-dynamic'
 
-const RESERVED_SLUGS = new Set([
-  'favicon.ico',
-  'robots.txt',
-  'sitemap.xml',
-  'manifest.json',
-])
-
-export default async function SlugMenuPage({
-  params,
+export default async function MenuPreviewPage({
+  searchParams,
 }: {
-  params: Promise<{ slug: string }> | { slug: string }
+  searchParams: Promise<{ slug?: string; config?: string }> | { slug?: string; config?: string }
 }) {
-  const resolved = params instanceof Promise ? await params : params
-  const slug = resolved.slug?.toLowerCase().trim()
+  const params = searchParams instanceof Promise ? await searchParams : searchParams
+  const slug = params.slug?.trim().toLowerCase()
   if (!slug) notFound()
-  if (RESERVED_SLUGS.has(slug) || slug.includes('.')) notFound()
 
   const data = await getPublicMenuBundleBySlug(slug)
   if (!data) notFound()
 
+  let config = menuDesignConfigSchema.parse({})
+  if (params.config) {
+    try {
+      const parsed = menuDesignConfigSchema.safeParse(JSON.parse(params.config))
+      if (parsed.success) config = parsed.data
+    } catch {
+      // Keep the default draft when the preview query is invalid.
+    }
+  }
+
   return (
-    <MenuPersonalizationWrapper
+    <SmartMenu
       restaurantId={data.restaurant.id}
       menuItems={data.menuItems}
       initialLanguage={data.initialLanguage}
       initialTranslationCache={data.initialTranslationCache}
       showcases={data.showcases}
       categories={data.categories}
-      theme={data.theme}
+      theme={{ ...data.theme, ...designConfigToTheme(config) } as any}
       restaurantName={data.restaurant.name}
       restaurantLogo={data.restaurant.logo}
       engineMode={data.engineMode}
@@ -49,8 +52,7 @@ export default async function SlugMenuPage({
       tableOrderingEnabled={data.tableOrderingEnabled}
       smartSearchFeelingContext={data.smartSearchFeelingContext}
       snowfallSettings={data.snowfallSettings}
-      forceShowImages
-      menuDesign={data.menuDesign}
+      forceShowImages={config.showItemImages}
     />
   )
 }
